@@ -133,6 +133,11 @@ public struct SparklineView: View {
     }
 
     /// Small "-24h" / "now" labels below the chart for temporal context.
+    ///
+    /// Explicit `@MainActor` because the computed property doesn't inherit
+    /// the body's main-actor isolation under Swift 6, and `L10n.text` is
+    /// main-actor-isolated (the `languageOverride` it reads is mutable).
+    @MainActor
     private var axisLabels: some View {
         HStack {
             Text("-24h")
