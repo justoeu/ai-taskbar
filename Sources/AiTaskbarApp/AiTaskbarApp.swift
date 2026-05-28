@@ -10,11 +10,16 @@ struct AiTaskbarApp: App {
     @StateObject private var loginItem = LoginItemService()
     @StateObject private var cost = CostEstimator()
     @StateObject private var updates: UpdateChecker
+    @StateObject private var configWatcher: ConfigWatcher
     private let env: AppEnvironment
 
     init() {
         let env = AppEnvironment.live()
         _updates = StateObject(wrappedValue: UpdateChecker(config: env.config.updates))
+        let watcherPath = (try? Paths.configFile())
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("ai-taskbar-config.toml")
+        _configWatcher = StateObject(wrappedValue: ConfigWatcher(path: watcherPath))
         // Apply language override from config BEFORE any view reads strings,
         // so the very first render uses the right locale.
         L10n.languageOverride = env.config.ui.language
@@ -48,6 +53,7 @@ struct AiTaskbarApp: App {
             .environmentObject(loginItem)
             .environmentObject(cost)
             .environmentObject(updates)
+            .environmentObject(configWatcher)
             .frame(width: 420, height: 540)
             .onAppear {
                 // Scheduler is already running from init (see above).

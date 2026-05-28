@@ -6,6 +6,7 @@ public struct PopoverContentView: View {
     @EnvironmentObject var store: UsageStore
     @EnvironmentObject var loginItem: LoginItemService
     @EnvironmentObject var cost: CostEstimator
+    @EnvironmentObject var configWatcher: ConfigWatcher
     @State private var showAbout = false
     public var onOpenConfig: () -> Void
     public var onQuit: () -> Void
@@ -20,6 +21,10 @@ public struct PopoverContentView: View {
             VStack(spacing: 0) {
                 headerBar
                 Divider()
+                if configWatcher.configChanged {
+                    configChangedBanner
+                    Divider()
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         if store.vendors.isEmpty {
@@ -135,6 +140,39 @@ public struct PopoverContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .font(.caption)
+    }
+
+    /// Non-intrusive yellow banner shown when config.toml changes on disk.
+    /// Most settings (refresh interval, language, vendor enabled flags,
+    /// cache TTL, TLS pinning) are captured at launch; a relaunch is the
+    /// only consistent way to reflect them.
+    private var configChangedBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.yellow)
+            L10n.text("config_changed_banner")
+                .font(.caption)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Button {
+                configWatcher.relaunch()
+            } label: {
+                L10n.text("relaunch")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            Button {
+                configWatcher.dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.localizedString("dismiss"))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.yellow.opacity(0.12))
     }
 
     private var emptyState: some View {

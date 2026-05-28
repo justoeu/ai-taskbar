@@ -10,6 +10,9 @@
 "config" = "Configurações";
 "open_at_login" = "Abrir no login";
 "quit" = "Sair";
+"config_changed_banner" = "Configuração alterada — reinicie para aplicar.";
+"relaunch" = "Reiniciar";
+"dismiss" = "Dispensar";
 "no_providers_enabled" = "Nenhum provedor ativado.";
 "no_providers_hint" = "Verifique ~/Library/Application Support/ai-taskbar/config.toml e garanta que pelo menos um provedor tem `enabled = true`.";
 

@@ -11,6 +11,9 @@
 "config" = "Config";
 "open_at_login" = "Open at login";
 "quit" = "Quit";
+"config_changed_banner" = "Config changed — relaunch to apply.";
+"relaunch" = "Relaunch";
+"dismiss" = "Dismiss";
 "no_providers_enabled" = "No providers enabled.";
 "no_providers_hint" = "Check ~/Library/Application Support/ai-taskbar/config.toml and make sure at least one provider has `enabled = true`.";
 
