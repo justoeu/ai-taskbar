@@ -80,8 +80,13 @@ public struct VendorSectionView: View {
 
     @ViewBuilder
     private var costFooter: some View {
-        if let estimate = cost.byVendor[vm.vendorId],
-           estimate.usdToday > 0 || estimate.usdLast7Days > 0 {
+        let estimate = cost.byVendor[vm.vendorId]
+        let hasData = (estimate?.usdToday ?? 0) > 0 || (estimate?.usdLast7Days ?? 0) > 0
+        let supportsLocal = CostEstimator.supportedVendors.contains(vm.vendorId)
+        // Render the footer when we already have data, OR while we're loading
+        // for a vendor that the local scanners cover. Otherwise (OpenRouter,
+        // Z.AI, Kimi without data), stay hidden.
+        if hasData, let estimate {
             Divider()
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 12) {
@@ -103,7 +108,41 @@ public struct VendorSectionView: View {
                 }
                 modelBreakdownDetailed(for: estimate)
             }
+        } else if supportsLocal && cost.isLoading {
+            Divider()
+            modelBreakdownLoading
         }
+    }
+
+    /// Placeholder shown when the cost scanner is running and we don't have
+    /// any prior data for this vendor yet (e.g. the first launch).
+    @ViewBuilder
+    private var modelBreakdownLoading: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "cpu")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                L10n.text("models_label")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                ProgressView()
+                    .controlSize(.mini)
+                    .scaleEffect(0.55)
+                    .frame(width: 12, height: 12)
+                Spacer(minLength: 6)
+            }
+            HStack(spacing: 4) {
+                Text("•")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                L10n.text("loading")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.leading, 4)
+        }
+        .padding(.leading, 2)
     }
 
     /// Combined breakdown showing both today and the 7-day window. Today
@@ -135,6 +174,15 @@ public struct VendorSectionView: View {
                     L10n.text("models_label")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    // Inline spinner while a recompute is in flight, so the
+                    // user sees "we're refreshing" even though the previous
+                    // values stay visible underneath.
+                    if cost.isLoading {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .scaleEffect(0.55)
+                            .frame(width: 12, height: 12)
+                    }
                     Spacer(minLength: 6)
                     L10n.text("models_columns_header")
                         .font(.caption2)
@@ -155,6 +203,9 @@ public struct VendorSectionView: View {
         let todayPct = totalToday > 0 ? Int((row.usdToday / totalToday * 100).rounded()) : 0
         let weekPct  = total7d > 0    ? Int((row.usd7d   / total7d   * 100).rounded()) : 0
         HStack(spacing: 0) {
+            Text("•  ")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             Text(Self.shortModelName(row.name))
                 .font(.caption2.monospaced())
                 .foregroundStyle(.secondary)
