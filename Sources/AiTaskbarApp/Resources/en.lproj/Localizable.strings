@@ -37,8 +37,8 @@
 "approximate_help" = "Approximate cost based on token usage × pricing table.";
 
 // Cost / details
-"today_cost_fmt" = "Today: $%.2f";
-"weekly_cost_fmt" = "7d: $%.2f";
+"today_label" = "Today";
+"weekly_label" = "7d";
 "extra_usage_fmt" = "Extra usage: $%.2f";
 "credits_fmt" = "Credits: $%.2f";
 "balance_fmt" = "Balance: $%.2f";

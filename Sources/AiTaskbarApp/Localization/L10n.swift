@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// Usage:
 ///   `Text(L10n.localizedString("loading"))` or `L10n.text("loading")`
-///   `L10n.localizedString("today_cost_fmt", args: estimate.usdToday)`
+///   `L10n.localizedString("notif_resets_fmt", args: kind, when)`
 @MainActor
 public enum L10n {
     /// Forced language code (e.g. "pt-BR", "en", "es"). nil = follow system.

@@ -36,8 +36,8 @@
 "approximate_help" = "Custo aproximado baseado em tokens consumidos × tabela de preços.";
 
 // Cost / details
-"today_cost_fmt" = "Hoje: $%.2f";
-"weekly_cost_fmt" = "7d: $%.2f";
+"today_label" = "Hoje";
+"weekly_label" = "7d";
 "extra_usage_fmt" = "Uso extra: $%.2f";
 "credits_fmt" = "Créditos: $%.2f";
 "balance_fmt" = "Saldo: $%.2f";
