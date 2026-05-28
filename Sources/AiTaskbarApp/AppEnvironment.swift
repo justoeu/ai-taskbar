@@ -49,14 +49,19 @@ public final class AppEnvironment {
     }
 
     /// Build the set of providers indicated as enabled by the live config.
+    /// Cache TTL is wired to `refresh_interval_seconds` so that popover
+    /// opens between scheduled refreshes serve from cache (no extra network
+    /// calls) regardless of what interval the user picked.
     public func makeProviders() -> [any UsageProvider] {
+        let ttl = config.ui.refreshIntervalSeconds
         var out: [any UsageProvider] = []
         if config.anthropic.enabled {
             do {
                 let p = try AnthropicProvider(
                     http: http,
                     keychainService: config.anthropic.keychainService ?? "Claude Code-credentials",
-                    keychainAccount: config.anthropic.keychainAccount)
+                    keychainAccount: config.anthropic.keychainAccount,
+                    cacheTTL: ttl)
                 out.append(p)
             } catch {
                 NSLog("ai-taskbar: anthropic init failed: %@", "\(error)")
@@ -65,7 +70,7 @@ public final class AppEnvironment {
         if config.openai.enabled {
             do {
                 let path = config.openai.codexAuthPath.map { URL(fileURLWithPath: $0) }
-                let p = try OpenAIProvider(http: http, codexAuthPath: path)
+                let p = try OpenAIProvider(http: http, codexAuthPath: path, cacheTTL: ttl)
                 out.append(p)
             } catch {
                 NSLog("ai-taskbar: openai init failed: %@", "\(error)")
@@ -73,7 +78,7 @@ public final class AppEnvironment {
         }
         if config.openrouter.enabled {
             do {
-                let p = try OpenRouterProvider(config: config.openrouter, http: http)
+                let p = try OpenRouterProvider(config: config.openrouter, http: http, cacheTTL: ttl)
                 out.append(p)
             } catch {
                 NSLog("ai-taskbar: openrouter init failed: %@", "\(error)")
@@ -81,7 +86,7 @@ public final class AppEnvironment {
         }
         if config.zai.enabled {
             do {
-                let p = try ZAIProvider(config: config.zai, http: http)
+                let p = try ZAIProvider(config: config.zai, http: http, cacheTTL: ttl)
                 out.append(p)
             } catch {
                 NSLog("ai-taskbar: zai init failed: %@", "\(error)")
@@ -89,7 +94,7 @@ public final class AppEnvironment {
         }
         if config.kimi.enabled {
             do {
-                let p = try KimiProvider(config: config.kimi, http: http)
+                let p = try KimiProvider(config: config.kimi, http: http, cacheTTL: ttl)
                 out.append(p)
             } catch {
                 NSLog("ai-taskbar: kimi init failed: %@", "\(error)")

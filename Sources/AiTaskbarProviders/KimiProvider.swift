@@ -18,8 +18,10 @@ public final class KimiProvider: UsageProvider {
         self.baseURL = baseURL
     }
 
-    public convenience init(config: KimiConfig, http: HTTPClient = .init()) throws {
-        let cache = try DiskCache.defaultFor(.kimi)
+    public convenience init(config: KimiConfig,
+                            http: HTTPClient = .init(),
+                            cacheTTL: TimeInterval = 150) throws {
+        let cache = try DiskCache.defaultFor(.kimi, ttl: cacheTTL)
         let baseURL = URL(string: config.baseURL) ?? URL(string: "https://api.moonshot.ai/v1")!
         self.init(
             credentials: EnvOrConfigCredentialReader(

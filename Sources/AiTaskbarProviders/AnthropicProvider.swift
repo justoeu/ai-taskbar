@@ -24,8 +24,9 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
 
     public convenience init(http: HTTPClient = .init(),
                             keychainService: String = "Claude Code-credentials",
-                            keychainAccount: String? = nil) throws {
-        let cache = try DiskCache.defaultFor(.anthropic)
+                            keychainAccount: String? = nil,
+                            cacheTTL: TimeInterval = 150) throws {
+        let cache = try DiskCache.defaultFor(.anthropic, ttl: cacheTTL)
         self.init(
             credentialReader: KeychainCredentialReader(service: keychainService,
                                                        preferredAccount: keychainAccount),

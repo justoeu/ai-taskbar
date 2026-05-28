@@ -19,8 +19,10 @@ public final class ZAIProvider: UsageProvider {
         self.configTier = configTier
     }
 
-    public convenience init(config: ZAIConfig, http: HTTPClient = .init()) throws {
-        let cache = try DiskCache.defaultFor(.zai)
+    public convenience init(config: ZAIConfig,
+                            http: HTTPClient = .init(),
+                            cacheTTL: TimeInterval = 150) throws {
+        let cache = try DiskCache.defaultFor(.zai, ttl: cacheTTL)
         self.init(
             credentials: EnvOrConfigCredentialReader(
                 envVarName: config.apiKeyEnv,
