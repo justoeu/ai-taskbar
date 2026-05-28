@@ -1,0 +1,40 @@
+name: CI
+
+# Runs on every push to main + every pull request. Confirms the validation
+# suite passes — same gate `make validate` enforces locally.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Build + validate
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          uname -a
+
+      - name: Compile (debug)
+        run: swift build -c debug
+
+      - name: Runtime validation suite
+        # Mirrors the suite that `make validate` runs locally — 128+
+        # assertions covering wire types, JSONValue, KimiConfig URL whitelist,
+        # OpenAI PII strip, DiskCache TTL, AtomicFileWrite perms, etc.
+        run: swift run ai-taskbar-validate
+
+      - name: Compile (release)
+        run: swift build -c release
+
+      - name: Universal binary smoke test
+        run: |
+          make app-universal
+          file build/AiTaskbar.app/Contents/MacOS/ai-taskbar
+          lipo -archs build/AiTaskbar.app/Contents/MacOS/ai-taskbar
+          codesign --verify --deep --strict build/AiTaskbar.app

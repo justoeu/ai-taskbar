@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened Runtime entitlements. Only honored when signed with a real
+         Developer ID + `codesign --options runtime`. Ad-hoc signed builds
+         ignore these. -->
+
+    <!-- App Sandbox: disabled. We need to read ~/.codex/auth.json, the
+         macOS Login Keychain, ~/Library/Caches, etc. Sandboxing those
+         would require entitlements per CLI we read from, which doesn't
+         scale and would prompt the user repeatedly. -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+
+    <!-- Network egress only. Disable inbound/server sockets. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- No JIT / writable-executable memory. SwiftUI doesn't need them; -->
+    <!-- denying them tightens the hardened runtime posture. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <false/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <false/>
+    <key>com.apple.security.cs.disable-executable-page-protection</key>
+    <false/>
+
+    <!-- Refuse DYLD env-var injection (LSEnvironment etc.). -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <false/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <false/>
+</dict>
+</plist>

@@ -1,0 +1,32 @@
+# Build artifacts
+.build/
+.swiftpm/
+build/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+
+# SPM resolved (regenerated on swift build; commit if you want reproducible dep versions)
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Local agent / IDE state (machine-specific, never commit)
+.claude/
+.codex/
+.vscode/
+.idea/
+
+# Distribution artifacts
+*.dmg
+*.zip
+
+# Local config / secrets
+config.toml
+config.local.toml
+*.env
+.env*
+
+# Test artifacts
+.test-output/

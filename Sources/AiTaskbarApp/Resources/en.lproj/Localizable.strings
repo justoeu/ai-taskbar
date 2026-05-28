@@ -1,0 +1,93 @@
+// English (base language)
+
+// Header / footer
+"app_name" = "AI Taskbar";
+"menu_bar_hint" = "Menu bar shows the highest utilization across all enabled providers.";
+"about_help" = "About AI Taskbar";
+"refresh_all_help" = "Refresh all providers";
+// The relative formatter already produces "X ago" / "in X" — we only add
+// the verb tense prefix here, not the temporal direction.
+"updated_ago_fmt" = "updated %@";
+"config" = "Config";
+"open_at_login" = "Open at login";
+"quit" = "Quit";
+"no_providers_enabled" = "No providers enabled.";
+"no_providers_hint" = "Check ~/Library/Application Support/ai-taskbar/config.toml and make sure at least one provider has `enabled = true`.";
+
+// Vendor section
+"loading" = "Loading…";
+"waiting_first_refresh" = "Waiting for first refresh…";
+"no_usage_windows" = "No usage windows reported by the API. The endpoint may have changed schema.";
+"no_credentials_short" = "No credentials — set up in config.toml to enable.";
+"no_credentials_for_vendor_fmt" = "No credentials configured for %@.";
+"no_credentials_hint" = "Set the API key in config (footer → Config) or export the env var before launching.";
+"showing_cached_data" = "Showing last cached data:";
+"stale_help" = "Showing cached data — last live fetch failed.";
+"no_credentials_help" = "No credentials configured.";
+"last_fetch_failed_help" = "Last fetch failed.";
+"locked_help" = "Locked — no credentials configured.";
+"expand_fmt" = "Expand %@";
+"collapse_fmt" = "Collapse %@";
+"refresh_vendor_fmt" = "Refresh %@";
+"open_dashboard_fmt" = "Open %@";
+"approximate_short" = "approx.";
+"approximate_help" = "Approximate cost based on token usage × pricing table.";
+
+// Cost / details
+"today_cost_fmt" = "Today: $%.2f";
+"weekly_cost_fmt" = "7d: $%.2f";
+"extra_usage_fmt" = "Extra usage: $%.2f";
+"credits_fmt" = "Credits: $%.2f";
+"balance_fmt" = "Balance: $%.2f";
+"voucher_fmt" = "Voucher: $%.2f";
+"cash_fmt" = "Cash: $%.2f";
+
+// Notifications
+"notif_limit_reached" = "Limit reached.";
+"notif_approaching_limit" = "Approaching limit.";
+"notif_heavy_usage" = "Heavy usage.";
+"notif_resets_fmt" = "%@ Resets %@.";
+"notif_discreet_title" = "AI Taskbar";
+"notif_discreet_body_fmt" = "A monitored window crossed %d%%.";
+
+// About panel
+"about_description" = "Tracks LLM usage across Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), and Kimi (Moonshot) — all from your menu bar.";
+"about_refresh_hint" = "Refresh cycle is configurable in config.toml";
+"about_macroscopic" = "Macroscopic % = highest utilization across enabled providers";
+"about_credentials" = "Credentials read from Keychain + ~/.codex/auth.json";
+"about_security" = "All cache + config files are user-only (0o600)";
+"about_inspired" = "Inspired by akitaonrails/ai-usagebar (Linux)";
+"about_built_with" = "Built with SwiftUI · MIT-licensed";
+"open_config_toml" = "Open config.toml";
+"done" = "Done";
+
+// History / sparkline
+"building_history" = "Building history…";
+"now" = "now";
+
+// Updates
+"updates_check" = "Check for updates";
+"updates_recheck" = "Re-check";
+"updates_checking" = "Checking GitHub Releases…";
+"updates_up_to_date_fmt" = "Up to date (v%@)";
+"updates_available_fmt" = "Update available: %@";
+"updates_download" = "Download";
+"updates_view_release" = "Release notes";
+"updates_downloading_fmt" = "Downloading %@…";
+"updates_downloaded_fmt" = "Downloaded %@";
+"updates_drag_to_applications" = "DMG opened in Finder — drag AI Taskbar.app to /Applications, then relaunch.";
+"updates_failed" = "Update check failed";
+"updates_retry" = "Retry";
+"updates_disabled" = "Update checks are disabled in config (`[updates] enabled = false`).";
+"updates_bad_repo" = "Set `[updates] owner_repo = \"yourname/ai-taskbar\"` in config to enable.";
+"updates_no_stable" = "Only a pre-release is published; set `include_prereleases = true` to consider it.";
+"updates_no_asset" = "Release exists but no .dmg asset attached.";
+
+// Model breakdown
+"models_label" = "Models";
+"models_tooltip_header" = "Models used today:";
+"models_header" = "Models (today / last 7 days):";
+
+// About — cost data source
+"about_cost_source" = "Cost computed locally from ~/.claude/projects & ~/.codex/logs_2.sqlite";
+"about_cost_source_help" = "Anthropic cost is derived by parsing assistant messages in your local Claude Code session JSONL files (~/.claude/projects/*/*.jsonl), then multiplying input/output/cache tokens by the published Claude pricing.\n\nOpenAI cost reads total_usage_tokens from ~/.codex/logs_2.sqlite and applies the Codex model pricing.\n\nNothing is sent to any network — the calculation happens entirely on your Mac. Subscription plans (Claude Max, ChatGPT Pro) charge a flat fee; the number shown is what an API equivalent of the same usage would cost.";

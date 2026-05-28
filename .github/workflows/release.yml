@@ -1,0 +1,120 @@
+name: Release
+
+# Triggered when you push a tag like `v0.1.0`, `v0.2.0-beta`, etc.
+# To cut a release locally:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+on:
+  push:
+    tags:
+      - 'v*'
+  # Allow manual trigger from the Actions tab for testing.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write    # needed to create releases
+
+jobs:
+  build-and-release:
+    name: Build universal .dmg and publish release
+    runs-on: macos-14
+    # macos-14 runner is Apple Silicon (M1). It can still cross-build x86_64
+    # via `swift build --arch x86_64` because both SDK slices ship with the
+    # toolchain. We lipo the two slices into a fat binary.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          # Strip leading "v" for the Make VERSION var so artifact filenames
+          # don't end up with double-v (e.g. ai-taskbar-v0.1.0.dmg → 0.1.0).
+          VERSION_NUM="${VERSION#v}"
+          echo "tag=$VERSION"           >> "$GITHUB_OUTPUT"
+          echo "number=$VERSION_NUM"    >> "$GITHUB_OUTPUT"
+          echo "Resolved tag=$VERSION number=$VERSION_NUM"
+
+      - name: Show toolchain info
+        run: |
+          swift --version
+          xcodebuild -version || true
+          uname -a
+
+      - name: Build universal .app + DMG
+        run: |
+          make dmg-universal VERSION="${{ steps.version.outputs.number }}"
+
+      - name: Verify universal binary
+        run: |
+          file build/AiTaskbar.app/Contents/MacOS/ai-taskbar
+          lipo -archs build/AiTaskbar.app/Contents/MacOS/ai-taskbar
+          codesign --verify --deep --strict --verbose=2 build/AiTaskbar.app
+
+      - name: Run validation suite
+        run: |
+          # Compile-only validation; smoke launch is skipped in CI because
+          # the runner has no Keychain entries and no `~/.codex/auth.json`.
+          # We rely on the runtime asserts (no network, no creds needed).
+          swift run ai-taskbar-validate
+
+      - name: Compute SHA256 (for Homebrew Cask updates)
+        id: shasum
+        run: |
+          SHA256=$(shasum -a 256 "ai-taskbar-${{ steps.version.outputs.number }}.dmg" | awk '{print $1}')
+          echo "sha=$SHA256"   >> "$GITHUB_OUTPUT"
+          echo "DMG SHA256: $SHA256"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          cat > /tmp/release_notes.md <<EOF
+          ## AI Taskbar ${{ steps.version.outputs.tag }}
+
+          Universal macOS menu-bar tracker for LLM usage (Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI, Kimi/Moonshot).
+
+          ### Install
+          1. Download \`ai-taskbar-${{ steps.version.outputs.number }}.dmg\` below.
+          2. Open the DMG and drag \`AiTaskbar.app\` to \`/Applications\`.
+          3. First launch: macOS Gatekeeper will warn that the app is from an unidentified developer. Either:
+             - **Right-click \`AiTaskbar.app\` → Open**, then click **Open** in the dialog.
+             - Or run: \`xattr -dr com.apple.quarantine /Applications/AiTaskbar.app\`
+
+          ### What you get
+          - Universal binary (Apple Silicon + Intel)
+          - macOS 13 (Ventura) or newer
+          - Read-only access to your existing Claude / Codex / Z.AI / Kimi / OpenRouter credentials
+          - All cache + config locked to \`0o600\` (user-only)
+
+          ### Asset checksum
+          \`\`\`
+          SHA256: ${{ steps.shasum.outputs.sha }}
+          \`\`\`
+
+          See [README](https://github.com/${{ github.repository }}/blob/main/README.md) for full setup.
+          EOF
+          cat /tmp/release_notes.md
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: AI Taskbar ${{ steps.version.outputs.tag }}
+          body_path: /tmp/release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
+          files: |
+            ai-taskbar-${{ steps.version.outputs.number }}.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

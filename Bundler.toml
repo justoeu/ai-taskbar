@@ -1,0 +1,13 @@
+format_version = 2
+
+[bundle.AiTaskbar]
+identifier = "dev.aitaskbar.app"
+display_name = "AI Taskbar"
+version = "0.1.0"
+category = "public.app-category.developer-tools"
+minimum_macos_version = "13.0"
+icon = "Resources/AppIcon.icns"
+info_plist_extra_entries = "Resources/Info.plist"
+
+[bundle.AiTaskbar.target]
+executable = "ai-taskbar"

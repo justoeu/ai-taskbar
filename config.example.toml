@@ -1,0 +1,63 @@
+# ai-taskbar config
+# Lives at: ~/Library/Application Support/ai-taskbar/config.toml
+# Missing file or missing sections fall back to the defaults below.
+
+[ui]
+# primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi
+# menu_bar_mode = "icon_and_percent"  # icon | icon_and_percent | rotating
+# refresh_interval_seconds = 60     # 15 = floor; common: 60 (1m), 300 (5m), 600 (10m)
+# language = "pt-BR"                # force UI language (en | pt-BR | es). Default: macOS system locale.
+
+[thresholds]
+# Color thresholds applied to progress bars and the menu bar icon.
+warning  = 70       # green → yellow above this
+critical = 90       # yellow → orange/red above this
+
+[notifications]
+enabled  = true     # macOS notifications when a window crosses a threshold
+notify_at = [90, 100]   # percent thresholds that trigger a notification
+# discreet = true   # hides vendor name from notification title (lock-screen friendly)
+
+[updates]
+# Default points at the upstream repo (justoeu/ai-taskbar). If you forked,
+# override owner_repo to your fork to receive your own releases.
+# enabled = true
+# owner_repo = "justoeu/ai-taskbar"
+# include_prereleases = false           # set true to consider beta/rc tags too
+
+[security]
+# TLS pinning (SPKI hash, Trust-On-First-Use). Empty list = no pinning.
+# On first successful connection to a listed host, the SHA256 of the leaf
+# cert's public key is captured and stored in:
+#   ~/Library/Application Support/ai-taskbar/pins/<host>.txt
+# Every subsequent connection must match. Cert rotations on the same SPKI
+# are transparent; MitM with a different cert is rejected.
+# pin_hosts = ["api.anthropic.com", "platform.claude.com", "chatgpt.com",
+#              "auth.openai.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai"]
+# pin_audit_only = false   # true = log mismatches but allow connection
+
+[anthropic]
+enabled = true
+# keychain_service = "Claude Code-credentials"  # override (rarely needed)
+# keychain_account = "your.short.username"      # pin if you have multiple Claude entries
+
+[openai]
+enabled = true
+# codex_auth_path = "/Users/you/.codex/auth.json"   # override; default ~/.codex/auth.json
+
+[zai]
+enabled = true
+api_key_env = "ZAI_API_KEY"
+# api_key = "..."          # inline fallback if env not set
+# plan_tier = "lite"       # lite | pro | max
+
+[openrouter]
+enabled = true
+api_key_env = "OPENROUTER_API_KEY"
+# api_key = "sk-or-v1-..."
+
+[kimi]
+enabled = true
+api_key_env = "MOONSHOT_API_KEY"
+# api_key = "sk-..."
+# base_url = "https://api.moonshot.ai/v1"   # use https://api.moonshot.cn/v1 for China region
