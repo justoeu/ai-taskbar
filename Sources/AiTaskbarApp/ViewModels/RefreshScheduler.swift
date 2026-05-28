@@ -9,7 +9,7 @@ public final class RefreshScheduler: ObservableObject {
     private var refreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
 
-    public init(store: UsageStore, interval: TimeInterval = 60) {
+    public init(store: UsageStore, interval: TimeInterval = 150) {
         self.store = store
         // Floor at 15 s. Below this the undocumented vendor endpoints
         // (Anthropic, Codex, Z.AI) start returning 429 aggressively.

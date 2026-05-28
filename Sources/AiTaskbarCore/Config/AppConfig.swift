@@ -198,7 +198,7 @@ public struct UIConfig: Codable, Sendable, Equatable {
     public var menuBarMode: MenuBarMode = .iconAndPercent
     /// Auto-refresh cadence in seconds. Minimum 15 s is enforced at runtime
     /// to avoid spamming undocumented vendor endpoints.
-    public var refreshIntervalSeconds: Double = 60
+    public var refreshIntervalSeconds: Double = 150
     /// Force a specific UI language code (e.g. "pt-BR", "en", "es"). When
     /// nil, the macOS system language is used. Useful when you want this
     /// app in a different language than the rest of macOS.
@@ -206,7 +206,7 @@ public struct UIConfig: Codable, Sendable, Equatable {
 
     public init(primary: VendorId? = nil,
                 menuBarMode: MenuBarMode = .iconAndPercent,
-                refreshIntervalSeconds: Double = 60,
+                refreshIntervalSeconds: Double = 150,
                 language: String? = nil) {
         self.primary = primary
         self.menuBarMode = menuBarMode
@@ -234,7 +234,7 @@ public struct UIConfig: Codable, Sendable, Equatable {
         } else {
             self.menuBarMode = .iconAndPercent
         }
-        self.refreshIntervalSeconds = max(15, c.flexibleDouble(forKey: .refreshIntervalSeconds, default: 60))
+        self.refreshIntervalSeconds = max(15, c.flexibleDouble(forKey: .refreshIntervalSeconds, default: 150))
         self.language = try c.decodeIfPresent(String.self, forKey: .language)
     }
 

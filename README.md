@@ -184,7 +184,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The **`RefreshScheduler`** fires every `refresh_interval_seconds` (default 60s, recommended 300s to avoid Anthropic rate-limits during development) and triggers `UsageStore.refreshAll()`, which fans out to each `VendorViewModel`. Per-vendor state updates only invalidate that vendor's `VendorSectionView` — no fan-out re-renders.
+The **`RefreshScheduler`** fires every `refresh_interval_seconds` (default 150s = 2.5 min — chosen as a balance between freshness and being polite to the Anthropic usage endpoint, which rate-limits aggressively below ~60s) and triggers `UsageStore.refreshAll()`, which fans out to each `VendorViewModel`. Per-vendor state updates only invalidate that vendor's `VendorSectionView` — no fan-out re-renders.
 
 ## Configuration
 
@@ -196,7 +196,7 @@ Full schema in [`config.example.toml`](config.example.toml). Highlights:
 [ui]
 # primary = "anthropic"              # which vendor opens first
 # menu_bar_mode = "icon_and_percent"   # icon | icon_and_percent | rotating
-# refresh_interval_seconds = 60      # 15 = floor; common: 60, 300, 600
+# refresh_interval_seconds = 150     # default 150 (2.5m). Floor 15. Common: 60, 150, 300, 600.
 # language = "pt-BR"                 # force UI language (en | pt-BR | es)
 
 [thresholds]
