@@ -10,22 +10,28 @@ APP_DIR    := $(BUILD_DIR)/$(APP)
 DMG        := ai-taskbar-$(VERSION).dmg
 
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
-        sign-developer notarize staple release universal-check
+        sign-developer notarize staple release universal-check icon
 
 all: app
 
 build:
 	swift build -c release
 
+# Render the AppIcon.icns from the Swift script. Idempotent — safe to chain
+# before every `app` build so the icon never goes stale relative to the
+# source script.
+icon:
+	@scripts/build_icon.sh
+
 # Default `app` target = host-architecture only. Fast for local iteration.
 # For distribution use `make app-universal` (also runs on Intel Macs).
-app:
+app: icon
 	swift build -c release
 	rm -rf $(APP_DIR)
 	mkdir -p $(APP_DIR)/Contents/MacOS $(APP_DIR)/Contents/Resources
 	cp .build/release/ai-taskbar $(APP_DIR)/Contents/MacOS/ai-taskbar
 	cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
-	-cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
+	cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/
 	# Copy SPM-generated resource bundle (.lproj/Localizable.strings live here)
 	# next to the binary so Bundle.module finds them at runtime.
 	-cp -R .build/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/MacOS/ 2>/dev/null || true
@@ -38,7 +44,7 @@ app:
 # Universal binary (arm64 + x86_64). Works with Command Line Tools alone —
 # no full Xcode required. Strategy: build each arch separately, then `lipo`
 # them into a fat binary. ~2× build time vs single-arch.
-app-universal:
+app-universal: icon
 	@echo "==> Building arm64..."
 	swift build -c release --arch arm64
 	cp .build/arm64-apple-macosx/release/ai-taskbar build/.ai-taskbar.arm64
@@ -52,7 +58,7 @@ app-universal:
 		-output $(APP_DIR)/Contents/MacOS/ai-taskbar
 	rm -f build/.ai-taskbar.arm64 build/.ai-taskbar.x86_64
 	cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
-	-cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
+	cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/
 	# Copy resource bundle (arm64 + x86_64 ship the same resources, pick arm64).
 	-cp -R .build/arm64-apple-macosx/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/MacOS/ 2>/dev/null || true
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_DIR)/Contents/Info.plist

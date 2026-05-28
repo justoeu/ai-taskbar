@@ -8,6 +8,8 @@
     <string>ai-taskbar</string>
     <key>CFBundleName</key>
     <string>ai-taskbar</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleDisplayName</key>
     <string>AI Taskbar</string>
     <key>CFBundleShortVersionString</key>
