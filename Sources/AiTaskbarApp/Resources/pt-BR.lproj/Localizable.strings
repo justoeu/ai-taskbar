@@ -36,8 +36,8 @@
 "approximate_help" = "Custo aproximado baseado em tokens consumidos × tabela de preços.";
 
 // Cost / details
-"today_label" = "Hoje";
-"weekly_label" = "7d";
+"today_cost_fmt" = "Hoje: $%.2f";
+"weekly_cost_fmt" = "7d: $%.2f";
 "extra_usage_fmt" = "Uso extra: $%.2f";
 "credits_fmt" = "Créditos: $%.2f";
 "balance_fmt" = "Saldo: $%.2f";
@@ -88,7 +88,7 @@
 // Model breakdown
 "models_label" = "Modelos";
 "models_tooltip_header" = "Modelos usados hoje:";
-"models_header" = "Modelos (hoje / últimos 7 dias):";
+"models_columns_header" = "hoje / últimos 7 dias";
 
 // About — cost data source
 "about_cost_source" = "Custo calculado localmente a partir de ~/.claude/projects e ~/.codex/logs_2.sqlite";

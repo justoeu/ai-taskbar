@@ -83,45 +83,25 @@ public struct VendorSectionView: View {
         if let estimate = cost.byVendor[vm.vendorId],
            estimate.usdToday > 0 || estimate.usdLast7Days > 0 {
             Divider()
-            VStack(alignment: .leading, spacing: 4) {
-                costRow(labelKey: "today_label",
-                        systemImage: "calendar",
-                        value: estimate.usdToday)
-                costRow(labelKey: "weekly_label",
-                        systemImage: "chart.bar",
-                        value: estimate.usdLast7Days,
-                        trailingNote: estimate.isApproximate
-                            ? L10n.localizedString("approximate_short")
-                            : nil,
-                        trailingHelp: estimate.note
-                            ?? L10n.localizedString("approximate_help"))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    Label(L10n.localizedString("today_cost_fmt", estimate.usdToday),
+                          systemImage: "calendar")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Label(L10n.localizedString("weekly_cost_fmt", estimate.usdLast7Days),
+                          systemImage: "chart.bar")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if estimate.isApproximate {
+                        L10n.text("approximate_short")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .help(estimate.note ?? L10n.localizedString("approximate_help"))
+                    }
+                }
                 modelBreakdownDetailed(for: estimate)
-            }
-        }
-    }
-
-    /// One row of the cost summary: label + icon on the left, monospaced
-    /// USD value pinned to the right, optional "aprox." note after the
-    /// value (with help tooltip).
-    @ViewBuilder
-    private func costRow(labelKey: String,
-                         systemImage: String,
-                         value: Double,
-                         trailingNote: String? = nil,
-                         trailingHelp: String? = nil) -> some View {
-        HStack(spacing: 6) {
-            Label(L10n.localizedString(labelKey), systemImage: systemImage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            Text(String(format: "$%.2f", value))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            if let note = trailingNote {
-                Text(note)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .help(trailingHelp ?? "")
             }
         }
     }
@@ -145,13 +125,20 @@ public struct VendorSectionView: View {
             .sorted { ($0.usd7d, $0.usdToday) > ($1.usd7d, $1.usdToday) }
 
             VStack(alignment: .leading, spacing: 2) {
+                // Label on the left, column headers ("hoje / últimos 7 dias")
+                // pinned to the right so they sit directly above the
+                // corresponding `$X (Y%) / $Z (W%)` value pairs below.
                 HStack(spacing: 4) {
                     Image(systemName: "cpu")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    L10n.text("models_header")
+                    L10n.text("models_label")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    Spacer(minLength: 6)
+                    L10n.text("models_columns_header")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
                 ForEach(rows) { row in
                     modelRow(row,
