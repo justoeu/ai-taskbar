@@ -65,13 +65,19 @@ public struct PopoverContentView: View {
                 L10n.text("app_name")
                     .font(.headline)
                 Spacer()
-                // `TimelineView` forces a re-render every 30 s using the
+                // `TimelineView` forces a re-render every 5 s using the
                 // schedule's `context.date` as "now" — without it the relative
                 // string ("há 42 seg") would freeze at whatever the popover
                 // last rendered, because nothing in `store` changes between
                 // fetches.
+                //
+                // The `from:` anchor MUST be a fixed epoch, NOT `.now`. With
+                // `.now`, every popover open re-anchors the schedule so the
+                // first tick is `interval` seconds away — if the user closes
+                // and reopens faster than `interval`, they never see a tick
+                // and the timer appears frozen.
                 if let when = store.lastRefreshedAt {
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                    TimelineView(.periodic(from: Self.scheduleAnchor, by: 5)) { context in
                         Text(String(
                             format: L10n.localizedString("updated_ago_fmt"),
                             Self.relativeFormatter.localizedString(
@@ -199,4 +205,10 @@ public struct PopoverContentView: View {
         f.locale = L10n.effectiveLocale
         return f
     }()
+
+    /// Fixed anchor for the `TimelineView` periodic schedule. Using a
+    /// constant epoch (rather than `.now`) means the schedule is
+    /// deterministic across popover open/close cycles — the next tick is
+    /// always at most one interval away, regardless of when the view mounts.
+    private static let scheduleAnchor = Date(timeIntervalSinceReferenceDate: 0)
 }
