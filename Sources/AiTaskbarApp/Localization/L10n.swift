@@ -16,9 +16,40 @@ public enum L10n {
     /// Set once at app startup from the config.
     public static var languageOverride: String?
 
+    /// Custom resource-bundle locator. Replaces `Bundle.module` because the
+    /// SwiftPM-generated accessor uses
+    /// `Bundle.main.bundleURL.appendingPathComponent("…bundle")` as its
+    /// primary lookup, which works only when the executable runs straight
+    /// from `.build/<arch>/release/` (where the resource bundle is a
+    /// sibling of the binary). Inside a packaged `.app`,
+    /// `Bundle.main.bundleURL` points at the `.app` root, not at
+    /// `Contents/Resources/` where the bundle is shipped — so
+    /// `Bundle.module` `fatalError`s on first access and the popover
+    /// crashes the entire app.
+    ///
+    /// This lookup tries the conventional locations a packaged `.app`
+    /// places resource bundles, falls back to the dev-mode build dir, and
+    /// degrades gracefully to `Bundle.main` (untranslated UI is annoying
+    /// but the app stays alive) if nothing matches.
+    nonisolated(unsafe) private static let resourceBundle: Bundle = {
+        let bundleName = "ai-taskbar_AiTaskbarApp.bundle"
+        let candidates: [URL?] = [
+            // Packaged .app: SwiftPM resource bundle copied to
+            // Contents/Resources/ by `make app` / `make app-universal`.
+            Bundle.main.resourceURL?.appendingPathComponent(bundleName),
+            // dev mode: `swift run` from .build/<arch>/release/ — the
+            // bundle is the sibling of the executable.
+            Bundle.main.bundleURL.appendingPathComponent(bundleName),
+        ]
+        for url in candidates {
+            if let url, let b = Bundle(url: url) { return b }
+        }
+        return .main
+    }()
+
     /// Resolves the effective bundle for string lookups. When the override
     /// names a `.lproj` we have, scope the bundle to it; otherwise fall back
-    /// to the module bundle, which lets macOS pick the best system match.
+    /// to the resource bundle, which lets macOS pick the best system match.
     ///
     /// Resolution tries multiple forms because SPM lowercases the regional
     /// suffix when materializing `.lproj` folders (`pt-BR.lproj` →
@@ -26,7 +57,7 @@ public enum L10n {
     /// ("pt-BR") in config. We try: exact → lowercased → language-only.
     public static var bundle: Bundle {
         guard let override = languageOverride, !override.isEmpty else {
-            return .module
+            return resourceBundle
         }
         let candidates: [String] = {
             var out = [override]
@@ -39,12 +70,12 @@ public enum L10n {
             return out
         }()
         for code in candidates {
-            if let path = Bundle.module.path(forResource: code, ofType: "lproj"),
+            if let path = resourceBundle.path(forResource: code, ofType: "lproj"),
                let scoped = Bundle(path: path) {
                 return scoped
             }
         }
-        return .module
+        return resourceBundle
     }
 
     /// Plain string lookup. Falls back to the key itself when there's no
