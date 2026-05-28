@@ -4,7 +4,7 @@ APP        := AiTaskbar.app
 # Default points to a generic local namespace so the upstream repo doesn't
 # baked in anyone's personal apple-id namespace.
 BUNDLE_ID  ?= dev.aitaskbar.app
-VERSION    ?= 0.1.0
+VERSION    ?= 0.1.1
 BUILD_DIR  := build
 APP_DIR    := $(BUILD_DIR)/$(APP)
 DMG        := ai-taskbar-$(VERSION).dmg
@@ -33,8 +33,12 @@ app: icon
 	cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
 	cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/
 	# Copy SPM-generated resource bundle (.lproj/Localizable.strings live here)
-	# next to the binary so Bundle.module finds them at runtime.
-	-cp -R .build/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/MacOS/ 2>/dev/null || true
+	# into Contents/Resources/. SwiftPM's generated `Bundle.module` lookup
+	# tries `Bundle.main.resourceURL` first (= Contents/Resources/), so the
+	# bundle MUST live there or `L10n.bundle` fatalErrors as soon as the
+	# popover renders. Putting it in Contents/MacOS/ works for `swift run`
+	# (where Bundle.main.bundleURL is the .build dir) but breaks the .app.
+	-cp -R .build/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_DIR)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $(BUNDLE_ID)" $(APP_DIR)/Contents/Info.plist
 	codesign --force --deep --sign - $(APP_DIR)
@@ -60,7 +64,9 @@ app-universal: icon
 	cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
 	cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/
 	# Copy resource bundle (arm64 + x86_64 ship the same resources, pick arm64).
-	-cp -R .build/arm64-apple-macosx/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/MacOS/ 2>/dev/null || true
+	# Lives in Contents/Resources/ for `Bundle.module` to find it — see the
+	# detailed comment on the `app` target above.
+	-cp -R .build/arm64-apple-macosx/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_DIR)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $(BUNDLE_ID)" $(APP_DIR)/Contents/Info.plist
 	codesign --force --deep --sign - $(APP_DIR)

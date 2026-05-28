@@ -30,6 +30,13 @@ bold "[3/5] assemble .app bundle"
 make app >/dev/null 2>&1
 test -x build/AiTaskbar.app/Contents/MacOS/ai-taskbar || fail "Mach-O missing"
 codesign --verify build/AiTaskbar.app 2>/dev/null || fail "ad-hoc signature invalid"
+# Bundle.module crashes the popover if the SPM-generated resource bundle is
+# in the wrong location (regression from v0.1.0). Must live in Resources/.
+spm_bundle="build/AiTaskbar.app/Contents/Resources/ai-taskbar_AiTaskbarApp.bundle"
+test -d "$spm_bundle" \
+    || fail "SPM resource bundle missing from Contents/Resources/ — Bundle.module will fatalError"
+test -f "$spm_bundle/en.lproj/Localizable.strings" \
+    || fail "Localizable.strings missing from resource bundle"
 ok "bundle + ad-hoc signature OK"
 
 bold "[4/5] smoke launch"
