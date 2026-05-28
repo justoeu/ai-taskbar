@@ -102,7 +102,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 **Core**
 - 5 LLM providers — Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), Kimi (Moonshot)
 - OAuth auto-refresh for Anthropic + OpenAI using their official `client_id`s
-- Per-vendor caches with 60-second TTL and 7-day stale fallback
+- Per-vendor caches with 150-second TTL (matched to default refresh interval) and 7-day stale fallback
 
 **UI**
 - SwiftUI `MenuBarExtra` with accordion popover (locked providers stay collapsed)
@@ -163,7 +163,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 │              5 × Provider (UsageProvider impl)              │
 │              All use CachedFetch helper:                    │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ 1. Cache check (60s TTL → no network)                │  │
+│  │ 1. Cache check (150s TTL → no network)               │  │
 │  │ 2. Credentials read (Keychain / file / env+config)   │  │
 │  │ 3. OAuth refresh if needed (shared OAuthRefresher)   │  │
 │  │ 4. HTTP request                                      │  │

@@ -15,7 +15,7 @@ public struct DiskCache: Sendable {
 
     public init(vendor: VendorId,
                 baseDir: URL,
-                ttl: TimeInterval = 60,
+                ttl: TimeInterval = 150,
                 maxStale: TimeInterval = 7 * 24 * 60 * 60) {
         self.vendor = vendor
         self.baseDir = baseDir
