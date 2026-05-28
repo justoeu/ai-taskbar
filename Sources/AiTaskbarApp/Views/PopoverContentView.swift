@@ -65,7 +65,7 @@ public struct PopoverContentView: View {
                 L10n.text("app_name")
                     .font(.headline)
                 Spacer()
-                // `TimelineView` forces a re-render every 5 s using the
+                // `TimelineView` forces a re-render every 1 s using the
                 // schedule's `context.date` as "now" — without it the relative
                 // string ("há 42 seg") would freeze at whatever the popover
                 // last rendered, because nothing in `store` changes between
@@ -77,7 +77,7 @@ public struct PopoverContentView: View {
                 // and reopens faster than `interval`, they never see a tick
                 // and the timer appears frozen.
                 if let when = store.lastRefreshedAt {
-                    TimelineView(.periodic(from: Self.scheduleAnchor, by: 5)) { context in
+                    TimelineView(.periodic(from: Self.scheduleAnchor, by: 1)) { context in
                         Text(String(
                             format: L10n.localizedString("updated_ago_fmt"),
                             Self.relativeFormatter.localizedString(
