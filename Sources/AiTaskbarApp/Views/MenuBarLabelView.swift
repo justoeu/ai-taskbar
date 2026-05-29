@@ -71,6 +71,7 @@ public struct MenuBarLabelView: View {
         case .openrouter: return "OR"
         case .zai:        return "ZAI"
         case .kimi:       return "Km"
+        case .gemini:     return "Gm"
         }
     }
 

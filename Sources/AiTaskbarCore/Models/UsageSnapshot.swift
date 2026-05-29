@@ -8,6 +8,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
     case zai(ZAISnapshot)
     case openrouter(OpenRouterSnapshot)
     case kimi(KimiSnapshot)
+    case gemini(GeminiSnapshot)
 
     public var vendorId: VendorId {
         switch self {
@@ -16,6 +17,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .zai:        return .zai
         case .openrouter: return .openrouter
         case .kimi:       return .kimi
+        case .gemini:     return .gemini
         }
     }
 
@@ -26,6 +28,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .zai(let s):        return s.planLabel
         case .openrouter(let s): return s.planLabel
         case .kimi(let s):       return s.planLabel
+        case .gemini(let s):     return s.planLabel
         }
     }
 
@@ -41,6 +44,8 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             return [s.balance, s.daily, s.weekly, s.monthly].compactMap { $0 }
         case .kimi(let s):
             return [s.balance].compactMap { $0 }
+        case .gemini(let s):
+            return [s.status].compactMap { $0 }
         }
     }
 
@@ -132,6 +137,29 @@ public struct KimiSnapshot: Sendable, Equatable, Codable {
         self.availableUSD = availableUSD
         self.voucherUSD = voucherUSD
         self.cashUSD = cashUSD
+    }
+}
+
+/// Google Gemini doesn't expose a public quota/billing REST endpoint on the
+/// `generativelanguage.googleapis.com` host. We instead use the `models` list
+/// as an authenticated heartbeat: it validates the API key and reports how
+/// many models the key can see. The status row shows 0% utilization (we have
+/// no quota signal) and the model count is surfaced via `detail`.
+public struct GeminiSnapshot: Sendable, Equatable, Codable {
+    public var planLabel: String?
+    /// Single status row — utilization is always 0%, the detail string carries
+    /// "N models available". Acts as a connectivity check.
+    public var status: UsageWindow?
+    /// Number of models the API key can list. Useful as a quick sanity that
+    /// the key still has access to the Generative Language API.
+    public var modelCount: Int?
+
+    public init(planLabel: String? = nil,
+                status: UsageWindow? = nil,
+                modelCount: Int? = nil) {
+        self.planLabel = planLabel
+        self.status = status
+        self.modelCount = modelCount
     }
 }
 

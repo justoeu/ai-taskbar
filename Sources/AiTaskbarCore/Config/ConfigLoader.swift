@@ -161,5 +161,14 @@ public struct ConfigLoader: Sendable {
         # base_url  = "https://api.moonshot.ai/v1"   # use https://api.moonshot.cn/v1 for China region
 
         """),
+        ("[gemini]", """
+
+        [gemini]
+        enabled     = true
+        api_key_env = "GEMINI_API_KEY"
+        # api_key   = "AIza..."
+        # base_url  = "https://generativelanguage.googleapis.com/v1beta"
+
+        """),
     ]
 }

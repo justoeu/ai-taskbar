@@ -12,6 +12,7 @@ struct VendorIdTests {
         #expect(VendorId.zai.displayName == "Z.AI (GLM)")
         #expect(VendorId.openrouter.displayName == "OpenRouter")
         #expect(VendorId.kimi.displayName == "Kimi (Moonshot)")
+        #expect(VendorId.gemini.displayName == "Gemini (Google AI)")
     }
 
     @Test("dashboardURL is non-nil and uses https for every vendor")
@@ -30,9 +31,9 @@ struct VendorIdTests {
         }
     }
 
-    @Test("CaseIterable enumerates all five vendors")
-    func caseIterable_enumerates_five() {
-        #expect(VendorId.allCases.count == 5)
+    @Test("CaseIterable enumerates all six vendors")
+    func caseIterable_enumerates_six() {
+        #expect(VendorId.allCases.count == 6)
     }
 
     @Test("Codable round-trip preserves rawValue")

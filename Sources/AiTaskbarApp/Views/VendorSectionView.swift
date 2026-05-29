@@ -446,6 +446,13 @@ public struct VendorSectionView: View {
             }
         case .openrouter, .zai:
             EmptyView()
+        case .gemini(let s):
+            if let count = s.modelCount {
+                Label("\(count) models available",
+                      systemImage: "sparkles")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         case .kimi(let s):
             VStack(alignment: .leading, spacing: 2) {
                 if let avail = s.availableUSD {

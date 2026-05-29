@@ -55,6 +55,21 @@ public enum PricingTable {
         "gpt-5-mini":            ModelPricing(input: 0.25, output: 2,   cacheRead: 0.025),
     ]
 
+    /// Google Gemini — Generative Language API pricing (verified 2026-05).
+    /// Cache read uses Google's "cached input" tier price.
+    public static let gemini: [String: ModelPricing] = [
+        // Gemini 2.5
+        "gemini-2.5-pro":        ModelPricing(input: 1.25, output: 10,  cacheRead: 0.31),
+        "gemini-2.5-flash":      ModelPricing(input: 0.30, output: 2.50, cacheRead: 0.075),
+        "gemini-2.5-flash-lite": ModelPricing(input: 0.10, output: 0.40, cacheRead: 0.025),
+        // Gemini 2.0
+        "gemini-2.0-flash":      ModelPricing(input: 0.10, output: 0.40, cacheRead: 0.025),
+        "gemini-2.0-flash-lite": ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.019),
+        // Legacy 1.5
+        "gemini-1.5-pro":        ModelPricing(input: 1.25, output: 5.00, cacheRead: 0.31),
+        "gemini-1.5-flash":      ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.019),
+    ]
+
     public static func lookup(_ model: String, table: [String: ModelPricing]) -> ModelPricing? {
         if let exact = table[model] { return exact }
         // Try a prefix match — log lines may include suffixes like "model=gpt-5.5-2026-01".
