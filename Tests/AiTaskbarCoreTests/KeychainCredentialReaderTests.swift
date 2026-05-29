@@ -88,6 +88,87 @@ struct KeychainCredentialReaderTests {
         }
     }
 
+    @Test("read on Keychain with seeded entry round-trips credentials")
+    func read_with_seeded_entry_round_trips() throws {
+        let service = "ai-taskbar-test-\(UUID().uuidString)"
+        let account = "test@example.com"
+        let payload = #"""
+        {
+          "claudeAiOauth": {
+            "accessToken": "seeded-access",
+            "refreshToken": "seeded-refresh",
+            "expiresAt": 1764201600000
+          }
+        }
+        """#
+
+        // Seed the Keychain. Skip the test if SecItemAdd fails (some CI
+        // environments don't allow GenericPassword writes).
+        let addQuery: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String:   Data(payload.utf8),
+        ]
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            // CI runner probably can't write to login keychain. Not a real
+            // failure of the code under test.
+            return
+        }
+        defer {
+            let delQuery: [String: Any] = [
+                kSecClass as String:       kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+            ]
+            _ = SecItemDelete(delQuery as CFDictionary)
+        }
+
+        let reader = KeychainCredentialReader(service: service)
+        let creds = try reader.read()
+        #expect(creds.accessToken == "seeded-access")
+        #expect(creds.refreshToken == "seeded-refresh")
+        #expect(creds.expiresAtMs == 1_764_201_600_000)
+    }
+
+    @Test("writeBack updates a seeded Keychain entry")
+    func writeBack_updates_seeded_entry() throws {
+        let service = "ai-taskbar-test-wb-\(UUID().uuidString)"
+        let account = "writeback@example.com"
+        let initialPayload = #"""
+        {"claudeAiOauth":{"accessToken":"old","refreshToken":"r","expiresAt":1}}
+        """#
+        let addQuery: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String:   Data(initialPayload.utf8),
+        ]
+        guard SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess else {
+            return  // skip on CI without keychain perms
+        }
+        defer {
+            let delQuery: [String: Any] = [
+                kSecClass as String:       kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+            ]
+            _ = SecItemDelete(delQuery as CFDictionary)
+        }
+
+        let reader = KeychainCredentialReader(service: service,
+                                              preferredAccount: account)
+        _ = try? reader.read()   // primes _resolvedAccount
+        let updated = AnthropicCredentials(
+            accessToken: "new", refreshToken: "new-r",
+            expiresAtMs: 2_000_000_000_000)
+        try reader.writeBack(updated)
+        let back = try reader.read()
+        #expect(back.accessToken == "new")
+        #expect(back.refreshToken == "new-r")
+    }
+
     @Test("read on empty Keychain throws AppError.credentials")
     func read_throws_when_keychain_empty() {
         // Service that surely doesn't exist on any test machine.
