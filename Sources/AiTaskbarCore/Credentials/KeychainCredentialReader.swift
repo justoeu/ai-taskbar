@@ -11,11 +11,11 @@ import Security
 /// Pass `preferredAccount` (from `[anthropic] keychain_account = "..."` in
 /// config) to pin to a specific entry; otherwise the lexicographically
 /// smallest account name wins and a warning is logged.
-/// Open for subclassing (drop the `final` modifier) specifically so test
-/// targets can inject a mock that overrides `read()` / `writeBack()` without
-/// touching the real Keychain. There's no production motivation to subclass
-/// this elsewhere.
-public class KeychainCredentialReader: @unchecked Sendable {
+/// Conforms to `AnthropicCredentialReading` so tests can substitute an
+/// in-memory mock without subclassing this concrete reader — the class
+/// stays `final` and the production credential surface is interception-
+/// proof for any external consumer.
+public final class KeychainCredentialReader: AnthropicCredentialReading, @unchecked Sendable {
     public let service: String
     public let preferredAccount: String?
 
@@ -28,7 +28,7 @@ public class KeychainCredentialReader: @unchecked Sendable {
         self.preferredAccount = preferredAccount
     }
 
-    open func read() throws -> AnthropicCredentials {
+    public func read() throws -> AnthropicCredentials {
         let items = try fetchAll()
         if items.isEmpty {
             throw AppError.credentials(
@@ -45,7 +45,7 @@ public class KeychainCredentialReader: @unchecked Sendable {
         }
     }
 
-    open func writeBack(_ updated: AnthropicCredentials) throws {
+    public func writeBack(_ updated: AnthropicCredentials) throws {
         let file = AnthropicCredentialsFile(claudeAiOauth: updated)
         let data = try SharedCoders.encoder.encode(file)
         var query: [String: Any] = [

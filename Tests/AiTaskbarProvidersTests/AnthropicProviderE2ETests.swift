@@ -4,19 +4,17 @@ import Foundation
 @testable import AiTaskbarProviders
 import AiTaskbarTesting
 
-/// Mock that bypasses the real macOS Keychain so we can drive
-/// AnthropicProvider end-to-end without an "Always Allow" prompt.
-private final class MockKeychainReader: KeychainCredentialReader, @unchecked Sendable {
+/// In-memory `AnthropicCredentialReading` for driving AnthropicProvider
+/// end-to-end without an "Always Allow" Keychain prompt. Class (not struct)
+/// so the test can observe `writeBackCalls` after the provider mutates state.
+private final class MockKeychainReader: AnthropicCredentialReading, @unchecked Sendable {
     var nextRead: AnthropicCredentials
     var writeBackCalls: [AnthropicCredentials] = []
 
-    init(initial: AnthropicCredentials) {
-        self.nextRead = initial
-        super.init(service: "test-service", preferredAccount: nil)
-    }
+    init(initial: AnthropicCredentials) { self.nextRead = initial }
 
-    override func read() throws -> AnthropicCredentials { nextRead }
-    override func writeBack(_ updated: AnthropicCredentials) throws {
+    func read() throws -> AnthropicCredentials { nextRead }
+    func writeBack(_ updated: AnthropicCredentials) throws {
         writeBackCalls.append(updated)
         nextRead = updated
     }

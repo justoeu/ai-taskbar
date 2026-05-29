@@ -3,7 +3,7 @@ import AiTaskbarCore
 
 public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     public let vendorId: VendorId = .anthropic
-    private let credentialReader: KeychainCredentialReader
+    private let credentialReader: any AnthropicCredentialReading
     private let fetcher: CachedFetch
     private let http: HTTPClient
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
@@ -14,7 +14,7 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     private let labelLock = NSLock()
     private var labelCache: (key: String, label: String?)?
 
-    public init(credentialReader: KeychainCredentialReader = .init(),
+    public init(credentialReader: any AnthropicCredentialReading = KeychainCredentialReader(),
                 cache: DiskCache,
                 http: HTTPClient) {
         self.credentialReader = credentialReader
