@@ -129,6 +129,36 @@ struct PinningDelegateTests {
         #expect(disposition == .performDefaultHandling)
     }
 
+    @Test("pinned host without server trust → cancel")
+    func pinned_host_no_server_trust_cancels() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-pdnst-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let store = PinStore(baseDir: tmp)
+        let delegate = PinningDelegate(pinnedHosts: ["pinned.example.com"],
+                                       store: store, auditOnly: false)
+        // Server trust auth method but no serverTrust object on the
+        // protection space (URLProtectionSpace's plain init doesn't set one).
+        let space = URLProtectionSpace(
+            host: "pinned.example.com",
+            port: 443,
+            protocol: "https",
+            realm: nil,
+            authenticationMethod: NSURLAuthenticationMethodServerTrust)
+        let challenge = URLAuthenticationChallenge(
+            protectionSpace: space,
+            proposedCredential: nil,
+            previousFailureCount: 0,
+            failureResponse: nil,
+            error: nil,
+            sender: NoopSender())
+        var disposition: URLSession.AuthChallengeDisposition?
+        delegate.urlSession(URLSession.shared,
+                            didReceive: challenge) { d, _ in disposition = d }
+        #expect(disposition == .cancelAuthenticationChallenge)
+    }
+
     @Test("server-trust on non-pinned host falls through")
     func server_trust_non_pinned_host_falls_through() throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())

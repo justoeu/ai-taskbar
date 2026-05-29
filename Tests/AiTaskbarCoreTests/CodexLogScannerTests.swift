@@ -37,6 +37,14 @@ struct CodexLogScannerTests {
         #expect(CodexLogScanner.parse(body: body)?.tokens == 42)
     }
 
+    @Test("estimate(dbPath:) on truly missing file returns the no-file note")
+    func estimate_missing_file_returns_no_file_note() {
+        let nonexistent = "/tmp/ai-taskbar-codex-missing-\(UUID().uuidString).sqlite"
+        let est = CodexLogScanner.estimate(dbPath: nonexistent)
+        #expect(est.usdToday == 0)
+        #expect(est.note?.contains("No ~/.codex/logs_2.sqlite") == true)
+    }
+
     @Test("estimate falls back gracefully when sqlite file missing")
     func estimate_returns_zero_when_no_db() {
         // The default path scan when ~/.codex/logs_2.sqlite is absent should

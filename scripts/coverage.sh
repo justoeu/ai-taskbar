@@ -48,14 +48,15 @@ fi
 
 printf "  Line coverage: \033[1m%s%%\033[0m\n" "$TOTAL_LINE"
 
-# Use integer math (bc isn't on every macOS by default; awk is).
-PCT_INT=$(awk -v n="$TOTAL_LINE" 'BEGIN { print int(n) }')
+# Float-precise comparison so 89.84% doesn't round-down past the 90% gate.
+# `awk` is universally available; `bc` isn't on every macOS by default.
+BELOW=$(awk -v n="$TOTAL_LINE" -v f="$FLOOR" 'BEGIN { print (n + 0 < f + 0) ? "1" : "0" }')
 
 if [ "$FLOOR" -gt 0 ]; then
-    if [ "$PCT_INT" -lt "$FLOOR" ]; then
-        fail "coverage $PCT_INT% < floor $FLOOR%"
+    if [ "$BELOW" = "1" ]; then
+        fail "coverage $TOTAL_LINE% < floor $FLOOR%"
     fi
-    ok "coverage $PCT_INT% ≥ floor $FLOOR%"
+    ok "coverage $TOTAL_LINE% ≥ floor $FLOOR%"
 else
     warn "no floor enforced (COVERAGE_FLOOR=0). Goal: 90%"
 fi

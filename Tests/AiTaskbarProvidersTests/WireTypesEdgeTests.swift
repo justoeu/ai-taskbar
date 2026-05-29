@@ -96,6 +96,28 @@ struct WireTypesEdgeTests {
         #expect(snap.creditsUSD == nil)
     }
 
+    @Test("Z.AI envelope without window field uses default classification")
+    func zai_no_window_field_classifies_by_unit() throws {
+        let body = #"""
+        {
+          "code": 0, "data": {
+            "level": "lite",
+            "limits": [
+              { "name": "WindowlessSession", "unit": "TOKENS_LIMIT",
+                "used": 1, "limit": 5, "used_percent": 20.0 },
+              { "name": "MCP", "unit": "MCP_LIMIT",
+                "used": 1, "limit": 10, "used_percent": 10.0 }
+            ]
+          }
+        }
+        """#
+        let parsed = try JSONDecoder().decode(ZAIEnvelope.self, from: Data(body.utf8))
+        let snap = parsed.toSnapshot(configTier: nil)
+        // First TOKENS_LIMIT without window classification becomes session.
+        #expect(snap.session != nil)
+        #expect(snap.mcp != nil)
+    }
+
     @Test("Z.AI envelope with MCP only — mcp window populated")
     func zai_mcp_only_branch() throws {
         let body = #"""
