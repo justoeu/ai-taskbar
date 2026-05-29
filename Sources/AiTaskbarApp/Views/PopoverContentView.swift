@@ -83,7 +83,7 @@ public struct PopoverContentView: View {
                             Self.relativeFormatter.localizedString(
                                 for: when, relativeTo: context.date)
                         ))
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -104,10 +104,10 @@ public struct PopoverContentView: View {
             }
             HStack(spacing: 4) {
                 Image(systemName: "info.circle")
-                    .font(.caption2)
+                    .font(.subheadline)
                     .foregroundStyle(.tertiary)
                 L10n.text("menu_bar_hint")
-                    .font(.caption2)
+                    .font(.subheadline)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -145,7 +145,7 @@ public struct PopoverContentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .font(.caption)
+        .font(.subheadline)
     }
 
     /// Non-intrusive yellow banner shown when config.toml changes on disk.
@@ -157,7 +157,7 @@ public struct PopoverContentView: View {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.yellow)
             L10n.text("config_changed_banner")
-                .font(.caption)
+                .font(.subheadline)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
@@ -187,7 +187,7 @@ public struct PopoverContentView: View {
                   systemImage: "exclamationmark.triangle")
                 .font(.subheadline)
             L10n.text("no_providers_hint")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
         .padding(12)

@@ -24,7 +24,7 @@ public struct SparklineView: View {
                 let filtered = samples.filter { $0.at >= start && $0.at <= now }
                 if filtered.count < 2 {
                     L10n.text("building_history")
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 } else {
@@ -114,7 +114,7 @@ public struct SparklineView: View {
                     .frame(width: 4, height: 4)
                     .position(x: xFor(last.at), y: yFor(last.max))
                 Text("\(Int(last.max.rounded()))%")
-                    .font(.caption2.monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(tint)
                     .position(x: plotWidth + valueLabelWidth / 2,
                               y: yFor(last.max))
@@ -124,7 +124,7 @@ public struct SparklineView: View {
             // recent spikes that may have already drained.
             if maxPercent > currentPercent + 5 {
                 Text("↑\(Int(maxPercent.rounded()))%")
-                    .font(.system(size: 8).monospacedDigit())
+                    .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(.tertiary)
                     .position(x: plotWidth + valueLabelWidth / 2,
                               y: yFor(maxPercent) - 8)
@@ -141,11 +141,11 @@ public struct SparklineView: View {
     private var axisLabels: some View {
         HStack {
             Text("-24h")
-                .font(.system(size: 8).monospacedDigit())
+                .font(.system(size: 12).monospacedDigit())
                 .foregroundStyle(.tertiary)
             Spacer()
             L10n.text("now")
-                .font(.system(size: 8).monospacedDigit())
+                .font(.system(size: 12).monospacedDigit())
                 .foregroundStyle(.tertiary)
                 .padding(.trailing, 28)   // align under the right edge of the plot
         }

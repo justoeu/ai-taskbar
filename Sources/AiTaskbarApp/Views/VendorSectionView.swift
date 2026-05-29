@@ -74,7 +74,7 @@ public struct VendorSectionView: View {
     private var disabledHint: some View {
         Label(L10n.localizedString("no_credentials_short"),
               systemImage: "key.slash")
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
     }
 
@@ -92,16 +92,16 @@ public struct VendorSectionView: View {
                 HStack(spacing: 12) {
                     Label(L10n.localizedString("today_cost_fmt", estimate.usdToday),
                           systemImage: "calendar")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Label(L10n.localizedString("weekly_cost_fmt", estimate.usdLast7Days),
                           systemImage: "chart.bar")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Spacer()
                     if estimate.isApproximate {
                         L10n.text("approximate_short")
-                            .font(.caption2)
+                            .font(.subheadline)
                             .foregroundStyle(.tertiary)
                             .help(estimate.note ?? L10n.localizedString("approximate_help"))
                     }
@@ -121,10 +121,10 @@ public struct VendorSectionView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Image(systemName: "cpu")
-                    .font(.caption2)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                 L10n.text("models_label")
-                    .font(.caption2)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                 ProgressView()
                     .controlSize(.mini)
@@ -134,10 +134,10 @@ public struct VendorSectionView: View {
             }
             HStack(spacing: 4) {
                 Text("•")
-                    .font(.caption2)
+                    .font(.subheadline)
                     .foregroundStyle(.tertiary)
                 L10n.text("loading")
-                    .font(.caption2)
+                    .font(.subheadline)
                     .foregroundStyle(.tertiary)
             }
             .padding(.leading, 4)
@@ -169,10 +169,10 @@ public struct VendorSectionView: View {
                 // corresponding `$X (Y%) / $Z (W%)` value pairs below.
                 HStack(spacing: 4) {
                     Image(systemName: "cpu")
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     L10n.text("models_label")
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     // Inline spinner while a recompute is in flight, so the
                     // user sees "we're refreshing" even though the previous
@@ -185,7 +185,7 @@ public struct VendorSectionView: View {
                     }
                     Spacer(minLength: 6)
                     L10n.text("models_columns_header")
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.tertiary)
                 }
                 ForEach(rows) { row in
@@ -204,37 +204,37 @@ public struct VendorSectionView: View {
         let weekPct  = total7d > 0    ? Int((row.usd7d   / total7d   * 100).rounded()) : 0
         HStack(spacing: 0) {
             Text("•  ")
-                .font(.caption2)
+                .font(.subheadline)
                 .foregroundStyle(.tertiary)
             Text(Self.shortModelName(row.name))
-                .font(.caption2.monospaced())
+                .font(.subheadline.monospaced())
                 .foregroundStyle(.secondary)
             Spacer(minLength: 6)
             if row.usdToday > 0 {
                 Text(String(format: "$%.2f", row.usdToday))
-                    .font(.caption2.monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Text(String(format: " (%d%%)", todayPct))
-                    .font(.caption2.monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.tertiary)
             } else {
                 Text("—")
-                    .font(.caption2.monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
             Text(" / ")
-                .font(.caption2.monospacedDigit())
+                .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.tertiary)
             if row.usd7d > 0 {
                 Text(String(format: "$%.2f", row.usd7d))
-                    .font(.caption2.monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Text(String(format: " (%d%%)", weekPct))
-                    .font(.caption2.monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.tertiary)
             } else {
                 Text("—")
-                    .font(.caption2.monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
         }
@@ -267,7 +267,7 @@ public struct VendorSectionView: View {
                     persistExpansion(userExpanded)
                 } label: {
                     Image(systemName: effectiveExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption.weight(.bold))
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(.secondary)
                         .frame(width: 14)
                 }
@@ -277,7 +277,7 @@ public struct VendorSectionView: View {
                     vm.vendorId.displayName))
             } else {
                 Image(systemName: "lock.fill")
-                    .font(.caption2)
+                    .font(.subheadline)
                     .foregroundStyle(.tertiary)
                     .frame(width: 14)
                     .help(L10n.localizedString("locked_help"))
@@ -294,13 +294,13 @@ public struct VendorSectionView: View {
                             .foregroundStyle(.primary)
                         if vm.vendorId.dashboardURL != nil {
                             Image(systemName: "arrow.up.right.square")
-                                .font(.caption2)
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     if let plan = state.outcome?.snapshot.planLabel {
                         Text(plan)
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -365,19 +365,19 @@ public struct VendorSectionView: View {
         switch state {
         case .idle:
             L10n.text("waiting_first_refresh")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
 
         case .loading where state.outcome == nil:
             L10n.text("loading")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
 
         case .loading, .ok:
             if let snap = state.outcome?.snapshot {
                 if snap.windows.isEmpty {
                     L10n.text("no_usage_windows")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.orange)
                 } else {
                     renderSnapshot(snap)
@@ -390,21 +390,21 @@ public struct VendorSectionView: View {
                     Label(L10n.localizedString("no_credentials_for_vendor_fmt",
                                                vm.vendorId.displayName),
                           systemImage: "key.slash")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     L10n.text("no_credentials_hint")
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
                     Text(err.localizedDescription)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
                 if let snap = fallback?.snapshot, !snap.windows.isEmpty {
                     Divider()
                     L10n.text("showing_cached_data")
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     renderSnapshot(snap)
                 }
@@ -429,19 +429,19 @@ public struct VendorSectionView: View {
             if let extra = s.extraUsageUSD, extra > 0 {
                 Label(L10n.localizedString("extra_usage_fmt", extra),
                       systemImage: "dollarsign.circle")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
         case .openai(let s):
             if let credits = s.creditsUSD {
                 Label(L10n.localizedString("credits_fmt", credits),
                       systemImage: "dollarsign.circle")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             if let range = s.messageCountRange {
                 Label(range, systemImage: "message")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
         case .openrouter, .zai:
@@ -451,19 +451,19 @@ public struct VendorSectionView: View {
                 if let avail = s.availableUSD {
                     Label(L10n.localizedString("balance_fmt", avail),
                           systemImage: "dollarsign.circle")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 if let voucher = s.voucherUSD, voucher > 0 {
                     Label(L10n.localizedString("voucher_fmt", voucher),
                           systemImage: "ticket")
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 if let cash = s.cashUSD, cash > 0 {
                     Label(L10n.localizedString("cash_fmt", cash),
                           systemImage: "creditcard")
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }

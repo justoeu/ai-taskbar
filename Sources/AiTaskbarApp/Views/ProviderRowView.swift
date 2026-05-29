@@ -27,12 +27,12 @@ public struct ProviderRowView: View {
             HStack(spacing: 8) {
                 if let resetsAt = window.resetsAt {
                     Text("resets \(resetsAt, style: .relative)")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 if let detail = window.detail {
                     Text(detail)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
