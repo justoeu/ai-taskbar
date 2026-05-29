@@ -3,7 +3,7 @@
 # Missing file or missing sections fall back to the defaults below.
 
 [ui]
-# primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi
+# primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi | gemini
 # menu_bar_mode = "icon_and_percent"  # icon | icon_and_percent | rotating
 # refresh_interval_seconds = 150    # default 150 (2.5m). Floor 15. Common: 60, 150, 300, 600.
 # language = "pt-BR"                # force UI language (en | pt-BR | es). Default: macOS system locale.
@@ -61,3 +61,11 @@ enabled = true
 api_key_env = "MOONSHOT_API_KEY"
 # api_key = "sk-..."
 # base_url = "https://api.moonshot.ai/v1"   # use https://api.moonshot.cn/v1 for China region
+
+[gemini]
+enabled = true
+api_key_env = "GEMINI_API_KEY"
+# api_key = "AIza..."        # inline fallback if env not set
+# base_url = "https://generativelanguage.googleapis.com/v1beta"
+# Note: Google AI doesn't expose a public usage/billing REST endpoint —
+# this row shows model-list availability as a key-health heartbeat.

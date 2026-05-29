@@ -100,6 +100,14 @@ public final class AppEnvironment {
                 NSLog("ai-taskbar: kimi init failed: %@", "\(error)")
             }
         }
+        if config.gemini.enabled {
+            do {
+                let p = try GeminiProvider(config: config.gemini, http: http, cacheTTL: ttl)
+                out.append(p)
+            } catch {
+                NSLog("ai-taskbar: gemini init failed: %@", "\(error)")
+            }
+        }
         return out
     }
 }

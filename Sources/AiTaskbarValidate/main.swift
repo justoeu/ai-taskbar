@@ -69,6 +69,44 @@ section("JSONValue round-trip") {
     expect(decoded == payload, "JSONValue Codable round-trip preserves shape")
 }
 
+section("GeminiConfig.validate") {
+    expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1beta") != nil,
+           "accepts https://generativelanguage.googleapis.com/v1beta")
+    expect(GeminiConfig.validate("http://generativelanguage.googleapis.com/v1beta") == nil,
+           "rejects http://")
+    expect(GeminiConfig.validate("https://attacker.com/v1beta") == nil,
+           "rejects unknown host")
+    expect(GeminiConfig.validate("https://GENERATIVELANGUAGE.GOOGLEAPIS.COM/v1beta") != nil,
+           "scheme/host case-insensitive")
+    expect(GeminiConfig.validate("not a url") == nil,
+           "rejects garbage")
+    expect(GeminiConfig.validate("https://aiplatform.googleapis.com/v1") == nil,
+           "rejects Vertex host (not in allowlist; needs OAuth)")
+}
+
+section("Wire types: Gemini fixture") {
+    let parsed = try SharedCoders.decoder.decode(
+        GeminiModelsResponse.self,
+        from: Fixtures.data(Fixtures.geminiModels200))
+    let s = parsed.toSnapshot()
+    expect(s.planLabel == "Google AI Studio", "Gemini plan label")
+    expect(s.modelCount == 3, "Gemini model count = 3")
+    expect(s.status?.label == "API Key", "Gemini status row labeled 'API Key'")
+    expect(s.status?.utilizationPercent == 0,
+           "Gemini status is 0% (no quota signal)")
+    expect(s.status?.detail == "3 models available",
+           "Gemini detail line carries model count")
+
+    // Empty list branch.
+    let empty = try SharedCoders.decoder.decode(
+        GeminiModelsResponse.self,
+        from: Fixtures.data(Fixtures.geminiModelsEmpty200))
+    let es = empty.toSnapshot()
+    expect(es.modelCount == 0, "Gemini empty list → modelCount 0")
+    expect(es.status?.detail == "API key valid (no models visible)",
+           "Gemini empty list uses validity hint")
+}
+
 section("KimiConfig.validate") {
     expect(KimiConfig.validate("https://api.moonshot.ai/v1") != nil,
            "accepts https://api.moonshot.ai/v1")
@@ -293,6 +331,10 @@ section("PricingTable lookup") {
     expect(prefix != nil, "prefix match finds gpt-5-codex")
     let kimi = PricingTable.lookup("kimi-k2-6", table: PricingTable.kimi)
     expect(kimi?.cacheReadPer1M == 0.16, "Kimi K2.6 cache-hit price")
+    let gemini = PricingTable.lookup("gemini-2.5-flash", table: PricingTable.gemini)
+    expect(gemini?.inputPer1M == 0.30, "Gemini 2.5 Flash input price")
+    let geminiPrefix = PricingTable.lookup("gemini-2.0-flash-thinking", table: PricingTable.gemini)
+    expect(geminiPrefix != nil, "Gemini prefix match (2.0-flash-thinking → 2.0-flash)")
     let unknown = PricingTable.lookup("totally-made-up-model", table: PricingTable.anthropic)
     expect(unknown == nil, "unknown model returns nil")
 }

@@ -112,6 +112,37 @@ public enum Fixtures {
     }
     """#
 
+    /// Gemini `models.list` payload — heartbeat used as a stand-in for a
+    /// quota signal (Google AI doesn't expose one publicly). Three sample
+    /// models so the snapshot's modelCount has something to count.
+    public static let geminiModels200 = #"""
+    {
+      "models": [
+        {
+          "name": "models/gemini-2.5-pro",
+          "displayName": "Gemini 2.5 Pro",
+          "supportedGenerationMethods": ["generateContent", "countTokens"]
+        },
+        {
+          "name": "models/gemini-2.5-flash",
+          "displayName": "Gemini 2.5 Flash",
+          "supportedGenerationMethods": ["generateContent", "countTokens"]
+        },
+        {
+          "name": "models/gemini-2.0-flash",
+          "displayName": "Gemini 2.0 Flash",
+          "supportedGenerationMethods": ["generateContent"]
+        }
+      ]
+    }
+    """#
+
+    /// Empty model list — exercises the "no models visible" branch (still a
+    /// valid 200, just an API key without access).
+    public static let geminiModelsEmpty200 = #"""
+    { "models": [] }
+    """#
+
     /// Synthetic OAuth refresh response.
     public static let oauthRefresh200 = #"""
     { "access_token": "new.acc.tk", "refresh_token": "new.ref.tk", "expires_in": 28800 }

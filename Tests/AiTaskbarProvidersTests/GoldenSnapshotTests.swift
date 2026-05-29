@@ -114,6 +114,32 @@ struct GoldenSnapshotTests {
         #expect(snap.balance?.detail == "$87.65 available")
     }
 
+    // MARK: - Gemini
+
+    @Test("Gemini golden — models heartbeat + plan label")
+    func gemini_golden() throws {
+        let parsed = try JSONDecoder().decode(
+            GeminiModelsResponse.self,
+            from: Fixtures.data(Fixtures.geminiModels200))
+        let snap = parsed.toSnapshot()
+
+        #expect(snap.planLabel == "Google AI Studio")
+        #expect(snap.modelCount == 3)
+        #expect(snap.status?.label == "API Key")
+        #expect(snap.status?.utilizationPercent == 0)
+        #expect(snap.status?.detail == "3 models available")
+    }
+
+    @Test("Gemini golden — empty models list still produces a valid snapshot")
+    func gemini_empty_models() throws {
+        let parsed = try JSONDecoder().decode(
+            GeminiModelsResponse.self,
+            from: Fixtures.data(Fixtures.geminiModelsEmpty200))
+        let snap = parsed.toSnapshot()
+        #expect(snap.modelCount == 0)
+        #expect(snap.status?.detail == "API key valid (no models visible)")
+    }
+
     // MARK: - Cross-snapshot invariants
 
     @Test("VendorSnapshot.maxUtilization equals the highest window")
