@@ -11,23 +11,36 @@ on:
 jobs:
   validate:
     name: Build + validate
-    runs-on: macos-14
+    # macos-15 ships Xcode 16 (Swift 6). macos-14 still ships Xcode 15 +
+    # Swift 5.10, which can't parse `swift-tools-version: 6.0`.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode 16 (Swift 6)
+        # Pin to a known Xcode that ships Swift 6.0 so `swift test` finds
+        # `Testing.framework` and the testTargets compile.
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
 
       - name: Show toolchain
         run: |
           swift --version
+          xcodebuild -version || true
           uname -a
 
       - name: Compile (debug)
         run: swift build -c debug
 
       - name: Runtime validation suite
-        # Mirrors the suite that `make validate` runs locally — 128+
+        # Mirrors the suite that `make validate` runs locally — 145+
         # assertions covering wire types, JSONValue, KimiConfig URL whitelist,
         # OpenAI PII strip, DiskCache TTL, AtomicFileWrite perms, etc.
         run: swift run ai-taskbar-validate
+
+      - name: swift test + coverage gate (≥90%)
+        # Enforces the policy documented in CLAUDE.md / AGENTS.md. Local
+        # validate.sh runs the same script.
+        run: COVERAGE_FLOOR=90 scripts/coverage.sh 90
 
       - name: Compile (release)
         run: swift build -c release

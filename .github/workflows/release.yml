@@ -22,14 +22,16 @@ permissions:
 jobs:
   build-and-release:
     name: Build universal .dmg and publish release
-    runs-on: macos-14
-    # macos-14 runner is Apple Silicon (M1). It can still cross-build x86_64
-    # via `swift build --arch x86_64` because both SDK slices ship with the
-    # toolchain. We lipo the two slices into a fat binary.
+    # macos-15 ships Xcode 16 (Swift 6) which Package.swift requires for
+    # `swift-tools-version: 6.0` + Testing.framework. Apple Silicon (M1).
+    runs-on: macos-15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Select Xcode 16 (Swift 6)
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
 
       - name: Resolve version
         id: version
