@@ -7,9 +7,13 @@ import SQLite3
 /// total as input-priced (conservative; real cost is usually lower since most
 /// of the budget is reads).
 public enum CodexLogScanner {
-    public static func estimate(now: Date = .init()) -> CostEstimate {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let path = home.appendingPathComponent(".codex/logs_2.sqlite").path
+    public static func estimate(now: Date = .init(),
+                                dbPath: String? = nil) -> CostEstimate {
+        let path: String = {
+            if let dbPath { return dbPath }
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            return home.appendingPathComponent(".codex/logs_2.sqlite").path
+        }()
         guard FileManager.default.fileExists(atPath: path) else {
             return CostEstimate(usdToday: 0, usdLast7Days: 0,
                                 isApproximate: true,

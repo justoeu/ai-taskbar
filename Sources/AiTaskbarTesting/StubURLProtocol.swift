@@ -8,10 +8,23 @@ public final class StubURLProtocol: URLProtocol {
         public var status: Int
         public var data: Data
         public var headers: [String: String]
-        public init(status: Int = 200, data: Data, headers: [String: String] = [:]) {
+        /// When set, the protocol surfaces this error to the caller via
+        /// `didFailWithError`. Used to exercise the `URLError` → `AppError`
+        /// translation paths in HTTPClient.
+        public var error: Error?
+        public init(status: Int = 200,
+                    data: Data,
+                    headers: [String: String] = [:],
+                    error: Error? = nil) {
             self.status = status
             self.data = data
             self.headers = headers
+            self.error = error
+        }
+
+        /// Builds a response that surfaces a `URLError` of the given code.
+        public static func failing(_ code: URLError.Code) -> CannedResponse {
+            CannedResponse(status: 0, data: Data(), error: URLError(code))
         }
     }
 
@@ -38,6 +51,10 @@ public final class StubURLProtocol: URLProtocol {
             return
         }
         let resp = handler(request)
+        if let err = resp.error {
+            client?.urlProtocol(self, didFailWithError: err)
+            return
+        }
         let httpResp = HTTPURLResponse(
             url: request.url ?? URL(string: "about:blank")!,
             statusCode: resp.status,

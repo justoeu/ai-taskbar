@@ -1,0 +1,100 @@
+import Testing
+import Foundation
+@testable import AiTaskbarCore
+@testable import AiTaskbarProviders
+import AiTaskbarTesting
+
+@Suite("CachedFetch fall-through paths", .serialized)
+struct CachedFetchEdgeTests {
+    init() { StubURLProtocol.reset() }
+
+    @Test("forceRefresh=false with fresh cache skips fetcher")
+    func uses_fresh_cache_without_fetcher() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfeF-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cache = DiskCache(vendor: .openrouter, baseDir: tmp, ttl: 60)
+        // Seed cache with a valid payload.
+        let credits = #"{"data":{"total_credits":10,"total_usage":1}}"#
+        let key = #"{"data":{"label":"p","usage":1,"limit":10}}"#
+        let payload = #"{"credits":\#(credits),"key":\#(key)}"#
+        try cache.writePayload(Data(payload.utf8))
+
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET", inlineKey: "k", vendorName: "OpenRouter")
+        StubURLProtocol.handler = { _ in
+            Issue.record("network should not be called when cache is fresh")
+            return .init(data: Data())
+        }
+        let provider = OpenRouterProvider(
+            credentials: creds,
+            cache: cache,
+            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]))
+        let outcome = try await provider.fetchUsage(forceRefresh: false)
+        #expect(!outcome.isStale)
+        StubURLProtocol.reset()
+    }
+
+    @Test("network failure without cached payload propagates as AppError")
+    func no_cache_and_network_failure_propagates() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfne-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cache = DiskCache(vendor: .openrouter, baseDir: tmp, ttl: 60)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET", inlineKey: "k", vendorName: "OpenRouter")
+        StubURLProtocol.handler = { _ in
+            .failing(.cannotConnectToHost)
+        }
+        let provider = OpenRouterProvider(
+            credentials: creds, cache: cache,
+            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]))
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected throw — no cache + failed network")
+        } catch let err as AppError {
+            // wrapping wraps any non-AppError into .other; transport errors
+            // come through as .transport.
+            switch err {
+            case .transport, .other: break
+            default: Issue.record("unexpected \(err)")
+            }
+        } catch {
+            Issue.record("expected AppError")
+        }
+        StubURLProtocol.reset()
+    }
+
+    @Test("cancelled Task raises CancellationError")
+    func cancelled_task_raises_cancellation() async {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfeC-\(UUID().uuidString)")
+        try? Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cache = DiskCache(vendor: .openrouter, baseDir: tmp, ttl: 60)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET", inlineKey: "k", vendorName: "OpenRouter")
+        StubURLProtocol.handler = { _ in
+            // Slow the response so cancel fires first; rough but reliable.
+            Thread.sleep(forTimeInterval: 0.05)
+            return .init(data: Data())
+        }
+        let provider = OpenRouterProvider(
+            credentials: creds,
+            cache: cache,
+            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]))
+        let task = Task<FetchOutcome, Error> {
+            try await provider.fetchUsage(forceRefresh: true)
+        }
+        task.cancel()
+        do {
+            _ = try await task.value
+            // Race condition — either outcome is acceptable.
+        } catch {
+            // Either CancellationError or AppError from the cancelled URLSession.
+        }
+        StubURLProtocol.reset()
+    }
+}

@@ -46,6 +46,24 @@ public enum Fixtures {
                 "is_free_tier": false } }
     """#
 
+    /// Free-tier: no `limit` field → branch that emits "balance unknown".
+    public static let openrouterKeyFreeTier200 = #"""
+    { "data": { "label": "free", "usage": 0.10, "is_free_tier": true } }
+    """#
+
+    /// OpenAI balance encoded as an Int (older format) — exercises the
+    /// Int64 branch of OpenAICredits.balance decoding.
+    public static let openaiUsageBalanceAsInt200 = #"""
+    {
+      "user_id": "u_int",
+      "rate_limit": {
+        "primary_window": { "used_percent": 20.0, "limit_window_seconds": 18000 }
+      },
+      "credits": { "balance": 7, "has_credits": true,
+                   "approx_cloud_messages": [50, 75] }
+    }
+    """#
+
     public static let zaiUsage200 = #"""
     {
       "code": 0, "msg": "ok",
@@ -59,6 +77,37 @@ public enum Fixtures {
           { "name": "MCP tools", "unit": "MCP_LIMIT", "used": 2, "limit": 50,
             "used_percent": 4.0 }
         ]
+      }
+    }
+    """#
+
+    public static let kimiBalance200 = #"""
+    {
+      "code": 0,
+      "status": true,
+      "scode": "0x0",
+      "data": {
+        "available_balance": 87.65,
+        "voucher_balance": 30.00,
+        "cash_balance": 57.65
+      }
+    }
+    """#
+
+    /// Older shape — only `balance` exposed, no available/voucher/cash split.
+    public static let kimiBalanceLegacy200 = #"""
+    { "code": 0, "status": true, "data": { "balance": 42.00 } }
+    """#
+
+    /// Wild shape: balance fields encoded as strings (observed in early
+    /// Moonshot rollouts).
+    public static let kimiBalanceStringNumbers200 = #"""
+    {
+      "code": 0,
+      "data": {
+        "available_balance": "21.50",
+        "voucher_balance": "0.00",
+        "cash_balance": "21.50"
       }
     }
     """#

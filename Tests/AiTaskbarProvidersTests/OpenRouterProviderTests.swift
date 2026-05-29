@@ -1,30 +1,27 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AiTaskbarCore
 @testable import AiTaskbarProviders
 import AiTaskbarTesting
 
-final class OpenRouterProviderTests: XCTestCase {
-    var tmpCacheDir: URL!
+@Suite("OpenRouter provider", .serialized)
+struct OpenRouterProviderTests {
+    let tmpCacheDir: URL
 
-    override func setUpWithError() throws {
+    init() throws {
         StubURLProtocol.reset()
         tmpCacheDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ai-taskbar-or-\(UUID().uuidString)")
         try Paths.ensureDir(tmpCacheDir)
     }
 
-    override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: tmpCacheDir)
-        StubURLProtocol.reset()
-    }
-
-    func test_combined_response_parses_to_snapshot() async throws {
+    @Test("combined response parses to snapshot")
+    func combined_response_parses_to_snapshot() async throws {
         StubURLProtocol.handler = { req in
             if req.url?.path.contains("credits") == true {
                 return .init(data: Fixtures.data(Fixtures.openrouterCredits200))
-            } else {
-                return .init(data: Fixtures.data(Fixtures.openrouterKey200))
             }
+            return .init(data: Fixtures.data(Fixtures.openrouterKey200))
         }
         let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
         let cache = DiskCache(vendor: .openrouter, baseDir: tmpCacheDir)
@@ -33,18 +30,22 @@ final class OpenRouterProviderTests: XCTestCase {
             inlineKey: "sk-or-test",
             vendorName: "OpenRouter"
         )
-        let provider = OpenRouterProvider(creds: creds, cache: cache, http: http)
+        let provider = OpenRouterProvider(credentials: creds, cache: cache, http: http)
 
         let outcome = try await provider.fetchUsage(forceRefresh: true)
         guard case let .openrouter(snap) = outcome.snapshot else {
-            return XCTFail("expected openrouter snapshot")
+            Issue.record("expected openrouter snapshot")
+            return
         }
-        XCTAssertEqual(snap.planLabel, "OpenRouter: primary")
-        XCTAssertEqual(Int((snap.balance?.utilizationPercent ?? 0).rounded()), 25)
-        XCTAssertEqual(Int((snap.monthly?.utilizationPercent ?? 0).rounded()), 25)
+        #expect(snap.planLabel == "OpenRouter: primary")
+        #expect(Int((snap.balance?.utilizationPercent ?? 0).rounded()) == 25)
+        #expect(Int((snap.monthly?.utilizationPercent ?? 0).rounded()) == 25)
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
     }
 
-    func test_uses_bearer_prefix_for_authorization() async throws {
+    @Test("uses bearer prefix for Authorization")
+    func uses_bearer_prefix_for_authorization() async throws {
         StubURLProtocol.handler = { req in
             if req.url?.path.contains("credits") == true {
                 return .init(data: Fixtures.data(Fixtures.openrouterCredits200))
@@ -58,13 +59,14 @@ final class OpenRouterProviderTests: XCTestCase {
             inlineKey: "sk-or-test",
             vendorName: "OpenRouter"
         )
-        let provider = OpenRouterProvider(creds: creds, cache: cache, http: http)
+        let provider = OpenRouterProvider(credentials: creds, cache: cache, http: http)
         _ = try await provider.fetchUsage(forceRefresh: true)
 
         let auths = StubURLProtocol.captured.compactMap {
             $0.value(forHTTPHeaderField: "Authorization")
         }
-        XCTAssertTrue(auths.allSatisfy { $0 == "Bearer sk-or-test" },
-                      "got: \(auths)")
+        #expect(auths.allSatisfy { $0 == "Bearer sk-or-test" }, "got: \(auths)")
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
     }
 }

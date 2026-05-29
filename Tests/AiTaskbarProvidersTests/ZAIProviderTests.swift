@@ -1,24 +1,22 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AiTaskbarCore
 @testable import AiTaskbarProviders
 import AiTaskbarTesting
 
-final class ZAIProviderTests: XCTestCase {
-    var tmpCacheDir: URL!
+@Suite("Z.AI provider", .serialized)
+struct ZAIProviderTests {
+    let tmpCacheDir: URL
 
-    override func setUpWithError() throws {
+    init() throws {
         StubURLProtocol.reset()
         tmpCacheDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ai-taskbar-zai-\(UUID().uuidString)")
         try Paths.ensureDir(tmpCacheDir)
     }
 
-    override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: tmpCacheDir)
-        StubURLProtocol.reset()
-    }
-
-    func test_no_bearer_prefix_on_authorization() async throws {
+    @Test("no Bearer prefix on Authorization header")
+    func no_bearer_prefix_on_authorization() async throws {
         StubURLProtocol.handler = { _ in
             .init(data: Fixtures.data(Fixtures.zaiUsage200))
         }
@@ -29,15 +27,17 @@ final class ZAIProviderTests: XCTestCase {
             inlineKey: "zai-test-key",
             vendorName: "Z.AI"
         )
-        let provider = ZAIProvider(creds: creds, cache: cache, http: http, configTier: "lite")
+        let provider = ZAIProvider(credentials: creds, cache: cache, http: http, configTier: "lite")
         _ = try await provider.fetchUsage(forceRefresh: true)
 
         let auth = StubURLProtocol.captured.first?.value(forHTTPHeaderField: "Authorization")
-        XCTAssertEqual(auth, "zai-test-key",
-                       "Z.AI must receive raw key, never `Bearer ...`")
+        #expect(auth == "zai-test-key", "Z.AI must receive raw key, never `Bearer ...`")
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
     }
 
-    func test_parses_envelope_and_classifies_entries() async throws {
+    @Test("parses envelope and classifies entries")
+    func parses_envelope_and_classifies_entries() async throws {
         StubURLProtocol.handler = { _ in
             .init(data: Fixtures.data(Fixtures.zaiUsage200))
         }
@@ -48,19 +48,46 @@ final class ZAIProviderTests: XCTestCase {
             inlineKey: "k",
             vendorName: "Z.AI"
         )
-        let provider = ZAIProvider(creds: creds, cache: cache, http: http, configTier: nil)
+        let provider = ZAIProvider(credentials: creds, cache: cache, http: http, configTier: nil)
         let outcome = try await provider.fetchUsage(forceRefresh: true)
         guard case let .zai(snap) = outcome.snapshot else {
-            return XCTFail("expected zai")
+            Issue.record("expected zai snapshot")
+            return
         }
-        XCTAssertEqual(snap.planLabel, "GLM Lite")
-        XCTAssertEqual(snap.session?.label, "Session")
-        XCTAssertEqual(snap.weekly?.label, "Weekly")
-        XCTAssertEqual(snap.mcp?.label, "MCP tools")
+        #expect(snap.planLabel == "GLM Lite")
+        #expect(snap.session?.label == "Session")
+        #expect(snap.weekly?.label == "Weekly")
+        #expect(snap.mcp?.label == "MCP tools")
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
     }
 
-    func test_falls_back_to_cache_on_http_failure() async throws {
-        // First request succeeds, second returns 500.
+    @Test("decode failure on malformed body raises AppError.schema")
+    func zai_decode_failure_throws_schema() async throws {
+        StubURLProtocol.handler = { _ in
+            .init(data: Data("not z.ai shape".utf8))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .zai, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_ZAI_DEC", inlineKey: "k", vendorName: "Z.AI")
+        let provider = ZAIProvider(credentials: creds, cache: cache, http: http)
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected throw")
+        } catch let err as AppError {
+            if case .schema = err {} else {
+                Issue.record("expected .schema, got \(err)")
+            }
+        } catch {
+            Issue.record("expected AppError")
+        }
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
+    }
+
+    @Test("falls back to cache on HTTP failure")
+    func falls_back_to_cache_on_http_failure() async throws {
         var callCount = 0
         StubURLProtocol.handler = { _ in
             callCount += 1
@@ -76,15 +103,18 @@ final class ZAIProviderTests: XCTestCase {
             inlineKey: "k",
             vendorName: "Z.AI"
         )
-        let provider = ZAIProvider(creds: creds, cache: cache, http: http)
+        let provider = ZAIProvider(credentials: creds, cache: cache, http: http)
         _ = try await provider.fetchUsage(forceRefresh: true)
-        Thread.sleep(forTimeInterval: 0.05)
+        try await Task.sleep(nanoseconds: 50_000_000)
 
         let outcome = try await provider.fetchUsage(forceRefresh: true)
-        XCTAssertTrue(outcome.isStale, "second fetch should serve stale cache")
+        #expect(outcome.isStale, "second fetch should serve stale cache")
         guard case let .zai(snap) = outcome.snapshot else {
-            return XCTFail("expected zai")
+            Issue.record("expected zai snapshot")
+            return
         }
-        XCTAssertNotNil(snap.session)
+        #expect(snap.session != nil)
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
     }
 }

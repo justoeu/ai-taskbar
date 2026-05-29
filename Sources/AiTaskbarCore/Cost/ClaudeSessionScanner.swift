@@ -11,9 +11,11 @@ import Foundation
 ///  - Files are memory-mapped (`.mappedIfSafe`) so large transcripts don't
 ///    cause `LineStream.buffer.removeSubrange` O(n²) shifts.
 public enum ClaudeSessionScanner {
-    public static func estimate(now: Date = .init()) -> CostEstimate {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let projects = home.appendingPathComponent(".claude/projects")
+    public static func estimate(now: Date = .init(),
+                                projectsDir: URL? = nil) -> CostEstimate {
+        let projects: URL = projectsDir ?? FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects")
         guard let walker = FileManager.default.enumerator(
             at: projects,
             includingPropertiesForKeys: [.contentModificationDateKey],
@@ -113,7 +115,10 @@ public enum ClaudeSessionScanner {
         iso.date(from: s) ?? isoNoFrac.date(from: s)
     }
 
-    private static func scan(
+    /// Internal-visibility (so tests can drive synthetic JSONL through it
+    /// without standing up the whole `~/.claude/projects` walker).
+    /// Production path goes through `estimate(now:)`.
+    internal static func scan(
         data: Data,
         startOfToday: Date,
         sevenDaysAgo: Date,

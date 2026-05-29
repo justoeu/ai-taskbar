@@ -1,10 +1,12 @@
-import XCTest
+import Testing
 @testable import AiTaskbarApp
 
-final class SmokeTests: XCTestCase {
-    func test_app_module_loads() {
-        // Compile-only smoke. Real UI testing would need ViewInspector or
-        // pointfreeco/swift-snapshot-testing — deferred to v2.
-        XCTAssertTrue(true)
+@Suite("AiTaskbarApp smoke")
+struct SmokeTests {
+    @Test("app module loads")
+    func app_module_loads() {
+        // Compile-only smoke. Real UI testing would need swift-snapshot-testing
+        // or a hosted XCTest target — deferred.
+        #expect(Bool(true))
     }
 }

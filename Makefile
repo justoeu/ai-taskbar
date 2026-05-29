@@ -92,11 +92,19 @@ run: app
 	open $(APP_DIR)
 
 test:
-	swift test
+	swift test --no-parallel
+
+# Line coverage on AiTaskbarCore + AiTaskbarProviders. App UI views are
+# excluded — SwiftUI body coverage requires Xcode/host UI testing infra
+# we deliberately don't pull in. Pass COVERAGE_FLOOR=NN to fail under
+# that threshold; default is `warn-only` until we close the gap.
+COVERAGE_FLOOR ?= 90
+coverage:
+	@scripts/coverage.sh $(COVERAGE_FLOOR)
 
 # Full local validation — runs after EVERY implementation change.
-# Compile + runtime suite + bundle + smoke launch + permission audit.
-# Required by CLAUDE.md / AGENTS.md policy.
+# Compile + runtime suite + bundle + smoke launch + permission audit
+# + swift test + coverage report. Required by CLAUDE.md / AGENTS.md.
 validate:
 	@scripts/validate.sh
 

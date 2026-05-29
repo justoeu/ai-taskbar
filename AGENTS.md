@@ -18,41 +18,90 @@ make validate
 What it runs (`scripts/validate.sh`):
 
 1. `swift build -c debug` — catches compile errors across all targets.
-2. `swift run ai-taskbar-validate` — **67+ runtime assertions** in
+2. `swift run ai-taskbar-validate` — **145+ runtime assertions** in
    `Sources/AiTaskbarValidate/main.swift`. Covers: wire-type fixtures for
    every vendor, OAuth error parsing, JWT decode, AppError equality,
    JSONValue round-trip, KimiConfig URL validation, DiskCache TTL+stale
    semantics, AtomicFileWrite permissions, ConfigLoader TOML int↔double
    tolerance, UsageHistoryStore append/load/compact, PricingTable, CostMath.
-3. `make app` — assembles the `.app` bundle with ad-hoc code signature.
-4. **Smoke launch** — `open build/AiTaskbar.app`, waits 3 s, confirms
+3. `swift test --no-parallel --enable-code-coverage` via `scripts/coverage.sh` —
+   runs the Swift Testing suites in `Tests/` and reports line coverage on
+   `AiTaskbarCore` + `AiTaskbarProviders`. Coverage floor is enforced via
+   `COVERAGE_FLOOR` env var (see "Testing policy" below).
+4. `make app` — assembles the `.app` bundle with ad-hoc code signature.
+5. **Smoke launch** — `open build/AiTaskbar.app`, waits 3 s, confirms
    process is still alive, then kills it. Proves the Mach-O actually loads
    under SwiftUI's MenuBarExtra runtime.
-5. **Permission audit** — verifies `~/Library/Application Support/ai-taskbar/`
+6. **Permission audit** — verifies `~/Library/Application Support/ai-taskbar/`
    is `0700`, `config.toml` is `0600`, `~/.codex/auth.json` is `0600`.
    These hold credentials; loose perms are a security regression.
 
 If any step fails, **fix it before claiming the work is done**. Don't paper
 over with comments or `try?`-swallowing.
 
-## Adding new tests
+## Testing policy (MANDATORY)
 
-When you implement anything new:
+Two mandates with non-negotiable status:
 
-- **Pure logic** (decoders, helpers, cost math, config) → add a `section(...)`
-  block to `Sources/AiTaskbarValidate/main.swift`. Keep assertions atomic
-  (one fact per `expect`) so failures point exactly at the broken invariant.
-- **New vendor wire types** → add a fixture string to
-  `Sources/AiTaskbarTesting/Fixtures.swift` first, then assert against it
-  in the validate target.
-- **New security surface** (e.g. another inline secret in config) → add
-  a permission check to `scripts/validate.sh`.
-- **UI-only changes** that can't be asserted on headlessly → at minimum
-  exercise them via the smoke launch and document in the PR what was
-  visually verified.
+### 1. Line coverage ≥ 90% on `AiTaskbarCore` + `AiTaskbarProviders`
 
-XCTest in `Tests/` is kept for the day full Xcode is available. Do NOT delete
-those tests; the validation suite mirrors and extends them.
+Measured via `swift test --enable-code-coverage` + `llvm-cov report`,
+filtered to those two targets only. Excluded:
+
+- `AiTaskbarApp` (SwiftUI view bodies are out of scope — CLI-only coverage
+  tooling can't meaningfully exercise them without an XCTest UI host).
+- `AiTaskbarTesting` (fixtures/stubs by definition).
+- `AiTaskbarValidate` (it IS a test runner; covering its body is circular).
+
+Enforce with `COVERAGE_FLOOR=90 make validate`. Current ramp:
+
+| Phase | `COVERAGE_FLOOR` | Status |
+|-------|------------------|--------|
+| now   | `0` (warn only)  | infra is in place; we report % but don't fail |
+| soon  | `40` → `60` → `80` | tighten as gaps close |
+| goal  | `90`             | hard fail in CI + `make validate` |
+
+Don't ship new code that adds uncovered surface area. New file → new test.
+
+### 2. Snapshot / golden testing on every vendor wire type
+
+Each vendor in `AiTaskbarProviders` ships a `*WireTypes.swift`. Every
+wire-type struct gets a **golden test**:
+
+1. A canonical JSON fixture lives in `Sources/AiTaskbarTesting/Fixtures.swift`.
+2. The test decodes that fixture, converts to `VendorSnapshot`, then
+   compares the snapshot field-by-field against a frozen reference.
+3. The reference values live in the test file itself (not in a separate
+   golden directory) so a diff in the test = a deliberate schema decision.
+
+The point: a careless edit to `*Snapshot` props or decoder logic must
+fail the test, not "succeed silently with the wrong number." This is what
+the user means by "imutabilidade" — the public Snapshot shape is a
+contract, not an implementation detail.
+
+### 3. Writing tests
+
+- We use **Swift Testing** (`import Testing`, `@Test`, `#expect`), not
+  XCTest. XCTest doesn't work on Command Line Tools alone.
+- Tests using `StubURLProtocol` must mark their suite `.serialized`
+  AND `make test` runs with `--no-parallel`, because `StubURLProtocol.handler`
+  is process-wide static state.
+- Keep assertions atomic. One `#expect` per fact. Tests that fail with
+  "expected 5, got 3" are useful; tests that fail with "got non-nil"
+  send you to the debugger.
+- For pure logic without I/O, you can still extend
+  `Sources/AiTaskbarValidate/main.swift` — it runs faster than `swift test`
+  for sanity checks and double-checks the `Testing` results.
+
+### 4. When you implement anything new
+
+- **New wire type / vendor** → golden test (see above). Not optional.
+- **New file in Core or Providers** → at least one `@Test` covering its
+  happy path. Aim higher; coverage gate enforces this.
+- **New security surface** (e.g. inline secret in config) → add a
+  permission check to `scripts/validate.sh`.
+- **UI-only changes** that can't be asserted headlessly → exercise via the
+  smoke launch and document what was visually verified in the PR.
 
 ## Build commands
 
@@ -60,6 +109,9 @@ those tests; the validation suite mirrors and extends them.
 swift build                    # debug build, all targets
 swift run ai-taskbar           # run app from .build (no .app bundle, will Dock-icon)
 swift run ai-taskbar-validate  # standalone validation suite
+make test                      # swift test --no-parallel (Swift Testing)
+make coverage                  # swift test + coverage report (no floor)
+COVERAGE_FLOOR=90 make coverage  # fail if Core+Providers < 90%
 make app                       # release build + assemble .app bundle with ad-hoc sign
 make run                       # make app && open it
 make dmg                       # make app + hdiutil into ai-taskbar-X.Y.Z.dmg
@@ -110,9 +162,13 @@ make clean                     # nuke .build, build/, generated DMGs
 7. Add to `PricingTable` if cost tracking applies.
 8. Add to `AppEnvironment.makeProviders()`.
 9. Add `shortLabel(for:)` case in `MenuBarLabelView` (rotating mode).
-10. **Add fixtures + section() to `AiTaskbarValidate/main.swift`.** This is
-    not optional.
+10. **Add fixtures + section() to `AiTaskbarValidate/main.swift`** AND a
+    **golden test** for the wire type (see "Testing policy" above). Both
+    are mandatory — fixtures alone aren't enough to satisfy the
+    immutability mandate.
 11. Run `make validate` — must pass before commit.
+12. Run `COVERAGE_FLOOR=<current floor> make coverage` — new vendor code
+    should not drop the % below the active floor.
 
 ## Config schema
 
@@ -124,7 +180,6 @@ user edits. See `config.example.toml` for the full schema.
 
 - App is ad-hoc signed only. Gatekeeper warns on first launch. Notarization
   needs an Apple Developer account ($99/yr) — deferred.
-- XCTest tests require full Xcode. Validate suite is the day-to-day cover.
 - v0.2 candidates (open): start-at-login via `SMAppService` works only when
   the `.app` lives in `/Applications`; global hotkey via
   `MenuBarExtraAccess`; OpenAI Platform API (`sk-...`) for actual budget caps.

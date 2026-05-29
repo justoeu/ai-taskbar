@@ -16,17 +16,25 @@ cd "$(dirname "$0")/.."
 
 bold() { printf "\033[1m%s\033[0m\n" "$1"; }
 ok()   { printf "  \033[32m✓\033[0m %s\n" "$1"; }
+warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
 fail() { printf "  \033[31m✗\033[0m %s\n" "$1"; exit 1; }
 
-bold "[1/5] swift build"
+# Coverage gate. Hard-fail under this percentage. Override with
+# COVERAGE_FLOOR=<n>. The 90 target lives in CLAUDE.md / AGENTS.md.
+COVERAGE_FLOOR="${COVERAGE_FLOOR:-90}"
+
+bold "[1/6] swift build"
 swift build -c debug 2>&1 | tail -3
 ok "compile clean"
 
-bold "[2/5] runtime validation suite"
+bold "[2/6] runtime validation suite"
 swift run ai-taskbar-validate
 ok "67+ assertions passed"
 
-bold "[3/5] assemble .app bundle"
+bold "[3/6] swift test + coverage"
+COVERAGE_FLOOR="$COVERAGE_FLOOR" scripts/coverage.sh "$COVERAGE_FLOOR"
+
+bold "[4/6] assemble .app bundle"
 make app >/dev/null 2>&1
 test -x build/AiTaskbar.app/Contents/MacOS/ai-taskbar || fail "Mach-O missing"
 codesign --verify build/AiTaskbar.app 2>/dev/null || fail "ad-hoc signature invalid"
@@ -39,7 +47,7 @@ test -f "$spm_bundle/en.lproj/Localizable.strings" \
     || fail "Localizable.strings missing from resource bundle"
 ok "bundle + ad-hoc signature OK"
 
-bold "[4/5] smoke launch"
+bold "[5/6] smoke launch"
 pkill -f "build/AiTaskbar.app" 2>/dev/null || true
 sleep 1
 open build/AiTaskbar.app
@@ -51,7 +59,7 @@ else
     fail "app died within 3s — check Console.app for crash"
 fi
 
-bold "[5/5] permission audit"
+bold "[6/6] permission audit"
 support_dir="$HOME/Library/Application Support/ai-taskbar"
 config_file="$support_dir/config.toml"
 codex_auth="$HOME/.codex/auth.json"

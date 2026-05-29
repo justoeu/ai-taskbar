@@ -11,7 +11,11 @@ import Security
 /// Pass `preferredAccount` (from `[anthropic] keychain_account = "..."` in
 /// config) to pin to a specific entry; otherwise the lexicographically
 /// smallest account name wins and a warning is logged.
-public final class KeychainCredentialReader: @unchecked Sendable {
+/// Open for subclassing (drop the `final` modifier) specifically so test
+/// targets can inject a mock that overrides `read()` / `writeBack()` without
+/// touching the real Keychain. There's no production motivation to subclass
+/// this elsewhere.
+public class KeychainCredentialReader: @unchecked Sendable {
     public let service: String
     public let preferredAccount: String?
 
@@ -24,7 +28,7 @@ public final class KeychainCredentialReader: @unchecked Sendable {
         self.preferredAccount = preferredAccount
     }
 
-    public func read() throws -> AnthropicCredentials {
+    open func read() throws -> AnthropicCredentials {
         let items = try fetchAll()
         if items.isEmpty {
             throw AppError.credentials(
@@ -41,7 +45,7 @@ public final class KeychainCredentialReader: @unchecked Sendable {
         }
     }
 
-    public func writeBack(_ updated: AnthropicCredentials) throws {
+    open func writeBack(_ updated: AnthropicCredentials) throws {
         let file = AnthropicCredentialsFile(claudeAiOauth: updated)
         let data = try SharedCoders.encoder.encode(file)
         var query: [String: Any] = [
@@ -70,7 +74,9 @@ public final class KeychainCredentialReader: @unchecked Sendable {
 
     // MARK: - Internals
 
-    private struct KeychainItem {
+    /// Internal-visibility so test targets can drive `select(from:)` without
+    /// touching the real Keychain.
+    internal struct KeychainItem {
         let account: String
         let data: Data
     }
@@ -177,7 +183,7 @@ public final class KeychainCredentialReader: @unchecked Sendable {
     /// `errSecInteractionNotAllowed` (-25308) deserves a specific hint
     /// because it's what happens on every rebuild — we tell the user
     /// exactly how to re-authorize via `security set-generic-password-partition-list`.
-    private static func errorFor(status: OSStatus, op: String) -> AppError {
+    internal static func errorFor(status: OSStatus, op: String) -> AppError {
         switch status {
         case errSecInteractionNotAllowed:
             return .credentials("""
@@ -193,7 +199,7 @@ public final class KeychainCredentialReader: @unchecked Sendable {
         }
     }
 
-    private func select(from items: [KeychainItem]) -> KeychainItem {
+    internal func select(from items: [KeychainItem]) -> KeychainItem {
         if let preferred = preferredAccount,
            let match = items.first(where: { $0.account == preferred }) {
             return match

@@ -1,19 +1,46 @@
-import XCTest
+import Testing
+import Foundation
 @testable import AiTaskbarCore
 
-final class JWTTests: XCTestCase {
-    /// Header: {"alg":"none"} payload: {"exp": 1764201600, "https://api.openai.com/auth.chatgpt_plan_type": "pro"}
+@Suite("JWT decoder")
+struct JWTTests {
+    /// Header: {"alg":"none"} payload: {"exp": 1764201600, "...chatgpt_plan_type": "pro"}
     /// Hand-crafted token below.
-    func test_decode_payload_extracts_known_claims() throws {
+    @Test("decode payload extracts known claims")
+    func decode_payload_extracts_known_claims() throws {
         let header  = Data("{\"alg\":\"none\"}".utf8).base64URL()
         let payload = Data(
             #"{"exp":1764201600,"https://api.openai.com/auth.chatgpt_plan_type":"pro"}"#.utf8
         ).base64URL()
         let token = "\(header).\(payload)."
         let dict = JWT.decodePayload(token)
-        XCTAssertEqual(dict?["https://api.openai.com/auth.chatgpt_plan_type"] as? String, "pro")
-        let exp = JWT.expiry(token)
-        XCTAssertEqual(exp?.timeIntervalSince1970, 1764201600)
+        #expect(dict?["https://api.openai.com/auth.chatgpt_plan_type"] as? String == "pro")
+        #expect(JWT.expiry(token)?.timeIntervalSince1970 == 1764201600)
+    }
+
+    @Test("expiry returns nil on malformed token")
+    func expiry_returns_nil_on_malformed_token() {
+        #expect(JWT.expiry("not.a.jwt") == nil)
+        #expect(JWT.expiry("") == nil)
+        #expect(JWT.expiry("only-one-segment") == nil)
+    }
+
+    @Test("decodePayload returns nil when payload is not JSON")
+    func decode_payload_returns_nil_on_non_json_payload() {
+        let header = Data("{\"alg\":\"none\"}".utf8).base64URL()
+        let badPayload = Data("not-json".utf8).base64URL()
+        let token = "\(header).\(badPayload)."
+        #expect(JWT.decodePayload(token) == nil)
+    }
+
+    @Test("claim<T> returns typed value when present")
+    func typed_claim_returns_value() {
+        let header = Data("{\"alg\":\"none\"}".utf8).base64URL()
+        let payload = Data(#"{"sub":"user-123","aud":42}"#.utf8).base64URL()
+        let token = "\(header).\(payload)."
+        #expect(JWT.claim(token, key: "sub", as: String.self) == "user-123")
+        #expect(JWT.claim(token, key: "aud", as: Int.self) == 42)
+        #expect(JWT.claim(token, key: "missing", as: String.self) == nil)
     }
 }
 
