@@ -18,6 +18,13 @@ public struct PopoverContentView: View {
 
     public var body: some View {
         ZStack {
+            // Solid background — `MenuBarExtra(.window)` defaults to a
+            // vibrancy/translucent material, which makes the popover hard to
+            // read when bright content sits behind it. `windowBackgroundColor`
+            // adapts to light/dark mode.
+            Color(NSColor.windowBackgroundColor)
+                .ignoresSafeArea()
+
             VStack(spacing: 0) {
                 headerBar
                 Divider()
