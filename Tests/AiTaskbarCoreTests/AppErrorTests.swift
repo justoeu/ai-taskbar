@@ -47,6 +47,16 @@ struct AppErrorTests {
         #expect(!AppError.credentials("x").isTransient)
     }
 
+    @Test("isRateLimited flips only on HTTP 429")
+    func isRateLimited_flips_only_on_429() {
+        #expect(AppError.http(status: 429, body: "").isRateLimited)
+        #expect(!AppError.http(status: 408, body: "").isRateLimited)
+        #expect(!AppError.http(status: 500, body: "").isRateLimited)
+        #expect(!AppError.http(status: 401, body: "").isRateLimited)
+        #expect(!AppError.transport("net").isRateLimited)
+        #expect(!AppError.io("disk").isRateLimited)
+    }
+
     @Test("errorDescription mirrors description")
     func errorDescription_mirrors_description() {
         let err = AppError.schema("bad")

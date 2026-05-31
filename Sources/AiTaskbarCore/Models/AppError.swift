@@ -44,6 +44,13 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
         }
     }
 
+    /// True only when the vendor responded with HTTP 429 (Too Many Requests).
+    /// Scheduler uses this to extend the next sleep — see RefreshScheduler.
+    public var isRateLimited: Bool {
+        if case .http(let s, _) = self, s == 429 { return true }
+        return false
+    }
+
     /// Wraps any error into an `AppError`, passing through if it's already one.
     /// Eliminates the `(error as? AppError) ?? AppError.other("\(error)")`
     /// boilerplate previously duplicated across all five providers.

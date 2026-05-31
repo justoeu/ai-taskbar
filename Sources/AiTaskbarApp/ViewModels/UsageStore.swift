@@ -73,6 +73,15 @@ public final class UsageStore: ObservableObject {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
     }
 
+    /// True if any vendor's most recent refresh ended in HTTP 429.
+    /// RefreshScheduler reads this between cycles to back off the next tick.
+    public var hasRateLimitedVendor: Bool {
+        vendors.contains { vm in
+            if case .failed(let err, _) = vm.state, err.isRateLimited { return true }
+            return false
+        }
+    }
+
     public func refresh(vendor: VendorId, forceRefresh: Bool = true) {
         vendorVM(vendor)?.refresh(forceRefresh: forceRefresh)
     }

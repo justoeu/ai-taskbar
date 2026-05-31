@@ -15,7 +15,7 @@ public struct DiskCache: Sendable {
 
     public init(vendor: VendorId,
                 baseDir: URL,
-                ttl: TimeInterval = 150,
+                ttl: TimeInterval = 300,
                 maxStale: TimeInterval = 7 * 24 * 60 * 60) {
         self.vendor = vendor
         self.baseDir = baseDir
@@ -24,12 +24,12 @@ public struct DiskCache: Sendable {
     }
 
     /// Builds a cache rooted at the user's standard Caches/<vendor>/ dir.
-    /// `ttl` defaults to 150 s (matches the default `refresh_interval_seconds`)
+    /// `ttl` defaults to 300 s (matches the default `refresh_interval_seconds`)
     /// but callers should pass the active interval to keep cache TTL aligned
     /// with how often the scheduler actually fires — otherwise popover opens
     /// between scheduled refreshes can burn extra network calls.
     public static func defaultFor(_ vendor: VendorId,
-                                  ttl: TimeInterval = 150) throws -> DiskCache {
+                                  ttl: TimeInterval = 300) throws -> DiskCache {
         let dir = try Paths.cacheDir(for: vendor)
         return DiskCache(vendor: vendor, baseDir: dir, ttl: ttl)
     }

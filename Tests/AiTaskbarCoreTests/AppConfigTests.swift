@@ -49,10 +49,10 @@ struct AppConfigTests {
         #expect(!cfg.openrouter.enabled)
     }
 
-    @Test("refresh interval defaults to 150s")
+    @Test("refresh interval defaults to 300s")
     func refresh_interval_default() throws {
         let cfg = try TOMLDecoder().decode(AppConfig.self, from: "")
-        #expect(cfg.ui.refreshIntervalSeconds == 150)
+        #expect(cfg.ui.refreshIntervalSeconds == 300)
     }
 
     @Test("refresh interval accepts int and float (TOML lenient decode)")

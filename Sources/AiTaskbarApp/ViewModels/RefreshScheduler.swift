@@ -5,11 +5,15 @@ import AiTaskbarCore
 @MainActor
 public final class RefreshScheduler: ObservableObject {
     public let interval: TimeInterval
+    /// Extra delay applied to the next sleep when the previous cycle saw any
+    /// HTTP 429. Stacked on top of `interval` so a rate-limited vendor gets a
+    /// 6-minute breather (default 300 + 60) before being polled again.
+    public static let rateLimitBackoff: TimeInterval = 60
     private weak var store: UsageStore?
     private var refreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
 
-    public init(store: UsageStore, interval: TimeInterval = 150) {
+    public init(store: UsageStore, interval: TimeInterval = 300) {
         self.store = store
         // Floor at 15 s. Below this the undocumented vendor endpoints
         // (Anthropic, Codex, Z.AI) start returning 429 aggressively.
@@ -30,7 +34,9 @@ public final class RefreshScheduler: ObservableObject {
             // Initial fetch so the popover isn't blank on first open.
             self.store?.refreshAll(forceRefresh: false)
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(self.interval))
+                let backoff = (self.store?.hasRateLimitedVendor ?? false)
+                    ? Self.rateLimitBackoff : 0
+                try? await Task.sleep(for: .seconds(self.interval + backoff))
                 if Task.isCancelled { break }
                 self.store?.refreshAll(forceRefresh: false)
             }
