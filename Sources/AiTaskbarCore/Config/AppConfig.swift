@@ -472,8 +472,11 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
         }
     }
 
-    /// Returns `raw` if it is an `https://` URL pointing to an allowed host;
-    /// otherwise nil. Lowercases scheme/host before comparing.
+    /// Returns `raw` if it is an `https://` URL pointing to an allowed Google
+    /// AI host AND carries a `/v1*` API-version path prefix. Otherwise nil.
+    /// The path check catches the subtle misconfiguration where a user trims
+    /// the API-version segment — without it, `GET /models` resolves at the
+    /// root and Google serves a permanent 404 even though the key is valid.
     public static func validate(_ raw: String) -> String? {
         guard let url = URL(string: raw),
               let scheme = url.scheme?.lowercased(),
@@ -481,6 +484,8 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
               let host = url.host?.lowercased(),
               allowedHosts.contains(host)
         else { return nil }
+        // Require an API-version namespace (/v1, /v1beta, /v1alpha, …).
+        guard url.path.hasPrefix("/v1") else { return nil }
         return raw
     }
 

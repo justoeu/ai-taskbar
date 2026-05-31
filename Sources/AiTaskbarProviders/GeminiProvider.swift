@@ -28,10 +28,18 @@ public final class GeminiProvider: UsageProvider {
 
     public convenience init(config: GeminiConfig,
                             http: HTTPClient = .init(),
-                            cacheTTL: TimeInterval = 150) throws {
+                            cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.gemini, ttl: cacheTTL)
-        let baseURL = URL(string: config.baseURL)
-            ?? URL(string: GeminiConfig.defaultBaseURL)!
+        // GeminiConfig.init(from:) already normalizes user input to the
+        // default on parse failure, but we belt-and-suspenders here:
+        // throw instead of force-unwrapping if both URL constructions
+        // somehow fail. AppEnvironment catches the throw and disables only
+        // the Gemini provider instead of crashing the whole menu-bar app.
+        guard let baseURL = URL(string: config.baseURL)
+                          ?? URL(string: GeminiConfig.defaultBaseURL) else {
+            throw AppError.io(
+                "GeminiConfig.baseURL '\(config.baseURL)' is unparseable and the built-in default also failed")
+        }
         self.init(
             credentials: EnvOrConfigCredentialReader(
                 envVarName: config.apiKeyEnv,

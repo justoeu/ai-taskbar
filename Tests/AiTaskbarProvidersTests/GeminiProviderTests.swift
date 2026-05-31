@@ -106,4 +106,42 @@ struct GeminiProviderTests {
         let provider = try GeminiProvider(config: cfg, http: .init())
         #expect(provider.vendorId == .gemini)
     }
+
+    @Test("missing `models` key produces a schema-warning snapshot, not silent zero")
+    func missing_models_key_surfaces_schema_warning() throws {
+        // Simulates a future Google v1beta rename that drops the `models`
+        // key entirely. Decoder still succeeds because the field is
+        // Optional, but toSnapshot() should NOT pretend the API key is
+        // valid-with-zero-models — that would mask the regression.
+        let payload = Data(#"{"nextPageToken":"abc"}"#.utf8)
+        let parsed = try JSONDecoder().decode(GeminiModelsResponse.self, from: payload)
+        let snap = parsed.toSnapshot()
+        #expect(snap.modelCount == 0)
+        #expect(snap.status?.detail?.contains("Unexpected response shape") == true)
+    }
+
+    @Test("empty models list still claims 'API key valid (no models visible)'")
+    func empty_list_branch_keeps_valid_phrasing() throws {
+        // The empty-list case (key valid, no models granted to this user
+        // yet) must NOT regress into the schema-warning branch.
+        let payload = Data(#"{"models":[]}"#.utf8)
+        let parsed = try JSONDecoder().decode(GeminiModelsResponse.self, from: payload)
+        let snap = parsed.toSnapshot()
+        #expect(snap.modelCount == 0)
+        #expect(snap.status?.detail == "API key valid (no models visible)")
+    }
+
+    @Test("GeminiConfig.validate rejects URLs without /v1 path prefix")
+    func validate_rejects_missing_api_version() {
+        // Bare host: rejected.
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com") == nil)
+        // Root path: rejected.
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/") == nil)
+        // Non-/v1 path: rejected.
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/models") == nil)
+        // Allowed shapes.
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1beta") != nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1") != nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1alpha") != nil)
+    }
 }
