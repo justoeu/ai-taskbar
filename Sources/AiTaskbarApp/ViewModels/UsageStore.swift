@@ -21,14 +21,22 @@ public final class UsageStore: ObservableObject {
     @Published public private(set) var lastRefreshedAt: Date?
 
     public let thresholds: ThresholdsConfig
+    /// Configured scheduler cadence in seconds — surfaced here so views can
+    /// render a forward countdown ("Próx. em 4:59") without having to depend
+    /// on RefreshScheduler directly. Kept as a constant: changes to
+    /// `refresh_interval_seconds` in config.toml require a relaunch to take
+    /// effect (same as RefreshScheduler itself), so a `let` is honest.
+    public let refreshIntervalSeconds: TimeInterval
     private var subscriptions: Set<AnyCancellable> = []
 
     public init(vendors: [VendorViewModel],
                 primary: VendorId?,
-                thresholds: ThresholdsConfig = .init()) {
+                thresholds: ThresholdsConfig = .init(),
+                refreshIntervalSeconds: TimeInterval = 300) {
         self.vendors = vendors
         self.primary = primary
         self.thresholds = thresholds
+        self.refreshIntervalSeconds = refreshIntervalSeconds
         wireUpAggregates()
     }
 
@@ -71,6 +79,16 @@ public final class UsageStore: ObservableObject {
 
     public func refreshAll(forceRefresh: Bool = false) {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
+    }
+
+    /// True when at least one vendor is mid-fetch. Views use this to swap
+    /// the "Próx. em M:SS" countdown for an "Atualizando…" label while the
+    /// scheduler's tick is in flight.
+    public var isAnyVendorLoading: Bool {
+        vendors.contains { vm in
+            if case .loading = vm.state { return true }
+            return false
+        }
     }
 
     /// True if any vendor's most recent refresh ended in HTTP 429 — whether

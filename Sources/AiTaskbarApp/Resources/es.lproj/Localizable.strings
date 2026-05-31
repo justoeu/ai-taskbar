@@ -7,6 +7,9 @@
 "refresh_all_help" = "Actualizar todos los proveedores";
 // El RelativeDateTimeFormatter ya produce "hace X" / "en X" — aquí solo prefijamos el verbo.
 "updated_ago_fmt" = "actualizado %@";
+// Cuenta regresiva hasta el próximo refresh programado. %@ es "4:59" (MM:SS).
+"next_refresh_in_fmt" = "Próx. en %@";
+"refreshing_now" = "Actualizando…";
 "config" = "Configuración";
 "open_at_login" = "Abrir al iniciar sesión";
 "quit" = "Salir";

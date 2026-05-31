@@ -8,6 +8,9 @@
 // The relative formatter already produces "X ago" / "in X" — we only add
 // the verb tense prefix here, not the temporal direction.
 "updated_ago_fmt" = "updated %@";
+// Countdown until the next scheduled refresh. %@ becomes "4:59" (MM:SS).
+"next_refresh_in_fmt" = "Next in %@";
+"refreshing_now" = "Refreshing…";
 "config" = "Config";
 "open_at_login" = "Open at login";
 "quit" = "Quit";

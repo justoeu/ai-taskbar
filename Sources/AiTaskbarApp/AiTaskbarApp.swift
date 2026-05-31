@@ -31,7 +31,8 @@ struct AiTaskbarApp: App {
         let store = UsageStore(
             vendors: vendors,
             primary: env.config.ui.primary,
-            thresholds: env.config.thresholds
+            thresholds: env.config.thresholds,
+            refreshIntervalSeconds: env.config.ui.refreshIntervalSeconds
         )
         let scheduler = RefreshScheduler(store: store,
                                          interval: env.config.ui.refreshIntervalSeconds)

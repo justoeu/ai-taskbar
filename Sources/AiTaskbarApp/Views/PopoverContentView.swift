@@ -72,27 +72,19 @@ public struct PopoverContentView: View {
                 L10n.text("app_name")
                     .font(.headline)
                 Spacer()
-                // `TimelineView` forces a re-render every 1 s using the
-                // schedule's `context.date` as "now" — without it the relative
-                // string ("há 42 seg") would freeze at whatever the popover
-                // last rendered, because nothing in `store` changes between
-                // fetches.
+                // Forward countdown to the next scheduled refresh. The format
+                // is "Próx. em M:SS" computed from `lastRefreshedAt + interval`
+                // (the scheduler's cadence). When a fetch is in flight (any
+                // vendor `.loading`) we swap for "Atualizando…" instead of
+                // showing 0:00 with no movement.
                 //
-                // The `from:` anchor MUST be a fixed epoch, NOT `.now`. With
-                // `.now`, every popover open re-anchors the schedule so the
-                // first tick is `interval` seconds away — if the user closes
-                // and reopens faster than `interval`, they never see a tick
-                // and the timer appears frozen.
-                if let when = store.lastRefreshedAt {
-                    TimelineView(.periodic(from: Self.scheduleAnchor, by: 1)) { context in
-                        Text(String(
-                            format: L10n.localizedString("updated_ago_fmt"),
-                            Self.relativeFormatter.localizedString(
-                                for: when, relativeTo: context.date)
-                        ))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                // `TimelineView` re-renders every 1 s. The `from:` anchor
+                // MUST be a fixed epoch (not `.now`) so the schedule is
+                // deterministic across popover open/close cycles.
+                TimelineView(.periodic(from: Self.scheduleAnchor, by: 1)) { context in
+                    countdownLabel(now: context.date)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
                 Button {
                     showAbout = true
@@ -218,4 +210,30 @@ public struct PopoverContentView: View {
     /// deterministic across popover open/close cycles — the next tick is
     /// always at most one interval away, regardless of when the view mounts.
     private static let scheduleAnchor = Date(timeIntervalSinceReferenceDate: 0)
+
+    /// Header countdown: "Próx. em 4:59" while the next scheduled refresh
+    /// approaches; "Atualizando…" while at least one vendor's fetch is in
+    /// flight; empty otherwise (e.g. the very first refresh hasn't returned
+    /// a fresh outcome yet — `lastRefreshedAt` is nil, so we have nothing
+    /// to count down from). Pure function of `store` + `now` so the
+    /// surrounding `TimelineView` controls the 1-second re-render cadence.
+    @ViewBuilder
+    private func countdownLabel(now: Date) -> some View {
+        if store.isAnyVendorLoading {
+            Text(L10n.localizedString("refreshing_now"))
+        } else if let last = store.lastRefreshedAt {
+            let elapsed = now.timeIntervalSince(last)
+            let remaining = max(0, store.refreshIntervalSeconds - elapsed)
+            let minutes = Int(remaining) / 60
+            let seconds = Int(remaining) % 60
+            Text(String(
+                format: L10n.localizedString("next_refresh_in_fmt"),
+                String(format: "%d:%02d", minutes, seconds)
+            ))
+        } else {
+            // No fresh fetch on record yet — say nothing rather than
+            // claiming a countdown we can't honor.
+            EmptyView()
+        }
+    }
 }
