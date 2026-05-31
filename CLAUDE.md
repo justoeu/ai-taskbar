@@ -154,7 +154,18 @@ make clean                     # nuke .build, build/, generated DMGs
   state on `RefreshScheduler` (timer + 24h compactor). Default cadence is
   300 s; the scheduler reads `UsageStore.hasRateLimitedVendor` between
   cycles and adds `RefreshScheduler.rateLimitBackoff` (60 s) to the next
-  sleep whenever any vendor's last refresh ended in HTTP 429.
+  sleep whenever any vendor's last refresh ended in HTTP 429. Aggregates
+  (`maxUtilization`, `isAnyVendorLoading`, `hasRateLimitedVendor`) are
+  pre-computed inside `recomputeAggregates()` so the per-second header
+  TimelineView reads flat `@Published` properties instead of re-scanning
+  vendors. The merged `$state` stream is throttled at 50 ms with
+  `Publishers.MergeMany.throttle(latest:true)` to coalesce the bursts of
+  synchronous `.loading` → `.ok/.failed` transitions a single
+  `refreshAll()` produces. The popover header runs a 1-Hz countdown
+  anchored on `UsageStore.lastScheduledTickAt`; localized strings are
+  memoized at type init. `DiskCache` TTL is set in `AppEnvironment` to
+  `max(15, refresh_interval_seconds − 5)` so the scheduled tick reliably
+  trips `freshPayload()` without needing `forceRefresh: true`.
 - **`AiTaskbarValidate`** — runtime test runner, see "Validation policy".
 - **`AiTaskbarTesting`** — fixtures + StubURLProtocol, shared by tests +
   validate.
