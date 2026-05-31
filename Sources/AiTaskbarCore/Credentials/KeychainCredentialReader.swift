@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import LocalAuthentication
 
 /// Reads/writes the Claude Code OAuth credentials JSON blob from the macOS
 /// login keychain. The Claude Code CLI stores it under
@@ -21,6 +22,26 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
 
     private let lock = NSLock()
     private var _resolvedAccount: String?
+    /// In-memory mirror of the most recent successful OAuth refresh whose
+    /// `writeBack` was blocked by an ACL mismatch. Read paths return this in
+    /// preference to the on-disk Keychain item so that **refresh_token
+    /// rotation survives across refresh cycles** even when the Keychain ACL
+    /// doesn't trust the current binary — without this, a successful
+    /// rotation that can't persist would be re-attempted with the now-stale
+    /// disk token on the next cycle and fail with `invalid_grant`.
+    /// Cleared on any successful Keychain write.
+    private var _pendingUpdate: AnthropicCredentials?
+
+    /// Reused LAContext for no-UI Keychain queries. macOS 11 deprecated
+    /// `kSecUseAuthenticationUIFail`; the modern replacement is to pass an
+    /// `LAContext` with `interactionNotAllowed = true` via
+    /// `kSecUseAuthenticationContext`. Shared across all 4 SecItem queries
+    /// — LAContext is reusable in no-UI mode and avoids per-call allocation.
+    private let laContext: LAContext = {
+        let ctx = LAContext()
+        ctx.interactionNotAllowed = true
+        return ctx
+    }()
 
     public init(service: String = "Claude Code-credentials",
                 preferredAccount: String? = nil) {
@@ -29,6 +50,12 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     }
 
     public func read() throws -> AnthropicCredentials {
+        // Prefer the in-memory copy if a prior writeBack was blocked. This
+        // is what keeps OAuth refresh_token rotation safe across cycles when
+        // the Keychain item's ACL no longer trusts our cdhash.
+        if let pending = getPendingUpdate() {
+            return pending
+        }
         let items = try fetchAll()
         if items.isEmpty {
             throw AppError.credentials(
@@ -56,17 +83,29 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             // cycle behind an invisible window. Fast-fail with
             // errSecInteractionNotAllowed and let the caller-side branch
             // below treat persistence as best-effort.
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
+            kSecUseAuthenticationContext as String: laContext,
         ]
         // Pin to the account we resolved on read so we never accidentally
-        // overwrite an unrelated entry (work vs personal).
-        if let account = getResolvedAccount() ?? preferredAccount {
+        // overwrite an unrelated entry (work vs personal). Skip empty-string
+        // accounts: a legacy Claude Code item has NO `kSecAttrAccount` at
+        // all, so pinning `kSecAttrAccount = ""` would not match it and
+        // `SecItemUpdate` would return `errSecItemNotFound`, sending us
+        // through `SecItemAdd` and forking the credential into a duplicate
+        // entry with an empty-string account.
+        if let account = getResolvedAccount() ?? preferredAccount, !account.isEmpty {
             query[kSecAttrAccount as String] = account
         }
         let update: [String: Any] = [kSecValueData as String: data]
         let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
-        if status == errSecSuccess { return }
+        if status == errSecSuccess {
+            setPendingUpdate(nil)
+            return
+        }
         if status == errSecInteractionNotAllowed {
+            // Disk persistence blocked; stash the renewed credentials in
+            // memory so the next `read()` returns the rotated tokens
+            // instead of the stale on-disk ones.
+            setPendingUpdate(updated)
             logACLMismatch(op: "update")
             return
         }
@@ -74,14 +113,21 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             var add = query
             add[kSecValueData as String] = data
             let addStatus = SecItemAdd(add as CFDictionary, nil)
-            if addStatus == errSecSuccess { return }
+            if addStatus == errSecSuccess {
+                setPendingUpdate(nil)
+                return
+            }
             if addStatus == errSecInteractionNotAllowed {
+                setPendingUpdate(updated)
                 logACLMismatch(op: "add")
                 return
             }
-            throw AppError.credentials("SecItemAdd failed (OSStatus \(addStatus))")
+            // Route through `errorFor` so locked-keychain / auth-failed
+            // codes carry the curated user-facing hint instead of a raw
+            // OSStatus number.
+            throw Self.errorFor(status: addStatus, op: "writeBack add")
         }
-        throw AppError.credentials("SecItemUpdate failed (OSStatus \(status))")
+        throw Self.errorFor(status: status, op: "writeBack update")
     }
 
     /// Logged (not thrown) only on `errSecInteractionNotAllowed` during a
@@ -163,7 +209,7 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             // we're an LSUIElement (no Dock icon) menu bar app. Fast-fail
             // with errSecInteractionNotAllowed is recoverable; an invisible
             // hang is not.
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
+            kSecUseAuthenticationContext as String: laContext,
         ]
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecItemNotFound { return [] }
@@ -182,7 +228,7 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             kSecAttrAccount as String:         account,
             kSecMatchLimit as String:          kSecMatchLimitOne,
             kSecReturnData as String:          true,
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
+            kSecUseAuthenticationContext as String: laContext,
         ]
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else {
@@ -201,7 +247,7 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             kSecAttrService as String:         service,
             kSecMatchLimit as String:          kSecMatchLimitOne,
             kSecReturnData as String:          true,
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
+            kSecUseAuthenticationContext as String: laContext,
         ]
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecItemNotFound { return nil }
@@ -252,5 +298,13 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     private func getResolvedAccount() -> String? {
         lock.lock(); defer { lock.unlock() }
         return _resolvedAccount
+    }
+    private func setPendingUpdate(_ v: AnthropicCredentials?) {
+        lock.lock(); defer { lock.unlock() }
+        _pendingUpdate = v
+    }
+    private func getPendingUpdate() -> AnthropicCredentials? {
+        lock.lock(); defer { lock.unlock() }
+        return _pendingUpdate
     }
 }
