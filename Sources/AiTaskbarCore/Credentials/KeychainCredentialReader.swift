@@ -1,6 +1,5 @@
 import Foundation
 import Security
-import LocalAuthentication
 
 /// Reads/writes the Claude Code OAuth credentials JSON blob from the macOS
 /// login keychain. The Claude Code CLI stores it under
@@ -31,17 +30,6 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     /// disk token on the next cycle and fail with `invalid_grant`.
     /// Cleared on any successful Keychain write.
     private var _pendingUpdate: AnthropicCredentials?
-
-    /// Reused LAContext for no-UI Keychain queries. macOS 11 deprecated
-    /// `kSecUseAuthenticationUIFail`; the modern replacement is to pass an
-    /// `LAContext` with `interactionNotAllowed = true` via
-    /// `kSecUseAuthenticationContext`. Shared across all 4 SecItem queries
-    /// — LAContext is reusable in no-UI mode and avoids per-call allocation.
-    private let laContext: LAContext = {
-        let ctx = LAContext()
-        ctx.interactionNotAllowed = true
-        return ctx
-    }()
 
     public init(service: String = "Claude Code-credentials",
                 preferredAccount: String? = nil) {
@@ -78,12 +66,24 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         var query: [String: Any] = [
             kSecClass as String:               kSecClassGenericPassword,
             kSecAttrService as String:         service,
-            // Same rationale as the reads: we're LSUIElement (no Dock icon),
-            // so a SecurityAgent password prompt would freeze the refresh
-            // cycle behind an invisible window. Fast-fail with
-            // errSecInteractionNotAllowed and let the caller-side branch
-            // below treat persistence as best-effort.
-            kSecUseAuthenticationContext as String: laContext,
+            // Deliberate use of the deprecated `kSecUseAuthenticationUIFail`.
+            //
+            // The modern replacement (`kSecUseAuthenticationContext` carrying
+            // an `LAContext` with `interactionNotAllowed = true`) only
+            // suppresses the SecurityAgent prompt for Keychain items stored
+            // with a `SecAccessControl` carrying a LocalAuthentication
+            // policy. The `Claude Code-credentials` item is a plain generic
+            // password with no LA policy, so the LAContext route is silently
+            // ignored and the prompt fires anyway — exactly what we saw in
+            // the field after migrating away from this key. The deprecated
+            // switch is the ONLY documented way to fast-fail with
+            // `errSecInteractionNotAllowed` for plain-generic-password items.
+            // Apple has been promising to remove it for years; do not migrate
+            // until they ship a working replacement.
+            //
+            // Same rationale applies to the read paths below — they share
+            // the brief pointer comment back to here.
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
         // Pin to the account we resolved on read so we never accidentally
         // overwrite an unrelated entry (work vs personal). Skip empty-string
@@ -209,7 +209,12 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             // we're an LSUIElement (no Dock icon) menu bar app. Fast-fail
             // with errSecInteractionNotAllowed is recoverable; an invisible
             // hang is not.
-            kSecUseAuthenticationContext as String: laContext,
+            // See `writeBack` for why we deliberately stick with the
+            // deprecated `kSecUseAuthenticationUIFail` here. tl;dr: the
+            // LAContext path only works for items stored with an LA-aware
+            // `SecAccessControl`, which the `Claude Code-credentials`
+            // generic password is not.
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecItemNotFound { return [] }
@@ -228,7 +233,12 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             kSecAttrAccount as String:         account,
             kSecMatchLimit as String:          kSecMatchLimitOne,
             kSecReturnData as String:          true,
-            kSecUseAuthenticationContext as String: laContext,
+            // See `writeBack` for why we deliberately stick with the
+            // deprecated `kSecUseAuthenticationUIFail` here. tl;dr: the
+            // LAContext path only works for items stored with an LA-aware
+            // `SecAccessControl`, which the `Claude Code-credentials`
+            // generic password is not.
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else {
@@ -247,7 +257,12 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             kSecAttrService as String:         service,
             kSecMatchLimit as String:          kSecMatchLimitOne,
             kSecReturnData as String:          true,
-            kSecUseAuthenticationContext as String: laContext,
+            // See `writeBack` for why we deliberately stick with the
+            // deprecated `kSecUseAuthenticationUIFail` here. tl;dr: the
+            // LAContext path only works for items stored with an LA-aware
+            // `SecAccessControl`, which the `Claude Code-credentials`
+            // generic password is not.
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecItemNotFound { return nil }
