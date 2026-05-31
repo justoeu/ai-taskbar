@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import os
 
 /// Reads/writes the Claude Code OAuth credentials JSON blob from the macOS
 /// login keychain. The Claude Code CLI stores it under
@@ -19,17 +20,28 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     public let service: String
     public let preferredAccount: String?
 
-    private let lock = NSLock()
-    private var _resolvedAccount: String?
-    /// In-memory mirror of the most recent successful OAuth refresh whose
-    /// `writeBack` was blocked by an ACL mismatch. Read paths return this in
-    /// preference to the on-disk Keychain item so that **refresh_token
-    /// rotation survives across refresh cycles** even when the Keychain ACL
-    /// doesn't trust the current binary — without this, a successful
-    /// rotation that can't persist would be re-attempted with the now-stale
-    /// disk token on the next cycle and fail with `invalid_grant`.
-    /// Cleared on any successful Keychain write.
-    private var _pendingUpdate: AnthropicCredentials?
+    /// Both pieces of mutable state live behind a single
+    /// `OSAllocatedUnfairLock` — replaces the previous `NSLock` + two `var`
+    /// fields with a structured value-typed state guarded by one cheap
+    /// kernel primitive. macOS 13+ only, which matches our deployment
+    /// target.
+    ///
+    /// - `resolvedAccount` — the `kSecAttrAccount` chosen during the last
+    ///   successful `read()`. Pinned so `writeBack` targets the same
+    ///   entry. Empty strings are normalized to `nil` at the set site so
+    ///   the `getResolvedAccount() ?? preferredAccount` fallback chain
+    ///   works as intended.
+    /// - `pendingUpdate` — in-memory mirror of the most recent successful
+    ///   OAuth refresh whose `writeBack` was blocked by an ACL mismatch.
+    ///   Consulted by `read()` and reconciled against the on-disk copy:
+    ///   whichever has the later `expiresAtMs` wins. Cleared when the
+    ///   disk copy catches up or surpasses it (e.g. Claude Code CLI
+    ///   re-auth wrote a fresher token).
+    private struct LockedState {
+        var resolvedAccount: String?
+        var pendingUpdate: AnthropicCredentials?
+    }
+    private let state = OSAllocatedUnfairLock(initialState: LockedState())
 
     public init(service: String = "Claude Code-credentials",
                 preferredAccount: String? = nil) {
@@ -38,25 +50,60 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     }
 
     public func read() throws -> AnthropicCredentials {
-        // Prefer the in-memory copy if a prior writeBack was blocked. This
-        // is what keeps OAuth refresh_token rotation safe across cycles when
-        // the Keychain item's ACL no longer trusts our cdhash.
-        if let pending = getPendingUpdate() {
-            return pending
+        // Always attempt the Keychain read so its side effect — setting
+        // `resolvedAccount` — runs regardless of which copy ends up winning.
+        // Without that side effect a future `writeBack` would forget which
+        // entry to update.
+        let diskResult = readFromKeychain()
+        let pending = getPendingUpdate()
+
+        switch (diskResult, pending) {
+        case (.success(let disk), .some(let p)):
+            // Reconcile: the freshest `expiresAtMs` wins. If an external
+            // refresher (e.g. Claude Code CLI re-auth) wrote a newer token
+            // to disk while we held a stale in-memory copy, prefer disk
+            // and drop the pending. If our pending is still ahead, keep
+            // it — the next successful writeBack will clear it.
+            if disk.expiresAtMs >= p.expiresAtMs {
+                setPendingUpdate(nil)
+                return disk
+            }
+            return p
+        case (.success(let disk), .none):
+            return disk
+        case (.failure, .some(let p)):
+            // Keychain unreadable (ACL block, schema error, …) but the
+            // in-memory copy is still good. This is the very state the
+            // `_pendingUpdate` cache exists to cover.
+            return p
+        case (.failure(let err), .none):
+            throw err
         }
-        let items = try fetchAll()
-        if items.isEmpty {
-            throw AppError.credentials(
-                "Keychain item '\(service)' not found. Run Claude Code at least once.")
-        }
-        let chosen = select(from: items)
-        setResolvedAccount(chosen.account)
+    }
+
+    /// Captures the Keychain side of `read()` so the reconciliation in
+    /// `read()` itself stays a pure `(Result, pending?) → outcome` switch.
+    private func readFromKeychain() -> Result<AnthropicCredentials, AppError> {
         do {
-            return try SharedCoders.decoder
-                .decode(AnthropicCredentialsFile.self, from: chosen.data)
-                .claudeAiOauth
+            let items = try fetchAll()
+            if items.isEmpty {
+                return .failure(.credentials(
+                    "Keychain item '\(service)' not found. Run Claude Code at least once."))
+            }
+            let chosen = select(from: items)
+            setResolvedAccount(chosen.account)
+            do {
+                let creds = try SharedCoders.decoder
+                    .decode(AnthropicCredentialsFile.self, from: chosen.data)
+                    .claudeAiOauth
+                return .success(creds)
+            } catch {
+                return .failure(.schema("decoding Claude credentials JSON: \(error)"))
+            }
+        } catch let appErr as AppError {
+            return .failure(appErr)
         } catch {
-            throw AppError.schema("decoding Claude credentials JSON: \(error)")
+            return .failure(.other(String(describing: error)))
         }
     }
 
@@ -306,20 +353,22 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         return sorted[0]
     }
 
+    /// Stores the resolved account, normalizing empty strings to `nil` so
+    /// `getResolvedAccount() ?? preferredAccount` falls back as intended.
+    /// Legacy `fetchLegacySingle` items report `account = ""`, which would
+    /// otherwise short-circuit the fallback and silently shadow the
+    /// configured `keychain_account`.
     private func setResolvedAccount(_ s: String) {
-        lock.lock(); defer { lock.unlock() }
-        _resolvedAccount = s
+        let normalized = s.isEmpty ? nil : s
+        state.withLock { $0.resolvedAccount = normalized }
     }
     private func getResolvedAccount() -> String? {
-        lock.lock(); defer { lock.unlock() }
-        return _resolvedAccount
+        state.withLock { $0.resolvedAccount }
     }
     private func setPendingUpdate(_ v: AnthropicCredentials?) {
-        lock.lock(); defer { lock.unlock() }
-        _pendingUpdate = v
+        state.withLock { $0.pendingUpdate = v }
     }
     private func getPendingUpdate() -> AnthropicCredentials? {
-        lock.lock(); defer { lock.unlock() }
-        return _pendingUpdate
+        state.withLock { $0.pendingUpdate }
     }
 }
