@@ -30,27 +30,42 @@ public struct GeminiModel: Decodable, Sendable {
 
 extension GeminiModelsResponse {
     public func toSnapshot() -> GeminiSnapshot {
-        let count = models?.count ?? 0
-        // No quota signal from this endpoint — the row is a 0% status anchor
-        // whose detail line carries the model count. Mirrors the Kimi balance
-        // pattern (flat row + descriptive detail).
+        // Distinguish the three observable response shapes so a future
+        // Google v1beta rename (e.g. `models` → `availableModels`) doesn't
+        // silently render as a successful "no models visible" forever.
+        //
+        // - models == nil  → field missing/null. Treat as a schema warning.
+        // - models == []   → key valid, but no models granted (real case
+        //                     for new accounts before activation).
+        // - models == [..] → expected case, surface the count.
         let detail: String
-        if count == 0 {
-            detail = "API key valid (no models visible)"
-        } else if count == 1 {
-            detail = "1 model available"
+        let count: Int
+        if let models {
+            count = models.count
+            detail = (count == 1) ? "1 model available"
+                                   : "\(count) models available"
+            if count == 0 {
+                // `models` present but empty — genuine "no models granted"
+                // state. Overwrite the count-zero phrasing above.
+                return GeminiSnapshot(
+                    planLabel: "Google AI Studio",
+                    status: UsageWindow(label: "API Key",
+                                        utilizationPercent: 0,
+                                        resetsAt: nil,
+                                        detail: "API key valid (no models visible)"),
+                    modelCount: 0
+                )
+            }
         } else {
-            detail = "\(count) models available"
+            count = 0
+            detail = "Unexpected response shape — check base_url / API version"
         }
-        let status = UsageWindow(
-            label: "API Key",
-            utilizationPercent: 0,
-            resetsAt: nil,
-            detail: detail
-        )
         return GeminiSnapshot(
             planLabel: "Google AI Studio",
-            status: status,
+            status: UsageWindow(label: "API Key",
+                                utilizationPercent: 0,
+                                resetsAt: nil,
+                                detail: detail),
             modelCount: count
         )
     }

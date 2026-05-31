@@ -106,4 +106,86 @@ struct GeminiProviderTests {
         let provider = try GeminiProvider(config: cfg, http: .init())
         #expect(provider.vendorId == .gemini)
     }
+
+    @Test("toSnapshot defensive backstop renders schema-warning detail when called with models == nil")
+    func missing_models_key_surfaces_schema_warning() throws {
+        // The production path now rejects this shape inside
+        // `decodeSnapshot` (see `missing_models_field_throws_schema_error`
+        // below). This test still pins `toSnapshot`'s defensive branch so
+        // anyone calling it directly — bypassing the provider's decoder —
+        // also gets the warning phrasing instead of a false-positive
+        // "valid (no models visible)".
+        let payload = Data(#"{"nextPageToken":"abc"}"#.utf8)
+        let parsed = try JSONDecoder().decode(GeminiModelsResponse.self, from: payload)
+        let snap = parsed.toSnapshot()
+        #expect(snap.modelCount == 0)
+        #expect(snap.status?.detail?.contains("Unexpected response shape") == true)
+    }
+
+    @Test("missing `models` field surfaces AppError.schema from the production decode path")
+    func missing_models_field_throws_schema_error() async throws {
+        // The whole point of the schema throw in decodeSnapshot is that
+        // a future Google v1beta rename surfaces as a .failed vendor
+        // state (red row + visible error) instead of a silently green
+        // "no models visible" snapshot. CachedFetch lifts the throw into
+        // markFailed + fallback; with no cached payload, fetchUsage
+        // rethrows as AppError.schema.
+        StubURLProtocol.handler = { _ in
+            .init(data: Data(#"{"nextPageToken":"abc"}"#.utf8))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_GEMINI_SCHEMA",
+            inlineKey: "k",
+            vendorName: "Gemini"
+        )
+        let provider = GeminiProvider(
+            credentials: creds,
+            cache: cache,
+            http: http,
+            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta")!
+        )
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected AppError.schema; got success")
+        } catch let err as AppError {
+            if case .schema(let msg) = err {
+                #expect(msg.contains("missing `models`"))
+            } else {
+                Issue.record("expected AppError.schema, got \(err)")
+            }
+        }
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
+    }
+
+    @Test("empty models list still claims 'API key valid (no models visible)'")
+    func empty_list_branch_keeps_valid_phrasing() throws {
+        // The empty-list case (key valid, no models granted to this user
+        // yet) must NOT regress into the schema-warning branch.
+        let payload = Data(#"{"models":[]}"#.utf8)
+        let parsed = try JSONDecoder().decode(GeminiModelsResponse.self, from: payload)
+        let snap = parsed.toSnapshot()
+        #expect(snap.modelCount == 0)
+        #expect(snap.status?.detail == "API key valid (no models visible)")
+    }
+
+    @Test("GeminiConfig.validate rejects URLs without an accepted API-version path")
+    func validate_rejects_missing_api_version() {
+        // Bare host / root path / non-versioned path: rejected.
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com") == nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/") == nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/models") == nil)
+        // Strict-prefix matcher rejects typos that the previous
+        // `hasPrefix("/v1")` accepted (these would 404 at runtime).
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1banana") == nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1xxxxxx") == nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v123") == nil)
+        // Allowed shapes (exact match or rooted subpath).
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1") != nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1beta") != nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1alpha") != nil)
+        #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1beta/models") != nil)
+    }
 }

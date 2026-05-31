@@ -97,12 +97,21 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 
 ## What's in this version
 
+### v0.2 — Gemini, calmer cadence, honest countdown, no more Keychain prompts
+
+- **Sixth provider — Google Gemini.** Uses `GET /v1beta/models` as an authenticated heartbeat (Generative Language API has no public quota REST endpoint). Auth via `x-goog-api-key` header, never `?key=` query string. Host allow-listed to `generativelanguage.googleapis.com`. `GeminiConfig.validate` is strict on the API-version segment — `base_url` must be exactly `/v1`, `/v1beta`, or `/v1alpha` (or a sub-path of one). A typo like `/v1xxx` is rejected at config-load with an NSLog warning, instead of producing a silent 404 at first fetch. A future Google rename (`models` → `availableModels`) lands as `AppError.schema` + red row, not as a silently green "no models visible".
+- **Default refresh cadence raised from 150 s → 300 s (5 min).** Comfortable headroom under every vendor's 429 threshold. Floor is still 15 s; override via `[ui] refresh_interval_seconds = …`.
+- **Forward countdown in the popover header.** "Próx. em 4:59" replaces the old "atualizado há …" — anchored on `UsageStore.lastScheduledTickAt`, which is stamped by `RefreshScheduler.markScheduledTick()` immediately before every cycle. When the scheduler is in the 60 s post-429 back-off the label switches to "Aguardando rate-limit…"; while a fetch is in flight it says "Atualizando…". Pre-computed `@Published` aggregates (`isAnyVendorLoading`, `hasRateLimitedVendor`) keep the per-second TimelineView reading flat properties instead of re-scanning the vendor array; localized strings are memoized at type init.
+- **Rate-limit back-off.** When any vendor's most recent refresh ended in HTTP 429, `RefreshScheduler` adds `rateLimitBackoff` (60 s) to the next sleep. Stays applied while at least one vendor keeps 429-ing; clears automatically when responses go green. `UsageStore.hasRateLimitedVendor` detects both `.failed(429, _)` AND stale-`.ok` outcomes whose cached `lastError.status == 429` (CachedFetch hides single 429s as `.ok(stale)` whenever any payload is cached).
+- **Cache TTL automatically derived from the cadence** — `max(15, refresh_interval_seconds − 5)`. Popover opens between scheduled refreshes still serve from cache, but the scheduled tick at T=interval always finds an expired entry (`age ≈ interval > ttl`) and goes straight to the network without needing `forceRefresh: true`. The 5-second margin absorbs Task.sleep jitter.
+- **Keychain write no longer triggers the macOS password prompt.** `KeychainCredentialReader.writeBack` passes `kSecUseAuthenticationUIFail` (the deprecated key — the modern `LAContext.interactionNotAllowed` doesn't work for plain generic-password items without a `SecAccessControl`) and treats `errSecInteractionNotAllowed` as best-effort: logs to Console.app with the exact `security set-generic-password-partition-list` fix and returns. The renewed credentials are mirrored to an in-memory `_pendingUpdate`; the next `read()` reconciles against the on-disk copy by `expiresAtMs` (so an external rotation via Claude Code CLI wins automatically when it lands). Menu-bar app (LSUIElement) no longer freezes behind an invisible SecurityAgent dialog after every `make app` rebuild.
+
 ### v0.1.0 — initial release
 
 **Core**
 - 5 LLM providers — Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), Kimi (Moonshot)
 - OAuth auto-refresh for Anthropic + OpenAI using their official `client_id`s
-- Per-vendor caches with 150-second TTL (matched to default refresh interval) and 7-day stale fallback
+- Per-vendor caches with 150-second TTL (matched to the v0.1 default refresh interval) and 7-day stale fallback
 
 **UI**
 - SwiftUI `MenuBarExtra` with accordion popover (locked providers stay collapsed)
@@ -135,7 +144,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 - GitHub Actions release workflow (`.github/workflows/release.yml`) auto-builds per tag
 
 **Validation**
-- `make validate` runs **143 runtime assertions** + 5-stage gate (build → suite → bundle → smoke launch → permission audit). Replaces XCTest on systems with only Command Line Tools.
+- `make validate` runs **160 runtime assertions** + 6-stage gate (build → validate runner → swift-test + coverage → bundle → smoke launch → permission audit). Coverage floor on `AiTaskbarCore` + `AiTaskbarProviders` enforced at ≥ 90%.
 
 ## How it works
 
@@ -163,7 +172,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 │              5 × Provider (UsageProvider impl)              │
 │              All use CachedFetch helper:                    │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ 1. Cache check (150s TTL → no network)               │  │
+│  │ 1. Cache check (300s TTL → no network)               │  │
 │  │ 2. Credentials read (Keychain / file / env+config)   │  │
 │  │ 3. OAuth refresh if needed (shared OAuthRefresher)   │  │
 │  │ 4. HTTP request                                      │  │
@@ -184,7 +193,11 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The **`RefreshScheduler`** fires every `refresh_interval_seconds` (default 150s = 2.5 min — chosen as a balance between freshness and being polite to the Anthropic usage endpoint, which rate-limits aggressively below ~60s) and triggers `UsageStore.refreshAll()`, which fans out to each `VendorViewModel`. Per-vendor state updates only invalidate that vendor's `VendorSectionView` — no fan-out re-renders.
+The **`RefreshScheduler`** fires every `refresh_interval_seconds` (default 300s = 5 min — chosen as a balance between freshness and being polite to the Anthropic / Z.AI / Codex usage endpoints, which rate-limit aggressively below ~60s) and triggers `UsageStore.refreshAll()`, which fans out to each `VendorViewModel`. Per-vendor state updates only invalidate that vendor's `VendorSectionView` — no fan-out re-renders.
+
+If any vendor's last refresh ended in HTTP 429, the scheduler adds **`RefreshScheduler.rateLimitBackoff` = 60 s** to the next sleep. The back-off is read via `UsageStore.hasRateLimitedVendor` between cycles and stays applied for as long as at least one vendor keeps returning 429 — once they clear, the cadence drops back to the configured interval automatically. During the back-off the popover countdown shows "Aguardando rate-limit…" (anchored on `UsageStore.isInRateLimitBackoff`) so the header never silently freezes at 0:00.
+
+The per-vendor `DiskCache` TTL is wired to `max(15, refresh_interval_seconds − 5)` in `AppEnvironment`. The 5 s margin means a scheduled tick at T=interval always sees an expired cache (`age ≈ interval > ttl`), so the scheduler doesn't need `forceRefresh: true` to defeat the cache. Popover opens between scheduled refreshes still serve from cache.
 
 ## Configuration
 
@@ -196,7 +209,7 @@ Full schema in [`config.example.toml`](config.example.toml). Highlights:
 [ui]
 # primary = "anthropic"              # which vendor opens first
 # menu_bar_mode = "icon_and_percent"   # icon | icon_and_percent | rotating
-# refresh_interval_seconds = 150     # default 150 (2.5m). Floor 15. Common: 60, 150, 300, 600.
+# refresh_interval_seconds = 300     # default 300 (5m). Floor 15. Common: 60, 150, 300, 600.
 # language = "pt-BR"                 # force UI language (en | pt-BR | es)
 
 [thresholds]
@@ -257,6 +270,7 @@ The app **never writes outside these locations**. No telemetry, no remote loggin
 ## Privacy & security
 
 - Anthropic OAuth tokens stay in the **Keychain** — the app reads them, never copies them to disk.
+- Keychain reads **and** writes pass `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail`, so an ad-hoc-rebuilt binary (whose cdhash no longer matches the item's ACL) never triggers a SecurityAgent password prompt behind the menu bar — the renewed access_token is kept in memory and persistence retries on the next OAuth cycle. The fix is logged to Console.app with the exact `security set-generic-password-partition-list` command to silence it for good.
 - Codex `~/.codex/auth.json` writes go through atomic tempfile with `0o600` set **before** the rename — no race window where fresh refresh tokens are world-readable.
 - Configuration files (`config.toml`) and cache files are `chmod 0600`, support dir `chmod 0700`.
 - OpenAI cache strips `user_id`/`account_id`/`email` fields before persisting — only utilization data survives.
@@ -274,7 +288,7 @@ make app-universal      # arm64 + x86_64 fat binary
 make icon               # regenerate Resources/AppIcon.icns from Swift drawing script
 make dmg                # host-arch DMG
 make dmg-universal      # universal DMG
-make validate           # 143+ assertion suite + smoke launch + perms audit
+make validate           # 160+ assertion suite + 245-test swift-test + coverage ≥90% + smoke launch + perms audit
 make sign-developer     # requires DEVELOPER_ID env var
 make notarize           # requires APPLE_ID/APPLE_TEAM_ID/APPLE_PASSWORD
 make release            # full pipeline: sign → notarize → staple → DMG
@@ -309,7 +323,7 @@ git push origin v0.1.0
 The [release workflow](.github/workflows/release.yml) runs on GitHub-hosted macOS runners:
 1. Build universal DMG via `make dmg-universal`
 2. Verify code signature
-3. Run the 143-assertion validation suite
+3. Run the 160-assertion validation suite (plus the swift-test coverage gate)
 4. Compute SHA256 of the DMG
 5. Create a GitHub Release with auto-generated notes + the DMG attached
 
@@ -332,7 +346,7 @@ AiTaskbarCore/
   Cost/                   ClaudeSessionScanner, CodexLogScanner, PricingTable
   History/                UsageHistoryStore (persistent JSONL + NSLock)
   Util/                   Paths, JWT, Semver, SharedCoders
-AiTaskbarValidate/        143+ runtime asserts (replaces XCTest on CLT-only setups)
+AiTaskbarValidate/        160+ runtime asserts (replaces XCTest on CLT-only setups)
 AiTaskbarTesting/         Fixtures + StubURLProtocol (shared by tests + validate)
 Tests/                    XCTest tests (require full Xcode)
 ```

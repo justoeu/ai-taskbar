@@ -31,7 +31,7 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
 
     public convenience init(http: HTTPClient = .init(),
                             codexAuthPath: URL? = nil,
-                            cacheTTL: TimeInterval = 150) throws {
+                            cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.openai, ttl: cacheTTL)
         self.init(
             credentials: FileCredentialReader(path: codexAuthPath ?? Paths.defaultCodexAuth()),

@@ -28,10 +28,18 @@ public final class GeminiProvider: UsageProvider {
 
     public convenience init(config: GeminiConfig,
                             http: HTTPClient = .init(),
-                            cacheTTL: TimeInterval = 150) throws {
+                            cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.gemini, ttl: cacheTTL)
-        let baseURL = URL(string: config.baseURL)
-            ?? URL(string: GeminiConfig.defaultBaseURL)!
+        // GeminiConfig.init(from:) already normalizes user input to the
+        // default on parse failure, but we belt-and-suspenders here:
+        // throw instead of force-unwrapping if both URL constructions
+        // somehow fail. AppEnvironment catches the throw and disables only
+        // the Gemini provider instead of crashing the whole menu-bar app.
+        guard let baseURL = URL(string: config.baseURL)
+                          ?? URL(string: GeminiConfig.defaultBaseURL) else {
+            throw AppError.io(
+                "GeminiConfig.baseURL '\(config.baseURL)' is unparseable and the built-in default also failed")
+        }
         self.init(
             credentials: EnvOrConfigCredentialReader(
                 envVarName: config.apiKeyEnv,
@@ -63,11 +71,25 @@ public final class GeminiProvider: UsageProvider {
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
+        let parsed: GeminiModelsResponse
         do {
-            let parsed = try SharedCoders.decoder.decode(GeminiModelsResponse.self, from: data)
-            return .gemini(parsed.toSnapshot())
+            parsed = try SharedCoders.decoder.decode(GeminiModelsResponse.self, from: data)
         } catch {
             throw AppError.schema("gemini models decode: \(error)")
         }
+        // `models` Optional becomes nil when the field is missing OR null
+        // — i.e. exactly the shape a future Google v1beta rename would
+        // produce (e.g. `models` → `availableModels`). Routing this
+        // through `AppError.schema` instead of toSnapshot's UX branch
+        // makes CachedFetch mark the vendor failed, the UI render an
+        // error tint, and the regression visible rather than masquerading
+        // as a healthy "no models visible" green row forever. Empty list
+        // (`{"models":[]}`) is a legitimate vendor state and still flows
+        // through `toSnapshot()` as a happy .ok.
+        guard parsed.models != nil else {
+            throw AppError.schema(
+                "gemini models: response missing `models` field — base_url may be wrong or the API has changed")
+        }
+        return .gemini(parsed.toSnapshot())
     }
 }

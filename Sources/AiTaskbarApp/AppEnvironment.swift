@@ -49,11 +49,16 @@ public final class AppEnvironment {
     }
 
     /// Build the set of providers indicated as enabled by the live config.
-    /// Cache TTL is wired to `refresh_interval_seconds` so that popover
-    /// opens between scheduled refreshes serve from cache (no extra network
-    /// calls) regardless of what interval the user picked.
+    /// Cache TTL is wired to `refresh_interval_seconds − 5 s` (floored at
+    /// 15 s) so that:
+    ///   1. Popover opens between scheduled refreshes still serve from
+    ///      cache without a network round-trip.
+    ///   2. The scheduled tick at T=interval ALWAYS finds an expired
+    ///      cache (`age ≈ interval > ttl`), going straight to the network
+    ///      without needing `forceRefresh: true`. The 5-second margin
+    ///      absorbs Task.sleep jitter.
     public func makeProviders() -> [any UsageProvider] {
-        let ttl = config.ui.refreshIntervalSeconds
+        let ttl = max(15, config.ui.refreshIntervalSeconds - 5)
         var out: [any UsageProvider] = []
         if config.anthropic.enabled {
             do {

@@ -201,8 +201,9 @@ public struct UIConfig: Codable, Sendable, Equatable {
     public var primary: VendorId?
     public var menuBarMode: MenuBarMode = .iconAndPercent
     /// Auto-refresh cadence in seconds. Minimum 15 s is enforced at runtime
-    /// to avoid spamming undocumented vendor endpoints.
-    public var refreshIntervalSeconds: Double = 150
+    /// to avoid spamming undocumented vendor endpoints. Default 300 s (5 min)
+    /// keeps every vendor comfortably below their 429 thresholds.
+    public var refreshIntervalSeconds: Double = 300
     /// Force a specific UI language code (e.g. "pt-BR", "en", "es"). When
     /// nil, the macOS system language is used. Useful when you want this
     /// app in a different language than the rest of macOS.
@@ -210,7 +211,7 @@ public struct UIConfig: Codable, Sendable, Equatable {
 
     public init(primary: VendorId? = nil,
                 menuBarMode: MenuBarMode = .iconAndPercent,
-                refreshIntervalSeconds: Double = 150,
+                refreshIntervalSeconds: Double = 300,
                 language: String? = nil) {
         self.primary = primary
         self.menuBarMode = menuBarMode
@@ -238,7 +239,7 @@ public struct UIConfig: Codable, Sendable, Equatable {
         } else {
             self.menuBarMode = .iconAndPercent
         }
-        self.refreshIntervalSeconds = max(15, c.flexibleDouble(forKey: .refreshIntervalSeconds, default: 150))
+        self.refreshIntervalSeconds = max(15, c.flexibleDouble(forKey: .refreshIntervalSeconds, default: 300))
         self.language = try c.decodeIfPresent(String.self, forKey: .language)
     }
 
@@ -471,8 +472,17 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
         }
     }
 
-    /// Returns `raw` if it is an `https://` URL pointing to an allowed host;
-    /// otherwise nil. Lowercases scheme/host before comparing.
+    /// Returns `raw` if it is an `https://` URL pointing to an allowed Google
+    /// AI host AND whose path is exactly one of the known API-version
+    /// namespaces (or a subpath rooted on one). Otherwise nil.
+    ///
+    /// We're strict here on purpose: a previous `hasPrefix("/v1")` check
+    /// would accept `/v1banana`, `/v1xxxxxx`, etc. — typos pass validation
+    /// then produce 404s at runtime that the user has to debug. Anchoring
+    /// on a closed set of accepted prefixes turns the typo into a
+    /// startup-time NSLog warning instead.
+    public static let allowedAPIVersions: [String] = ["/v1", "/v1beta", "/v1alpha"]
+
     public static func validate(_ raw: String) -> String? {
         guard let url = URL(string: raw),
               let scheme = url.scheme?.lowercased(),
@@ -480,6 +490,11 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
               let host = url.host?.lowercased(),
               allowedHosts.contains(host)
         else { return nil }
+        let path = url.path
+        let pathOK = allowedAPIVersions.contains { prefix in
+            path == prefix || path.hasPrefix(prefix + "/")
+        }
+        guard pathOK else { return nil }
         return raw
     }
 

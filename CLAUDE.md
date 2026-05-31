@@ -18,12 +18,15 @@ make validate
 What it runs (`scripts/validate.sh`):
 
 1. `swift build -c debug` — catches compile errors across all targets.
-2. `swift run ai-taskbar-validate` — **145+ runtime assertions** in
+2. `swift run ai-taskbar-validate` — **160+ runtime assertions** in
    `Sources/AiTaskbarValidate/main.swift`. Covers: wire-type fixtures for
-   every vendor, OAuth error parsing, JWT decode, AppError equality,
+   every vendor (Anthropic, OpenAI, OpenRouter, Z.AI, Kimi, Gemini), OAuth
+   error parsing, JWT decode, AppError equality + `isRateLimited`,
    JSONValue round-trip, KimiConfig URL validation, DiskCache TTL+stale
-   semantics, AtomicFileWrite permissions, ConfigLoader TOML int↔double
-   tolerance, UsageHistoryStore append/load/compact, PricingTable, CostMath.
+   semantics (default TTL = 300 s), AtomicFileWrite permissions,
+   ConfigLoader TOML int↔double tolerance (default
+   `refresh_interval_seconds = 300`), UsageHistoryStore append/load/compact,
+   PricingTable, CostMath.
 3. `swift test --no-parallel --enable-code-coverage` via `scripts/coverage.sh` —
    runs the Swift Testing suites in `Tests/` and reports line coverage on
    `AiTaskbarCore` + `AiTaskbarProviders`. Coverage floor is enforced via
@@ -38,6 +41,26 @@ What it runs (`scripts/validate.sh`):
 
 If any step fails, **fix it before claiming the work is done**. Don't paper
 over with comments or `try?`-swallowing.
+
+**Pre-commit / pre-PR gate (non-negotiable):** `make validate` must be green
+**before** `git commit`, `git push`, `gh pr create`, or any tool that adds
+follow-up commits to an existing PR. Order: stage → `make validate` →
+commit/push/PR. On red, stop and root-cause; never commit on red and never
+re-run `--no-verify`. This applies to every commit on a PR branch, not just
+the first one — landing a broken commit and "fixing it in the next" still
+breaks `git bisect` and CI for collaborators.
+
+**PR review pipeline:** once a PR is open (or refreshed), fan out the
+following passes in parallel and report a combined summary:
+
+1. `/code-review` — correctness bugs in the diff.
+2. `/security-review` — auth, secrets, file perms, host allow-lists,
+   TOCTOU, TLS pinning, SAST.
+3. Swift-best-practices Agent — Swift 6 strict concurrency
+   (`Sendable`, `@MainActor`), `try?` discipline, `JSONValue` over
+   `[String: Any]`, lenient TOML decoders.
+4. Performance / CVE Agent — hot-path allocation, Combine fan-out,
+   DiskCache I/O, SPM dep CVE scan.
 
 ## Testing policy (MANDATORY)
 
@@ -128,7 +151,21 @@ make clean                     # nuke .build, build/, generated DMGs
   lifecycle. **Do NOT re-introduce per-provider boilerplate.** If a vendor
   needs special behavior, extend `CachedFetch`, don't fork it.
 - **`AiTaskbarApp`** — SwiftUI. `UsageStore` is `@MainActor`. Long-running
-  state on `RefreshScheduler` (timer + 24h compactor).
+  state on `RefreshScheduler` (timer + 24h compactor). Default cadence is
+  300 s; the scheduler reads `UsageStore.hasRateLimitedVendor` between
+  cycles and adds `RefreshScheduler.rateLimitBackoff` (60 s) to the next
+  sleep whenever any vendor's last refresh ended in HTTP 429. Aggregates
+  (`maxUtilization`, `isAnyVendorLoading`, `hasRateLimitedVendor`) are
+  pre-computed inside `recomputeAggregates()` so the per-second header
+  TimelineView reads flat `@Published` properties instead of re-scanning
+  vendors. The merged `$state` stream is throttled at 50 ms with
+  `Publishers.MergeMany.throttle(latest:true)` to coalesce the bursts of
+  synchronous `.loading` → `.ok/.failed` transitions a single
+  `refreshAll()` produces. The popover header runs a 1-Hz countdown
+  anchored on `UsageStore.lastScheduledTickAt`; localized strings are
+  memoized at type init. `DiskCache` TTL is set in `AppEnvironment` to
+  `max(15, refresh_interval_seconds − 5)` so the scheduled tick reliably
+  trips `freshPayload()` without needing `forceRefresh: true`.
 - **`AiTaskbarValidate`** — runtime test runner, see "Validation policy".
 - **`AiTaskbarTesting`** — fixtures + StubURLProtocol, shared by tests +
   validate.
@@ -148,6 +185,13 @@ make clean                     # nuke .build, build/, generated DMGs
   literal parses as `Int64`, not `Double`, and TOMLKit will not auto-cast.
 - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
   cleanup, marker writes). If a credential write fails, the user must see it.
+- **Keychain reads AND writes** must pass `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail`.
+  We're an `LSUIElement` menu-bar app, so a SecurityAgent password prompt
+  would freeze the refresh cycle behind an invisible window. The only
+  tolerated swallow is `errSecInteractionNotAllowed` on `SecItemUpdate` /
+  `SecItemAdd` in `KeychainCredentialReader.writeBack` — log via NSLog and
+  return (the renewed token still works in memory; the next OAuth cycle
+  retries persistence). Every other OSStatus must throw.
 
 ## Adding a new LLM vendor (checklist)
 

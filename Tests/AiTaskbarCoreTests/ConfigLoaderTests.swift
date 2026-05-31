@@ -27,7 +27,7 @@ struct ConfigLoaderTests {
         let loader = ConfigLoader(path: tempConfigPath())
         let cfg = try loader.load()
         #expect(cfg.anthropic.enabled)
-        #expect(cfg.ui.refreshIntervalSeconds == 150)
+        #expect(cfg.ui.refreshIntervalSeconds == 300)
         try? FileManager.default.removeItem(at: tmp)
     }
 

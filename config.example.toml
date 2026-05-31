@@ -5,7 +5,7 @@
 [ui]
 # primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi | gemini
 # menu_bar_mode = "icon_and_percent"  # icon | icon_and_percent | rotating
-# refresh_interval_seconds = 150    # default 150 (2.5m). Floor 15. Common: 60, 150, 300, 600.
+# refresh_interval_seconds = 300    # default 300 (5m). Floor 15. Common: 60, 150, 300, 600.
 # language = "pt-BR"                # force UI language (en | pt-BR | es). Default: macOS system locale.
 
 [thresholds]

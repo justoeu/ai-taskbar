@@ -7,6 +7,12 @@
 "refresh_all_help" = "Atualizar todos os provedores";
 // O RelativeDateTimeFormatter já produz "há X" / "em X" — aqui só prefixamos o verbo.
 "updated_ago_fmt" = "atualizado %@";
+// Contador regressivo até o próximo refresh agendado. %@ vira "4:59" (MM:SS).
+"next_refresh_in_fmt" = "Próx. em %@";
+"refreshing_now" = "Atualizando…";
+// Mostrado durante o back-off de 60 s pós-429 — informa que estamos esperando
+// o vendor liberar a cota antes de tentar de novo, em vez de mostrar 0:00 fixo.
+"rate_limit_waiting" = "Aguardando rate-limit…";
 "config" = "Configurações";
 "open_at_login" = "Abrir no login";
 "quit" = "Sair";
