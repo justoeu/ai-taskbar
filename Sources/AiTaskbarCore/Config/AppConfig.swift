@@ -473,10 +473,16 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
     }
 
     /// Returns `raw` if it is an `https://` URL pointing to an allowed Google
-    /// AI host AND carries a `/v1*` API-version path prefix. Otherwise nil.
-    /// The path check catches the subtle misconfiguration where a user trims
-    /// the API-version segment — without it, `GET /models` resolves at the
-    /// root and Google serves a permanent 404 even though the key is valid.
+    /// AI host AND whose path is exactly one of the known API-version
+    /// namespaces (or a subpath rooted on one). Otherwise nil.
+    ///
+    /// We're strict here on purpose: a previous `hasPrefix("/v1")` check
+    /// would accept `/v1banana`, `/v1xxxxxx`, etc. — typos pass validation
+    /// then produce 404s at runtime that the user has to debug. Anchoring
+    /// on a closed set of accepted prefixes turns the typo into a
+    /// startup-time NSLog warning instead.
+    public static let allowedAPIVersions: [String] = ["/v1", "/v1beta", "/v1alpha"]
+
     public static func validate(_ raw: String) -> String? {
         guard let url = URL(string: raw),
               let scheme = url.scheme?.lowercased(),
@@ -484,8 +490,11 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
               let host = url.host?.lowercased(),
               allowedHosts.contains(host)
         else { return nil }
-        // Require an API-version namespace (/v1, /v1beta, /v1alpha, …).
-        guard url.path.hasPrefix("/v1") else { return nil }
+        let path = url.path
+        let pathOK = allowedAPIVersions.contains { prefix in
+            path == prefix || path.hasPrefix(prefix + "/")
+        }
+        guard pathOK else { return nil }
         return raw
     }
 

@@ -71,11 +71,25 @@ public final class GeminiProvider: UsageProvider {
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
+        let parsed: GeminiModelsResponse
         do {
-            let parsed = try SharedCoders.decoder.decode(GeminiModelsResponse.self, from: data)
-            return .gemini(parsed.toSnapshot())
+            parsed = try SharedCoders.decoder.decode(GeminiModelsResponse.self, from: data)
         } catch {
             throw AppError.schema("gemini models decode: \(error)")
         }
+        // `models` Optional becomes nil when the field is missing OR null
+        // — i.e. exactly the shape a future Google v1beta rename would
+        // produce (e.g. `models` → `availableModels`). Routing this
+        // through `AppError.schema` instead of toSnapshot's UX branch
+        // makes CachedFetch mark the vendor failed, the UI render an
+        // error tint, and the regression visible rather than masquerading
+        // as a healthy "no models visible" green row forever. Empty list
+        // (`{"models":[]}`) is a legitimate vendor state and still flows
+        // through `toSnapshot()` as a happy .ok.
+        guard parsed.models != nil else {
+            throw AppError.schema(
+                "gemini models: response missing `models` field — base_url may be wrong or the API has changed")
+        }
+        return .gemini(parsed.toSnapshot())
     }
 }
