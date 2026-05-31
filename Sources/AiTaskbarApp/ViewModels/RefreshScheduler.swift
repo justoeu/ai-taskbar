@@ -31,24 +31,38 @@ public final class RefreshScheduler: ObservableObject {
         guard refreshLoop == nil else { return }
         refreshLoop = Task { @MainActor [weak self] in
             guard let self else { return }
-            // Initial fetch so the popover isn't blank on first open.
+            // Initial fetch keeps cache semantics — if a relaunch lands
+            // inside a fresh cache window, don't burn a network call.
+            self.store?.markScheduledTick()
             self.store?.refreshAll(forceRefresh: false)
             while !Task.isCancelled {
                 // Sleep the configured interval first. While we sleep, the
-                // previous cycle's async per-vendor Tasks complete and update
-                // their state. Only AFTER waking do we sample
+                // previous cycle's async per-vendor Tasks complete and
+                // update their state. Only AFTER waking do we sample
                 // `hasRateLimitedVendor`, because if we sampled before the
                 // sleep the state we'd read is the synchronous `.loading`
-                // that `refreshAll` just set — wiping any `.failed(429)` or
-                // stale-`.ok(429-lastError)` from the cycle we're trying to
-                // back off from.
+                // that `refreshAll` just set — wiping any `.failed(429)`
+                // or stale-`.ok(429-lastError)` from the cycle we're
+                // trying to back off from.
                 try? await Task.sleep(for: .seconds(self.interval))
                 if Task.isCancelled { break }
                 if self.store?.hasRateLimitedVendor ?? false {
                     try? await Task.sleep(for: .seconds(Self.rateLimitBackoff))
                     if Task.isCancelled { break }
                 }
-                self.store?.refreshAll(forceRefresh: false)
+                // Scheduled ticks bypass the disk cache. The cache TTL is
+                // set equal to the scheduler interval (so the popover
+                // doesn't burn extra network calls when reopened between
+                // ticks), but that equality means a tick at T = interval
+                // hits the `age <= ttl` boundary as STILL FRESH and
+                // CachedFetch returns the cached payload with cacheAge
+                // ≈ interval. The view's `lastNetworkFetch` (which gates
+                // on `cacheAge <= 1`) then wouldn't advance, the countdown
+                // would stick at 0:00, and the next real network fetch
+                // wouldn't happen for another full interval. forceRefresh
+                // here is what makes the cadence honest.
+                self.store?.markScheduledTick()
+                self.store?.refreshAll(forceRefresh: true)
             }
         }
     }

@@ -19,6 +19,13 @@ public final class UsageStore: ObservableObject {
     @Published public var primary: VendorId?
     @Published public private(set) var maxUtilization: Double = 0
     @Published public private(set) var lastRefreshedAt: Date?
+    /// Wall-clock instant the scheduler last fired a tick (regardless of
+    /// whether each vendor's fetch ultimately succeeded). Drives the
+    /// header countdown — basing the countdown on `lastRefreshedAt`
+    /// (which only advances on truly fresh data) would freeze it at 0:00
+    /// every time a scheduled tick lands inside the cache TTL window or
+    /// the network 429s into the stale fallback path.
+    @Published public private(set) var lastScheduledTickAt: Date?
 
     public let thresholds: ThresholdsConfig
     /// Configured scheduler cadence in seconds — surfaced here so views can
@@ -79,6 +86,12 @@ public final class UsageStore: ObservableObject {
 
     public func refreshAll(forceRefresh: Bool = false) {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
+    }
+
+    /// Stamp the scheduler tick that's about to dispatch fetches. The view
+    /// reads `lastScheduledTickAt` to anchor the countdown.
+    public func markScheduledTick() {
+        lastScheduledTickAt = .now
     }
 
     /// True when at least one vendor is mid-fetch. Views use this to swap

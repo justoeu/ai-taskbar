@@ -221,8 +221,14 @@ public struct PopoverContentView: View {
     private func countdownLabel(now: Date) -> some View {
         if store.isAnyVendorLoading {
             Text(L10n.localizedString("refreshing_now"))
-        } else if let last = store.lastRefreshedAt {
-            let elapsed = now.timeIntervalSince(last)
+        } else if let tick = store.lastScheduledTickAt {
+            // Anchor on the scheduler tick, not on `lastRefreshedAt`.
+            // `lastRefreshedAt` only advances when a fetch returns truly
+            // fresh data (cacheAge <= 1) — meaning a tick that hit the
+            // cache boundary or 429'd into the stale fallback would never
+            // reset the countdown and the label would stick at 0:00 until
+            // a successful network fetch landed.
+            let elapsed = now.timeIntervalSince(tick)
             let remaining = max(0, store.refreshIntervalSeconds - elapsed)
             let minutes = Int(remaining) / 60
             let seconds = Int(remaining) % 60
