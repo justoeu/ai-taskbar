@@ -42,6 +42,26 @@ What it runs (`scripts/validate.sh`):
 If any step fails, **fix it before claiming the work is done**. Don't paper
 over with comments or `try?`-swallowing.
 
+**Pre-commit / pre-PR gate (non-negotiable):** `make validate` must be green
+**before** `git commit`, `git push`, `gh pr create`, or any tool that adds
+follow-up commits to an existing PR. Order: stage → `make validate` →
+commit/push/PR. On red, stop and root-cause; never commit on red and never
+re-run `--no-verify`. This applies to every commit on a PR branch, not just
+the first one — landing a broken commit and "fixing it in the next" still
+breaks `git bisect` and CI for collaborators.
+
+**PR review pipeline:** once a PR is open (or refreshed), fan out the
+following passes in parallel and report a combined summary:
+
+1. `/code-review` — correctness bugs in the diff.
+2. `/security-review` — auth, secrets, file perms, host allow-lists,
+   TOCTOU, TLS pinning, SAST.
+3. Swift-best-practices Agent — Swift 6 strict concurrency
+   (`Sendable`, `@MainActor`), `try?` discipline, `JSONValue` over
+   `[String: Any]`, lenient TOML decoders.
+4. Performance / CVE Agent — hot-path allocation, Combine fan-out,
+   DiskCache I/O, SPM dep CVE scan.
+
 ## Testing policy (MANDATORY)
 
 Two mandates with non-negotiable status:
