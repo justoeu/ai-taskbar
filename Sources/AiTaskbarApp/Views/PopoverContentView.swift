@@ -213,33 +213,39 @@ public struct PopoverContentView: View {
 
     /// Header countdown: "Próx. em 4:59" while the next scheduled refresh
     /// approaches; "Atualizando…" while at least one vendor's fetch is in
-    /// flight; empty otherwise (e.g. the very first refresh hasn't returned
-    /// a fresh outcome yet — `lastRefreshedAt` is nil, so we have nothing
-    /// to count down from). Pure function of `store` + `now` so the
-    /// surrounding `TimelineView` controls the 1-second re-render cadence.
+    /// flight; "Aguardando rate-limit…" while RefreshScheduler is sleeping
+    /// out the 60 s back-off after a 429; empty otherwise. Pure function of
+    /// `store` + `now` so the surrounding `TimelineView` controls the
+    /// 1-second re-render cadence.
     @ViewBuilder
     private func countdownLabel(now: Date) -> some View {
         if store.isAnyVendorLoading {
-            Text(L10n.localizedString("refreshing_now"))
+            Text(Self.refreshingNowText)
+        } else if store.isInRateLimitBackoff {
+            Text(Self.rateLimitWaitingText)
         } else if let tick = store.lastScheduledTickAt {
-            // Anchor on the scheduler tick, not on `lastRefreshedAt`.
-            // `lastRefreshedAt` only advances when a fetch returns truly
-            // fresh data (cacheAge <= 1) — meaning a tick that hit the
-            // cache boundary or 429'd into the stale fallback would never
-            // reset the countdown and the label would stick at 0:00 until
-            // a successful network fetch landed.
             let elapsed = now.timeIntervalSince(tick)
             let remaining = max(0, store.refreshIntervalSeconds - elapsed)
             let minutes = Int(remaining) / 60
             let seconds = Int(remaining) % 60
-            Text(String(
-                format: L10n.localizedString("next_refresh_in_fmt"),
-                String(format: "%d:%02d", minutes, seconds)
-            ))
+            // Manual concat avoids String(format:) machinery + a temporary
+            // String allocation per tick. With the popover open for 5 min
+            // that's ~300 saved Format scans + alloc/release cycles.
+            let mmss = "\(minutes):\(seconds < 10 ? "0" : "")\(seconds)"
+            Text(String(format: Self.nextRefreshInFmt, mmss))
         } else {
             // No fresh fetch on record yet — say nothing rather than
             // claiming a countdown we can't honor.
             EmptyView()
         }
     }
+
+    // L10n.localizedString does an uncached Bundle lookup per call. These
+    // three keys are read up to 1×/s by the TimelineView while the popover
+    // is open, so resolve them once at type initialization. Language change
+    // requires a relaunch anyway (per `L10n.languageOverride` semantics),
+    // so a static cache is honest.
+    private static let refreshingNowText = L10n.localizedString("refreshing_now")
+    private static let rateLimitWaitingText = L10n.localizedString("rate_limit_waiting")
+    private static let nextRefreshInFmt = L10n.localizedString("next_refresh_in_fmt")
 }

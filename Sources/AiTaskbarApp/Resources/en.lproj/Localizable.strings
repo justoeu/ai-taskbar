@@ -11,6 +11,9 @@
 // Countdown until the next scheduled refresh. %@ becomes "4:59" (MM:SS).
 "next_refresh_in_fmt" = "Next in %@";
 "refreshing_now" = "Refreshing…";
+// Shown during the 60 s post-429 back-off — tells the user we're holding
+// off intentionally instead of leaving the countdown frozen at 0:00.
+"rate_limit_waiting" = "Waiting on rate-limit…";
 "config" = "Config";
 "open_at_login" = "Open at login";
 "quit" = "Quit";

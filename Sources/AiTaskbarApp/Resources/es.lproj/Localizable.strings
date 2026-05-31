@@ -10,6 +10,9 @@
 // Cuenta regresiva hasta el próximo refresh programado. %@ es "4:59" (MM:SS).
 "next_refresh_in_fmt" = "Próx. en %@";
 "refreshing_now" = "Actualizando…";
+// Mostrado durante el back-off de 60 s tras un 429 — indica que estamos
+// esperando a propósito, en lugar de dejar el contador congelado en 0:00.
+"rate_limit_waiting" = "Esperando rate-limit…";
 "config" = "Configuración";
 "open_at_login" = "Abrir al iniciar sesión";
 "quit" = "Salir";
