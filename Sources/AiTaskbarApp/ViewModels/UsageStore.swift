@@ -73,12 +73,23 @@ public final class UsageStore: ObservableObject {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
     }
 
-    /// True if any vendor's most recent refresh ended in HTTP 429.
-    /// RefreshScheduler reads this between cycles to back off the next tick.
+    /// True if any vendor's most recent refresh ended in HTTP 429 — whether
+    /// surfaced directly as `.failed(429, _)` OR masked as a stale-fallback
+    /// `.ok(outcome)` whose `outcome.lastError?.status == 429`. CachedFetch
+    /// converts a 429 into a stale-`.ok` whenever any cached payload exists
+    /// (<7-day maxStale), so checking only `.failed` would miss the steady-
+    /// state case and let RefreshScheduler's back-off branch sit idle.
     public var hasRateLimitedVendor: Bool {
         vendors.contains { vm in
-            if case .failed(let err, _) = vm.state, err.isRateLimited { return true }
-            return false
+            switch vm.state {
+            case .failed(let err, let fallback):
+                if err.isRateLimited { return true }
+                return fallback?.lastError?.status == 429
+            case .ok(let outcome):
+                return outcome.lastError?.status == 429
+            case .idle, .loading:
+                return false
+            }
         }
     }
 

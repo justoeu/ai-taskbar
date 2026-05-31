@@ -21,7 +21,7 @@ public final class ZAIProvider: UsageProvider {
 
     public convenience init(config: ZAIConfig,
                             http: HTTPClient = .init(),
-                            cacheTTL: TimeInterval = 150) throws {
+                            cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.zai, ttl: cacheTTL)
         self.init(
             credentials: EnvOrConfigCredentialReader(

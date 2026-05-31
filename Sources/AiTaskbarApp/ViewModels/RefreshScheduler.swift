@@ -34,10 +34,20 @@ public final class RefreshScheduler: ObservableObject {
             // Initial fetch so the popover isn't blank on first open.
             self.store?.refreshAll(forceRefresh: false)
             while !Task.isCancelled {
-                let backoff = (self.store?.hasRateLimitedVendor ?? false)
-                    ? Self.rateLimitBackoff : 0
-                try? await Task.sleep(for: .seconds(self.interval + backoff))
+                // Sleep the configured interval first. While we sleep, the
+                // previous cycle's async per-vendor Tasks complete and update
+                // their state. Only AFTER waking do we sample
+                // `hasRateLimitedVendor`, because if we sampled before the
+                // sleep the state we'd read is the synchronous `.loading`
+                // that `refreshAll` just set — wiping any `.failed(429)` or
+                // stale-`.ok(429-lastError)` from the cycle we're trying to
+                // back off from.
+                try? await Task.sleep(for: .seconds(self.interval))
                 if Task.isCancelled { break }
+                if self.store?.hasRateLimitedVendor ?? false {
+                    try? await Task.sleep(for: .seconds(Self.rateLimitBackoff))
+                    if Task.isCancelled { break }
+                }
                 self.store?.refreshAll(forceRefresh: false)
             }
         }

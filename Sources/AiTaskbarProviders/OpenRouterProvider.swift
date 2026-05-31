@@ -19,7 +19,7 @@ public final class OpenRouterProvider: UsageProvider {
 
     public convenience init(config: OpenRouterConfig,
                             http: HTTPClient = .init(),
-                            cacheTTL: TimeInterval = 150) throws {
+                            cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.openrouter, ttl: cacheTTL)
         self.init(
             credentials: EnvOrConfigCredentialReader(
