@@ -49,8 +49,14 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         let file = AnthropicCredentialsFile(claudeAiOauth: updated)
         let data = try SharedCoders.encoder.encode(file)
         var query: [String: Any] = [
-            kSecClass as String:       kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecClass as String:               kSecClassGenericPassword,
+            kSecAttrService as String:         service,
+            // Same rationale as the reads: we're LSUIElement (no Dock icon),
+            // so a SecurityAgent password prompt would freeze the refresh
+            // cycle behind an invisible window. Fast-fail with
+            // errSecInteractionNotAllowed and let the caller-side branch
+            // below treat persistence as best-effort.
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
         // Pin to the account we resolved on read so we never accidentally
         // overwrite an unrelated entry (work vs personal).
@@ -60,16 +66,40 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         let update: [String: Any] = [kSecValueData as String: data]
         let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
         if status == errSecSuccess { return }
+        if status == errSecInteractionNotAllowed {
+            logACLMismatch(op: "update")
+            return
+        }
         if status == errSecItemNotFound {
             var add = query
             add[kSecValueData as String] = data
             let addStatus = SecItemAdd(add as CFDictionary, nil)
-            guard addStatus == errSecSuccess else {
-                throw AppError.credentials("SecItemAdd failed (OSStatus \(addStatus))")
+            if addStatus == errSecSuccess { return }
+            if addStatus == errSecInteractionNotAllowed {
+                logACLMismatch(op: "add")
+                return
             }
-            return
+            throw AppError.credentials("SecItemAdd failed (OSStatus \(addStatus))")
         }
         throw AppError.credentials("SecItemUpdate failed (OSStatus \(status))")
+    }
+
+    /// Logged (not thrown) only on `errSecInteractionNotAllowed` during a
+    /// write. The OAuth refresh that produced `updated` already succeeded in
+    /// memory, so the current fetch can proceed — only persistence to the
+    /// Keychain item was blocked by an ACL the binary doesn't satisfy
+    /// (typical for ad-hoc rebuilds whose cdhash changes). The next refresh
+    /// cycle will try again. Surfacing this in Console.app rather than
+    /// throwing prevents the menu-bar app from breaking on every OAuth
+    /// rotation while still giving the user a discoverable hint.
+    private func logACLMismatch(op: String) {
+        NSLog(
+            "ai-taskbar: Keychain %@ skipped (errSecInteractionNotAllowed). " +
+            "Token kept in memory; persistence will retry next cycle. " +
+            "Silence this by running: security set-generic-password-partition-list " +
+            "-S apple-tool:,apple:,unsigned: -s \"%@\" -a \"$(whoami)\" -k login",
+            op, service
+        )
     }
 
     // MARK: - Internals
