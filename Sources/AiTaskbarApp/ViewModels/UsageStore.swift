@@ -18,14 +18,25 @@ public final class UsageStore: ObservableObject {
     @Published public private(set) var vendors: [VendorViewModel]
     @Published public var primary: VendorId?
     @Published public private(set) var maxUtilization: Double = 0
-    @Published public private(set) var lastRefreshedAt: Date?
     /// Wall-clock instant the scheduler last fired a tick (regardless of
     /// whether each vendor's fetch ultimately succeeded). Drives the
-    /// header countdown — basing the countdown on `lastRefreshedAt`
-    /// (which only advances on truly fresh data) would freeze it at 0:00
-    /// every time a scheduled tick lands inside the cache TTL window or
-    /// the network 429s into the stale fallback path.
+    /// header countdown — basing the countdown on the per-vendor
+    /// `lastNetworkFetch` (which only advances on truly fresh data) would
+    /// freeze it at 0:00 every time a scheduled tick lands inside the
+    /// cache TTL window or the network 429s into the stale fallback path.
     @Published public private(set) var lastScheduledTickAt: Date?
+    /// True when at least one vendor is mid-fetch. Pre-computed so the
+    /// 1-Hz countdown TimelineView reads it as a flat property instead of
+    /// re-running a 6-element enum scan every second.
+    @Published public private(set) var isAnyVendorLoading: Bool = false
+    /// True if any vendor's most recent refresh ended in HTTP 429 — whether
+    /// surfaced directly as `.failed(429, _)` OR masked as a stale-fallback
+    /// `.ok(outcome)` whose `outcome.lastError?.status == 429`. CachedFetch
+    /// converts a 429 into a stale-`.ok` whenever any cached payload exists
+    /// (<7-day maxStale), so checking only `.failed` would miss the
+    /// steady-state case and let `RefreshScheduler`'s back-off branch sit
+    /// idle. Pre-computed in `recomputeAggregates`.
+    @Published public private(set) var hasRateLimitedVendor: Bool = false
 
     public let thresholds: ThresholdsConfig
     /// Configured scheduler cadence in seconds — surfaced here so views can
@@ -47,23 +58,24 @@ public final class UsageStore: ObservableObject {
         wireUpAggregates()
     }
 
-    /// Subscribe to each VendorViewModel's `state` and `lastNetworkFetch`
-    /// publishers. On every change, recompute the cross-vendor aggregates.
-    /// `removeDuplicates()` on the resulting Double / Date dampens redundant
-    /// `objectWillChange.send()` calls — the MenuBarLabelView only re-renders
-    /// when the global max actually changes value.
+    /// Merge every vendor's `$state` publisher into one stream, throttle
+    /// the result to coalesce bursts (each `VendorViewModel.refresh()`
+    /// fires `.loading` → `.ok/.failed` synchronously in quick succession),
+    /// then recompute the cross-vendor aggregates exactly once per burst.
+    ///
+    /// Why we no longer subscribe to `$lastNetworkFetch`: it used to feed
+    /// `lastRefreshedAt`, but no view consumes that anymore (the header
+    /// countdown anchors on `lastScheduledTickAt`). Dropping the
+    /// subscription halves the publisher fan-out per refresh cycle.
     private func wireUpAggregates() {
         subscriptions.removeAll()
-        for vm in vendors {
-            vm.$state
-                .receive(on: RunLoop.main)
-                .sink { [weak self] _ in self?.recomputeAggregates() }
-                .store(in: &subscriptions)
-            vm.$lastNetworkFetch
-                .receive(on: RunLoop.main)
-                .sink { [weak self] _ in self?.recomputeAggregates() }
-                .store(in: &subscriptions)
-        }
+        let stateStreams = vendors.map { $0.$state.eraseToAnyPublisher() }
+        Publishers.MergeMany(stateStreams)
+            .throttle(for: .milliseconds(50),
+                      scheduler: RunLoop.main,
+                      latest: true)
+            .sink { [weak self] _ in self?.recomputeAggregates() }
+            .store(in: &subscriptions)
         recomputeAggregates()
     }
 
@@ -71,8 +83,25 @@ public final class UsageStore: ObservableObject {
         let newMax = vendors.compactMap { $0.state.outcome?.snapshot.maxUtilization }.max() ?? 0
         if newMax != maxUtilization { maxUtilization = newMax }
 
-        let newest = vendors.compactMap { $0.lastNetworkFetch }.max()
-        if newest != lastRefreshedAt { lastRefreshedAt = newest }
+        var loading = false
+        var rateLimited = false
+        // Single pass so the steady-state cost is O(vendors), not 2×.
+        for vm in vendors {
+            switch vm.state {
+            case .loading:
+                loading = true
+            case .failed(let err, let fallback):
+                if err.isRateLimited || fallback?.lastError?.status == 429 {
+                    rateLimited = true
+                }
+            case .ok(let outcome):
+                if outcome.lastError?.status == 429 { rateLimited = true }
+            case .idle:
+                break
+            }
+        }
+        if loading != isAnyVendorLoading { isAnyVendorLoading = loading }
+        if rateLimited != hasRateLimitedVendor { hasRateLimitedVendor = rateLimited }
     }
 
     // MARK: - Public surface used by views
@@ -94,34 +123,16 @@ public final class UsageStore: ObservableObject {
         lastScheduledTickAt = .now
     }
 
-    /// True when at least one vendor is mid-fetch. Views use this to swap
-    /// the "Próx. em M:SS" countdown for an "Atualizando…" label while the
-    /// scheduler's tick is in flight.
-    public var isAnyVendorLoading: Bool {
-        vendors.contains { vm in
-            if case .loading = vm.state { return true }
-            return false
-        }
-    }
+    /// True while RefreshScheduler is sleeping out the extra
+    /// `rateLimitBackoff` after a 429 — used by the countdown label to
+    /// show "Aguardando rate-limit…" instead of freezing at 0:00.
+    @Published public private(set) var isInRateLimitBackoff: Bool = false
 
-    /// True if any vendor's most recent refresh ended in HTTP 429 — whether
-    /// surfaced directly as `.failed(429, _)` OR masked as a stale-fallback
-    /// `.ok(outcome)` whose `outcome.lastError?.status == 429`. CachedFetch
-    /// converts a 429 into a stale-`.ok` whenever any cached payload exists
-    /// (<7-day maxStale), so checking only `.failed` would miss the steady-
-    /// state case and let RefreshScheduler's back-off branch sit idle.
-    public var hasRateLimitedVendor: Bool {
-        vendors.contains { vm in
-            switch vm.state {
-            case .failed(let err, let fallback):
-                if err.isRateLimited { return true }
-                return fallback?.lastError?.status == 429
-            case .ok(let outcome):
-                return outcome.lastError?.status == 429
-            case .idle, .loading:
-                return false
-            }
-        }
+    public func enterRateLimitBackoff() {
+        if !isInRateLimitBackoff { isInRateLimitBackoff = true }
+    }
+    public func exitRateLimitBackoff() {
+        if isInRateLimitBackoff { isInRateLimitBackoff = false }
     }
 
     public func refresh(vendor: VendorId, forceRefresh: Bool = true) {

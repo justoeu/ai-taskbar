@@ -21,7 +21,7 @@ public final class RefreshScheduler: ObservableObject {
     }
 
     /// Idempotent: subsequent calls (e.g. on every popover open) are no-ops so
-    /// we don't reset the recurring cycle or re-stamp `lastRefreshedAt`.
+    /// we don't reset the recurring cycle.
     public func start() {
         startRefreshLoop()
         startCompactLoop()
@@ -47,22 +47,25 @@ public final class RefreshScheduler: ObservableObject {
                 try? await Task.sleep(for: .seconds(self.interval))
                 if Task.isCancelled { break }
                 if self.store?.hasRateLimitedVendor ?? false {
+                    // Surface the back-off to the UI so the countdown
+                    // label can render "Aguardando rate-limit…" instead
+                    // of freezing at 0:00 for 60 s. Cleared right before
+                    // the markScheduledTick that follows so the countdown
+                    // re-anchors cleanly.
+                    self.store?.enterRateLimitBackoff()
                     try? await Task.sleep(for: .seconds(Self.rateLimitBackoff))
+                    self.store?.exitRateLimitBackoff()
                     if Task.isCancelled { break }
                 }
-                // Scheduled ticks bypass the disk cache. The cache TTL is
-                // set equal to the scheduler interval (so the popover
-                // doesn't burn extra network calls when reopened between
-                // ticks), but that equality means a tick at T = interval
-                // hits the `age <= ttl` boundary as STILL FRESH and
-                // CachedFetch returns the cached payload with cacheAge
-                // ≈ interval. The view's `lastNetworkFetch` (which gates
-                // on `cacheAge <= 1`) then wouldn't advance, the countdown
-                // would stick at 0:00, and the next real network fetch
-                // wouldn't happen for another full interval. forceRefresh
-                // here is what makes the cadence honest.
+                // Scheduled ticks use `forceRefresh: false`. AppEnvironment
+                // wires the DiskCache TTL to `max(15, interval - 5)`, so
+                // at T=interval the cache age (≈ interval) is always
+                // strictly greater than the TTL — `freshPayload()` returns
+                // nil and CachedFetch goes to the network without needing
+                // a force flag. The 5-second margin absorbs Task.sleep
+                // jitter without ever letting the boundary equal the TTL.
                 self.store?.markScheduledTick()
-                self.store?.refreshAll(forceRefresh: true)
+                self.store?.refreshAll(forceRefresh: false)
             }
         }
     }
