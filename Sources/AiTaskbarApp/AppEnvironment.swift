@@ -66,6 +66,7 @@ public final class AppEnvironment {
                     http: http,
                     keychainService: config.anthropic.keychainService ?? "Claude Code-credentials",
                     keychainAccount: config.anthropic.keychainAccount,
+                    manageOAuthRefresh: config.anthropic.manageOauthRefresh,
                     cacheTTL: ttl)
                 out.append(p)
             } catch {

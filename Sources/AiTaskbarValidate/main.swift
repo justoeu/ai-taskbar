@@ -261,6 +261,7 @@ section("Config: full round-trip via TOMLKit") {
 
     [anthropic]
     enabled = false
+    manage_oauth_refresh = true
 
     [kimi]
     enabled = true
@@ -280,6 +281,7 @@ section("Config: full round-trip via TOMLKit") {
     expect(cfg.thresholds.critical == 95, "thresholds.critical")
     expect(cfg.notifications.notifyAt == [80, 100], "notify_at array (ints → doubles)")
     expect(cfg.anthropic.enabled == false, "anthropic disabled")
+    expect(cfg.anthropic.manageOauthRefresh == true, "anthropic manage_oauth_refresh parsed")
     expect(cfg.kimi.apiKey == "sk-xyz", "kimi inline api_key")
     expect(cfg.kimi.baseURL == "https://api.moonshot.cn/v1", ".cn base URL accepted")
 }

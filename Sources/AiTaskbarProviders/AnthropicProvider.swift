@@ -6,6 +6,13 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     private let credentialReader: any AnthropicCredentialReading
     private let fetcher: CachedFetch
     private let http: HTTPClient
+    /// When `false`, the provider never performs the OAuth refresh exchange or
+    /// writes back to the shared Keychain item — it reads whatever token the
+    /// Claude Code CLI maintains and lets the CLI own renewal. This avoids
+    /// rotating the shared refresh token (which logs other CLI sessions out)
+    /// and the ACL prompt write-back triggers on ad-hoc builds. See
+    /// `AnthropicConfig.manageOauthRefresh` for the full rationale.
+    private let manageOAuthRefresh: Bool
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     // Memoize the plan label so we don't make a `SecItemCopyMatching`
@@ -16,22 +23,26 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
 
     public init(credentialReader: any AnthropicCredentialReading = KeychainCredentialReader(),
                 cache: DiskCache,
-                http: HTTPClient) {
+                http: HTTPClient,
+                manageOAuthRefresh: Bool = true) {
         self.credentialReader = credentialReader
         self.fetcher = CachedFetch(cache: cache)
         self.http = http
+        self.manageOAuthRefresh = manageOAuthRefresh
     }
 
     public convenience init(http: HTTPClient = .init(),
                             keychainService: String = "Claude Code-credentials",
                             keychainAccount: String? = nil,
+                            manageOAuthRefresh: Bool = true,
                             cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.anthropic, ttl: cacheTTL)
         self.init(
             credentialReader: KeychainCredentialReader(service: keychainService,
                                                        preferredAccount: keychainAccount),
             cache: cache,
-            http: http
+            http: http,
+            manageOAuthRefresh: manageOAuthRefresh
         )
     }
 
@@ -41,7 +52,13 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
             decode: decodeSnapshot,
             fetch: { [self] in
                 var credentials = try credentialReader.read()
-                if credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
+                // Only rotate + persist the shared OAuth token when explicitly
+                // opted in. In the default read-only mode we use whatever token
+                // the Claude Code CLI maintains; if it's briefly expired the
+                // request 401s and CachedFetch serves the last cached snapshot
+                // until the CLI renews. This is what keeps the monitor from
+                // logging out other CLI sessions or tripping a Keychain prompt.
+                if manageOAuthRefresh, credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
                     let resp = try await AnthropicOAuth.refresh(
                         refreshToken: credentials.refreshToken, http: http)
                     try Task.checkCancellation()

@@ -265,13 +265,28 @@ public struct AnthropicConfig: Codable, Sendable, Equatable {
     /// Claude Keychain entries (e.g. work + personal). When nil and multiple
     /// entries exist, the reader picks lexicographically and logs a warning.
     public var keychainAccount: String?
+    /// When `true`, the provider performs the OAuth `refresh_token` exchange
+    /// itself and writes the rotated tokens back to the shared
+    /// `Claude Code-credentials` Keychain item once the access token nears
+    /// expiry. **Default `false`** — a usage *monitor* should not mutate the
+    /// credential it shares with the Claude Code CLI. Anthropic rotates the
+    /// refresh token on every exchange, so refreshing here invalidates the
+    /// copy other already-running CLI sessions hold (→ "please re-login"),
+    /// and the write-back itself trips a Keychain ACL prompt on ad-hoc
+    /// builds. Read-only mode reads whatever token the CLI maintains and lets
+    /// the CLI own renewal; if the token is briefly expired the fetch serves
+    /// the last cached snapshot until the CLI refreshes. Opt in only if you
+    /// run the app standalone without the CLI.
+    public var manageOauthRefresh: Bool = false
 
     public init(enabled: Bool = true,
                 keychainService: String? = nil,
-                keychainAccount: String? = nil) {
+                keychainAccount: String? = nil,
+                manageOauthRefresh: Bool = false) {
         self.enabled = enabled
         self.keychainService = keychainService
         self.keychainAccount = keychainAccount
+        self.manageOauthRefresh = manageOauthRefresh
     }
 
     public init(from decoder: Decoder) throws {
@@ -279,12 +294,14 @@ public struct AnthropicConfig: Codable, Sendable, Equatable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         keychainService = try c.decodeIfPresent(String.self, forKey: .keychainService)
         keychainAccount = try c.decodeIfPresent(String.self, forKey: .keychainAccount)
+        manageOauthRefresh = try c.decodeIfPresent(Bool.self, forKey: .manageOauthRefresh) ?? false
     }
 
     enum CodingKeys: String, CodingKey {
         case enabled
         case keychainService = "keychain_service"
         case keychainAccount = "keychain_account"
+        case manageOauthRefresh = "manage_oauth_refresh"
     }
 }
 

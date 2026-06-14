@@ -128,6 +128,9 @@ public struct ConfigLoader: Sendable {
         [anthropic]
         enabled = true
         # keychain_account = "your.short.username"   # pin if you have multiple Claude entries
+        # manage_oauth_refresh = false   # default false: read-only, let Claude Code own token renewal.
+        #                                 # Set true ONLY if you run the app without the Claude Code CLI;
+        #                                 # true rotates the shared token and can log out other CLI sessions.
 
         """),
         ("[openai]", """
