@@ -39,7 +39,9 @@ notify_at = [90, 100]   # percent thresholds that trigger a notification
 [anthropic]
 enabled = true
 # keychain_service = "Claude Code-credentials"  # override (rarely needed)
-# keychain_account = "your.short.username"      # pin if you have multiple Claude entries
+# keychain_account = "your.short.username"      # optional: pin one of multiple Claude entries.
+                                                #   Normally unneeded — the reader auto-picks the
+                                                #   freshest (unexpired) token on its own.
 # manage_oauth_refresh = false   # default false: the app reads the OAuth token Claude Code maintains
 #                                 # and never rotates/writes it back. This avoids logging out other
 #                                 # Claude Code sessions and the periodic Keychain password prompt.

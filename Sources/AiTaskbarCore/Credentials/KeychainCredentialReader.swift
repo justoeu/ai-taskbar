@@ -210,13 +210,18 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     ///    `preferredAccount` in config, use the legacy single-limit query
     ///    filtered by service only. This is one ACL operation, so a single
     ///    "Always Allow" click silences future prompts. Vast majority of
-    ///    users have one Claude entry → this is the common case.
+    ///    users have one Claude entry → this is the common case. We trust
+    ///    this result ONLY while its token is unexpired: the query can return
+    ///    a stale orphan that shadows the live entry, so an expired hit
+    ///    triggers the disambiguation path instead.
     ///
-    /// 2. **Disambiguation path (two-pass, 2 SecItem calls):** only when
-    ///    the user explicitly set `keychain_account = "…"` in config (or
-    ///    the fast path returned nothing). We list accounts first, then
-    ///    fetch each one's data. Each pass is a separate ACL operation, so
-    ///    users see two prompts on first launch but never again.
+    /// 2. **Disambiguation path (two-pass, 2 SecItem calls):** when the user
+    ///    set `keychain_account = "…"` in config, OR the fast path returned
+    ///    nothing / an expired token. We list accounts first, then fetch each
+    ///    one's data. Each pass is a separate ACL operation, so users see two
+    ///    prompts on first launch but never again. Among the results,
+    ///    `select` applies freshest-wins so a stale orphan never beats the
+    ///    entry the current CLI keeps refreshed.
     ///
     /// macOS rejects the combination
     /// `kSecMatchLimitAll + kSecReturnAttributes + kSecReturnData` in a single
@@ -224,11 +229,24 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     /// disambiguation.
     private func fetchAll() throws -> [KeychainItem] {
         if preferredAccount == nil {
-            if let single = try fetchLegacySingle() {
+            // Fast path: a single ACL operation, so one "Always Allow" click
+            // silences future prompts for the overwhelmingly common
+            // single-item case. BUT trust it only while the token it returns
+            // is still valid. This service-only `kSecMatchLimitOne` query can
+            // non-deterministically return a STALE, account-less blob left by
+            // an older Claude Code version, which would shadow the fresh
+            // account-bearing entry the current CLI keeps refreshed (observed
+            // in the field: a 13-day-expired legacy item served instead of the
+            // live one → persistent HTTP 401). On an expired hit, fall through
+            // to full enumeration + freshest-wins in `select`.
+            if let single = try fetchLegacySingle(),
+               let creds = try? SharedCoders.decoder
+                   .decode(AnthropicCredentialsFile.self, from: single.data)
+                   .claudeAiOauth,
+               !creds.isExpired(buffer: 0) {
                 return [single]
             }
-            // Single-pass returned nothing — fall through to enumeration in
-            // case the keychain holds items only matchable by account.
+            // Fast path returned nothing usable — fall through to enumeration.
         }
         let accounts = try listAccounts()
         if accounts.isEmpty {
@@ -343,14 +361,35 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             return match
         }
         if items.count == 1 { return items[0] }
-        let sorted = items.sorted { $0.account < $1.account }
+        // Freshest-wins: prefer the candidate whose decoded credentials expire
+        // latest. Self-healing against stale, orphaned items an older Claude
+        // Code version left behind (e.g. a legacy account-less blob shadowing
+        // the account-bearing entry the current CLI keeps refreshed).
+        // Undecodable items and exact ties break lexicographically so the
+        // choice stays deterministic.
+        let sorted = items.sorted { a, b in
+            let ea = decodedExpiry(a) ?? Int64.min
+            let eb = decodedExpiry(b) ?? Int64.min
+            if ea != eb { return ea > eb }
+            return a.account < b.account
+        }
         NSLog(
             "ai-taskbar: Found %d Keychain entries for service '%@' [%@]. " +
-            "Using '%@'. Set `keychain_account` under [anthropic] in config.toml to pin.",
+            "Using '%@' (freshest token). Set `keychain_account` under " +
+            "[anthropic] in config.toml to pin.",
             sorted.count, service, sorted.map(\.account).joined(separator: ", "),
             sorted[0].account
         )
         return sorted[0]
+    }
+
+    /// Decodes an item's `expiresAt` (ms since epoch), or `nil` when the blob
+    /// isn't valid Claude credentials JSON. Used by `select` to rank
+    /// candidates by freshness.
+    private func decodedExpiry(_ item: KeychainItem) -> Int64? {
+        try? SharedCoders.decoder
+            .decode(AnthropicCredentialsFile.self, from: item.data)
+            .claudeAiOauth.expiresAtMs
     }
 
     /// Stores the resolved account, normalizing empty strings to `nil` so

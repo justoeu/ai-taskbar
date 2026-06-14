@@ -123,7 +123,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 **i18n** — 3 languages out of the box (`en`, `pt-BR`, `es`) with `[ui] language = ...` config override
 
 **Security**
-- macOS Keychain reader with single-pass query (1 ACL prompt for single-account, 2 for multi-account)
+- macOS Keychain reader with single-pass query (1 ACL prompt for single-account, 2 for multi-account); auto-discovers the live entry via freshest-token-wins, so a stale orphan left by an older Claude Code version never shadows the one the CLI keeps refreshed
 - `~/.codex/auth.json` write-back with atomic `0o600` chmod **before** rename
 - All cache/config files chmod `0o600`, support dir `0o700`
 - OpenAI cache strips PII (`user_id`/`account_id`/`email`)
@@ -134,7 +134,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 **Cost tracking**
 - Reads `~/.claude/projects/*/*.jsonl` (Claude Code sessions) — byte prefilter rejects ~73% of lines without JSON parse
 - Reads `~/.codex/logs_2.sqlite` via libsqlite3 — regex-based `model=`/`total_usage_tokens=` extraction
-- Pricing table for known Anthropic, OpenAI, and Kimi models (prefix matching tolerates date-suffixed variants)
+- Pricing table for Anthropic + OpenAI models, used by the local Claude/Codex log scanners (longest-prefix matching tolerates date-suffixed variants). Gemini/Kimi/OpenRouter/Z.AI surface cost or balance straight from each vendor's API, so they don't use this table.
 - Per-model breakdown for today **and** last 7 days
 
 **Build / distribution**
