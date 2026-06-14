@@ -238,6 +238,7 @@ enabled = true
 [openai]
 enabled = true
 # codex_auth_path = "/Users/you/.codex/auth.json"
+# manage_oauth_refresh = false   # default false: read-only, lets the Codex CLI own token renewal
 
 [openrouter]
 enabled = true
@@ -271,7 +272,7 @@ The app **never writes outside these locations**. No telemetry, no remote loggin
 ## Privacy & security
 
 - Anthropic OAuth tokens stay in the **Keychain** — the app reads them, never copies them to disk.
-- **The Anthropic provider is read-only by default** (`[anthropic] manage_oauth_refresh = false`). A usage monitor shares the `Claude Code-credentials` Keychain item with the Claude Code CLI, and Anthropic rotates the refresh token on every exchange — so refreshing it here would invalidate the token other running CLI sessions hold (forcing "please re-login") and trip a Keychain ACL prompt on ad-hoc builds. In read-only mode the app uses whatever token the CLI maintains and lets the CLI own renewal; if the token is briefly expired the last cached snapshot is shown until the CLI refreshes. Set `manage_oauth_refresh = true` only if you run AI Taskbar standalone without the CLI.
+- **The OAuth providers are read-only by default** (`[anthropic] manage_oauth_refresh = false` and `[openai] manage_oauth_refresh = false`). A usage monitor shares the `Claude Code-credentials` Keychain item with the Claude Code CLI and `~/.codex/auth.json` with the Codex CLI, and both vendors rotate the refresh token on every exchange — so refreshing it here would invalidate the token other running CLI sessions hold (forcing "please re-login"), and the Anthropic write-back also trips a Keychain ACL prompt on ad-hoc builds. In read-only mode the app uses whatever token the CLI maintains and lets the CLI own renewal; if the token is briefly expired the last cached snapshot is shown until the CLI refreshes (on a cold cache with no prior snapshot the vendor tile shows the error until renewal). Set `manage_oauth_refresh = true` for a vendor only if you run AI Taskbar standalone without that CLI.
 - Keychain reads **and** writes pass `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail`, so an ad-hoc-rebuilt binary (whose cdhash no longer matches the item's ACL) never triggers a SecurityAgent password prompt behind the menu bar — the renewed access_token is kept in memory and persistence retries on the next OAuth cycle. The fix is logged to Console.app with the exact `security set-generic-password-partition-list` command to silence it for good.
 - Codex `~/.codex/auth.json` writes go through atomic tempfile with `0o600` set **before** the rename — no race window where fresh refresh tokens are world-readable.
 - Configuration files (`config.toml`) and cache files are `chmod 0600`, support dir `chmod 0700`.

@@ -137,6 +137,9 @@ public struct ConfigLoader: Sendable {
 
         [openai]
         enabled = true
+        # manage_oauth_refresh = false   # default false: read-only, let the Codex CLI own token renewal.
+        #                                 # Set true ONLY if you run the app without the Codex CLI;
+        #                                 # true rotates the shared token and can log out other CLI sessions.
 
         """),
         ("[openrouter]", """

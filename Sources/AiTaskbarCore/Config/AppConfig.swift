@@ -274,19 +274,20 @@ public struct AnthropicConfig: Codable, Sendable, Equatable {
     /// copy other already-running CLI sessions hold (→ "please re-login"),
     /// and the write-back itself trips a Keychain ACL prompt on ad-hoc
     /// builds. Read-only mode reads whatever token the CLI maintains and lets
-    /// the CLI own renewal; if the token is briefly expired the fetch serves
-    /// the last cached snapshot until the CLI refreshes. Opt in only if you
-    /// run the app standalone without the CLI.
-    public var manageOauthRefresh: Bool = false
+    /// the CLI own renewal; if the token is briefly expired the request 401s
+    /// and the last cached snapshot is served until the CLI refreshes (on a
+    /// cold cache with no prior snapshot the fetch surfaces the error instead).
+    /// Opt in only if you run the app standalone without the CLI.
+    public var manageOAuthRefresh: Bool = false
 
     public init(enabled: Bool = true,
                 keychainService: String? = nil,
                 keychainAccount: String? = nil,
-                manageOauthRefresh: Bool = false) {
+                manageOAuthRefresh: Bool = false) {
         self.enabled = enabled
         self.keychainService = keychainService
         self.keychainAccount = keychainAccount
-        self.manageOauthRefresh = manageOauthRefresh
+        self.manageOAuthRefresh = manageOAuthRefresh
     }
 
     public init(from decoder: Decoder) throws {
@@ -294,35 +295,51 @@ public struct AnthropicConfig: Codable, Sendable, Equatable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         keychainService = try c.decodeIfPresent(String.self, forKey: .keychainService)
         keychainAccount = try c.decodeIfPresent(String.self, forKey: .keychainAccount)
-        manageOauthRefresh = try c.decodeIfPresent(Bool.self, forKey: .manageOauthRefresh) ?? false
+        manageOAuthRefresh = try c.decodeIfPresent(Bool.self, forKey: .manageOAuthRefresh) ?? false
     }
 
     enum CodingKeys: String, CodingKey {
         case enabled
         case keychainService = "keychain_service"
         case keychainAccount = "keychain_account"
-        case manageOauthRefresh = "manage_oauth_refresh"
+        case manageOAuthRefresh = "manage_oauth_refresh"
     }
 }
 
 public struct OpenAIConfig: Codable, Sendable, Equatable {
     public var enabled: Bool = true
     public var codexAuthPath: String?
+    /// When `true`, the provider performs the OAuth `refresh_token` exchange
+    /// itself and writes the rotated tokens back to `~/.codex/auth.json`
+    /// once the id-token nears expiry. **Default `false`** — the file is
+    /// shared with the Codex CLI, and rotating the refresh token here would
+    /// invalidate the copy other running CLI sessions hold (→ forced
+    /// re-login). Read-only mode reads whatever token the Codex CLI maintains
+    /// and lets the CLI own renewal; if the token is briefly expired the
+    /// request 401s and the last cached snapshot is served until the CLI
+    /// refreshes (on a cold cache the fetch surfaces the error instead). Opt
+    /// in only if you run the app standalone without the Codex CLI.
+    public var manageOAuthRefresh: Bool = false
 
-    public init(enabled: Bool = true, codexAuthPath: String? = nil) {
+    public init(enabled: Bool = true,
+                codexAuthPath: String? = nil,
+                manageOAuthRefresh: Bool = false) {
         self.enabled = enabled
         self.codexAuthPath = codexAuthPath
+        self.manageOAuthRefresh = manageOAuthRefresh
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         codexAuthPath = try c.decodeIfPresent(String.self, forKey: .codexAuthPath)
+        manageOAuthRefresh = try c.decodeIfPresent(Bool.self, forKey: .manageOAuthRefresh) ?? false
     }
 
     enum CodingKeys: String, CodingKey {
         case enabled
         case codexAuthPath = "codex_auth_path"
+        case manageOAuthRefresh = "manage_oauth_refresh"
     }
 }
 

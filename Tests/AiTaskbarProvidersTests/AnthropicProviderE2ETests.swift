@@ -82,7 +82,10 @@ struct AnthropicProviderE2ETests {
             rateLimitTier: nil
         )
         let mock = MockKeychainReader(initial: expired)
-        let provider = AnthropicProvider(credentialReader: mock, cache: cache, http: http)
+        // Opt in to OAuth management so the refresh path runs (default is
+        // read-only, which would skip it).
+        let provider = AnthropicProvider(credentialReader: mock, cache: cache,
+                                         http: http, manageOAuthRefresh: true)
         _ = try await provider.fetchUsage(forceRefresh: true)
 
         // writeBack should have been called exactly once with the new tokens.

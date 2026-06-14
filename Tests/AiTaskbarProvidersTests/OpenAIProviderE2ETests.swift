@@ -86,7 +86,10 @@ struct OpenAIProviderE2ETests {
         _ = try writeAuthJSON(idToken: expiredToken)
         let path = tmpDir.appendingPathComponent("auth.json")
         let creds = FileCredentialReader(path: path)
-        let provider = OpenAIProvider(credentials: creds, cache: cache, http: http)
+        // Opt in to OAuth management so the refresh path runs (default is
+        // read-only, which would skip it).
+        let provider = OpenAIProvider(credentials: creds, cache: cache,
+                                      http: http, manageOAuthRefresh: true)
 
         _ = try await provider.fetchUsage(forceRefresh: true)
 
@@ -98,6 +101,38 @@ struct OpenAIProviderE2ETests {
         // Auth header on the actual usage call uses the new access token.
         let usageReq = StubURLProtocol.captured.last
         #expect(usageReq?.value(forHTTPHeaderField: "Authorization") == "Bearer new.acc")
+        try? FileManager.default.removeItem(at: tmpDir)
+        StubURLProtocol.reset()
+    }
+
+    @Test("read-only mode: expired JWT is NOT refreshed and NOT written back")
+    func read_only_mode_skips_refresh_and_writeback() async throws {
+        var hitOAuth = false
+        StubURLProtocol.handler = { req in
+            if req.url?.path.contains("oauth/token") == true {
+                hitOAuth = true
+                return .init(data: Data(#"{"access_token":"new.acc","refresh_token":"new.ref"}"#.utf8))
+            }
+            return .init(data: Fixtures.data(Fixtures.openaiUsage200))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .openai, baseDir: tmpDir)
+        // expired JWT (negative expiresIn) — would refresh if management were on.
+        let expiredToken = makeJWT(planType: "free", expiresIn: -100)
+        _ = try writeAuthJSON(idToken: expiredToken)
+        let path = tmpDir.appendingPathComponent("auth.json")
+        let creds = FileCredentialReader(path: path)
+        let provider = OpenAIProvider(credentials: creds, cache: cache,
+                                      http: http, manageOAuthRefresh: false)
+        _ = try await provider.fetchUsage(forceRefresh: true)
+
+        // No OAuth exchange and the on-disk token is untouched.
+        #expect(hitOAuth == false)
+        let reread = try creds.read()
+        #expect(reread.tokens.idToken == expiredToken)
+        // The stored (expired) access token was used as-is on the usage call.
+        let usageReq = StubURLProtocol.captured.last
+        #expect(usageReq?.value(forHTTPHeaderField: "Authorization") == "Bearer a")
         try? FileManager.default.removeItem(at: tmpDir)
         StubURLProtocol.reset()
     }

@@ -66,7 +66,7 @@ public final class AppEnvironment {
                     http: http,
                     keychainService: config.anthropic.keychainService ?? "Claude Code-credentials",
                     keychainAccount: config.anthropic.keychainAccount,
-                    manageOAuthRefresh: config.anthropic.manageOauthRefresh,
+                    manageOAuthRefresh: config.anthropic.manageOAuthRefresh,
                     cacheTTL: ttl)
                 out.append(p)
             } catch {
@@ -76,7 +76,9 @@ public final class AppEnvironment {
         if config.openai.enabled {
             do {
                 let path = config.openai.codexAuthPath.map { URL(fileURLWithPath: $0) }
-                let p = try OpenAIProvider(http: http, codexAuthPath: path, cacheTTL: ttl)
+                let p = try OpenAIProvider(http: http, codexAuthPath: path,
+                                           manageOAuthRefresh: config.openai.manageOAuthRefresh,
+                                           cacheTTL: ttl)
                 out.append(p)
             } catch {
                 NSLog("ai-taskbar: openai init failed: %@", "\(error)")

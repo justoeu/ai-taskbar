@@ -24,7 +24,7 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     public init(credentialReader: any AnthropicCredentialReading = KeychainCredentialReader(),
                 cache: DiskCache,
                 http: HTTPClient,
-                manageOAuthRefresh: Bool = true) {
+                manageOAuthRefresh: Bool = false) {
         self.credentialReader = credentialReader
         self.fetcher = CachedFetch(cache: cache)
         self.http = http
@@ -34,7 +34,7 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     public convenience init(http: HTTPClient = .init(),
                             keychainService: String = "Claude Code-credentials",
                             keychainAccount: String? = nil,
-                            manageOAuthRefresh: Bool = true,
+                            manageOAuthRefresh: Bool = false,
                             cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.anthropic, ttl: cacheTTL)
         self.init(
@@ -56,8 +56,9 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
                 // opted in. In the default read-only mode we use whatever token
                 // the Claude Code CLI maintains; if it's briefly expired the
                 // request 401s and CachedFetch serves the last cached snapshot
-                // until the CLI renews. This is what keeps the monitor from
-                // logging out other CLI sessions or tripping a Keychain prompt.
+                // (or surfaces the error when the cache is cold) until the CLI
+                // renews. This is what keeps the monitor from logging out other
+                // CLI sessions or tripping a Keychain prompt.
                 if manageOAuthRefresh, credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
                     let resp = try await AnthropicOAuth.refresh(
                         refreshToken: credentials.refreshToken, http: http)
