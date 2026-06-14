@@ -56,6 +56,51 @@ struct KeychainCredentialReaderTests {
         #expect(chosen.account == "alpha")
     }
 
+    @Test("select prefers the freshest token over a stale orphan")
+    func select_prefers_freshest_token() {
+        let reader = KeychainCredentialReader(service: "s", preferredAccount: nil)
+        func blob(_ exp: Int64) -> Data {
+            Data(#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","expiresAt":\#(exp)}}"#.utf8)
+        }
+        // `alpha` sorts first lexicographically but holds the long-expired
+        // orphan; `zeta` holds the live token. Freshest-wins must pick zeta.
+        let items = [
+            KeychainCredentialReader.KeychainItem(account: "alpha", data: blob(1_000)),
+            KeychainCredentialReader.KeychainItem(account: "zeta",  data: blob(9_999_999_999_999)),
+        ]
+        let chosen = reader.select(from: items)
+        #expect(chosen.account == "zeta")
+    }
+
+    @Test("select breaks ties lexicographically when expiries match")
+    func select_ties_break_lexicographically() {
+        let reader = KeychainCredentialReader(service: "s", preferredAccount: nil)
+        func blob(_ exp: Int64) -> Data {
+            Data(#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","expiresAt":\#(exp)}}"#.utf8)
+        }
+        let items = [
+            KeychainCredentialReader.KeychainItem(account: "beta",  data: blob(5_000)),
+            KeychainCredentialReader.KeychainItem(account: "alpha", data: blob(5_000)),
+        ]
+        let chosen = reader.select(from: items)
+        #expect(chosen.account == "alpha")
+    }
+
+    @Test("select still honors preferredAccount over a fresher entry")
+    func select_preferred_beats_freshness() {
+        let reader = KeychainCredentialReader(service: "s", preferredAccount: "pinned")
+        func blob(_ exp: Int64) -> Data {
+            Data(#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","expiresAt":\#(exp)}}"#.utf8)
+        }
+        // `pinned` is older than `other`, but an explicit pin must win.
+        let items = [
+            KeychainCredentialReader.KeychainItem(account: "other",  data: blob(9_999_999_999_999)),
+            KeychainCredentialReader.KeychainItem(account: "pinned", data: blob(1_000)),
+        ]
+        let chosen = reader.select(from: items)
+        #expect(chosen.account == "pinned")
+    }
+
     @Test("errorFor maps errSecInteractionNotAllowed to instructive message")
     func errorFor_maps_interaction_not_allowed() {
         let err = KeychainCredentialReader.errorFor(status: -25308, op: "list")

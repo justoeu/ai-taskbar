@@ -7,18 +7,39 @@ struct CostTests {
     @Test("lookup matches an exact key")
     func lookup_exact() {
         let m = PricingTable.lookup("claude-opus-4-7", table: PricingTable.anthropic)
+        #expect(m?.inputPer1M == 5)
+        #expect(m?.outputPer1M == 25)
+    }
+
+    @Test("Fable 5 has explicit pricing (not silently dropped)")
+    func lookup_fable() {
+        let m = PricingTable.lookup("claude-fable-5", table: PricingTable.anthropic)
+        #expect(m?.inputPer1M == 10)
+        #expect(m?.outputPer1M == 50)
+    }
+
+    @Test("legacy Opus 4.0/4.1 still price at the old tier via prefix")
+    func lookup_legacy_opus() {
+        let m = PricingTable.lookup("claude-opus-4-1", table: PricingTable.anthropic)
         #expect(m?.inputPer1M == 15)
         #expect(m?.outputPer1M == 75)
     }
 
     @Test("lookup falls back to prefix")
     func lookup_prefix_match() {
-        // Use a key with no ambiguous parents in the table — moonshot-v1-8k
-        // doesn't share a prefix with any other Kimi entry. Dictionary
-        // iteration order is undefined, so picking a prefix-unique key is
-        // the only way to make this assertion deterministic.
-        let m = PricingTable.lookup("moonshot-v1-8k-2026", table: PricingTable.kimi)
-        #expect(m?.inputPer1M == 1.0)
+        // Date-suffixed model id resolves to its base entry via prefix match.
+        let m = PricingTable.lookup("gpt-5.5-2026-04", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 5)
+    }
+
+    @Test("lookup prefers the longest matching prefix")
+    func lookup_longest_prefix_wins() {
+        // "gpt-5.4-mini-..." also has prefixes "gpt-5" and "gpt-5.4" in the
+        // table. Longest-prefix-wins must pick gpt-5.4-mini ($0.75), not the
+        // shorter, pricier gpt-5 ($1.25) or gpt-5.4 ($2.50). Dictionary order
+        // is undefined, so a first-match scan would be nondeterministic.
+        let m = PricingTable.lookup("gpt-5.4-mini-2026-05", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 0.75)
     }
 
     @Test("lookup returns nil on miss")
@@ -58,7 +79,6 @@ struct CostTests {
     func pricing_tables_non_empty() {
         #expect(!PricingTable.anthropic.isEmpty)
         #expect(!PricingTable.openai.isEmpty)
-        #expect(!PricingTable.kimi.isEmpty)
     }
 }
 
