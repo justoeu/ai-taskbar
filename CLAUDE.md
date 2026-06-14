@@ -266,6 +266,16 @@ user edits. See `config.example.toml` for the full schema.
 
 - App is ad-hoc signed only. Gatekeeper warns on first launch. Notarization
   needs an Apple Developer account ($99/yr) — deferred.
+- **Gemini is API-key heartbeat only — no usage/cost integration is feasible
+  today** (see README "Google Gemini — limited"). The consumer Gemini app
+  subscription (Plus/Pro/Ultra) has no public usage API; the developer
+  Cloud Monitoring API measures GCP-project API requests, not the
+  subscription; Code Assist's `cloudcode-pa…v1internal:retrieveUserQuota`
+  (read from `~/.gemini/oauth_creds.json`) works but is undocumented and is
+  being retired for individuals on 2026-06-18; the Antigravity CLI (`agy`)
+  exposes no usage command and stores auth as encrypted Electron
+  cookies/safeStorage. Revisit only if Google ships a real OAuth usage API.
+  Do NOT build against `v1internal` or scrape Electron cookies.
 - v0.2 candidates (open): start-at-login via `SMAppService` works only when
   the `.app` lives in `/Applications`; global hotkey via
   `MenuBarExtraAccess`; OpenAI Platform API (`sk-...`) for actual budget caps.

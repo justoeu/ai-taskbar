@@ -95,6 +95,19 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 > 2. Launch from a terminal: `OPENROUTER_API_KEY=sk-... open /Applications/AiTaskbar.app`.
 > 3. Set it globally: `launchctl setenv OPENROUTER_API_KEY "sk-..."` (until reboot).
 
+### Google Gemini — limited; no usable usage/quota API
+
+Gemini ships as a provider but it can only do an **API-key heartbeat**: with a Google AI Studio key it validates the key and reports the model count (`GET /v1beta/models`). **It cannot show usage or cost**, because none of Google's surfaces expose a readable consumption API for the products people actually have:
+
+| Surface | Usage API? |
+|---|---|
+| **Gemini app subscription** (Plus / AI Pro / Ultra, `gemini.google.com/usage`) | ❌ No public API — the 5-hour/weekly limits live only in the app UI. |
+| **Developer API** (AI Studio key / Vertex via a GCP project) | ✅ Cloud Monitoring (`serviceruntime.googleapis.com/quota/...`) — but it measures *GCP-project API requests*, needs a Cloud project + monitoring scope, and is **not** your consumer subscription. |
+| **Gemini Code Assist** (the `gemini-cli`, `~/.gemini/oauth_creds.json`) | ⚠️ Undocumented `cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` — per-model `remainingFraction`. **Being retired for individuals on 2026-06-18** in favor of Antigravity, and it's the free coding tier, *separate from* a paid Gemini app subscription. |
+| **Antigravity CLI** (`agy`) | ❌ No `usage` subcommand; the app stores auth as encrypted Electron cookies + Keychain safeStorage — no readable token, no usage endpoint. |
+
+**Bottom line:** there is no durable, official way to read your Gemini *subscription* usage today. If you don't have (or don't want) a Gemini API key, set `[gemini] enabled = false` in `config.toml` to hide the "no credentials" row. This will be revisited if Google ships a real consumer usage API (OAuth, not web cookies).
+
 ## What's in this version
 
 ### v0.2 — Gemini, calmer cadence, honest countdown, no more Keychain prompts
