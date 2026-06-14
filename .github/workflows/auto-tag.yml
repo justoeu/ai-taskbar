@@ -1,0 +1,134 @@
+name: Auto Tag & Release
+
+# Every push to main cuts a new version automatically:
+#   1. Decide the bump level from the commit messages since the last tag.
+#   2. Patch the version in Makefile, Bundler.toml, Info.plist, AboutView.
+#   3. Commit "chore(release): vX.Y.Z [skip release]" + push an annotated tag.
+#   4. Call release.yml to build the universal DMG and publish the GitHub Release.
+#
+# Bump rules (matched against commit subjects/bodies since the last v* tag):
+#   - major: a commit with "BREAKING CHANGE", a "type!:" subject, or "[bump:major]"
+#   - minor: a "feat:" / "feat(scope):" subject, or "[bump:minor]"
+#   - patch: everything else (the default — this repo uses free-form subjects)
+#
+# Opt out of a release for a given push by putting "[skip release]" anywhere in
+# the head commit message (docs-only tweaks, chores you don't want to ship).
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # push the bump commit + tag
+
+# Never let two auto-tag runs race on main / the version files.
+concurrency:
+  group: auto-tag-main
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Compute version, bump, tag
+    # Skip the workflow's own release commits and explicit opt-outs. (Pushes
+    # made with GITHUB_TOKEN don't re-trigger workflows either, so this is
+    # belt-and-suspenders.)
+    if: >-
+      !contains(github.event.head_commit.message, '[skip release]') &&
+      !startsWith(github.event.head_commit.message, 'chore(release):')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version, bump files, tag
+        id: bump
+        run: |
+          set -euo pipefail
+
+          # --- last released version --------------------------------------
+          LAST="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          if [ -z "$LAST" ]; then LAST="v0.0.0"; fi
+          echo "Last tag: $LAST"
+
+          BASE="${LAST#v}"
+          MAJOR="${BASE%%.*}"
+          REST="${BASE#*.}"
+          MINOR="${REST%%.*}"
+          PATCH="${REST#*.}"
+          PATCH="${PATCH%%-*}"   # drop any prerelease suffix
+
+          # --- bump level from commits since the last tag -----------------
+          # Read the log on the runner (never interpolate commit text into the
+          # shell — avoids workflow command injection).
+          if [ "$LAST" = "v0.0.0" ]; then RANGE="HEAD"; else RANGE="${LAST}..HEAD"; fi
+          LOG="$(git log --format='%s%n%b' "$RANGE")"
+
+          LEVEL="patch"
+          if printf '%s\n' "$LOG" | grep -qiE 'BREAKING CHANGE|^[a-z]+(\(.+\))?!:|\[bump:major\]'; then
+            LEVEL="major"
+          elif printf '%s\n' "$LOG" | grep -qiE '^feat(\(.+\))?:|\[bump:minor\]'; then
+            LEVEL="minor"
+          fi
+          echo "Bump level: $LEVEL"
+
+          case "$LEVEL" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+          NEW="${MAJOR}.${MINOR}.${PATCH}"
+          TAG="v${NEW}"
+          echo "Next version: $TAG"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — nothing to release."
+            echo "version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # --- bump the version everywhere it lives -----------------------
+          CUR_BUILD="$(grep -A1 'CFBundleVersion' Resources/Info.plist \
+            | grep -oE '<string>[0-9]+</string>' | grep -oE '[0-9]+' | head -n1)"
+          NEW_BUILD=$((CUR_BUILD+1))
+
+          sed -i -E 's/^(VERSION[[:space:]]*\?=).*/\1 '"$NEW"'/' Makefile
+          sed -i -E 's/^version = ".*"/version = "'"$NEW"'"/' Bundler.toml
+          sed -i -E 's/return "v[0-9]+\.[0-9]+\.[0-9]+(-dev)?"/return "v'"$NEW"'-dev"/' \
+            Sources/AiTaskbarApp/Views/AboutView.swift
+
+          awk -v ver="$NEW" -v bld="$NEW_BUILD" '
+            /<key>CFBundleShortVersionString<\/key>/ {
+              print; getline; sub(/<string>[^<]*<\/string>/, "<string>" ver "</string>"); print; next
+            }
+            /<key>CFBundleVersion<\/key>/ {
+              print; getline; sub(/<string>[^<]*<\/string>/, "<string>" bld "</string>"); print; next
+            }
+            { print }
+          ' Resources/Info.plist > Resources/Info.plist.tmp
+          mv Resources/Info.plist.tmp Resources/Info.plist
+
+          echo "--- diff ---"
+          git --no-pager diff
+
+          # --- commit + tag + push ----------------------------------------
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Makefile Bundler.toml Resources/Info.plist Sources/AiTaskbarApp/Views/AboutView.swift
+          git commit -m "chore(release): ${TAG} [skip release]"
+          git tag -a "${TAG}" -m "${TAG}"
+          git push origin HEAD:main
+          git push origin "${TAG}"
+
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Build DMG + publish release
+    needs: tag
+    if: ${{ needs.tag.outputs.version != '' }}
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.tag.outputs.version }}
+    secrets: inherit

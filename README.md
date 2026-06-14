@@ -318,9 +318,35 @@ Result: a DMG that opens with **no Gatekeeper warnings** on any macOS 11+ Mac. W
 
 ## Releasing a new version
 
+Releases are **automatic**. Every push to `main` (typically a PR merge) runs
+[`auto-tag.yml`](.github/workflows/auto-tag.yml), which:
+
+1. Picks the next version from the commit messages since the last tag.
+2. Bumps the version in `Makefile`, `Bundler.toml`, `Resources/Info.plist`, and
+   `AboutView.swift`, then commits `chore(release): vX.Y.Z [skip release]`.
+3. Pushes an annotated `vX.Y.Z` tag.
+4. Calls [`release.yml`](.github/workflows/release.yml) to build + publish.
+
+### Choosing the bump level
+
+The level is matched against the commit subjects/bodies since the last `v*` tag:
+
+| Bump  | Trigger                                                              |
+|-------|---------------------------------------------------------------------|
+| major | a `BREAKING CHANGE` body, a `type!:` subject, or `[bump:major]`      |
+| minor | a `feat:` / `feat(scope):` subject, or `[bump:minor]`               |
+| patch | anything else (the default — this repo uses free-form subjects)      |
+
+To push to `main` **without** cutting a release (docs-only tweaks, etc.), put
+`[skip release]` anywhere in the head commit message.
+
+### Cutting one manually
+
+You can still tag by hand (e.g. for a backfill or a pre-release):
+
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0-beta1
+git push origin v0.2.0-beta1
 ```
 
 The [release workflow](.github/workflows/release.yml) runs on GitHub-hosted macOS runners:

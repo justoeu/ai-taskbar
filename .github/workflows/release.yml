@@ -15,6 +15,14 @@ on:
         description: 'Version tag (e.g. v0.1.0)'
         required: true
         type: string
+  # Allow auto-tag.yml (push → main) to build+publish the release it just
+  # tagged, in the same workflow run (no GITHUB_TOKEN recursion limit).
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write    # needed to create releases
@@ -29,15 +37,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # tag push → GITHUB_REF is the tag. workflow_dispatch/workflow_call →
+          # inputs.version is the tag we want to build (e.g. auto-tag.yml just
+          # pushed it). Both are valid refs.
+          ref: ${{ inputs.version || github.ref }}
 
       - name: Select Xcode 16 (Swift 6)
         run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
 
       - name: Resolve version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
+          # inputs.version is set for workflow_dispatch + workflow_call;
+          # empty for a tag push, where the tag lives in GITHUB_REF.
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
           else
             VERSION="${GITHUB_REF#refs/tags/}"
           fi

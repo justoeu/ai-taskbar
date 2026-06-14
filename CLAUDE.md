@@ -142,6 +142,32 @@ make validate                  # the policy gate — see above
 make clean                     # nuke .build, build/, generated DMGs
 ```
 
+## Releasing / versioning (automatic on `main`)
+
+**Don't hand-edit version strings to cut a release, and don't push a `v*` tag
+yourself for a normal change.** Every push to `main` (typically a PR merge)
+triggers `.github/workflows/auto-tag.yml`, which decides the next version,
+bumps it everywhere, tags it, and calls `release.yml` to build + publish the
+universal DMG.
+
+- **Bump level** is inferred from commit subjects/bodies since the last `v*`
+  tag: `BREAKING CHANGE` / `type!:` / `[bump:major]` → **major**;
+  `feat:` / `feat(scope):` / `[bump:minor]` → **minor**; everything else →
+  **patch** (the default — this repo's subjects are free-form).
+- **Opt out** of a release for a push by putting `[skip release]` anywhere in
+  the head commit message (docs-only tweaks, chores). The bump commit the
+  workflow itself makes carries this marker so it never recurses.
+- **The version lives in four files** kept in lockstep by the workflow:
+  `Makefile` (`VERSION`), `Bundler.toml` (`version`), `Resources/Info.plist`
+  (`CFBundleShortVersionString` + `CFBundleVersion`), and
+  `AboutView.swift` (the `-dev` fallback). If you ever bump by hand, change all
+  four together.
+- **Manual / pre-release** tags still work: `git tag v0.3.0-beta1 && git push
+  origin v0.3.0-beta1` runs `release.yml` directly (pre-release auto-detected
+  from the `-` suffix).
+- `release.yml` re-runs the runtime validation suite before publishing, but it
+  is **not** a substitute for the green `make validate` gate before you push.
+
 ## Architecture (don't break these)
 
 - **`AiTaskbarCore`** — vendor-agnostic. Models, HTTP, Cache, Credentials,
