@@ -6,6 +6,12 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
     private let credentials: FileCredentialReader
     private let fetcher: CachedFetch
     private let http: HTTPClient
+    /// When `false`, the provider never performs the OAuth refresh exchange or
+    /// writes back to `~/.codex/auth.json` — it reads whatever token the Codex
+    /// CLI maintains and lets the CLI own renewal. This avoids rotating the
+    /// shared refresh token (which logs other Codex CLI sessions out). See
+    /// `OpenAIConfig.manageOAuthRefresh` for the full rationale.
+    private let manageOAuthRefresh: Bool
     private static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
     /// PII fields the upstream response carries that we strip before caching
@@ -23,20 +29,24 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
 
     public init(credentials: FileCredentialReader = .init(),
                 cache: DiskCache,
-                http: HTTPClient) {
+                http: HTTPClient,
+                manageOAuthRefresh: Bool = false) {
         self.credentials = credentials
         self.fetcher = CachedFetch(cache: cache)
         self.http = http
+        self.manageOAuthRefresh = manageOAuthRefresh
     }
 
     public convenience init(http: HTTPClient = .init(),
                             codexAuthPath: URL? = nil,
+                            manageOAuthRefresh: Bool = false,
                             cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.openai, ttl: cacheTTL)
         self.init(
             credentials: FileCredentialReader(path: codexAuthPath ?? Paths.defaultCodexAuth()),
             cache: cache,
-            http: http
+            http: http,
+            manageOAuthRefresh: manageOAuthRefresh
         )
     }
 
@@ -46,7 +56,14 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
             decode: decodeSnapshot,
             fetch: { [self] in
                 var auth = try credentials.read()
-                if let exp = JWT.expiry(auth.tokens.idToken),
+                // Only rotate + persist the shared Codex credential when
+                // explicitly opted in. In the default read-only mode we use
+                // whatever token the Codex CLI maintains; a briefly-expired
+                // token 401s and CachedFetch serves the last cached snapshot
+                // (or surfaces the error when the cache is cold) until the CLI
+                // renews — keeping the monitor from logging out Codex sessions.
+                if manageOAuthRefresh,
+                   let exp = JWT.expiry(auth.tokens.idToken),
                    exp < Date.now.addingTimeInterval(OpenAIOAuth.refreshBuffer) {
                     let resp = try await OpenAIOAuth.refresh(
                         refreshToken: auth.tokens.refreshToken, http: http)

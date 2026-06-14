@@ -30,3 +30,6 @@ config.local.toml
 
 # Test artifacts
 .test-output/
+
+# graphify knowledge graph (generated, AST-only)
+graphify-out/

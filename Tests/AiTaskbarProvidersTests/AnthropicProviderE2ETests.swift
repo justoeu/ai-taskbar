@@ -82,7 +82,10 @@ struct AnthropicProviderE2ETests {
             rateLimitTier: nil
         )
         let mock = MockKeychainReader(initial: expired)
-        let provider = AnthropicProvider(credentialReader: mock, cache: cache, http: http)
+        // Opt in to OAuth management so the refresh path runs (default is
+        // read-only, which would skip it).
+        let provider = AnthropicProvider(credentialReader: mock, cache: cache,
+                                         http: http, manageOAuthRefresh: true)
         _ = try await provider.fetchUsage(forceRefresh: true)
 
         // writeBack should have been called exactly once with the new tokens.
@@ -95,6 +98,42 @@ struct AnthropicProviderE2ETests {
         // anthropic-beta header is required by the upstream API.
         let beta = StubURLProtocol.captured.last?.value(forHTTPHeaderField: "anthropic-beta")
         #expect(beta == AnthropicOAuth.betaHeader)
+        try? FileManager.default.removeItem(at: tmpCache)
+        StubURLProtocol.reset()
+    }
+
+    @Test("read-only mode: expired token is NOT refreshed and NOT written back")
+    func read_only_mode_skips_refresh_and_writeback() async throws {
+        var hitOAuth = false
+        StubURLProtocol.handler = { req in
+            if req.url?.path.contains("oauth/token") == true {
+                hitOAuth = true
+                return .init(data: Fixtures.data(Fixtures.oauthRefresh200))
+            }
+            return .init(data: Fixtures.data(Fixtures.anthropicUsage200))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .anthropic, baseDir: tmpCache)
+        let expired = AnthropicCredentials(
+            accessToken: "old",
+            refreshToken: "old.r",
+            // Already expired — would trigger refresh if management were on.
+            expiresAtMs: Int64(Date().addingTimeInterval(-600).timeIntervalSince1970 * 1000),
+            subscriptionType: "pro",
+            rateLimitTier: nil
+        )
+        let mock = MockKeychainReader(initial: expired)
+        let provider = AnthropicProvider(credentialReader: mock, cache: cache,
+                                         http: http, manageOAuthRefresh: false)
+        _ = try await provider.fetchUsage(forceRefresh: true)
+
+        // No OAuth exchange, no Keychain write-back: the monitor left the
+        // shared credential untouched.
+        #expect(hitOAuth == false)
+        #expect(mock.writeBackCalls.isEmpty)
+        // The stored (expired) access token was used as-is.
+        let auth = StubURLProtocol.captured.last?.value(forHTTPHeaderField: "Authorization")
+        #expect(auth == "Bearer old")
         try? FileManager.default.removeItem(at: tmpCache)
         StubURLProtocol.reset()
     }

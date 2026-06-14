@@ -40,10 +40,20 @@ notify_at = [90, 100]   # percent thresholds that trigger a notification
 enabled = true
 # keychain_service = "Claude Code-credentials"  # override (rarely needed)
 # keychain_account = "your.short.username"      # pin if you have multiple Claude entries
+# manage_oauth_refresh = false   # default false: the app reads the OAuth token Claude Code maintains
+#                                 # and never rotates/writes it back. This avoids logging out other
+#                                 # Claude Code sessions and the periodic Keychain password prompt.
+#                                 # Set true ONLY if you run AI Taskbar standalone (no Claude Code CLI);
+#                                 # when true the token is briefly refreshed by the app and a stale
+#                                 # snapshot is shown until renewal otherwise.
 
 [openai]
 enabled = true
 # codex_auth_path = "/Users/you/.codex/auth.json"   # override; default ~/.codex/auth.json
+# manage_oauth_refresh = false   # default false: read-only, the app reads the token the Codex CLI
+#                                 # maintains and never rotates/writes it back (avoids logging out
+#                                 # other Codex CLI sessions). Set true ONLY if you run AI Taskbar
+#                                 # standalone without the Codex CLI.
 
 [zai]
 enabled = true

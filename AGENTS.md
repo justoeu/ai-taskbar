@@ -192,6 +192,22 @@ make clean                     # nuke .build, build/, generated DMGs
   `SecItemAdd` in `KeychainCredentialReader.writeBack` — log via NSLog and
   return (the renewed token still works in memory; the next OAuth cycle
   retries persistence). Every other OSStatus must throw.
+- **The shared-credential OAuth providers (Anthropic + OpenAI/Codex) must
+  default to read-only credentials.** Both `AnthropicConfig.manageOAuthRefresh`
+  and `OpenAIConfig.manageOAuthRefresh` default to `false`, and the providers'
+  `manageOAuthRefresh` init params default to `false` too (safe-by-default is
+  structural, not applied only at `AppEnvironment.makeProviders`). The app
+  shares the `Claude Code-credentials` Keychain item with the Claude Code CLI
+  and `~/.codex/auth.json` with the Codex CLI, and **both vendors rotate the
+  refresh token on every exchange** — so refreshing here invalidates the token
+  other running CLI sessions hold (→ forced re-login), and the Anthropic
+  write-back also trips the Keychain ACL prompt on ad-hoc builds. Read-only mode
+  reads whatever token the CLI keeps current and lets the CLI own renewal; a
+  briefly-expired token serves the last cached snapshot (or surfaces the error
+  on a cold cache). Only `manage_oauth_refresh = true` (opt-in, standalone use
+  without that CLI) is allowed to call `…OAuth.refresh` + `writeBack`. Do not
+  flip the defaults back to `true`. Any future vendor that reads a credential
+  shared with a CLI must follow the same read-only-by-default rule.
 
 ## Adding a new LLM vendor (checklist)
 
