@@ -41,15 +41,21 @@ public struct OAuthRefresher<Req: Encodable, Resp: Decodable>: Sendable {
 }
 
 /// Tolerant parser for the three error-body shapes both Anthropic and
-/// OpenAI return on 4xx OAuth failures.
+/// OpenAI return on 4xx OAuth failures. Decodes into `JSONValue` (not
+/// `[String: Any]`) to keep the function free of cross-actor `Any` payloads
+/// per the AGENTS.md hard rule.
 public enum OAuthErrorBody {
     public static func parse(_ data: Data) -> String? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) else { return nil }
-        if let obj = json as? [String: Any] {
-            if let s = obj["error_description"] as? String { return s }
-            if let s = obj["error"] as? String { return s }
-            if let nested = obj["error"] as? [String: Any],
-               let s = nested["message"] as? String { return s }
+        guard let json = try? SharedCoders.decoder.decode(JSONValue.self, from: data)
+        else { return nil }
+        guard case .object(let obj) = json else { return nil }
+        // RFC 6749 §5.2: `error_description` is the canonical human-readable
+        // string; some vendors additionally nest `error.message`.
+        if case .string(let s) = obj["error_description"] ?? .null { return s }
+        if case .string(let s) = obj["error"] ?? .null { return s }
+        if case .object(let nested) = obj["error"] ?? .null,
+           case .string(let s) = nested["message"] ?? .null {
+            return s
         }
         return nil
     }

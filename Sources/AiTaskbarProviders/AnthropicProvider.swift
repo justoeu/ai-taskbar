@@ -63,12 +63,10 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
                     let resp = try await AnthropicOAuth.refresh(
                         refreshToken: credentials.refreshToken, http: http)
                     try Task.checkCancellation()
-                    credentials.accessToken = resp.access_token
-                    if let newRefresh = resp.refresh_token {
-                        credentials.refreshToken = newRefresh
-                    }
-                    credentials.expiresAtMs = Int64(
-                        Date.now.addingTimeInterval(resp.expires_in).timeIntervalSince1970 * 1000)
+                    credentials = credentials.rotated(
+                        accessToken: resp.access_token,
+                        refreshToken: resp.refresh_token,
+                        expiresAt: Date.now.addingTimeInterval(resp.expires_in))
                     try credentialReader.writeBack(credentials)
                 }
                 primeLabelCache(subscriptionType: credentials.subscriptionType,

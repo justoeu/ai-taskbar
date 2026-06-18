@@ -17,6 +17,7 @@ Package.resolved
 .codex/
 .vscode/
 .idea/
+.serena/
 
 # Distribution artifacts
 *.dmg

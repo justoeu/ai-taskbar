@@ -413,7 +413,8 @@ public struct KimiConfig: Codable, Sendable, Equatable {
         if let validated = Self.validate(raw) {
             baseURL = validated
         } else {
-            NSLog("ai-taskbar: KimiConfig.base_url %@ rejected (must be https:// to an allowed Moonshot host) — falling back to default", raw)
+            // `raw` is user input — public so the user sees what they typed.
+            AppLog.config.warning("KimiConfig.base_url \(raw, privacy: .public) rejected (must be https:// to an allowed Moonshot host) — falling back to default")
             baseURL = Self.defaultBaseURL
         }
     }
@@ -501,7 +502,7 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
         if let validated = Self.validate(raw) {
             baseURL = validated
         } else {
-            NSLog("ai-taskbar: GeminiConfig.base_url %@ rejected (must be https:// to an allowed Google AI host) — falling back to default", raw)
+            AppLog.config.warning("GeminiConfig.base_url \(raw, privacy: .public) rejected (must be https:// to an allowed Google AI host) — falling back to default")
             baseURL = Self.defaultBaseURL
         }
     }

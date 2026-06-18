@@ -21,22 +21,21 @@ public final class AppEnvironment {
             // Top up the user's file with any sections we added since they
             // first ran the app (e.g. new vendors). Preserves their edits.
             if let appended = try? loader.ensureAllVendorSections(), !appended.isEmpty {
-                NSLog("ai-taskbar: appended missing config sections: %@", appended.joined(separator: ", "))
+                AppLog.lifecycle.info("appended missing config sections: \(appended.joined(separator: ", "), privacy: .public)")
             }
             // Build HTTP client with TLS pinning if configured.
             let http: HTTPClient
             if !cfg.security.pinHosts.isEmpty {
                 http = HTTPClient.pinned(pinnedHosts: cfg.security.pinHosts,
                                          auditOnly: cfg.security.pinAuditOnly)
-                NSLog("ai-taskbar: TLS pinning active for %d host(s)%@",
-                      cfg.security.pinHosts.count,
-                      cfg.security.pinAuditOnly ? " (audit only)" : "")
+                let suffix = cfg.security.pinAuditOnly ? " (audit only)" : ""
+                AppLog.pinning.notice("TLS pinning active for \(cfg.security.pinHosts.count, privacy: .public) host(s)\(suffix, privacy: .public)")
             } else {
                 http = HTTPClient()
             }
             return AppEnvironment(http: http, configLoader: loader, config: cfg)
         } catch {
-            NSLog("ai-taskbar: config load failed (%@) — using defaults", "\(error)")
+            AppLog.lifecycle.error("config load failed (\(String(describing: error), privacy: .public)) — using defaults")
             // Fallback to a temp-path config so the app still launches.
             // Init(path:) is statically non-throwing — no force-unwrap needed.
             let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -70,7 +69,7 @@ public final class AppEnvironment {
                     cacheTTL: ttl)
                 out.append(p)
             } catch {
-                NSLog("ai-taskbar: anthropic init failed: %@", "\(error)")
+                AppLog.lifecycle.error("anthropic init failed: \(String(describing: error), privacy: .public)")
             }
         }
         if config.openai.enabled {
@@ -81,7 +80,7 @@ public final class AppEnvironment {
                                            cacheTTL: ttl)
                 out.append(p)
             } catch {
-                NSLog("ai-taskbar: openai init failed: %@", "\(error)")
+                AppLog.lifecycle.error("openai init failed: \(String(describing: error), privacy: .public)")
             }
         }
         if config.openrouter.enabled {
@@ -89,7 +88,7 @@ public final class AppEnvironment {
                 let p = try OpenRouterProvider(config: config.openrouter, http: http, cacheTTL: ttl)
                 out.append(p)
             } catch {
-                NSLog("ai-taskbar: openrouter init failed: %@", "\(error)")
+                AppLog.lifecycle.error("openrouter init failed: \(String(describing: error), privacy: .public)")
             }
         }
         if config.zai.enabled {
@@ -97,7 +96,7 @@ public final class AppEnvironment {
                 let p = try ZAIProvider(config: config.zai, http: http, cacheTTL: ttl)
                 out.append(p)
             } catch {
-                NSLog("ai-taskbar: zai init failed: %@", "\(error)")
+                AppLog.lifecycle.error("zai init failed: \(String(describing: error), privacy: .public)")
             }
         }
         if config.kimi.enabled {
@@ -105,7 +104,7 @@ public final class AppEnvironment {
                 let p = try KimiProvider(config: config.kimi, http: http, cacheTTL: ttl)
                 out.append(p)
             } catch {
-                NSLog("ai-taskbar: kimi init failed: %@", "\(error)")
+                AppLog.lifecycle.error("kimi init failed: \(String(describing: error), privacy: .public)")
             }
         }
         if config.gemini.enabled {
@@ -113,7 +112,7 @@ public final class AppEnvironment {
                 let p = try GeminiProvider(config: config.gemini, http: http, cacheTTL: ttl)
                 out.append(p)
             } catch {
-                NSLog("ai-taskbar: gemini init failed: %@", "\(error)")
+                AppLog.lifecycle.error("gemini init failed: \(String(describing: error), privacy: .public)")
             }
         }
         return out

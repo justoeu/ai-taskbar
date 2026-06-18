@@ -232,3 +232,77 @@ struct KeychainCredentialReaderTests {
         }
     }
 }
+
+/// Unit tests for the pure reconciliation logic extracted from
+/// `KeychainCredentialReader.read()`. The freshness-wins / dropPending
+/// invariant drives whether the in-memory `pendingUpdate` cache stays
+/// after the read — verified here without touching the real Keychain.
+@Suite("CredentialReconciliation.pick — pure freshness logic")
+struct CredentialReconciliationTests {
+    private func creds(_ exp: Int64) -> AnthropicCredentials {
+        AnthropicCredentials(accessToken: "tok-\(exp)",
+                             refreshToken: "rt",
+                             expiresAtMs: exp)
+    }
+
+    @Test("nil disk + nil pending → nil (caller must throw)")
+    func both_nil_returns_nil() {
+        #expect(CredentialReconciliation.pick(disk: nil, pending: nil) == nil)
+    }
+
+    @Test("disk only → return disk, do not drop pending")
+    func disk_only_returns_disk() {
+        let d = creds(1000)
+        let v = CredentialReconciliation.pick(disk: d, pending: nil)
+        #expect(v?.credentials == d)
+        #expect(v?.dropPending == false)
+    }
+
+    @Test("pending only → return pending, do not drop (nothing to drop)")
+    func pending_only_returns_pending() {
+        let p = creds(2000)
+        let v = CredentialReconciliation.pick(disk: nil, pending: p)
+        #expect(v?.credentials == p)
+        #expect(v?.dropPending == false)
+    }
+
+    @Test("disk fresher → return disk, drop pending (disk won)")
+    func disk_fresher_returns_disk_and_drops_pending() {
+        let d = creds(2000)
+        let p = creds(1000)
+        let v = CredentialReconciliation.pick(disk: d, pending: p)
+        #expect(v?.credentials == d)
+        #expect(v?.dropPending == true)
+    }
+
+    @Test("pending fresher → return pending, keep pending")
+    func pending_fresher_returns_pending_and_keeps() {
+        let d = creds(1000)
+        let p = creds(2000)
+        let v = CredentialReconciliation.pick(disk: d, pending: p)
+        #expect(v?.credentials == p)
+        #expect(v?.dropPending == false)
+    }
+
+    @Test("equal expiry → disk wins (>=), drop pending")
+    func equal_expiry_disk_wins_tiebreak() {
+        // The `>=` lets disk recover from a previously-pending state when
+        // an external actor (CLI re-auth) caught up.
+        let d = creds(1500)
+        let p = creds(1500)
+        let v = CredentialReconciliation.pick(disk: d, pending: p)
+        #expect(v?.credentials == d)
+        #expect(v?.dropPending == true)
+    }
+
+    @Test("ACL block path: disk nil but pending present serves pending")
+    func acl_block_serves_pending() {
+        // This is the headline case: ACL mismatch blocked writeBack, so the
+        // freshest token only lives in memory. The reader MUST serve it
+        // rather than surfacing the keychain error to the user.
+        let p = creds(999_999)
+        let v = CredentialReconciliation.pick(disk: nil, pending: p)
+        #expect(v?.credentials == p)
+        #expect(v?.dropPending == false)
+    }
+}

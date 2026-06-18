@@ -76,11 +76,16 @@ public final class RefreshScheduler: ObservableObject {
             // Compact once at startup so JSONL files trimmed on launch, then
             // every 24 h thereafter. Without this the history files grow
             // ~300 KB/day per vendor unbounded.
-            self?.store?.compactAllHistory()
+            //
+            // Dispatched off-MainActor via `compactAllHistoryDetached()`:
+            // the I/O (mmap, decode-each-line, atomic rewrite) for 6 vendors
+            // at launch takes 100–500 ms on cold cache, which would otherwise
+            // freeze the popover on first open.
+            self?.store?.compactAllHistoryDetached()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(24 * 60 * 60))
                 if Task.isCancelled { break }
-                self?.store?.compactAllHistory()
+                self?.store?.compactAllHistoryDetached()
             }
         }
     }

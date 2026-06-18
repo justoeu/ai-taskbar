@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import Darwin
 import CryptoKit
+import AiTaskbarCore
 
 /// Watches `config.toml` for changes and exposes a `configChanged` flag the
 /// UI can surface as a "restart to apply" banner.
@@ -58,9 +59,10 @@ public final class ConfigWatcher: ObservableObject {
     private func arm() {
         // O_EVTONLY = open for event monitoring; does not count against the
         // process's open-file limit the way O_RDONLY would.
-        fd = open(path.path, O_EVTONLY)
+        let cfgPath = path.path
+        fd = open(cfgPath, O_EVTONLY)
         guard fd >= 0 else {
-            NSLog("ai-taskbar: ConfigWatcher could not open %@ (errno %d)", path.path, errno)
+            AppLog.lifecycle.error("ConfigWatcher could not open \(cfgPath, privacy: .public) (errno \(errno, privacy: .public))")
             return
         }
         let src = DispatchSource.makeFileSystemObjectSource(

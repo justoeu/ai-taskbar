@@ -26,7 +26,7 @@ struct WireTypesEdgeTests {
         let key = try JSONDecoder().decode(
             OpenRouterKeyResponse.self,
             from: Fixtures.data(Fixtures.openrouterKeyFreeTier200))
-        let combined = OpenRouterCombined(credits: credits, key: key)
+        let combined = OpenRouterCachedPayload(credits: credits, key: key)
         let snap = combined.toSnapshot()
         // free_tier → planLabel "OpenRouter Free Tier"
         #expect(snap.planLabel == "OpenRouter Free Tier")
@@ -74,7 +74,7 @@ struct WireTypesEdgeTests {
             OpenRouterCreditsResponse.self, from: Data(creditsBody.utf8))
         let key = try JSONDecoder().decode(
             OpenRouterKeyResponse.self, from: Data(keyBody.utf8))
-        let combined = OpenRouterCombined(credits: credits, key: key)
+        let combined = OpenRouterCachedPayload(credits: credits, key: key)
         let snap = combined.toSnapshot()
         // planLabel fallback when no label info → "OpenRouter"
         #expect(snap.planLabel == "OpenRouter: primary")

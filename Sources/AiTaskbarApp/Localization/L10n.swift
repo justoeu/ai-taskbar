@@ -55,7 +55,26 @@ public enum L10n {
     /// suffix when materializing `.lproj` folders (`pt-BR.lproj` →
     /// `pt-br.lproj`), but users naturally type the canonical form
     /// ("pt-BR") in config. We try: exact → lowercased → language-only.
+    ///
+    /// **Memoized.** The candidate resolution runs `Bundle.path(forResource:ofType:)`
+    /// (a directory scan) plus an array allocation, which we do NOT want on
+    /// every `localizedString` call (50–200 calls/s with the popover open).
+    /// The cache is keyed by the current `languageOverride` value — language
+    /// changes require a relaunch anyway, so the steady-state is O(1).
+    nonisolated(unsafe) private static var cachedBundle: Bundle?
+    nonisolated(unsafe) private static var cachedBundleLanguage: String?
+
     public static var bundle: Bundle {
+        if let cached = cachedBundle, cachedBundleLanguage == languageOverride {
+            return cached
+        }
+        let resolved = resolveBundle()
+        cachedBundle = resolved
+        cachedBundleLanguage = languageOverride
+        return resolved
+    }
+
+    private static func resolveBundle() -> Bundle {
         guard let override = languageOverride, !override.isEmpty else {
             return resourceBundle
         }

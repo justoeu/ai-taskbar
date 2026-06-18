@@ -91,18 +91,45 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
         )
     }
 
-    /// Removes `user_id`, `account_id`, `email` from the top-level response
-    /// object before persisting. Parses via `[String: JSONValue]` for type
-    /// safety; falls back to returning the raw bytes if the response isn't a
-    /// JSON object.
+    /// Removes `user_id`, `account_id`, `email` from the response before
+    /// persisting. Walks the entire `JSONValue` tree recursively — not just
+    /// the top level — because nested objects (e.g. `{"data":{"user_id":…}}`)
+    /// would otherwise survive into the on-disk cache at
+    /// `~/Library/Caches/ai-taskbar/openai/usage.json`. The cache file is
+    /// already `0600`, but stripping PII at every depth is defense-in-depth
+    /// (the intent of this function is clearly "remove these fields", not
+    /// "remove them only when convenient"). Falls back to returning the raw
+    /// bytes if the response isn't a JSON object.
     public static func stripPII(from raw: Data) throws -> Data {
-        guard var blob = try? SharedCoders.decoder.decode([String: JSONValue].self, from: raw) else {
+        guard let value = try? SharedCoders.decoder.decode(JSONValue.self, from: raw) else {
             return raw
         }
-        for field in piiFieldsToStrip {
-            blob.removeValue(forKey: field)
+        // Only rewrite when the top level is an object — preserves the
+        // original byte-stable behavior for non-object payloads (arrays,
+        // scalars) that have nothing to strip anyway.
+        guard case .object = value else {
+            return raw
         }
-        return try SharedCoders.encoder.encode(blob)
+        let scrubbed = Self.scrubPII(in: value)
+        return try SharedCoders.encoder.encode(scrubbed)
+    }
+
+    /// Recursive PII scrub. Removes the named keys from every object in the
+    /// tree (including nested ones); leaves arrays and scalars untouched.
+    private static func scrubPII(in value: JSONValue) -> JSONValue {
+        switch value {
+        case .object(let obj):
+            var cleaned: [String: JSONValue] = [:]
+            cleaned.reserveCapacity(obj.count)
+            for (k, v) in obj where !piiFieldsToStrip.contains(k) {
+                cleaned[k] = scrubPII(in: v)
+            }
+            return .object(cleaned)
+        case .array(let arr):
+            return .array(arr.map(scrubPII(in:)))
+        default:
+            return value
+        }
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {

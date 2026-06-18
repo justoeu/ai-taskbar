@@ -59,13 +59,13 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
 // MARK: - Per-vendor snapshots
 
 public struct AnthropicSnapshot: Sendable, Equatable, Codable {
-    public var planLabel: String?
-    public var session: UsageWindow?
-    public var weekly: UsageWindow?
+    public let planLabel: String?
+    public let session: UsageWindow?
+    public let weekly: UsageWindow?
     /// Opus-specific 7-day quota window (wire field: `seven_day_opus`).
-    public var opus: UsageWindow?
+    public let opus: UsageWindow?
     /// Extra usage in dollars, only meaningful when a primary window hit 100%.
-    public var extraUsageUSD: Double?
+    public let extraUsageUSD: Double?
 
     public init(planLabel: String? = nil,
                 session: UsageWindow? = nil,
@@ -81,11 +81,11 @@ public struct AnthropicSnapshot: Sendable, Equatable, Codable {
 }
 
 public struct OpenAISnapshot: Sendable, Equatable, Codable {
-    public var planLabel: String?
-    public var primary: UsageWindow?
-    public var secondary: UsageWindow?
-    public var creditsUSD: Double?
-    public var messageCountRange: String?  // e.g. "5–10 messages" — Codex reports a range
+    public let planLabel: String?
+    public let primary: UsageWindow?
+    public let secondary: UsageWindow?
+    public let creditsUSD: Double?
+    public let messageCountRange: String?  // e.g. "5–10 messages" — Codex reports a range
 
     public init(planLabel: String? = nil,
                 primary: UsageWindow? = nil,
@@ -101,10 +101,10 @@ public struct OpenAISnapshot: Sendable, Equatable, Codable {
 }
 
 public struct ZAISnapshot: Sendable, Equatable, Codable {
-    public var planLabel: String?
-    public var session: UsageWindow?
-    public var weekly: UsageWindow?
-    public var mcp: UsageWindow?
+    public let planLabel: String?
+    public let session: UsageWindow?
+    public let weekly: UsageWindow?
+    public let mcp: UsageWindow?
 
     public init(planLabel: String? = nil,
                 session: UsageWindow? = nil,
@@ -118,14 +118,14 @@ public struct ZAISnapshot: Sendable, Equatable, Codable {
 }
 
 public struct KimiSnapshot: Sendable, Equatable, Codable {
-    public var planLabel: String?
-    public var balance: UsageWindow?
+    public let planLabel: String?
+    public let balance: UsageWindow?
     /// Total available balance in USD (pre-paid credits).
-    public var availableUSD: Double?
+    public let availableUSD: Double?
     /// Voucher (promo) balance USD, if separately reported.
-    public var voucherUSD: Double?
+    public let voucherUSD: Double?
     /// Cash (paid) balance USD, if separately reported.
-    public var cashUSD: Double?
+    public let cashUSD: Double?
 
     public init(planLabel: String? = nil,
                 balance: UsageWindow? = nil,
@@ -146,13 +146,13 @@ public struct KimiSnapshot: Sendable, Equatable, Codable {
 /// many models the key can see. The status row shows 0% utilization (we have
 /// no quota signal) and the model count is surfaced via `detail`.
 public struct GeminiSnapshot: Sendable, Equatable, Codable {
-    public var planLabel: String?
+    public let planLabel: String?
     /// Single status row — utilization is always 0%, the detail string carries
     /// "N models available". Acts as a connectivity check.
-    public var status: UsageWindow?
+    public let status: UsageWindow?
     /// Number of models the API key can list. Useful as a quick sanity that
     /// the key still has access to the Generative Language API.
-    public var modelCount: Int?
+    public let modelCount: Int?
 
     public init(planLabel: String? = nil,
                 status: UsageWindow? = nil,
@@ -164,11 +164,11 @@ public struct GeminiSnapshot: Sendable, Equatable, Codable {
 }
 
 public struct OpenRouterSnapshot: Sendable, Equatable, Codable {
-    public var planLabel: String?
-    public var balance: UsageWindow?
-    public var daily: UsageWindow?
-    public var weekly: UsageWindow?
-    public var monthly: UsageWindow?
+    public let planLabel: String?
+    public let balance: UsageWindow?
+    public let daily: UsageWindow?
+    public let weekly: UsageWindow?
+    public let monthly: UsageWindow?
 
     public init(planLabel: String? = nil,
                 balance: UsageWindow? = nil,

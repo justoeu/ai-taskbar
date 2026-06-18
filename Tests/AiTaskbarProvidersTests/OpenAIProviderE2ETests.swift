@@ -212,6 +212,43 @@ struct OpenAIProviderE2ETests {
         #expect(stripped == raw, "non-object payloads pass through")
     }
 
+    @Test("stripPII removes top-level PII fields")
+    func stripPII_removes_top_level_fields() throws {
+        let raw = Data(#"{"user_id":"u","account_id":"a","email":"e","plan":"plus"}"#.utf8)
+        let stripped = try OpenAIProvider.stripPII(from: raw)
+        let str = String(decoding: stripped, as: UTF8.self)
+        #expect(!str.contains("user_id"))
+        #expect(!str.contains("account_id"))
+        #expect(!str.contains("email"))
+        #expect(str.contains("plus"))
+    }
+
+    @Test("stripPII recursively removes PII from nested objects")
+    func stripPII_recurses_into_nested_objects() throws {
+        // Defense-in-depth — the audit flagged the old top-level-only scrub
+        // as leaving nested copies (e.g. `{"data":{"user_id":"..."}}`) in the
+        // on-disk cache. Verify recursion now reaches every depth.
+        let raw = Data(#"""
+            {"data":{"user_id":"leaked","inner":{"email":"also-leaked"}},"ok":true}
+        """#.utf8)
+        let stripped = try OpenAIProvider.stripPII(from: raw)
+        let str = String(decoding: stripped, as: UTF8.self)
+        #expect(!str.contains("user_id"), "nested user_id must be stripped")
+        #expect(!str.contains("email"),   "doubly-nested email must be stripped")
+        #expect(str.contains("ok"))
+    }
+
+    @Test("stripPII recurses through arrays of objects")
+    func stripPII_recurses_through_arrays() throws {
+        let raw = Data(#"""
+            {"items":[{"user_id":"a"},{"email":"b"}]}
+        """#.utf8)
+        let stripped = try OpenAIProvider.stripPII(from: raw)
+        let str = String(decoding: stripped, as: UTF8.self)
+        #expect(!str.contains("user_id"))
+        #expect(!str.contains("email"))
+    }
+
     @Test("computePlanLabel returns nil for token without plan_type claim")
     func computePlanLabel_returns_nil_for_token_without_claim() {
         let header = Data("{\"alg\":\"none\"}".utf8).base64URLString()

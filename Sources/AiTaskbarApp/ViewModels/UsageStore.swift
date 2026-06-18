@@ -80,28 +80,10 @@ public final class UsageStore: ObservableObject {
     }
 
     private func recomputeAggregates() {
-        let newMax = vendors.compactMap { $0.state.outcome?.snapshot.maxUtilization }.max() ?? 0
-        if newMax != maxUtilization { maxUtilization = newMax }
-
-        var loading = false
-        var rateLimited = false
-        // Single pass so the steady-state cost is O(vendors), not 2×.
-        for vm in vendors {
-            switch vm.state {
-            case .loading:
-                loading = true
-            case .failed(let err, let fallback):
-                if err.isRateLimited || fallback?.lastError?.status == 429 {
-                    rateLimited = true
-                }
-            case .ok(let outcome):
-                if outcome.lastError?.status == 429 { rateLimited = true }
-            case .idle:
-                break
-            }
-        }
-        if loading != isAnyVendorLoading { isAnyVendorLoading = loading }
-        if rateLimited != hasRateLimitedVendor { hasRateLimitedVendor = rateLimited }
+        let result = AggregatesComputation.compute(states: vendors.map(\.state))
+        if result.maxUtilization != maxUtilization { maxUtilization = result.maxUtilization }
+        if result.isAnyVendorLoading != isAnyVendorLoading { isAnyVendorLoading = result.isAnyVendorLoading }
+        if result.hasRateLimitedVendor != hasRateLimitedVendor { hasRateLimitedVendor = result.hasRateLimitedVendor }
     }
 
     // MARK: - Public surface used by views
@@ -141,5 +123,74 @@ public final class UsageStore: ObservableObject {
 
     public func compactAllHistory() {
         for v in vendors { v.compactHistory() }
+    }
+
+    /// Schedules a history compaction off the MainActor. The history stores
+    /// are `@unchecked Sendable` with internal `NSLock` serialization, so
+    /// `compact()` is safe to invoke from a background task. Use this from
+    /// `RefreshScheduler` so launch-time compaction (6 vendors × up to
+    /// ~300 KB JSONL) doesn't block the UI for 100–500 ms.
+    public func compactAllHistoryDetached() {
+        let stores = vendors.compactMap { $0.historyStore }
+        guard !stores.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            for store in stores { store.compact() }
+        }
+    }
+}
+
+/// Pure aggregation logic extracted from `UsageStore.recomputeAggregates()`.
+/// Computes the cross-vendor `maxUtilization` / `isAnyVendorLoading` /
+/// `hasRateLimitedVendor` flags from a list of per-vendor states. Exposed so
+/// the subtle `hasRateLimitedVendor` invariant — which must fire on BOTH
+/// `.failed(429, _)` AND stale-`.ok(outcome)` whose `outcome.lastError?.status
+/// == 429` (CachedFetch converts a 429 into a stale `.ok` whenever a cached
+/// payload exists) — can be unit-tested without standing up the full store.
+@MainActor
+public enum AggregatesComputation {
+    public struct Result: Equatable {
+        public let maxUtilization: Double
+        public let isAnyVendorLoading: Bool
+        public let hasRateLimitedVendor: Bool
+
+        public init(maxUtilization: Double,
+                    isAnyVendorLoading: Bool,
+                    hasRateLimitedVendor: Bool) {
+            self.maxUtilization = maxUtilization
+            self.isAnyVendorLoading = isAnyVendorLoading
+            self.hasRateLimitedVendor = hasRateLimitedVendor
+        }
+    }
+
+    public static func compute(states: [VendorViewModel.State]) -> Result {
+        var maxUtil = 0.0
+        var loading = false
+        var rateLimited = false
+        // Single pass so the steady-state cost is O(vendors), not 2×.
+        for state in states {
+            switch state {
+            case .idle:
+                break
+            case .loading:
+                loading = true
+                if let m = state.outcome?.snapshot.maxUtilization, m > maxUtil {
+                    maxUtil = m
+                }
+            case .ok(let outcome):
+                if outcome.lastError?.status == 429 { rateLimited = true }
+                let m = outcome.snapshot.maxUtilization
+                if m > maxUtil { maxUtil = m }
+            case .failed(let err, let fallback):
+                if err.isRateLimited || fallback?.lastError?.status == 429 {
+                    rateLimited = true
+                }
+                if let m = fallback?.snapshot.maxUtilization, m > maxUtil {
+                    maxUtil = m
+                }
+            }
+        }
+        return Result(maxUtilization: maxUtil,
+                      isAnyVendorLoading: loading,
+                      hasRateLimitedVendor: rateLimited)
     }
 }

@@ -51,8 +51,8 @@ public enum ClaudeSessionScanner {
                  unparseableTimestamps: &unparseableTimestamps)
         }
 
-        let (usdToday, breakdownToday) = price(totals: totalsToday, table: PricingTable.anthropic)
-        let (usdWeek, breakdownLast7) = price(totals: totalsLast7, table: PricingTable.anthropic)
+        let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)
+        let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.anthropic)
         let note: String?
         if filesScanned == 0 {
             note = "No recent Claude sessions found."
@@ -96,23 +96,6 @@ public enum ClaudeSessionScanner {
                 let cache_read_input_tokens: Int?
             }
         }
-    }
-
-    private static let iso: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-    private static let isoNoFrac: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
-
-    private static func parseTimestamp(_ s: String) -> Date? {
-        // Prefer the fractional-seconds variant since Claude session logs
-        // include them by default.
-        iso.date(from: s) ?? isoNoFrac.date(from: s)
     }
 
     /// Internal-visibility (so tests can drive synthetic JSONL through it
@@ -159,41 +142,17 @@ public enum ClaudeSessionScanner {
                 cacheCreateTokens: usage.cache_creation_input_tokens ?? 0
             )
 
-            let ts = parsed.timestamp.flatMap(parseTimestamp)
+            let ts = parsed.timestamp.flatMap(ISO8601Parsing.parse)
             if let ts {
-                if ts >= startOfToday { add(modelUsage, into: &totalsToday, model: model) }
-                if ts >= sevenDaysAgo { add(modelUsage, into: &totalsLast7, model: model) }
+                if ts >= startOfToday { CostAggregator.add(modelUsage, into: &totalsToday, model: model) }
+                if ts >= sevenDaysAgo { CostAggregator.add(modelUsage, into: &totalsLast7, model: model) }
             } else {
                 // Fail-safe: count missing-timestamp records into today.
                 // We surface the count in the note so users can spot drift.
-                add(modelUsage, into: &totalsToday, model: model)
-                add(modelUsage, into: &totalsLast7, model: model)
+                CostAggregator.add(modelUsage, into: &totalsToday, model: model)
+                CostAggregator.add(modelUsage, into: &totalsLast7, model: model)
                 unparseableTimestamps += 1
             }
         }
-    }
-
-    private static func add(_ u: ModelUsage,
-                            into bucket: inout [String: ModelUsage],
-                            model: String) {
-        var existing = bucket[model] ?? ModelUsage()
-        existing.inputTokens += u.inputTokens
-        existing.outputTokens += u.outputTokens
-        existing.cacheReadTokens += u.cacheReadTokens
-        existing.cacheCreateTokens += u.cacheCreateTokens
-        bucket[model] = existing
-    }
-
-    private static func price(totals: [String: ModelUsage],
-                              table: [String: ModelPricing]) -> (Double, [String: Double]) {
-        var total = 0.0
-        var byModel: [String: Double] = [:]
-        for (model, usage) in totals {
-            guard let pricing = PricingTable.lookup(model, table: table) else { continue }
-            let usd = CostMath.cost(usage: usage, pricing: pricing)
-            total += usd
-            byModel[model] = usd
-        }
-        return (total, byModel)
     }
 }

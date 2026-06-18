@@ -41,7 +41,6 @@ public final class UpdateChecker: ObservableObject {
     public let config: UpdatesConfig
     public let currentVersion: String
     private let http: HTTPClient
-    private var downloadTask: URLSessionDownloadTask?
 
     public init(config: UpdatesConfig,
                 currentVersion: String? = nil,
@@ -138,10 +137,14 @@ public final class UpdateChecker: ObservableObject {
                 try FileManager.default.moveItem(at: tmp, to: dest)
                 self.status = .downloaded(localURL: dest, latest: release)
                 // Reveal the DMG in Finder so the user can drag the new app
-                // into /Applications. Also kick off a foreground open so the
-                // disk image mounts immediately.
+                // into /Applications. We deliberately do NOT auto-open the
+                // DMG (no `NSWorkspace.shared.open(dest)`) — a mounted image
+                // is one double-click away from executing whatever app the
+                // release contained, and a release compromise should not get
+                // that far without an explicit user gesture. The user
+                // double-clicking in Finder gives Gatekeeper a chance to
+                // surface its warning before anything runs.
                 NSWorkspace.shared.activateFileViewerSelecting([dest])
-                NSWorkspace.shared.open(dest)
             } catch {
                 self.status = .failed(message: error.localizedDescription)
             }
@@ -154,8 +157,7 @@ public final class UpdateChecker: ObservableObject {
 
     private static func parseDate(_ s: String?) -> Date? {
         guard let s else { return nil }
-        let f = ISO8601DateFormatter()
-        return f.date(from: s)
+        return ISO8601Parsing.parse(s)
     }
 }
 

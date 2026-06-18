@@ -27,29 +27,29 @@ let package = Package(
             name: "AiTaskbarApp",
             dependencies: ["AiTaskbarCore", "AiTaskbarProviders"],
             resources: [.process("Resources")],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
             name: "AiTaskbarCore",
             dependencies: [
                 .product(name: "TOMLKit", package: "TOMLKit"),
             ],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
             name: "AiTaskbarProviders",
             dependencies: ["AiTaskbarCore"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
             name: "AiTaskbarTesting",
             dependencies: ["AiTaskbarCore"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
             name: "AiTaskbarValidate",
             dependencies: ["AiTaskbarCore", "AiTaskbarProviders", "AiTaskbarTesting"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
             name: "AiTaskbarCoreTests",
@@ -69,6 +69,8 @@ let package = Package(
             name: "AiTaskbarAppTests",
             dependencies: [
                 "AiTaskbarApp",
+                "AiTaskbarCore",
+                "AiTaskbarProviders",
                 .product(name: "Testing", package: "swift-testing"),
             ]
         ),

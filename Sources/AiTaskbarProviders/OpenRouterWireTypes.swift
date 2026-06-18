@@ -53,19 +53,12 @@ public struct OpenRouterKeyResponse: Codable, Sendable {
 /// Payload shape we persist to the disk cache — both upstream responses
 /// nested as proper Codable structs (instead of JSON-round-tripping through
 /// `JSONSerialization` and `[String: Any]` like the old implementation did).
+/// Also carries the snapshot conversion (previously a parallel
+/// `OpenRouterCombined` struct with identical fields and the only `toSnapshot`
+/// impl — collapsed here so there's a single source of truth).
 public struct OpenRouterCachedPayload: Codable, Sendable {
     public let credits: OpenRouterCreditsResponse
     public let key: OpenRouterKeyResponse
-    public init(credits: OpenRouterCreditsResponse, key: OpenRouterKeyResponse) {
-        self.credits = credits
-        self.key = key
-    }
-}
-
-public struct OpenRouterCombined: Sendable {
-    public let credits: OpenRouterCreditsResponse
-    public let key: OpenRouterKeyResponse
-
     public init(credits: OpenRouterCreditsResponse, key: OpenRouterKeyResponse) {
         self.credits = credits
         self.key = key

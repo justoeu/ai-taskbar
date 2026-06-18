@@ -62,7 +62,7 @@ extension AnthropicUsageResponse {
             return UsageWindow(
                 label: label,
                 utilizationPercent: percent,
-                resetsAt: raw.resets_at.flatMap(parseISO8601),
+                resetsAt: raw.resets_at.flatMap(ISO8601Parsing.parse),
                 detail: detail
             )
         }
@@ -78,19 +78,4 @@ extension AnthropicUsageResponse {
             extraUsageUSD: extra
         )
     }
-}
-
-private let isoFormatter: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
-}()
-private let isoFormatterNoFrac: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime]
-    return f
-}()
-
-func parseISO8601(_ s: String) -> Date? {
-    isoFormatter.date(from: s) ?? isoFormatterNoFrac.date(from: s)
 }

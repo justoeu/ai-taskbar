@@ -62,8 +62,7 @@ public final class OpenRouterProvider: UsageProvider {
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
         do {
             let payload = try SharedCoders.decoder.decode(OpenRouterCachedPayload.self, from: data)
-            let snap = OpenRouterCombined(credits: payload.credits, key: payload.key).toSnapshot()
-            return .openrouter(snap)
+            return .openrouter(payload.toSnapshot())
         } catch {
             throw AppError.schema("openrouter cached payload decode: \(error)")
         }

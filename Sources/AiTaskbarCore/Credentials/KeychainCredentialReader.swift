@@ -57,29 +57,65 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         let diskResult = readFromKeychain()
         let pending = getPendingUpdate()
 
-        switch (diskResult, pending) {
-        case (.success(let disk), .some(let p)):
+        // Pure reconciliation over (disk, pending). Returns nil when neither
+        // copy is available — caller throws the original Keychain error.
+        guard let verdict = CredentialReconciliation.pick(disk: try? diskResult.get(),
+                                                           pending: pending) else {
+            // Re-throw the underlying Keychain error (preserves its
+            // service/account context for the user-facing message).
+            switch diskResult {
+            case .failure(let err): throw err
+            case .success:          throw AppError.credentials("no credentials available")
+            }
+        }
+        if verdict.dropPending {
+            setPendingUpdate(nil)
+        }
+        return verdict.credentials
+    }
+}
+
+/// Pure reconciliation between the on-disk Keychain copy and the in-memory
+/// `pendingUpdate` cache. Extracted so the freshness-wins / dropPending
+/// invariant can be unit-tested without touching the real Keychain.
+public enum CredentialReconciliation {
+    public struct Verdict: Equatable {
+        public let credentials: AnthropicCredentials
+        /// True when disk won — caller should clear the in-memory pending copy
+        /// because it's now stale relative to what the Keychain holds.
+        public let dropPending: Bool
+    }
+
+    /// Picks the freshest available credential copy.
+    /// Returns nil iff both `disk` and `pending` are nil — caller must throw.
+    public static func pick(disk: AnthropicCredentials?,
+                            pending: AnthropicCredentials?) -> Verdict? {
+        switch (disk, pending) {
+        case (.some(let d), .some(let p)):
             // Reconcile: the freshest `expiresAtMs` wins. If an external
             // refresher (e.g. Claude Code CLI re-auth) wrote a newer token
             // to disk while we held a stale in-memory copy, prefer disk
             // and drop the pending. If our pending is still ahead, keep
             // it — the next successful writeBack will clear it.
-            if disk.expiresAtMs >= p.expiresAtMs {
-                setPendingUpdate(nil)
-                return disk
+            if d.expiresAtMs >= p.expiresAtMs {
+                return Verdict(credentials: d, dropPending: true)
             }
-            return p
-        case (.success(let disk), .none):
-            return disk
-        case (.failure, .some(let p)):
+            return Verdict(credentials: p, dropPending: false)
+        case (.some(let d), .none):
+            return Verdict(credentials: d, dropPending: false)
+        case (.none, .some(let p)):
             // Keychain unreadable (ACL block, schema error, …) but the
             // in-memory copy is still good. This is the very state the
-            // `_pendingUpdate` cache exists to cover.
-            return p
-        case (.failure(let err), .none):
-            throw err
+            // `pendingUpdate` cache exists to cover.
+            return Verdict(credentials: p, dropPending: false)
+        case (.none, .none):
+            return nil
         }
     }
+}
+
+extension KeychainCredentialReader {
+    // MARK: - Internals (continued below)
 
     /// Captures the Keychain side of `read()` so the reconciliation in
     /// `read()` itself stays a pure `(Result, pending?) → outcome` switch.
@@ -186,13 +222,10 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     /// throwing prevents the menu-bar app from breaking on every OAuth
     /// rotation while still giving the user a discoverable hint.
     private func logACLMismatch(op: String) {
-        NSLog(
-            "ai-taskbar: Keychain %@ skipped (errSecInteractionNotAllowed). " +
-            "Token kept in memory; persistence will retry next cycle. " +
-            "Silence this by running: security set-generic-password-partition-list " +
-            "-S apple-tool:,apple:,unsigned: -s \"%@\" -a \"$(whoami)\" -k login",
-            op, service
-        )
+        // op and service are operational identifiers (not secrets).
+        // The full remediation command is part of the message — keep it
+        // public so users copy-pasting from Console.app get the fix.
+        AppLog.keychain.error("Keychain \(op, privacy: .public) skipped (errSecInteractionNotAllowed). Token kept in memory; persistence will retry next cycle. Silence via: security set-generic-password-partition-list -S apple-tool:,apple:,unsigned: -s \(self.service, privacy: .public) -a \"$(whoami)\" -k login")
     }
 
     // MARK: - Internals
@@ -373,13 +406,14 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             if ea != eb { return ea > eb }
             return a.account < b.account
         }
-        NSLog(
-            "ai-taskbar: Found %d Keychain entries for service '%@' [%@]. " +
-            "Using '%@' (freshest token). Set `keychain_account` under " +
-            "[anthropic] in config.toml to pin.",
-            sorted.count, service, sorted.map(\.account).joined(separator: ", "),
-            sorted[0].account
-        )
+        // Service is a well-known identifier; account names can be
+        // email-shaped — redact each one to <private> in sysdiagnose uploads
+        // while remaining visible in the user's own Console.app.
+        let count = sorted.count
+        let svc = self.service
+        let accounts = sorted.map(\.account).joined(separator: ", ")
+        let chosen = sorted[0].account
+        AppLog.keychain.info("Found \(count, privacy: .public) Keychain entries for service \(svc, privacy: .public) [\(accounts, privacy: .private)]. Using \(chosen, privacy: .private) (freshest token). Set `keychain_account` under [anthropic] in config.toml to pin.")
         return sorted[0]
     }
 

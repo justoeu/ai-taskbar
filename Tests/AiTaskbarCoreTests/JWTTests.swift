@@ -13,8 +13,13 @@ struct JWTTests {
             #"{"exp":1764201600,"https://api.openai.com/auth.chatgpt_plan_type":"pro"}"#.utf8
         ).base64URL()
         let token = "\(header).\(payload)."
-        let dict = JWT.decodePayload(token)
-        #expect(dict?["https://api.openai.com/auth.chatgpt_plan_type"] as? String == "pro")
+        let payload_value = JWT.decodePayload(token)
+        // Top-level shape must be an object for claim lookup to make sense.
+        guard case .object(let dict)? = payload_value else {
+            Issue.record("expected .object payload, got \(String(describing: payload_value))")
+            return
+        }
+        #expect(dict["https://api.openai.com/auth.chatgpt_plan_type"] == .string("pro"))
         #expect(JWT.expiry(token)?.timeIntervalSince1970 == 1764201600)
     }
 

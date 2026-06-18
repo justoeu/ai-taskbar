@@ -1,5 +1,6 @@
 import Foundation
 import ServiceManagement
+import AiTaskbarCore
 
 /// Thin wrapper around `SMAppService.mainApp`. Note that this only works when
 /// the app is launched from an installed location (e.g. /Applications) — when
@@ -40,7 +41,7 @@ public final class LoginItemService: ObservableObject {
             try SMAppService.mainApp.register()
             refresh()
         } catch {
-            NSLog("ai-taskbar: SMAppService.register failed: %@", "\(error)")
+            AppLog.lifecycle.error("SMAppService.register failed: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -49,7 +50,7 @@ public final class LoginItemService: ObservableObject {
             try SMAppService.mainApp.unregister()
             refresh()
         } catch {
-            NSLog("ai-taskbar: SMAppService.unregister failed: %@", "\(error)")
+            AppLog.lifecycle.error("SMAppService.unregister failed: \(String(describing: error), privacy: .public)")
         }
     }
 

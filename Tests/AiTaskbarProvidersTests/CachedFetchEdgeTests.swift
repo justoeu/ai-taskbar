@@ -67,8 +67,8 @@ struct CachedFetchEdgeTests {
         StubURLProtocol.reset()
     }
 
-    @Test("cancelled Task raises CancellationError")
-    func cancelled_task_raises_cancellation() async {
+    @Test("cancelled Task during fetch raises an error rather than returning a value")
+    func cancelled_task_raises_cancellation() async throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ai-taskbar-cfeC-\(UUID().uuidString)")
         try? Paths.ensureDir(tmp)
@@ -76,9 +76,11 @@ struct CachedFetchEdgeTests {
         let cache = DiskCache(vendor: .openrouter, baseDir: tmp, ttl: 60)
         let creds = EnvOrConfigCredentialReader(
             envVarName: "_UNSET", inlineKey: "k", vendorName: "OpenRouter")
+        // Sleep long enough that cancel always lands while the request is
+        // still in flight — turns the original "either outcome is acceptable"
+        // test (which could not fail) into a deterministic assertion.
         StubURLProtocol.handler = { _ in
-            // Slow the response so cancel fires first; rough but reliable.
-            Thread.sleep(forTimeInterval: 0.05)
+            Thread.sleep(forTimeInterval: 5)
             return .init(data: Data())
         }
         let provider = OpenRouterProvider(
@@ -88,12 +90,27 @@ struct CachedFetchEdgeTests {
         let task = Task<FetchOutcome, Error> {
             try await provider.fetchUsage(forceRefresh: true)
         }
+        // Let the task enter the URLSession await before cancelling. 50ms is
+        // generous for the StubURLProtocol handshake start.
+        try await Task.sleep(for: .milliseconds(50))
         task.cancel()
         do {
             _ = try await task.value
-            // Race condition — either outcome is acceptable.
+            Issue.record("expected the cancelled task to throw, not return a value")
         } catch {
-            // Either CancellationError or AppError from the cancelled URLSession.
+            // Either CancellationError (cancel observed at checkCancellation)
+            // or AppError.transport (URLSession surfaced URLError.cancelled).
+            // Both prove the cancel was observed — that's the assertion.
+            // The previous test accepted ANY outcome including success,
+            // which made it documentation-only.
+            let isCancellation = error is CancellationError
+            let isAppErrorTransport = (error as? AppError).map { err in
+                if case .transport = err { return true }
+                if case .other = err { return true }  // wrapped URLError
+                return false
+            } ?? false
+            #expect(isCancellation || isAppErrorTransport,
+                    "expected CancellationError or AppError transport, got \(error)")
         }
         StubURLProtocol.reset()
     }

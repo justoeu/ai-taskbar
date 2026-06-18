@@ -35,8 +35,10 @@ struct GoldenSnapshotTests {
         #expect(Int((snap.session?.utilizationPercent ?? 0).rounded()) == 47)
         #expect(snap.weekly?.label == "Weekly (7d)")
         #expect(Int((snap.weekly?.utilizationPercent ?? 0).rounded()) == 12)
-        // Opus window present but at 0%.
-        #expect(snap.opus?.label == "Sonnet/Opus (7d)" || snap.opus != nil)
+        // Opus window present, pinned to the wire-type label (was a tautology
+        // `== "Sonnet/Opus (7d)" || snap.opus != nil` — always true when opus
+        // non-nil; the source actually emits "Opus (7d)").
+        #expect(snap.opus?.label == "Opus (7d)")
         #expect(snap.extraUsageUSD == 2.45)
     }
 
@@ -70,7 +72,7 @@ struct GoldenSnapshotTests {
         let key = try JSONDecoder().decode(
             OpenRouterKeyResponse.self,
             from: Fixtures.data(Fixtures.openrouterKey200))
-        let snap = OpenRouterCombined(credits: credits, key: key).toSnapshot()
+        let snap = OpenRouterCachedPayload(credits: credits, key: key).toSnapshot()
 
         #expect(snap.planLabel == "OpenRouter: primary")
         // total_credits=10, total_usage=2.50 → 25%.

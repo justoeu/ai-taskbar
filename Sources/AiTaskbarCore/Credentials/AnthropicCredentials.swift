@@ -6,12 +6,12 @@ public struct AnthropicCredentialsFile: Codable, Sendable {
 }
 
 public struct AnthropicCredentials: Codable, Sendable, Equatable {
-    public var accessToken: String
-    public var refreshToken: String
+    public let accessToken: String
+    public let refreshToken: String
     /// Milliseconds since epoch. Accepts Int or Float on decode.
-    public var expiresAtMs: Int64
-    public var subscriptionType: String?
-    public var rateLimitTier: String?
+    public let expiresAtMs: Int64
+    public let subscriptionType: String?
+    public let rateLimitTier: String?
 
     enum CodingKeys: String, CodingKey {
         case accessToken
@@ -54,5 +54,27 @@ public struct AnthropicCredentials: Codable, Sendable, Equatable {
 
     public func isExpired(buffer: TimeInterval = 300, now: Date = .init()) -> Bool {
         expiresAt < now.addingTimeInterval(buffer)
+    }
+
+    /// Returns a copy with the OAuth fields rotated. Used after a successful
+    /// `refresh_token` exchange — replacing in-place `var` mutation keeps the
+    /// credential value type immutable (safer across the actor boundary it
+    /// crosses on its way back to the keychain reader).
+    ///
+    /// `refreshToken` falls back to the existing token when the OAuth response
+    /// didn't include a new one (some IdPs omit it when the rotation policy
+    /// re-uses the same token).
+    public func rotated(
+        accessToken: String,
+        refreshToken: String?,
+        expiresAt: Date
+    ) -> AnthropicCredentials {
+        AnthropicCredentials(
+            accessToken: accessToken,
+            refreshToken: refreshToken ?? self.refreshToken,
+            expiresAtMs: Int64(expiresAt.timeIntervalSince1970 * 1000),
+            subscriptionType: subscriptionType,
+            rateLimitTier: rateLimitTier
+        )
     }
 }

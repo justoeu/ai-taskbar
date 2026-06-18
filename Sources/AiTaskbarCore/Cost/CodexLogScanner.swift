@@ -58,14 +58,14 @@ public enum CodexLogScanner {
             let body = String(cString: cstr)
             guard let (model, tokens) = parse(body: body) else { continue }
             let usage = ModelUsage(inputTokens: tokens)
-            add(usage, into: &totalsLast7, model: model)
+            CostAggregator.add(usage, into: &totalsLast7, model: model)
             if ts >= startOfToday {
-                add(usage, into: &totalsToday, model: model)
+                CostAggregator.add(usage, into: &totalsToday, model: model)
             }
         }
 
-        let (usdToday, breakdownToday) = price(totals: totalsToday, table: PricingTable.openai)
-        let (usdWeek, breakdownLast7) = price(totals: totalsLast7, table: PricingTable.openai)
+        let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.openai)
+        let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.openai)
         return CostEstimate(
             usdToday: usdToday,
             usdLast7Days: usdWeek,
@@ -98,29 +98,5 @@ public enum CodexLogScanner {
               let tokens = Int(body[tokensValueRange])
         else { return nil }
         return (String(body[modelRange]), tokens)
-    }
-
-    private static func add(_ u: ModelUsage,
-                            into bucket: inout [String: ModelUsage],
-                            model: String) {
-        var existing = bucket[model] ?? ModelUsage()
-        existing.inputTokens += u.inputTokens
-        existing.outputTokens += u.outputTokens
-        existing.cacheReadTokens += u.cacheReadTokens
-        existing.cacheCreateTokens += u.cacheCreateTokens
-        bucket[model] = existing
-    }
-
-    private static func price(totals: [String: ModelUsage],
-                              table: [String: ModelPricing]) -> (Double, [String: Double]) {
-        var total = 0.0
-        var byModel: [String: Double] = [:]
-        for (model, usage) in totals {
-            guard let pricing = PricingTable.lookup(model, table: table) else { continue }
-            let usd = CostMath.cost(usage: usage, pricing: pricing)
-            total += usd
-            byModel[model] = usd
-        }
-        return (total, byModel)
     }
 }

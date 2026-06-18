@@ -11,8 +11,13 @@ import AiTaskbarTesting
 //
 // Run via `make validate` or `swift run ai-taskbar-validate`.
 
-var failures: [String] = []
-var passed = 0
+// Swift 6: top-level `var` in an executable's main.swift is implicitly
+// `@MainActor`-isolated, but `expect`/`section` are free functions callable
+// from any context. Wrapping the counters in a nonisolated container keeps
+// them mutable from the top-level synchronous entry point without forcing
+// every helper onto the main actor.
+nonisolated(unsafe) var failures: [String] = []
+nonisolated(unsafe) var passed = 0
 
 func expect(_ condition: @autoclosure () -> Bool,
             _ message: String,
@@ -171,7 +176,7 @@ section("Wire types: OpenRouter fixture (combined)") {
     let key = try SharedCoders.decoder.decode(
         OpenRouterKeyResponse.self,
         from: Fixtures.data(Fixtures.openrouterKey200))
-    let combined = OpenRouterCombined(credits: credits, key: key)
+    let combined = OpenRouterCachedPayload(credits: credits, key: key)
     let s = combined.toSnapshot()
     expect(s.planLabel == "OpenRouter: primary", "OpenRouter plan label")
     expect(Int((s.balance?.utilizationPercent ?? 0).rounded()) == 25,

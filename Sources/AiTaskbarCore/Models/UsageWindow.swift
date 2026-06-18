@@ -3,14 +3,14 @@ import Foundation
 /// A single rolling-window quota reading (Anthropic session/weekly, OpenAI 5h/7d, etc.).
 public struct UsageWindow: Sendable, Equatable, Codable {
     /// Label shown in the UI ("Session 5h", "Weekly 7d", "Sonnet 7d", ...).
-    public var label: String
+    public let label: String
     /// 0...100 (or higher if the vendor reports overuse).
-    public var utilizationPercent: Double
+    public let utilizationPercent: Double
     /// When the window resets (absolute time). May be nil if the vendor only
     /// reports a "seconds-until-reset" without an anchor.
-    public var resetsAt: Date?
+    public let resetsAt: Date?
     /// Best human-readable detail line (e.g. "1 of 250 messages", "$2.45 / $5.00").
-    public var detail: String?
+    public let detail: String?
 
     public init(label: String,
                 utilizationPercent: Double,
