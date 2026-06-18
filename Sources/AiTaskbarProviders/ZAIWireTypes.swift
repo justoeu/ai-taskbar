@@ -96,21 +96,24 @@ extension ZAIEnvelope {
         let planLabel: String? = level.map { "GLM \($0.capitalized)" }
 
         // Split by `type`: TIME_LIMIT is the web-tool quota (→ mcp slot),
-        // TOKENS_LIMIT entries are the prompt-quota windows.
+        // everything else (TOKENS_LIMIT) is a prompt-quota window.
         var tokenEntries: [ZAILimitEntry] = []
         var timeEntry: ZAILimitEntry?
         for entry in data.limits {
             let type = (entry.type ?? "").uppercased()
-            if type.contains("TIME") || type.contains("MCP") {
+            if type.contains("TIME") {
                 if timeEntry == nil { timeEntry = entry }
             } else {
                 tokenEntries.append(entry)
             }
         }
 
-        // The soonest-resetting token window is the rolling "session" limit;
-        // the later one is the weekly cap. Classifying by reset time is robust
-        // even if the numeric `unit` codes change.
+        // The soonest-resetting token window is the rolling "session" limit; the
+        // later one is the weekly cap. Ordering by reset time keeps the
+        // classification correct regardless of the numeric `unit` codes — only
+        // the cosmetic hour suffix in `sessionLabel` reads `unit`. The snapshot
+        // has just two token slots, so any third+ window is intentionally
+        // dropped (the live plan only exposes a 5h + a weekly window).
         tokenEntries.sort {
             ($0.nextResetTime ?? .greatestFiniteMagnitude)
                 < ($1.nextResetTime ?? .greatestFiniteMagnitude)
