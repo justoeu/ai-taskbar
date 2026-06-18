@@ -36,12 +36,12 @@ struct WireTypesEdgeTests {
     func zai_session_only() throws {
         let body = #"""
         {
-          "code": 0, "msg": "ok",
+          "code": 200, "msg": "ok", "success": true,
           "data": {
             "level": "pro",
             "limits": [
-              { "name": "Session", "unit": "TOKENS_LIMIT", "used": 50, "limit": 100,
-                "used_percent": 50.0, "window": "session" }
+              { "type": "TOKENS_LIMIT", "unit": 3, "number": 5,
+                "percentage": 50, "nextResetTime": 1781759602799 }
             ]
           }
         }
@@ -49,6 +49,8 @@ struct WireTypesEdgeTests {
         let parsed = try JSONDecoder().decode(ZAIEnvelope.self, from: Data(body.utf8))
         let snap = parsed.toSnapshot(configTier: nil)
         #expect(snap.session != nil)
+        #expect(snap.session?.label == "Session (5h)")
+        #expect(snap.session?.utilizationPercent == 50)
         #expect(snap.weekly == nil)
         #expect(snap.mcp == nil)
         #expect(snap.planLabel == "GLM Pro")
@@ -96,36 +98,41 @@ struct WireTypesEdgeTests {
         #expect(snap.creditsUSD == nil)
     }
 
-    @Test("Z.AI envelope without window field uses default classification")
-    func zai_no_window_field_classifies_by_unit() throws {
+    @Test("Z.AI entry without a known unit code falls back to a plain Session label")
+    func zai_unknown_unit_falls_back() throws {
         let body = #"""
         {
-          "code": 0, "data": {
+          "code": 200, "data": {
             "level": "lite",
             "limits": [
-              { "name": "WindowlessSession", "unit": "TOKENS_LIMIT",
-                "used": 1, "limit": 5, "used_percent": 20.0 },
-              { "name": "MCP", "unit": "MCP_LIMIT",
-                "used": 1, "limit": 10, "used_percent": 10.0 }
+              { "type": "TOKENS_LIMIT", "unit": 99, "number": 2,
+                "percentage": 20, "nextResetTime": 1781759602799 },
+              { "type": "TIME_LIMIT", "unit": 5, "number": 1, "usage": 10,
+                "currentValue": 1, "percentage": 10, "nextResetTime": 1784333321994 }
             ]
           }
         }
         """#
         let parsed = try JSONDecoder().decode(ZAIEnvelope.self, from: Data(body.utf8))
         let snap = parsed.toSnapshot(configTier: nil)
-        // First TOKENS_LIMIT without window classification becomes session.
-        #expect(snap.session != nil)
-        #expect(snap.mcp != nil)
+        // TOKENS_LIMIT → session; unknown unit code → "Session" without suffix.
+        #expect(snap.session?.label == "Session")
+        #expect(snap.session?.utilizationPercent == 20)
+        // TIME_LIMIT → web-tool (mcp) slot.
+        #expect(snap.mcp?.label == "Web tools")
+        #expect(snap.mcp?.detail == "1 / 10")
     }
 
-    @Test("Z.AI envelope with MCP only — mcp window populated")
-    func zai_mcp_only_branch() throws {
+    @Test("Z.AI envelope with TIME_LIMIT only — mcp window populated")
+    func zai_time_limit_only_branch() throws {
         let body = #"""
         {
-          "code": 0, "data": {
+          "code": 200, "data": {
             "level": "lite",
             "limits": [
-              { "name": "MCP tools", "unit": "MCP_LIMIT", "used": 3, "limit": 50, "used_percent": 6.0 }
+              { "type": "TIME_LIMIT", "unit": 5, "number": 1, "usage": 50,
+                "currentValue": 3, "remaining": 47, "percentage": 6,
+                "nextResetTime": 1784333321994 }
             ]
           }
         }
@@ -133,7 +140,9 @@ struct WireTypesEdgeTests {
         let parsed = try JSONDecoder().decode(ZAIEnvelope.self, from: Data(body.utf8))
         let snap = parsed.toSnapshot(configTier: nil)
         #expect(snap.mcp != nil)
+        #expect(snap.mcp?.detail == "3 / 50")
         #expect(snap.session == nil)
+        #expect(snap.weekly == nil)
     }
 
     @Test("KimiBalance toSnapshot when data is nil")

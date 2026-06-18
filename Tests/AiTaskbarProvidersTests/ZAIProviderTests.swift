@@ -55,9 +55,9 @@ struct ZAIProviderTests {
             return
         }
         #expect(snap.planLabel == "GLM Lite")
-        #expect(snap.session?.label == "Session")
+        #expect(snap.session?.label == "Session (5h)")
         #expect(snap.weekly?.label == "Weekly")
-        #expect(snap.mcp?.label == "MCP tools")
+        #expect(snap.mcp?.label == "Web tools")
         try? FileManager.default.removeItem(at: tmpCacheDir)
         StubURLProtocol.reset()
     }

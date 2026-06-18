@@ -190,9 +190,11 @@ section("Wire types: Z.AI fixture") {
         from: Fixtures.data(Fixtures.zaiUsage200))
     let s = env.toSnapshot(configTier: nil)
     expect(s.planLabel == "GLM Lite", "Z.AI plan label from data.level")
-    expect(s.session?.label == "Session", "Z.AI session classification")
-    expect(s.weekly?.label == "Weekly", "Z.AI weekly classification")
-    expect(s.mcp?.label == "MCP tools", "Z.AI MCP classification")
+    expect(s.session?.label == "Session (5h)", "Z.AI session classification (TOKENS_LIMIT 5h)")
+    expect(Int((s.session?.utilizationPercent ?? 0).rounded()) == 24, "Z.AI session percentage")
+    expect(s.weekly?.label == "Weekly", "Z.AI weekly classification (TOKENS_LIMIT weekly)")
+    expect(s.mcp?.label == "Web tools", "Z.AI TIME_LIMIT (web-tool) classification")
+    expect(s.mcp?.detail == "40 / 1000", "Z.AI web-tool used/cap detail")
 }
 
 section("DiskCache TTL semantics") {

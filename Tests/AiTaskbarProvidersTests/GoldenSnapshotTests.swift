@@ -89,12 +89,13 @@ struct GoldenSnapshotTests {
         let snap = parsed.toSnapshot(configTier: nil)
 
         #expect(snap.planLabel == "GLM Lite")
-        #expect(snap.session?.label == "Session")
+        #expect(snap.session?.label == "Session (5h)")
         #expect(Int((snap.session?.utilizationPercent ?? 0).rounded()) == 24)
         #expect(snap.weekly?.label == "Weekly")
         #expect(Int((snap.weekly?.utilizationPercent ?? 0).rounded()) == 16)
-        #expect(snap.mcp?.label == "MCP tools")
+        #expect(snap.mcp?.label == "Web tools")
         #expect(Int((snap.mcp?.utilizationPercent ?? 0).rounded()) == 4)
+        #expect(snap.mcp?.detail == "40 / 1000")
     }
 
     // MARK: - Kimi
