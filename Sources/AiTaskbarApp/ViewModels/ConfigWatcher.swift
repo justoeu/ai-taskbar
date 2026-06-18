@@ -31,9 +31,14 @@ public final class ConfigWatcher: ObservableObject {
     }
 
     deinit {
-        // Tear down without touching @MainActor state; the source's cancel
-        // handler closes the fd.
-        source?.cancel()
+        // The class is @MainActor-isolated, so deinit runs on the main actor
+        // at runtime. Swift 6.1+ doesn't infer this for non-Sendable property
+        // access in `nonisolated deinit` (the default) — `assumeIsolated`
+        // asserts the invariant and lets us reach `source` safely. The
+        // cancel handler closes the fd.
+        MainActor.assumeIsolated {
+            source?.cancel()
+        }
     }
 
     /// Dismiss the banner without restarting. The next change to the file
