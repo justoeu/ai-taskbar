@@ -66,16 +66,22 @@ public enum Fixtures {
 
     public static let zaiUsage200 = #"""
     {
-      "code": 0, "msg": "ok",
+      "code": 200, "msg": "Operation successful", "success": true,
       "data": {
         "level": "lite",
         "limits": [
-          { "name": "Session", "unit": "TOKENS_LIMIT", "used": 1200, "limit": 5000,
-            "used_percent": 24.0, "window": "session" },
-          { "name": "Weekly",  "unit": "TOKENS_LIMIT", "used": 8000, "limit": 50000,
-            "used_percent": 16.0, "window": "weekly" },
-          { "name": "MCP tools", "unit": "MCP_LIMIT", "used": 2, "limit": 50,
-            "used_percent": 4.0 }
+          { "type": "TIME_LIMIT", "unit": 5, "number": 1, "usage": 1000,
+            "currentValue": 40, "remaining": 960, "percentage": 4,
+            "nextResetTime": 1784333321994,
+            "usageDetails": [
+              { "modelCode": "search-prime", "usage": 20 },
+              { "modelCode": "web-reader", "usage": 15 },
+              { "modelCode": "zread", "usage": 5 }
+            ] },
+          { "type": "TOKENS_LIMIT", "unit": 3, "number": 5, "percentage": 24,
+            "nextResetTime": 1781759602799 },
+          { "type": "TOKENS_LIMIT", "unit": 6, "number": 1, "percentage": 16,
+            "nextResetTime": 1782346121993 }
         ]
       }
     }
