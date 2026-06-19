@@ -42,6 +42,11 @@ jobs:
           # inputs.version is the tag we want to build (e.g. auto-tag.yml just
           # pushed it). Both are valid refs.
           ref: ${{ inputs.version || github.ref }}
+          # Full history + tags so the changelog step can git-log between
+          # the previous v* tag and the current one. Without fetch-depth: 0
+          # `git describe --tags` returns nothing and the changelog is empty.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Select Xcode 16 (Swift 6)
         run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
@@ -98,17 +103,20 @@ jobs:
       - name: Generate changelog from commit history
         id: changelog
         run: |
-          # Walk commits since the previous v* tag (or all reachable commits
-          # if this is the first release). Group by conventional-commit type
-          # (feat / fix / perf / refactor / docs / chore / ci) so the notes
-          # read like a real changelog rather than a flat git log dump.
+          # Walk commits since the previous v* tag. With fetch-depth: 0 on
+          # checkout, `git describe` can walk back; the previous-tag heuristic
+          # is robust against either tag-on-bump-commit or tag-on-source-commit.
           PREV_TAG=$(git describe --tags --abbrev=0 "${{ steps.version.outputs.tag }}^" 2>/dev/null || true)
+          if [ -z "$PREV_TAG" ]; then
+            # Fallback: list v* tags by commit-date descending, pick the 2nd.
+            PREV_TAG=$(git tag --list 'v*' --sort=-creatordate | sed -n '2p')
+          fi
           if [ -n "$PREV_TAG" ]; then
             RANGE="${PREV_TAG}..${{ steps.version.outputs.tag }}"
           else
             RANGE="HEAD"
           fi
-          echo "Using changelog range: $RANGE"
+          echo "Using changelog range: $RANGE (PREV_TAG=$PREV_TAG)"
 
           {
             echo "## Changes"
