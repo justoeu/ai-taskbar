@@ -5,7 +5,7 @@ import AiTaskbarProviders
 @MainActor
 public final class AppEnvironment {
     public let http: HTTPClient
-    public let configLoader: ConfigLoader
+    public var configLoader: ConfigLoader
     public let config: AppConfig
 
     public init(http: HTTPClient, configLoader: ConfigLoader, config: AppConfig) {

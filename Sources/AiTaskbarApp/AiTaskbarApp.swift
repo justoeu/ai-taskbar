@@ -11,15 +11,24 @@ struct AiTaskbarApp: App {
     @StateObject private var cost = CostEstimator()
     @StateObject private var updates: UpdateChecker
     @StateObject private var configWatcher: ConfigWatcher
+    @StateObject private var settingsViewModel: SettingsViewModel
     private let env: AppEnvironment
 
     init() {
-        let env = AppEnvironment.live()
+        var env = AppEnvironment.live()
         _updates = StateObject(wrappedValue: UpdateChecker(config: env.config.updates))
         let watcherPath = (try? Paths.configFile())
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent("ai-taskbar-config.toml")
-        _configWatcher = StateObject(wrappedValue: ConfigWatcher(path: watcherPath))
+        let configWatcher = ConfigWatcher(path: watcherPath)
+        _configWatcher = StateObject(wrappedValue: configWatcher)
+        // Wire ConfigLoader's post-save hook so the ConfigWatcher doesn't
+        // surface a "Config changed — relaunch" banner for writes the
+        // Settings UI itself just made (it surfaces the banner via
+        // SettingsViewModel.didSaveSuccessfully instead).
+        env.configLoader.onAfterSave = { [weak configWatcher] in
+            configWatcher?.adoptCurrentAsBaseline()
+        }
         // Apply language override from config BEFORE any view reads strings,
         // so the very first render uses the right locale.
         L10n.languageOverride = env.config.ui.language
@@ -39,6 +48,8 @@ struct AiTaskbarApp: App {
         // Kick off the refresh + compact loops from launch so usage starts
         // accumulating without requiring the user to open the popover first.
         scheduler.start()
+        _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(
+            config: env.config, configLoader: env.configLoader))
         self.env = env
         _store = StateObject(wrappedValue: store)
         _scheduler = StateObject(wrappedValue: scheduler)
@@ -47,7 +58,6 @@ struct AiTaskbarApp: App {
     var body: some Scene {
         MenuBarExtra {
             PopoverContentView(
-                onOpenConfig: { openConfig() },
                 onQuit: { NSApplication.shared.terminate(nil) }
             )
             .environmentObject(store)
@@ -55,6 +65,7 @@ struct AiTaskbarApp: App {
             .environmentObject(cost)
             .environmentObject(updates)
             .environmentObject(configWatcher)
+            .environmentObject(settingsViewModel)
             .frame(width: 420, height: 540)
             .onAppear {
                 // Scheduler is already running from init (see above).
@@ -67,13 +78,5 @@ struct AiTaskbarApp: App {
             MenuBarLabelView(store: store, mode: env.config.ui.menuBarMode)
         }
         .menuBarExtraStyle(.window)
-    }
-
-    private func openConfig() {
-        let url = (try? Paths.configFile()) ?? URL(fileURLWithPath: "/tmp/ai-taskbar-config.toml")
-        if !FileManager.default.fileExists(atPath: url.path) {
-            try? env.configLoader.save(env.config)
-        }
-        NSWorkspace.shared.open(url)
     }
 }

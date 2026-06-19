@@ -48,6 +48,18 @@ public final class ConfigWatcher: ObservableObject {
         baselineHash = Self.hash(of: path)
     }
 
+    /// Hook for the Settings UI: call right after `configLoader.applyChanges`
+    /// or `save` returns. Re-hashes the on-disk content into `baselineHash`
+    /// and clears any pending banner so the user doesn't see a "Config
+    /// changed — relaunch" notification for an edit they just made through
+    /// the app itself.
+    ///
+    /// Idempotent and safe to call when nothing actually changed on disk.
+    public func adoptCurrentAsBaseline() {
+        baselineHash = Self.hash(of: path)
+        if configChanged { configChanged = false }
+    }
+
     /// Relaunch the .app bundle and terminate the current process. Uses the
     /// classic `sh -c "sleep 1; open <bundle>"` detach trick so the new
     /// instance starts only after the current one has fully exited (macOS

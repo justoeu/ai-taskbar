@@ -80,11 +80,6 @@ public struct AboutView: View {
             Spacer(minLength: 4)
 
             HStack(spacing: 12) {
-                Button(L10n.localizedString("open_config_toml")) {
-                    if let url = try? Paths.configFile() {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
                 Button(L10n.localizedString("done")) { onDone() }
                     .keyboardShortcut(.defaultAction)
             }

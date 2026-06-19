@@ -7,12 +7,12 @@ public struct PopoverContentView: View {
     @EnvironmentObject var loginItem: LoginItemService
     @EnvironmentObject var cost: CostEstimator
     @EnvironmentObject var configWatcher: ConfigWatcher
+    @EnvironmentObject var settingsViewModel: SettingsViewModel
     @State private var showAbout = false
-    public var onOpenConfig: () -> Void
+    @State private var showSettings = false
     public var onQuit: () -> Void
 
-    public init(onOpenConfig: @escaping () -> Void = {}, onQuit: @escaping () -> Void = {}) {
-        self.onOpenConfig = onOpenConfig
+    public init(onQuit: @escaping () -> Void = {}) {
         self.onQuit = onQuit
     }
 
@@ -28,7 +28,7 @@ public struct PopoverContentView: View {
             VStack(spacing: 0) {
                 headerBar
                 Divider()
-                if configWatcher.configChanged {
+                if configWatcher.configChanged || settingsViewModel.didSaveSuccessfully {
                     configChangedBanner
                     Divider()
                 }
@@ -60,8 +60,21 @@ public struct PopoverContentView: View {
                 AboutView { showAbout = false }
                     .transition(.scale(scale: 0.95).combined(with: .opacity))
             }
+
+            // Settings overlay — same pattern. The view binds to its own
+            // EnvironmentObject so the popover doesn't need to thread it.
+            if showSettings {
+                Color.black.opacity(0.45)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .onTapGesture { showSettings = false }
+                SettingsView { showSettings = false }
+                    .environmentObject(settingsViewModel)
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            }
         }
         .animation(.easeInOut(duration: 0.15), value: showAbout)
+        .animation(.easeInOut(duration: 0.15), value: showSettings)
     }
 
     private var headerBar: some View {
@@ -120,11 +133,12 @@ public struct PopoverContentView: View {
     private var footerBar: some View {
         HStack(spacing: 12) {
             Button {
-                onOpenConfig()
+                showSettings = true
             } label: {
-                Label(L10n.localizedString("config"), systemImage: "doc.text")
+                Label(L10n.localizedString("settings"), systemImage: "gearshape")
             }
             .buttonStyle(.borderless)
+            .help(L10n.localizedString("settings_help"))
             Toggle(isOn: Binding(
                 get: { loginItem.isRegistered },
                 set: { _ in loginItem.toggle() }
