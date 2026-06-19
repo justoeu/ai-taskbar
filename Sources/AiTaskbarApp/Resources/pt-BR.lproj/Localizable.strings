@@ -152,3 +152,6 @@
 "save" = "Salvar";
 "cancel" = "Cancelar";
 "done" = "Concluído";
+"settings_thresholds_help" = "As porcentagens dos limites definem a cor do ícone na barra e disparam as notificações.";
+"settings_security_help" = "Pinning TLS (hash SPKI) protege contra ataques man-in-the-middle. Os pins para os hosts conhecidos já vêm no binário — deixe a lista vazia para usá-los. Adicione um host customizado só se tiver um endpoint privado.";
+"settings_vendor_footer" = "As credenciais são só-leitura por padrão — deixe a CLI renovar o token. Ligue manage-oauth só se você usa este app isolado, sem a CLI.";

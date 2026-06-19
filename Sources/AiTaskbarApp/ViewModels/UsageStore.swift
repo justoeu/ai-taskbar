@@ -37,6 +37,12 @@ public final class UsageStore: ObservableObject {
     /// steady-state case and let `RefreshScheduler`'s back-off branch sit
     /// idle. Pre-computed in `recomputeAggregates`.
     @Published public private(set) var hasRateLimitedVendor: Bool = false
+    /// `vendors` re-sorted so configured providers (have valid credentials,
+    /// not in the `.failed(.disabled)` no-credentials state) appear before
+    /// unconfigured ones. Within each bucket, alphabetical by `rawValue`.
+    /// Recomputed in `recomputeAggregates` so a vendor that gets configured
+    /// via Settings → Save → Relaunch re-orders on the next refresh.
+    @Published public private(set) var sortedVendors: [VendorViewModel] = []
 
     public let thresholds: ThresholdsConfig
     /// Configured scheduler cadence in seconds — surfaced here so views can
@@ -76,6 +82,9 @@ public final class UsageStore: ObservableObject {
                       latest: true)
             .sink { [weak self] _ in self?.recomputeAggregates() }
             .store(in: &subscriptions)
+        // Seed `sortedVendors` so the first render uses the right order
+        // (before any state stream fires).
+        sortedVendors = vendors
         recomputeAggregates()
     }
 
@@ -84,6 +93,30 @@ public final class UsageStore: ObservableObject {
         if result.maxUtilization != maxUtilization { maxUtilization = result.maxUtilization }
         if result.isAnyVendorLoading != isAnyVendorLoading { isAnyVendorLoading = result.isAnyVendorLoading }
         if result.hasRateLimitedVendor != hasRateLimitedVendor { hasRateLimitedVendor = result.hasRateLimitedVendor }
+
+        // Re-sort so configured vendors (have working credentials, not in
+        // the no-credentials `.failed(.disabled)` state) appear before
+        // unconfigured ones. SwiftUI's `ForEach(Identifiable)` keeps view
+        // identity stable across order changes, so this just animates the
+        // reorder rather than rebuilding the sections.
+        let newlySorted = vendors.sorted { a, b in
+            let aConfigured = !Self.isUnconfigured(a)
+            let bConfigured = !Self.isUnconfigured(b)
+            if aConfigured != bConfigured { return aConfigured }
+            return a.vendorId.rawValue < b.vendorId.rawValue
+        }
+        // Only publish if the order actually changed — avoids spurious
+        // @Published fires on every refresh tick.
+        let sameOrder = newlySorted.count == sortedVendors.count
+            && zip(newlySorted, sortedVendors).allSatisfy { $0.id == $1.id }
+        if !sameOrder { sortedVendors = newlySorted }
+    }
+
+    /// True iff the vendor is in the no-credentials `.failed(.disabled)`
+    /// state. Such vendors sink to the bottom of `sortedVendors`.
+    private static func isUnconfigured(_ vm: VendorViewModel) -> Bool {
+        if case .failed(let err, _) = vm.state, err.isDisabled { return true }
+        return false
     }
 
     // MARK: - Public surface used by views

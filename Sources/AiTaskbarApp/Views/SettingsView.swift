@@ -7,6 +7,11 @@ import AiTaskbarCore
 /// tracking. The Save button calls `viewModel.save()` which routes through
 /// `ConfigLoader.applyChanges` (comment-preserving) and then surfaces the
 /// "relaunch to apply" banner via `viewModel.didSaveSuccessfully`.
+///
+/// **Layout:** matches the popover's 420×540 frame exactly. The header +
+/// footer are pinned outside the scroll view so Save/Cancel are always
+/// visible. Vendor sections are flat SwiftUI `Section`s (NOT nested
+/// DisclosureGroups, which macOS 13's Form+Section rendering breaks).
 public struct SettingsView: View {
     public let onDone: () -> Void
     @EnvironmentObject private var viewModel: SettingsViewModel
@@ -14,6 +19,7 @@ public struct SettingsView: View {
     @State private var showOAuthConfirmVendor: String?
     @State private var showResetConfirm = false
     @State private var pinHostsText: String = ""
+    @State private var expandedVendor: String? = nil
 
     public init(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -23,30 +29,35 @@ public struct SettingsView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollView {
-                Form {
-                    generalSection
-                    thresholdsSection
-                    notificationsSection
-                    updatesSection
-                    securitySection
-                    Section(L10n.localizedString("settings_vendors")) {
-                        anthropicSection
-                        openaiSection
-                        zaiSection
-                        openRouterSection
-                        kimiSection
-                        geminiSection
-                    }
-                }
-                .formStyle(.grouped)
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 4)
+            Form {
+                generalSection
+                thresholdsSection
+                notificationsSection
+                updatesSection
+                securitySection
+                // Vendors as flat Sections — DisclosureGroup nesting inside
+                // a Form+Section on macOS 13 silently breaks expand/collapse.
+                // The header line on each Section acts as the affordance.
+                Section(content: { vendorAnthropic },
+                        header: { vendorHeader("Anthropic", icon: "person.crop.circle") },
+                        footer: { Text(L10n.localizedString("settings_vendor_footer")).font(.caption2).foregroundStyle(.secondary) })
+                Section(content: { vendorOpenAI },
+                        header: { vendorHeader("OpenAI / Codex", icon: "person.crop.circle") })
+                Section(content: { vendorZAI },
+                        header: { vendorHeader("Z.AI", icon: "person.crop.circle") })
+                Section(content: { vendorOpenRouter },
+                        header: { vendorHeader("OpenRouter", icon: "person.crop.circle") })
+                Section(content: { vendorKimi },
+                        header: { vendorHeader("Kimi (Moonshot)", icon: "person.crop.circle") })
+                Section(content: { vendorGemini },
+                        header: { vendorHeader("Gemini", icon: "person.crop.circle") })
             }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
             Divider()
             footer
         }
-        .frame(width: 440, height: 580)
+        .frame(width: 420, height: 540)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(.regularMaterial)
@@ -68,11 +79,9 @@ public struct SettingsView: View {
         ) {
             Button(L10n.localizedString("settings_oauth_confirm_understand"),
                    role: .destructive) {
-                // User explicitly accepted — leave the toggle on.
                 showOAuthConfirmVendor = nil
             }
             Button(L10n.localizedString("cancel"), role: .cancel) {
-                // Revert whichever vendor's flag they tried to flip.
                 if let v = showOAuthConfirmVendor {
                     if v == "anthropic" { viewModel.draft.anthropic.manageOAuthRefresh = false }
                     if v == "openai"    { viewModel.draft.openai.manageOAuthRefresh = false }
@@ -127,6 +136,7 @@ public struct SettingsView: View {
                 L10n.text("settings_reset_to_defaults")
             }
             .buttonStyle(.borderless)
+            .controlSize(.small)
             Spacer()
             Button { onDone() } label: {
                 L10n.text("cancel")
@@ -152,20 +162,14 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var generalSection: some View {
-        Section(L10n.localizedString("settings_general")) {
-            Picker(L10n.localizedString("settings_primary_vendor"),
-                   selection: primarySelection) {
-                Text(L10n.localizedString("settings_system_default")).tag(VendorId?.none)
-                ForEach(VendorId.allCases, id: \.self) { v in
-                    Text(v.displayName).tag(Optional(v))
-                }
-            }
+        Section {
             Picker(L10n.localizedString("settings_menu_bar_mode"),
                    selection: menuBarModeSelection) {
                 ForEach(MenuBarMode.allCases, id: \.self) { m in
                     Text(menuBarModeLabel(m)).tag(m)
                 }
             }
+            .pickerStyle(.menu)
             HStack {
                 Text(L10n.localizedString("settings_refresh_interval"))
                 Spacer()
@@ -184,13 +188,12 @@ public struct SettingsView: View {
                     Text(languageDisplayName(code)).tag(Optional(code))
                 }
             }
+            .pickerStyle(.menu)
+        } header: {
+            Text(L10n.localizedString("settings_general"))
         }
     }
 
-    private var primarySelection: Binding<VendorId?> {
-        Binding(get: { viewModel.draft.ui.primary },
-                set: { viewModel.draft.ui.primary = $0 })
-    }
     private var menuBarModeSelection: Binding<MenuBarMode> {
         Binding(get: { viewModel.draft.ui.menuBarMode },
                 set: { viewModel.draft.ui.menuBarMode = $0 })
@@ -220,7 +223,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var thresholdsSection: some View {
-        Section(L10n.localizedString("settings_thresholds")) {
+        Section {
             HStack {
                 Text(L10n.localizedString("settings_warning"))
                 Spacer()
@@ -228,7 +231,7 @@ public struct SettingsView: View {
                     get: { viewModel.draft.thresholds.warning },
                     set: { viewModel.draft.thresholds.warning = $0 }),
                        in: 0...100) { EmptyView() }
-                    .frame(maxWidth: 160)
+                    .frame(maxWidth: 140)
                 Text("\(Int(viewModel.draft.thresholds.warning))%")
                     .font(.subheadline.monospacedDigit())
                     .frame(width: 36, alignment: .trailing)
@@ -240,11 +243,17 @@ public struct SettingsView: View {
                     get: { viewModel.draft.thresholds.critical },
                     set: { viewModel.draft.thresholds.critical = $0 }),
                        in: 0...100) { EmptyView() }
-                    .frame(maxWidth: 160)
+                    .frame(maxWidth: 140)
                 Text("\(Int(viewModel.draft.thresholds.critical))%")
                     .font(.subheadline.monospacedDigit())
                     .frame(width: 36, alignment: .trailing)
             }
+        } header: {
+            Text(L10n.localizedString("settings_thresholds"))
+        } footer: {
+            Text(L10n.localizedString("settings_thresholds_help"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -252,7 +261,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var notificationsSection: some View {
-        Section(L10n.localizedString("settings_notifications")) {
+        Section {
             Toggle(L10n.localizedString("settings_notifications_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.notifications.enabled },
@@ -261,9 +270,8 @@ public struct SettingsView: View {
                    isOn: Binding(
                     get: { viewModel.draft.notifications.discreet },
                     set: { viewModel.draft.notifications.discreet = $0 }))
-            L10n.text("settings_notify_at_hint")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        } header: {
+            Text(L10n.localizedString("settings_notifications"))
         }
     }
 
@@ -271,7 +279,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var updatesSection: some View {
-        Section(L10n.localizedString("settings_updates")) {
+        Section {
             Toggle(L10n.localizedString("settings_updates_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.updates.enabled },
@@ -280,6 +288,8 @@ public struct SettingsView: View {
                    isOn: Binding(
                     get: { viewModel.draft.updates.includePrereleases },
                     set: { viewModel.draft.updates.includePrereleases = $0 }))
+        } header: {
+            Text(L10n.localizedString("settings_updates"))
         }
     }
 
@@ -287,25 +297,32 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var securitySection: some View {
-        Section(L10n.localizedString("settings_security")) {
+        Section {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.localizedString("settings_pin_hosts"))
                     .font(.subheadline)
                 TextEditor(text: $pinHostsText)
                     .font(.subheadline.monospaced())
-                    .frame(minHeight: 44, maxHeight: 88)
+                    .frame(minHeight: 36, maxHeight: 72)
                     .onChange(of: pinHostsText) { new in
                         viewModel.draft.security.pinHosts = parseHostList(new)
                     }
-                L10n.text("settings_pin_hosts_hint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             Toggle(L10n.localizedString("settings_pin_audit_only"),
                    isOn: Binding(
                     get: { viewModel.draft.security.pinAuditOnly },
                     set: { viewModel.draft.security.pinAuditOnly = $0 }))
-                .help(L10n.localizedString("settings_pin_audit_help"))
+        } header: {
+            HStack(spacing: 4) {
+                Text(L10n.localizedString("settings_security"))
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        } footer: {
+            Text(L10n.localizedString("settings_security_help"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -319,11 +336,44 @@ public struct SettingsView: View {
             .filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }
 
+    // MARK: - Vendor headers (Section header pattern)
+
+    /// Per-vendor Section header. Clicking toggles the expansion state we
+    /// track locally — the body content reads the same flag to show/hide.
+    private func vendorHeader(_ name: String, icon: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(name)
+                .font(.subheadline.weight(.medium))
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(expandedVendor == name ? 90 : 0))
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                expandedVendor = (expandedVendor == name) ? nil : name
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func vendorBody<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if expandedVendor != nil {
+            content()
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
     // MARK: - Vendor: Anthropic
 
     @ViewBuilder
-    private var anthropicSection: some View {
-        DisclosureGroup(L10n.localizedString("anthropic")) {
+    private var vendorAnthropic: some View {
+        vendorBody {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.anthropic.enabled },
@@ -340,15 +390,14 @@ public struct SettingsView: View {
                         viewModel.draft.anthropic.manageOAuthRefresh = newVal
                         if newVal { showOAuthConfirmVendor = "anthropic" }
                     }))
-                .help(L10n.localizedString("settings_manage_oauth_help"))
         }
     }
 
     // MARK: - Vendor: OpenAI / Codex
 
     @ViewBuilder
-    private var openaiSection: some View {
-        DisclosureGroup(L10n.localizedString("openai")) {
+    private var vendorOpenAI: some View {
+        vendorBody {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.openai.enabled },
@@ -365,15 +414,14 @@ public struct SettingsView: View {
                         viewModel.draft.openai.manageOAuthRefresh = newVal
                         if newVal { showOAuthConfirmVendor = "openai" }
                     }))
-                .help(L10n.localizedString("settings_manage_oauth_help"))
         }
     }
 
     // MARK: - Vendor: ZAI
 
     @ViewBuilder
-    private var zaiSection: some View {
-        DisclosureGroup(L10n.localizedString("zai")) {
+    private var vendorZAI: some View {
+        vendorBody {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.zai.enabled },
@@ -394,14 +442,15 @@ public struct SettingsView: View {
                 Text(L10n.localizedString("settings_system_default")).tag("")
                 ForEach(["lite", "pro", "max"], id: \.self) { Text($0).tag($0) }
             }
+            .pickerStyle(.menu)
         }
     }
 
     // MARK: - Vendor: OpenRouter
 
     @ViewBuilder
-    private var openRouterSection: some View {
-        DisclosureGroup(L10n.localizedString("openrouter")) {
+    private var vendorOpenRouter: some View {
+        vendorBody {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.openrouter.enabled },
@@ -421,8 +470,8 @@ public struct SettingsView: View {
     // MARK: - Vendor: Kimi
 
     @ViewBuilder
-    private var kimiSection: some View {
-        DisclosureGroup(L10n.localizedString("kimi")) {
+    private var vendorKimi: some View {
+        vendorBody {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.kimi.enabled },
@@ -443,14 +492,15 @@ public struct SettingsView: View {
                 Text("api.moonshot.ai").tag("https://api.moonshot.ai/v1")
                 Text("api.moonshot.cn").tag("https://api.moonshot.cn/v1")
             }
+            .pickerStyle(.menu)
         }
     }
 
     // MARK: - Vendor: Gemini
 
     @ViewBuilder
-    private var geminiSection: some View {
-        DisclosureGroup(L10n.localizedString("gemini")) {
+    private var vendorGemini: some View {
+        vendorBody {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.gemini.enabled },
@@ -472,6 +522,7 @@ public struct SettingsView: View {
                 Text("v1").tag("https://generativelanguage.googleapis.com/v1")
                 Text("v1alpha").tag("https://generativelanguage.googleapis.com/v1alpha")
             }
+            .pickerStyle(.menu)
         }
     }
 }
@@ -487,17 +538,16 @@ struct SecureInlineField: View {
         HStack {
             Text(label)
             Spacer()
-            if visible {
-                TextField(label, text: $value)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 200)
-                    .font(.subheadline.monospaced())
-            } else {
-                SecureField(label, text: $value)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 200)
-                    .font(.subheadline.monospaced())
+            Group {
+                if visible {
+                    TextField(label, text: $value)
+                } else {
+                    SecureField(label, text: $value)
+                }
             }
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 200)
+            .font(.subheadline.monospaced())
             Button {
                 visible.toggle()
             } label: {

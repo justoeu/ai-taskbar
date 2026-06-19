@@ -34,10 +34,10 @@ public struct PopoverContentView: View {
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        if store.vendors.isEmpty {
+                        if store.sortedVendors.isEmpty {
                             emptyState
                         } else {
-                            ForEach(store.vendors) { vm in
+                            ForEach(store.sortedVendors) { vm in
                                 VendorSectionView(vm: vm,
                                                   thresholds: store.thresholds,
                                                   cost: cost)

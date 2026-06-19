@@ -153,3 +153,6 @@
 "save" = "Save";
 "cancel" = "Cancel";
 "done" = "Done";
+"settings_thresholds_help" = "Threshold percentages drive the menu-bar icon color and notification triggers.";
+"settings_security_help" = "TLS pinning (SPKI hash) protects against man-in-the-middle attacks. Baseline pins for known vendor hosts ship in-binary — leave the list empty to use them. Add a custom host only if you have a private endpoint.";
+"settings_vendor_footer" = "Credentials are read-only by default — let the CLI own token renewal. Toggle manage-oauth only if you run this app standalone.";
