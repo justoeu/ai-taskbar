@@ -64,7 +64,6 @@
 "about_macroscopic" = "% macroscópico = mayor utilización entre los proveedores activos";
 "about_credentials" = "Credenciales leídas del Keychain + ~/.codex/auth.json";
 "about_security" = "Archivos de caché + config son user-only (0o600)";
-"about_inspired" = "Inspirado en akitaonrails/ai-usagebar (Linux)";
 "about_built_with" = "Construido con SwiftUI · Licencia MIT";
 "open_config_toml" = "Abrir config.toml";
 "done" = "Hecho";

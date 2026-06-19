@@ -126,8 +126,13 @@ public final class UpdateChecker: ObservableObject {
             return
         }
         status = .downloading(progress: 0, latest: release)
-        let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ai-taskbar-\(release.tag).dmg")
+        // Drop the DMG in ~/Downloads (NOT the system temp dir) so the user
+        // can find it later from Finder's sidebar. Falls back to temp if the
+        // Downloads directory can't be resolved (rare — sandbox edge case).
+        let downloadsDir = FileManager.default.urls(for: .downloadsDirectory,
+                                                    in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let dest = downloadsDir.appendingPathComponent("ai-taskbar-\(release.tag).dmg")
         try? FileManager.default.removeItem(at: dest)
 
         Task { [weak self] in

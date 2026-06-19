@@ -65,7 +65,6 @@
 "about_macroscopic" = "Macroscopic % = highest utilization across enabled providers";
 "about_credentials" = "Credentials read from Keychain + ~/.codex/auth.json";
 "about_security" = "All cache + config files are user-only (0o600)";
-"about_inspired" = "Inspired by akitaonrails/ai-usagebar (Linux)";
 "about_built_with" = "Built with SwiftUI · MIT-licensed";
 "open_config_toml" = "Open config.toml";
 "done" = "Done";

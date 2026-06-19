@@ -69,9 +69,6 @@ public struct AboutView: View {
             Divider().padding(.horizontal, 40)
 
             VStack(spacing: 4) {
-                L10n.text("about_inspired")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
                 L10n.text("about_built_with")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)

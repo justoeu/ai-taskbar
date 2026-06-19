@@ -95,6 +95,67 @@ jobs:
           echo "sha=$SHA256"   >> "$GITHUB_OUTPUT"
           echo "DMG SHA256: $SHA256"
 
+      - name: Generate changelog from commit history
+        id: changelog
+        run: |
+          # Walk commits since the previous v* tag (or all reachable commits
+          # if this is the first release). Group by conventional-commit type
+          # (feat / fix / perf / refactor / docs / chore / ci) so the notes
+          # read like a real changelog rather than a flat git log dump.
+          PREV_TAG=$(git describe --tags --abbrev=0 "${{ steps.version.outputs.tag }}^" 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..${{ steps.version.outputs.tag }}"
+          else
+            RANGE="HEAD"
+          fi
+          echo "Using changelog range: $RANGE"
+
+          {
+            echo "## Changes"
+            echo
+            # Group by type. The sed strips the `type(scope): ` prefix per
+            # bullet so the rendered list reads as plain English. Skip
+            # chore(release)/[skip release] commits — those are auto-generated
+            # by the bump workflow and add no information.
+            for TYPE in feat feature fix perf refactor; do
+              HEADER=""
+              case $TYPE in
+                feat|feature) HEADER="✨ Features";;
+                fix)          HEADER="🐛 Fixes";;
+                perf)         HEADER="⚡️ Performance";;
+                refactor)     HEADER="♻️ Refactor";;
+              esac
+              COMMITS=$(git log --pretty=format:'%s' --no-merges "$RANGE" \
+                        | grep -iE "^${TYPE}(\(|:)" \
+                        | grep -vE '\[skip release\]|chore\(release\)' \
+                        | sed -E "s/^[^:]*:\s*//")
+              if [ -n "$COMMITS" ]; then
+                echo "### $HEADER"
+                echo
+                echo "$COMMITS" | sed 's/^/- /'
+                echo
+              fi
+            done
+            # Other (docs, chore, ci, style, test, build) — collapsed under
+            # a single "Maintenance" group so the changelog isn't noisy.
+            MAINT=$(git log --pretty=format:'%s' --no-merges "$RANGE" \
+                    | grep -viE '^(feat|feature|fix|perf|refactor)(\(|:)' \
+                    | grep -vE '\[skip release\]|chore\(release\)' \
+                    | head -n 20 \
+                    | sed -E "s/^[^:]*:\s*//")
+            if [ -n "$MAINT" ]; then
+              echo "### 🧰 Maintenance"
+              echo
+              echo "$MAINT" | sed 's/^/- /'
+              echo
+            fi
+            echo "---"
+            echo
+            echo "**Full diff:** [\`${PREV_TAG:-$(git rev-list --max-parents=0 HEAD | head -1 | cut -c1-7)}...${{ steps.version.outputs.tag }}\`](https://github.com/${{ github.repository }}/compare/${PREV_TAG:-$(git rev-list --max-parents=0 HEAD | head -1)}...${{ steps.version.outputs.tag }})"
+          } > /tmp/changelog.md
+          echo "## Changelog preview"
+          cat /tmp/changelog.md
+
       - name: Generate release notes
         id: notes
         run: |
@@ -105,7 +166,7 @@ jobs:
 
           ### Install
           1. Download \`ai-taskbar-${{ steps.version.outputs.number }}.dmg\` below.
-          2. Open the DMG and drag \`AiTaskbar.app\` to \`/Applications\`.
+          2. Open the DMG and drag \`AiTaskbar.app\` to the \`Applications\` folder (symlink included in the image).
           3. First launch: macOS Gatekeeper will warn that the app is from an unidentified developer. Either:
              - **Right-click \`AiTaskbar.app\` → Open**, then click **Open** in the dialog.
              - Or run: \`xattr -dr com.apple.quarantine /Applications/AiTaskbar.app\`
@@ -116,6 +177,12 @@ jobs:
           - Read-only access to your existing Claude / Codex / Z.AI / Kimi / OpenRouter credentials
           - All cache + config locked to \`0o600\` (user-only)
 
+          EOF
+          # Append the auto-generated changelog.
+          cat /tmp/changelog.md >> /tmp/release_notes.md
+          # Append the asset checksum footer.
+          cat >> /tmp/release_notes.md <<EOF
+
           ### Asset checksum
           \`\`\`
           SHA256: ${{ steps.shasum.outputs.sha }}
@@ -123,6 +190,7 @@ jobs:
 
           See [README](https://github.com/${{ github.repository }}/blob/main/README.md) for full setup.
           EOF
+          echo "## Final release notes"
           cat /tmp/release_notes.md
 
       - name: Create / update GitHub Release

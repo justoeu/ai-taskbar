@@ -7,6 +7,7 @@ BUNDLE_ID  ?= dev.aitaskbar.app
 VERSION    ?= 0.4.4
 BUILD_DIR  := build
 APP_DIR    := $(BUILD_DIR)/$(APP)
+DMG_STAGING := $(BUILD_DIR)/dmg-staging
 DMG        := ai-taskbar-$(VERSION).dmg
 
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
@@ -78,15 +79,39 @@ universal-check:
 	@file $(APP_DIR)/Contents/MacOS/ai-taskbar
 	@lipo -info $(APP_DIR)/Contents/MacOS/ai-taskbar 2>/dev/null || echo "(single-arch)"
 
+# `make dmg-staging-src` builds a DMG staging directory containing:
+#   - AiTaskbar.app
+#   - /Applications symlink (so the user can drag-to-install)
+#   - a fallback README.txt pointing at the project's GitHub Releases
+# The DMG targets below bundle this directory rather than the .app alone,
+# so the mounted image shows the standard "drag app to Applications" UX.
+dmg-staging-src: app
+	rm -rf $(DMG_STAGING)
+	mkdir -p $(DMG_STAGING)
+	cp -R $(APP_DIR) $(DMG_STAGING)/
+	ln -s /Applications $(DMG_STAGING)/Applications
+	@printf 'AI Taskbar v%s\n\nDrag AiTaskbar.app to the Applications folder.\nIssues: https://github.com/justoeu/ai-taskbar/issues\n' "$(VERSION)" > $(DMG_STAGING)/README.txt
+	@echo "==> Staged $(DMG_STAGING)"
+
 dmg-universal: app-universal
-	rm -f $(DMG)
-	hdiutil create -volname "AI Taskbar" -srcfolder $(APP_DIR) -ov -format UDZO $(DMG)
-	@echo "Built $(DMG) (universal)"
+	rm -rf $(DMG_STAGING) $(DMG)
+	mkdir -p $(DMG_STAGING)
+	cp -R $(APP_DIR) $(DMG_STAGING)/
+	ln -s /Applications $(DMG_STAGING)/Applications
+	@printf 'AI Taskbar v%s\n\nDrag AiTaskbar.app to the Applications folder.\nIssues: https://github.com/justoeu/ai-taskbar/issues\n' "$(VERSION)" > $(DMG_STAGING)/README.txt
+	hdiutil create -volname "AI Taskbar" -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG)
+	rm -rf $(DMG_STAGING)
+	@echo "Built $(DMG) (universal, with Applications symlink)"
 
 dmg: app
-	rm -f $(DMG)
-	hdiutil create -volname "AI Taskbar" -srcfolder $(APP_DIR) -ov -format UDZO $(DMG)
-	@echo "Built $(DMG)"
+	rm -rf $(DMG_STAGING) $(DMG)
+	mkdir -p $(DMG_STAGING)
+	cp -R $(APP_DIR) $(DMG_STAGING)/
+	ln -s /Applications $(DMG_STAGING)/Applications
+	@printf 'AI Taskbar v%s\n\nDrag AiTaskbar.app to the Applications folder.\nIssues: https://github.com/justoeu/ai-taskbar/issues\n' "$(VERSION)" > $(DMG_STAGING)/README.txt
+	hdiutil create -volname "AI Taskbar" -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG)
+	rm -rf $(DMG_STAGING)
+	@echo "Built $(DMG) (with Applications symlink)"
 
 run: app
 	open $(APP_DIR)
@@ -159,7 +184,11 @@ staple: notarize
 # Full release pipeline: build → sign with Developer ID → bundle DMG →
 # notarize → staple. Requires all env vars above.
 release: sign-developer
-	rm -f $(DMG)
-	hdiutil create -volname "AI Taskbar" -srcfolder $(APP_DIR) -ov -format UDZO $(DMG)
+	rm -rf $(DMG_STAGING) $(DMG)
+	mkdir -p $(DMG_STAGING)
+	cp -R $(APP_DIR) $(DMG_STAGING)/
+	ln -s /Applications $(DMG_STAGING)/Applications
+	hdiutil create -volname "AI Taskbar" -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG)
+	rm -rf $(DMG_STAGING)
 	$(MAKE) staple
 	@echo "✓ Release-ready: $(DMG)"
