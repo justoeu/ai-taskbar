@@ -181,8 +181,10 @@ public struct SettingsView: View {
                 }
             }
             .pickerStyle(.menu)
+            .help(L10n.localizedString("settings_menu_bar_mode_help"))
             HStack {
                 Text(L10n.localizedString("settings_refresh_interval"))
+                FieldHelpButton(helpKey: "settings_refresh_interval_help")
                 Spacer()
                 Stepper(value: refreshIntervalBinding,
                         in: 15...3600,
@@ -200,6 +202,7 @@ public struct SettingsView: View {
                 }
             }
             .pickerStyle(.menu)
+            .help(L10n.localizedString("settings_language_help"))
         } header: {
             Text(L10n.localizedString("settings_general"))
         }
@@ -237,6 +240,7 @@ public struct SettingsView: View {
         Section {
             HStack {
                 Text(L10n.localizedString("settings_warning"))
+                FieldHelpButton(helpKey: "settings_warning_help")
                 Spacer()
                 Slider(value: Binding(
                     get: { viewModel.draft.thresholds.warning },
@@ -249,6 +253,7 @@ public struct SettingsView: View {
             }
             HStack {
                 Text(L10n.localizedString("settings_critical"))
+                FieldHelpButton(helpKey: "settings_critical_help")
                 Spacer()
                 Slider(value: Binding(
                     get: { viewModel.draft.thresholds.critical },
@@ -273,16 +278,35 @@ public struct SettingsView: View {
     @ViewBuilder
     private var notificationsSection: some View {
         Section {
-            Toggle(L10n.localizedString("settings_notifications_enabled"),
-                   isOn: Binding(
-                    get: { viewModel.draft.notifications.enabled },
-                    set: { viewModel.draft.notifications.enabled = $0 }))
-            Toggle(L10n.localizedString("settings_discreet"),
-                   isOn: Binding(
-                    get: { viewModel.draft.notifications.discreet },
-                    set: { viewModel.draft.notifications.discreet = $0 }))
+            HelpToggle(label: L10n.localizedString("settings_notifications_enabled"),
+                       helpKey: "settings_notifications_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.notifications.enabled },
+                        set: { viewModel.draft.notifications.enabled = $0 }))
+                .disabled(NotificationService.isRuntimeKnownIncompatible)
+            HelpToggle(label: L10n.localizedString("settings_discreet"),
+                       helpKey: "settings_discreet_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.notifications.discreet },
+                        set: { viewModel.draft.notifications.discreet = $0 }))
+                .disabled(NotificationService.isRuntimeKnownIncompatible)
         } header: {
             Text(L10n.localizedString("settings_notifications"))
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                if NotificationService.isRuntimeKnownIncompatible {
+                    Label {
+                        Text(L10n.localizedString("settings_notifications_unavailable_tahoe"))
+                            .font(.caption2)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Text(L10n.localizedString("settings_notify_at_hint"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -291,14 +315,16 @@ public struct SettingsView: View {
     @ViewBuilder
     private var updatesSection: some View {
         Section {
-            Toggle(L10n.localizedString("settings_updates_enabled"),
-                   isOn: Binding(
-                    get: { viewModel.draft.updates.enabled },
-                    set: { viewModel.draft.updates.enabled = $0 }))
-            Toggle(L10n.localizedString("settings_updates_prereleases"),
-                   isOn: Binding(
-                    get: { viewModel.draft.updates.includePrereleases },
-                    set: { viewModel.draft.updates.includePrereleases = $0 }))
+            HelpToggle(label: L10n.localizedString("settings_updates_enabled"),
+                       helpKey: "settings_updates_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.updates.enabled },
+                        set: { viewModel.draft.updates.enabled = $0 }))
+            HelpToggle(label: L10n.localizedString("settings_updates_prereleases"),
+                       helpKey: "settings_updates_prereleases_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.updates.includePrereleases },
+                        set: { viewModel.draft.updates.includePrereleases = $0 }))
         } header: {
             Text(L10n.localizedString("settings_updates"))
         }
@@ -310,8 +336,11 @@ public struct SettingsView: View {
     private var securitySection: some View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.localizedString("settings_pin_hosts"))
-                    .font(.subheadline)
+                HStack(spacing: 4) {
+                    Text(L10n.localizedString("settings_pin_hosts"))
+                        .font(.subheadline)
+                    FieldHelpButton(helpKey: "settings_pin_hosts_help")
+                }
                 TextEditor(text: $pinHostsText)
                     .font(.subheadline.monospaced())
                     .frame(minHeight: 36, maxHeight: 72)
@@ -319,10 +348,11 @@ public struct SettingsView: View {
                         viewModel.draft.security.pinHosts = parseHostList(new)
                     }
             }
-            Toggle(L10n.localizedString("settings_pin_audit_only"),
-                   isOn: Binding(
-                    get: { viewModel.draft.security.pinAuditOnly },
-                    set: { viewModel.draft.security.pinAuditOnly = $0 }))
+            HelpToggle(label: L10n.localizedString("settings_pin_audit_only"),
+                       helpKey: "settings_pin_audit_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.security.pinAuditOnly },
+                        set: { viewModel.draft.security.pinAuditOnly = $0 }))
         } header: {
             HStack(spacing: 4) {
                 Text(L10n.localizedString("settings_security"))
@@ -391,22 +421,24 @@ public struct SettingsView: View {
     @ViewBuilder
     private var vendorAnthropic: some View {
         vendorBody("Anthropic") {
-            Toggle(L10n.localizedString("settings_enabled"),
-                   isOn: Binding(
-                    get: { viewModel.draft.anthropic.enabled },
-                    set: { viewModel.draft.anthropic.enabled = $0 }))
-            TextField(L10n.localizedString("settings_keychain_account"),
-                      text: Binding(
-                        get: { viewModel.draft.anthropic.keychainAccount ?? "" },
-                        set: { viewModel.draft.anthropic.keychainAccount = $0.isEmpty ? nil : $0 }))
-                .font(.subheadline.monospaced())
-            Toggle(L10n.localizedString("settings_manage_oauth_anthropic"),
-                   isOn: Binding(
-                    get: { viewModel.draft.anthropic.manageOAuthRefresh },
-                    set: { newVal in
-                        viewModel.draft.anthropic.manageOAuthRefresh = newVal
-                        if newVal { showOAuthConfirmVendor = "anthropic" }
-                    }))
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.anthropic.enabled },
+                        set: { viewModel.draft.anthropic.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_keychain_account"),
+                          helpKey: "settings_keychain_account_help",
+                          text: Binding(
+                            get: { viewModel.draft.anthropic.keychainAccount ?? "" },
+                            set: { viewModel.draft.anthropic.keychainAccount = $0.isEmpty ? nil : $0 }))
+            HelpToggle(label: L10n.localizedString("settings_manage_oauth_anthropic"),
+                       helpKey: "settings_manage_oauth_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.anthropic.manageOAuthRefresh },
+                        set: { newVal in
+                            viewModel.draft.anthropic.manageOAuthRefresh = newVal
+                            if newVal { showOAuthConfirmVendor = "anthropic" }
+                        }))
         }
     }
 
@@ -415,22 +447,24 @@ public struct SettingsView: View {
     @ViewBuilder
     private var vendorOpenAI: some View {
         vendorBody("OpenAI / Codex") {
-            Toggle(L10n.localizedString("settings_enabled"),
-                   isOn: Binding(
-                    get: { viewModel.draft.openai.enabled },
-                    set: { viewModel.draft.openai.enabled = $0 }))
-            TextField(L10n.localizedString("settings_codex_auth_path"),
-                      text: Binding(
-                        get: { viewModel.draft.openai.codexAuthPath ?? "" },
-                        set: { viewModel.draft.openai.codexAuthPath = $0.isEmpty ? nil : $0 }))
-                .font(.subheadline.monospaced())
-            Toggle(L10n.localizedString("settings_manage_oauth_openai"),
-                   isOn: Binding(
-                    get: { viewModel.draft.openai.manageOAuthRefresh },
-                    set: { newVal in
-                        viewModel.draft.openai.manageOAuthRefresh = newVal
-                        if newVal { showOAuthConfirmVendor = "openai" }
-                    }))
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.openai.enabled },
+                        set: { viewModel.draft.openai.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_codex_auth_path"),
+                          helpKey: "settings_codex_auth_path_help",
+                          text: Binding(
+                            get: { viewModel.draft.openai.codexAuthPath ?? "" },
+                            set: { viewModel.draft.openai.codexAuthPath = $0.isEmpty ? nil : $0 }))
+            HelpToggle(label: L10n.localizedString("settings_manage_oauth_openai"),
+                       helpKey: "settings_manage_oauth_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.openai.manageOAuthRefresh },
+                        set: { newVal in
+                            viewModel.draft.openai.manageOAuthRefresh = newVal
+                            if newVal { showOAuthConfirmVendor = "openai" }
+                        }))
         }
     }
 
@@ -439,16 +473,18 @@ public struct SettingsView: View {
     @ViewBuilder
     private var vendorZAI: some View {
         vendorBody("Z.AI") {
-            Toggle(L10n.localizedString("settings_enabled"),
-                   isOn: Binding(
-                    get: { viewModel.draft.zai.enabled },
-                    set: { viewModel.draft.zai.enabled = $0 }))
-            TextField(L10n.localizedString("settings_api_key_env"),
-                      text: Binding(
-                        get: { viewModel.draft.zai.apiKeyEnv },
-                        set: { viewModel.draft.zai.apiKeyEnv = $0 }))
-                .font(.subheadline.monospaced())
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.zai.enabled },
+                        set: { viewModel.draft.zai.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_api_key_env"),
+                          helpKey: "settings_api_key_env_help",
+                          text: Binding(
+                            get: { viewModel.draft.zai.apiKeyEnv },
+                            set: { viewModel.draft.zai.apiKeyEnv = $0 }))
             SecureInlineField(label: L10n.localizedString("settings_api_key"),
+                              helpKey: "settings_api_key_help",
                               value: Binding(
                                 get: { viewModel.draft.zai.apiKey ?? "" },
                                 set: { viewModel.draft.zai.apiKey = $0.isEmpty ? nil : $0 }))
@@ -460,6 +496,7 @@ public struct SettingsView: View {
                 ForEach(["lite", "pro", "max"], id: \.self) { Text($0).tag($0) }
             }
             .pickerStyle(.menu)
+            .help(L10n.localizedString("settings_plan_tier_help"))
         }
     }
 
@@ -468,16 +505,18 @@ public struct SettingsView: View {
     @ViewBuilder
     private var vendorOpenRouter: some View {
         vendorBody("OpenRouter") {
-            Toggle(L10n.localizedString("settings_enabled"),
-                   isOn: Binding(
-                    get: { viewModel.draft.openrouter.enabled },
-                    set: { viewModel.draft.openrouter.enabled = $0 }))
-            TextField(L10n.localizedString("settings_api_key_env"),
-                      text: Binding(
-                        get: { viewModel.draft.openrouter.apiKeyEnv },
-                        set: { viewModel.draft.openrouter.apiKeyEnv = $0 }))
-                .font(.subheadline.monospaced())
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.openrouter.enabled },
+                        set: { viewModel.draft.openrouter.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_api_key_env"),
+                          helpKey: "settings_api_key_env_help",
+                          text: Binding(
+                            get: { viewModel.draft.openrouter.apiKeyEnv },
+                            set: { viewModel.draft.openrouter.apiKeyEnv = $0 }))
             SecureInlineField(label: L10n.localizedString("settings_api_key"),
+                              helpKey: "settings_api_key_help",
                               value: Binding(
                                 get: { viewModel.draft.openrouter.apiKey ?? "" },
                                 set: { viewModel.draft.openrouter.apiKey = $0.isEmpty ? nil : $0 }))
@@ -489,16 +528,18 @@ public struct SettingsView: View {
     @ViewBuilder
     private var vendorKimi: some View {
         vendorBody("Kimi (Moonshot)") {
-            Toggle(L10n.localizedString("settings_enabled"),
-                   isOn: Binding(
-                    get: { viewModel.draft.kimi.enabled },
-                    set: { viewModel.draft.kimi.enabled = $0 }))
-            TextField(L10n.localizedString("settings_api_key_env"),
-                      text: Binding(
-                        get: { viewModel.draft.kimi.apiKeyEnv },
-                        set: { viewModel.draft.kimi.apiKeyEnv = $0 }))
-                .font(.subheadline.monospaced())
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.kimi.enabled },
+                        set: { viewModel.draft.kimi.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_api_key_env"),
+                          helpKey: "settings_api_key_env_help",
+                          text: Binding(
+                            get: { viewModel.draft.kimi.apiKeyEnv },
+                            set: { viewModel.draft.kimi.apiKeyEnv = $0 }))
             SecureInlineField(label: L10n.localizedString("settings_api_key"),
+                              helpKey: "settings_api_key_help",
                               value: Binding(
                                 get: { viewModel.draft.kimi.apiKey ?? "" },
                                 set: { viewModel.draft.kimi.apiKey = $0.isEmpty ? nil : $0 }))
@@ -510,6 +551,7 @@ public struct SettingsView: View {
                 Text("api.moonshot.cn").tag("https://api.moonshot.cn/v1")
             }
             .pickerStyle(.menu)
+            .help(L10n.localizedString("settings_base_url_help"))
         }
     }
 
@@ -518,16 +560,18 @@ public struct SettingsView: View {
     @ViewBuilder
     private var vendorGemini: some View {
         vendorBody("Gemini") {
-            Toggle(L10n.localizedString("settings_enabled"),
-                   isOn: Binding(
-                    get: { viewModel.draft.gemini.enabled },
-                    set: { viewModel.draft.gemini.enabled = $0 }))
-            TextField(L10n.localizedString("settings_api_key_env"),
-                      text: Binding(
-                        get: { viewModel.draft.gemini.apiKeyEnv },
-                        set: { viewModel.draft.gemini.apiKeyEnv = $0 }))
-                .font(.subheadline.monospaced())
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.gemini.enabled },
+                        set: { viewModel.draft.gemini.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_api_key_env"),
+                          helpKey: "settings_api_key_env_help",
+                          text: Binding(
+                            get: { viewModel.draft.gemini.apiKeyEnv },
+                            set: { viewModel.draft.gemini.apiKeyEnv = $0 }))
             SecureInlineField(label: L10n.localizedString("settings_api_key"),
+                              helpKey: "settings_api_key_help",
                               value: Binding(
                                 get: { viewModel.draft.gemini.apiKey ?? "" },
                                 set: { viewModel.draft.gemini.apiKey = $0.isEmpty ? nil : $0 }))
@@ -540,6 +584,7 @@ public struct SettingsView: View {
                 Text("v1alpha").tag("https://generativelanguage.googleapis.com/v1alpha")
             }
             .pickerStyle(.menu)
+            .help(L10n.localizedString("settings_base_url_help"))
         }
     }
 }
@@ -548,12 +593,16 @@ public struct SettingsView: View {
 /// keep the Settings UI dense (vendor sections stack 3-4 of these).
 struct SecureInlineField: View {
     let label: String
+    var helpKey: String? = nil
     @Binding var value: String
     @State private var visible = false
 
     var body: some View {
         HStack {
             Text(label)
+            if let helpKey {
+                FieldHelpButton(helpKey: helpKey)
+            }
             Spacer()
             Group {
                 if visible {
@@ -572,6 +621,88 @@ struct SecureInlineField: View {
             }
             .buttonStyle(.borderless)
             .help(L10n.localizedString(visible ? "settings_hide" : "settings_show"))
+        }
+    }
+}
+
+/// Small "?" affordance placed next to a field label. Click pops a popover
+/// with the help text; hovering also surfaces it as a native macOS tooltip
+/// via `.help`, so both interaction styles work.
+struct FieldHelpButton: View {
+    let helpKey: String
+    @State private var showPopover = false
+
+    var body: some View {
+        Button {
+            showPopover.toggle()
+        } label: {
+            Image(systemName: "questionmark.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help(L10n.localizedString(helpKey))
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.localizedString(helpKey))
+                    .font(.caption)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    showPopover = false
+                } label: {
+                    Text(L10n.localizedString("settings_field_help_close"))
+                        .font(.caption.weight(.medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
+            .padding(10)
+            .frame(maxWidth: 260, alignment: .leading)
+        }
+    }
+}
+
+/// A toggle row that pairs the control with an optional "?" help affordance.
+/// Equivalent to SwiftUI's `Toggle(label, isOn:)` but adds the help button
+/// right after the label text, preserving the Form's automatic alignment.
+struct HelpToggle: View {
+    let label: String
+    var helpKey: String? = nil
+    let isOn: Binding<Bool>
+
+    var body: some View {
+        Toggle(isOn: isOn) {
+            HStack(spacing: 4) {
+                Text(label)
+                if let helpKey {
+                    FieldHelpButton(helpKey: helpKey)
+                }
+            }
+        }
+    }
+}
+
+/// A bordered TextField row paired with a label and an optional "?" help
+/// affordance. The bordered style is what makes the input *look* like an
+/// input — plain `TextField` inside `.formStyle(.grouped)` renders borderless
+/// and is indistinguishable from static text (the bug being fixed here).
+struct HelpTextField: View {
+    let label: String
+    var helpKey: String? = nil
+    let text: Binding<String>
+
+    var body: some View {
+        HStack {
+            Text(label)
+            if let helpKey {
+                FieldHelpButton(helpKey: helpKey)
+            }
+            Spacer()
+            TextField(label, text: text)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 220)
+                .font(.subheadline.monospaced())
         }
     }
 }

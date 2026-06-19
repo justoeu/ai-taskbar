@@ -41,7 +41,6 @@ struct AiTaskbarApp: App {
         // so the very first render uses the right locale.
         L10n.languageOverride = env.config.ui.language
         let notifications = NotificationService(config: env.config.notifications)
-        notifications.requestAuthorizationIfNeeded()
         let vendors = env.makeProviders().map {
             VendorViewModel(provider: $0, notifications: notifications)
         }
