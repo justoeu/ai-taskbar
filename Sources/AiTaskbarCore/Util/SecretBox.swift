@@ -40,7 +40,11 @@ public enum SecretBox {
     /// model in the type doc above.
     private static let appPassphrase = "ai-taskbar/v0.3:settings-secret-v1"
 
-    private static let key: SymmetricKey = {
+    // `SymmetricKey` is not formally `Sendable` in CryptoKit, but it's
+    // effectively immutable after init (no mutating API surfaces). Marking
+    // `nonisolated(unsafe)` is honest: the value is a process-wide constant
+    // derived from a literal, with no writer after initialization.
+    nonisolated(unsafe) private static let key: SymmetricKey = {
         let digest = SHA256.hash(data: Data(appPassphrase.utf8))
         return SymmetricKey(data: digest)
     }()
