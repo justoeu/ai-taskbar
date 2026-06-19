@@ -26,8 +26,16 @@ struct AiTaskbarApp: App {
         // surface a "Config changed — relaunch" banner for writes the
         // Settings UI itself just made (it surfaces the banner via
         // SettingsViewModel.didSaveSuccessfully instead).
+        //
+        // `onAfterSave` is `@Sendable () -> Void` (called from inside
+        // ConfigLoader which is a Sendable struct). In practice the call
+        // always lands on MainActor because the SettingsViewModel.save()
+        // path that triggers it is @MainActor — `assumeIsolated` asserts
+        // that invariant and lets us reach the @MainActor method.
         env.configLoader.onAfterSave = { [weak configWatcher] in
-            configWatcher?.adoptCurrentAsBaseline()
+            MainActor.assumeIsolated {
+                configWatcher?.adoptCurrentAsBaseline()
+            }
         }
         // Apply language override from config BEFORE any view reads strings,
         // so the very first render uses the right locale.
