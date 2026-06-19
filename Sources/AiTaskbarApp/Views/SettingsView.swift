@@ -144,8 +144,19 @@ public struct SettingsView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             Button {
-                try? viewModel.save()
-                syncPinHostsText()
+                do {
+                    try viewModel.save()
+                    syncPinHostsText()
+                    // Close the Settings overlay on successful save so the
+                    // underlying "Config changed — relaunch" banner is
+                    // visible (the only honest UX given most settings need
+                    // a restart to take effect). Save failures stay open
+                    // with the error alert — see `settings_save_failed`.
+                    onDone()
+                } catch {
+                    // saveError already populated by the VM; the alert
+                    // surfaces it. Don't close — let the user retry.
+                }
             } label: {
                 Label(L10n.localizedString("save"), systemImage: "checkmark.circle.fill")
             }
@@ -362,8 +373,14 @@ public struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func vendorBody<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        if expandedVendor != nil {
+    private func vendorBody<Content: View>(
+        _ name: String,
+        @ViewBuilder _ content: () -> Content
+    ) -> some View {
+        // Only THIS vendor's body renders when it's the expanded one. The
+        // previous bug checked `expandedVendor != nil` which fired for ALL
+        // vendors as soon as any one was opened.
+        if expandedVendor == name {
             content()
                 .transition(.opacity.combined(with: .move(edge: .top)))
         }
@@ -373,7 +390,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var vendorAnthropic: some View {
-        vendorBody {
+        vendorBody("Anthropic") {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.anthropic.enabled },
@@ -397,7 +414,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var vendorOpenAI: some View {
-        vendorBody {
+        vendorBody("OpenAI / Codex") {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.openai.enabled },
@@ -421,7 +438,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var vendorZAI: some View {
-        vendorBody {
+        vendorBody("Z.AI") {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.zai.enabled },
@@ -450,7 +467,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var vendorOpenRouter: some View {
-        vendorBody {
+        vendorBody("OpenRouter") {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.openrouter.enabled },
@@ -471,7 +488,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var vendorKimi: some View {
-        vendorBody {
+        vendorBody("Kimi (Moonshot)") {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.kimi.enabled },
@@ -500,7 +517,7 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var vendorGemini: some View {
-        vendorBody {
+        vendorBody("Gemini") {
             Toggle(L10n.localizedString("settings_enabled"),
                    isOn: Binding(
                     get: { viewModel.draft.gemini.enabled },
