@@ -45,4 +45,15 @@ struct ConvenienceInitsTests {
             keychainAccount: nil)
         #expect(provider.vendorId == .anthropic)
     }
+
+    @Test("DeepSeekProvider builds from DeepSeekConfig")
+    func deepseek_convenience_init() throws {
+        let cfg = DeepSeekConfig(
+            enabled: true,
+            apiKeyEnv: "_UNSET",
+            apiKey: "key",
+            baseURL: "https://api.deepseek.com")
+        let provider = try DeepSeekProvider(config: cfg, http: .init())
+        #expect(provider.vendorId == .deepseek)
+    }
 }

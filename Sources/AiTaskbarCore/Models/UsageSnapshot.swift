@@ -9,6 +9,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
     case openrouter(OpenRouterSnapshot)
     case kimi(KimiSnapshot)
     case gemini(GeminiSnapshot)
+    case deepseek(DeepSeekSnapshot)
 
     public var vendorId: VendorId {
         switch self {
@@ -18,6 +19,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .openrouter: return .openrouter
         case .kimi:       return .kimi
         case .gemini:     return .gemini
+        case .deepseek:   return .deepseek
         }
     }
 
@@ -29,6 +31,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .openrouter(let s): return s.planLabel
         case .kimi(let s):       return s.planLabel
         case .gemini(let s):     return s.planLabel
+        case .deepseek(let s):   return s.planLabel
         }
     }
 
@@ -46,6 +49,8 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             return [s.balance].compactMap { $0 }
         case .gemini(let s):
             return [s.status].compactMap { $0 }
+        case .deepseek(let s):
+            return [s.balance].compactMap { $0 }
         }
     }
 
@@ -163,6 +168,45 @@ public struct KimiSnapshot: Sendable, Equatable, Codable {
         self.availableUSD = availableUSD
         self.voucherUSD = voucherUSD
         self.cashUSD = cashUSD
+    }
+}
+
+/// DeepSeek does not expose a token-usage / quota / cost REST endpoint —
+/// the only account-level signal its public API offers is prepaid balance via
+/// `GET /user/balance`. This snapshot therefore mirrors `KimiSnapshot`: a flat
+/// "Balance" row with 0% utilization (no quota window, no `resetsAt`). A
+/// DeepSeek account may carry both a USD and a CNY balance; we surface the USD
+/// entry (CNY as fallback) and keep the reported `currency` code so the UI can
+/// distinguish them. `isAvailable` reflects the API's sufficiency flag (false
+/// → DeepSeek would answer 402 on the next call).
+public struct DeepSeekSnapshot: Sendable, Equatable, Codable {
+    public let planLabel: String?
+    public let balance: UsageWindow?
+    /// Total balance of the chosen currency entry (granted + topped-up).
+    public let totalBalance: Double?
+    /// Promo / free credit (expires), if reported.
+    public let grantedBalance: Double?
+    /// Paid credit, if reported.
+    public let toppedUpBalance: Double?
+    /// Currency code of the entry we surfaced — "USD" or "CNY".
+    public let currency: String?
+    /// DeepSeek's "balance sufficient for API calls" flag.
+    public let isAvailable: Bool?
+
+    public init(planLabel: String? = nil,
+                balance: UsageWindow? = nil,
+                totalBalance: Double? = nil,
+                grantedBalance: Double? = nil,
+                toppedUpBalance: Double? = nil,
+                currency: String? = nil,
+                isAvailable: Bool? = nil) {
+        self.planLabel = planLabel
+        self.balance = balance
+        self.totalBalance = totalBalance
+        self.grantedBalance = grantedBalance
+        self.toppedUpBalance = toppedUpBalance
+        self.currency = currency
+        self.isAvailable = isAvailable
     }
 }
 

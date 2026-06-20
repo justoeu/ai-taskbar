@@ -118,6 +118,48 @@ public enum Fixtures {
     }
     """#
 
+    /// DeepSeek `/user/balance` — canonical shape. DeepSeek returns balance
+    /// values as JSON **strings**. An account may carry both CNY and USD; we
+    /// pick USD. Here both are present so the USD-preference branch is
+    /// exercised (USD total 110 must win over the CNY 770 entry).
+    public static let deepseekBalance200 = #"""
+    {
+      "is_available": true,
+      "balance_infos": [
+        { "currency": "CNY", "total_balance": "770.00", "granted_balance": "70.00", "topped_up_balance": "700.00" },
+        { "currency": "USD", "total_balance": "110.00", "granted_balance": "10.00", "topped_up_balance": "100.00" }
+      ]
+    }
+    """#
+
+    /// DeepSeek with only a CNY entry — exercises the CNY fallback (no USD).
+    public static let deepseekBalanceCNYOnly200 = #"""
+    {
+      "is_available": true,
+      "balance_infos": [
+        { "currency": "CNY", "total_balance": "500.00", "granted_balance": "0", "topped_up_balance": "500.00" }
+      ]
+    }
+    """#
+
+    /// DeepSeek with numeric (non-string) balance values — exercises the
+    /// `flexibleDouble` int/float path of the decoder (real API sends strings,
+    /// but we tolerate numbers defensively, matching the Kimi wire type).
+    public static let deepseekBalanceNumbers200 = #"""
+    {
+      "is_available": true,
+      "balance_infos": [
+        { "currency": "USD", "total_balance": 42.5, "granted_balance": 2.5, "topped_up_balance": 40 }
+      ]
+    }
+    """#
+
+    /// DeepSeek when balance is insufficient (`is_available: false`) and no
+    /// balance_infos at all — degenerate but must not crash.
+    public static let deepseekBalanceInsufficient200 = #"""
+    { "is_available": false }
+    """#
+
     /// Gemini `models.list` payload — heartbeat used as a stand-in for a
     /// quota signal (Google AI doesn't expose one publicly). Three sample
     /// models so the snapshot's modelCount has something to count.

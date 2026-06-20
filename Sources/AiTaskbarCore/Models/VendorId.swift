@@ -7,6 +7,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
     case openrouter
     case kimi
     case gemini
+    case deepseek
 
     public var id: String { rawValue }
 
@@ -18,6 +19,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .openrouter: return "OpenRouter"
         case .kimi:       return "Kimi (Moonshot)"
         case .gemini:     return "Gemini (Google AI)"
+        case .deepseek:   return "DeepSeek"
         }
     }
 
@@ -31,6 +33,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .zai:        return URL(string: "https://z.ai/manage-apikey/apikey-list")
         case .kimi:       return URL(string: "https://platform.kimi.ai/console/info/account")
         case .gemini:     return URL(string: "https://aistudio.google.com/apikey")
+        case .deepseek:   return URL(string: "https://platform.deepseek.com/usage")
         }
     }
 }

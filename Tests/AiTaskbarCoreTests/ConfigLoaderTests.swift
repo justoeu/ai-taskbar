@@ -129,3 +129,30 @@ struct KimiConfigTests {
         #expect(c.baseURL == KimiConfig.defaultBaseURL)
     }
 }
+
+@Suite("DeepSeekConfig URL allowlist validation")
+struct DeepSeekConfigTests {
+    @Test("default base URL accepted")
+    func default_base_url_accepted() {
+        let c = DeepSeekConfig(baseURL: "https://api.deepseek.com")
+        #expect(c.baseURL == "https://api.deepseek.com")
+    }
+
+    @Test("http (non-TLS) rejected, falls back to default")
+    func http_rejected() {
+        let c = DeepSeekConfig(baseURL: "http://api.deepseek.com")
+        #expect(c.baseURL == DeepSeekConfig.defaultBaseURL)
+    }
+
+    @Test("attacker-controlled host rejected")
+    func unauthorized_host_rejected() {
+        let c = DeepSeekConfig(baseURL: "https://evil.example.com")
+        #expect(c.baseURL == DeepSeekConfig.defaultBaseURL)
+    }
+
+    @Test("subdomain of allowed host NOT allowed")
+    func subdomain_not_auto_allowed() {
+        let c = DeepSeekConfig(baseURL: "https://staging.api.deepseek.com")
+        #expect(c.baseURL == DeepSeekConfig.defaultBaseURL)
+    }
+}

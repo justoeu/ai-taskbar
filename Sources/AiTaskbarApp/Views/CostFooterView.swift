@@ -5,7 +5,7 @@ import AiTaskbarCore
 /// a `cost.refresh()` (every ≥60 s, flipping `isLoading` / `byVendor` /
 /// `lastComputedAt`) re-renders **only** the per-vendor cost footer, not the
 /// entire `VendorSectionView`. The other 4 sections that don't surface cost
-/// data (Z.AI, OpenRouter, Kimi, Gemini) never subscribe.
+/// data (Z.AI, OpenRouter, Kimi, Gemini, DeepSeek) never subscribe.
 public struct CostFooterView: View {
     private let vendorId: VendorId
     @ObservedObject private var cost: CostEstimator
@@ -21,7 +21,7 @@ public struct CostFooterView: View {
         let supportsLocal = CostEstimator.supportedVendors.contains(vendorId)
         // Render the footer when we already have data, OR while we're loading
         // for a vendor that the local scanners cover. Otherwise (OpenRouter,
-        // Z.AI, Kimi without data), stay hidden.
+        // Z.AI, Kimi, DeepSeek without data), stay hidden.
         if hasData, let estimate {
             Divider()
             VStack(alignment: .leading, spacing: 6) {

@@ -95,6 +95,19 @@ struct AppConfigTests {
         #expect(cfg.kimi.baseURL == KimiConfig.defaultBaseURL)
     }
 
+    @Test("DeepSeekConfig fallback when TOML supplies invalid base_url")
+    func deepseek_config_toml_invalid_base_url_falls_back() throws {
+        let toml = #"""
+        [deepseek]
+        enabled = true
+        api_key_env = "DEEPSEEK_API_KEY"
+        base_url = "http://attacker.example.com/"
+        """#
+        let cfg = try TOMLDecoder().decode(AppConfig.self, from: toml)
+        #expect(cfg.deepseek.baseURL == DeepSeekConfig.defaultBaseURL)
+        #expect(cfg.deepseek.apiKeyEnv == "DEEPSEEK_API_KEY")
+    }
+
     @Test("UpdatesConfig parses owner_repo and include_prereleases")
     func updates_config_parses_fields() throws {
         let toml = #"""

@@ -149,6 +149,27 @@ struct GoldenSnapshotTests {
         #expect(snap.status?.detail == "API key valid (no models visible)")
     }
 
+    // MARK: - DeepSeek
+
+    @Test("DeepSeek golden — USD preferred over CNY, balance + breakdown")
+    func deepseek_golden() throws {
+        let parsed = try JSONDecoder().decode(
+            DeepSeekBalanceResponse.self,
+            from: Fixtures.data(Fixtures.deepseekBalance200))
+        let snap = parsed.toSnapshot()
+
+        // Pinned values — touching the decoder must touch this list.
+        #expect(snap.planLabel == "DeepSeek")
+        #expect(snap.currency == "USD")
+        #expect(snap.totalBalance == 110.00)
+        #expect(snap.grantedBalance == 10.00)
+        #expect(snap.toppedUpBalance == 100.00)
+        #expect(snap.isAvailable == true)
+        #expect(snap.balance?.label == "Balance")
+        #expect(snap.balance?.utilizationPercent == 0)
+        #expect(snap.balance?.detail == "$110.00 available")
+    }
+
     // MARK: - Cross-snapshot invariants
 
     @Test("VendorSnapshot.maxUtilization equals the highest window")

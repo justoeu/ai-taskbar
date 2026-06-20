@@ -51,6 +51,8 @@ public struct SettingsView: View {
                         header: { vendorHeader("Kimi (Moonshot)", icon: "person.crop.circle") })
                 Section(content: { vendorGemini },
                         header: { vendorHeader("Gemini", icon: "person.crop.circle") })
+                Section(content: { vendorDeepSeek },
+                        header: { vendorHeader("DeepSeek", icon: "person.crop.circle") })
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -582,6 +584,37 @@ public struct SettingsView: View {
                 Text("v1beta").tag("https://generativelanguage.googleapis.com/v1beta")
                 Text("v1").tag("https://generativelanguage.googleapis.com/v1")
                 Text("v1alpha").tag("https://generativelanguage.googleapis.com/v1alpha")
+            }
+            .pickerStyle(.menu)
+            .help(L10n.localizedString("settings_base_url_help"))
+        }
+    }
+
+    // MARK: - Vendor: DeepSeek
+
+    @ViewBuilder
+    private var vendorDeepSeek: some View {
+        vendorBody("DeepSeek") {
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.deepseek.enabled },
+                        set: { viewModel.draft.deepseek.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_api_key_env"),
+                          helpKey: "settings_api_key_env_help",
+                          text: Binding(
+                            get: { viewModel.draft.deepseek.apiKeyEnv },
+                            set: { viewModel.draft.deepseek.apiKeyEnv = $0 }))
+            SecureInlineField(label: L10n.localizedString("settings_api_key"),
+                              helpKey: "settings_api_key_help",
+                              value: Binding(
+                                get: { viewModel.draft.deepseek.apiKey ?? "" },
+                                set: { viewModel.draft.deepseek.apiKey = $0.isEmpty ? nil : $0 }))
+            Picker(L10n.localizedString("settings_base_url"),
+                   selection: Binding(
+                    get: { viewModel.draft.deepseek.baseURL },
+                    set: { viewModel.draft.deepseek.baseURL = $0 })) {
+                Text("api.deepseek.com").tag("https://api.deepseek.com")
             }
             .pickerStyle(.menu)
             .help(L10n.localizedString("settings_base_url_help"))

@@ -37,6 +37,7 @@ public enum PinBaseline {
     ///   - Z.AI: usage (z.ai global)
     ///   - Kimi: usage (moonshot.ai + .cn fallback)
     ///   - Gemini: models heartbeat
+    ///   - DeepSeek: balance
     ///   - Z.AI China endpoint (`open.bigmodel.cn`) is included for users on
     ///     the China region even though the default config uses `api.z.ai`.
     public static let baselineHosts: [String: String] = [
@@ -50,6 +51,7 @@ public enum PinBaseline {
         "api.moonshot.ai":                      "H0wEcOh/ES0pTJGw26MyKUhbH5NCUz15SmqNPf7Sc80=",
         "api.moonshot.cn":                      "uudumF+9OyzXbIQR0x8DcADr0WGLsHMf+MyT3XHb7uY=",
         "generativelanguage.googleapis.com":    "a5SvX3A73K8gyuUZAoYoPj0QnbN0jj68fErfY/0OPmM=",
+        "api.deepseek.com":                     "LGAhpHCTmC6sW60/uo8iqwDJYczUJ4e+NRvv2ewDupk=",
     ]
 
     /// Returns the baseline pin for `host` (case-insensitive). When non-nil,

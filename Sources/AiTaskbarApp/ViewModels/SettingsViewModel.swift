@@ -264,6 +264,20 @@ public final class SettingsViewModel: ObservableObject {
             out.append(.string(section: "gemini", key: "base_url", value: new.gemini.baseURL))
         }
 
+        // [deepseek]
+        if old.deepseek.enabled != new.deepseek.enabled {
+            out.append(.bool(section: "deepseek", key: "enabled", value: new.deepseek.enabled))
+        }
+        if old.deepseek.apiKeyEnv != new.deepseek.apiKeyEnv {
+            out.append(.string(section: "deepseek", key: "api_key_env", value: new.deepseek.apiKeyEnv))
+        }
+        if old.deepseek.apiKey != new.deepseek.apiKey {
+            out.append(.secret(section: "deepseek", key: "api_key", plaintext: new.deepseek.apiKey))
+        }
+        if old.deepseek.baseURL != new.deepseek.baseURL {
+            out.append(.string(section: "deepseek", key: "base_url", value: new.deepseek.baseURL))
+        }
+
         return out
     }
 }

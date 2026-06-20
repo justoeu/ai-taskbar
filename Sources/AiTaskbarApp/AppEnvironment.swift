@@ -115,6 +115,14 @@ public final class AppEnvironment {
                 AppLog.lifecycle.error("gemini init failed: \(String(describing: error), privacy: .public)")
             }
         }
+        if config.deepseek.enabled {
+            do {
+                let p = try DeepSeekProvider(config: config.deepseek, http: http, cacheTTL: ttl)
+                out.append(p)
+            } catch {
+                AppLog.lifecycle.error("deepseek init failed: \(String(describing: error), privacy: .public)")
+            }
+        }
         return out
     }
 }

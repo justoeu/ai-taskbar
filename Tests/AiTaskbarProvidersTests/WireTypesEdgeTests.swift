@@ -196,4 +196,52 @@ struct WireTypesEdgeTests {
         #expect(snap.availableUSD == 0)
         #expect(snap.balance != nil)
     }
+
+    @Test("DeepSeek picks first entry when no USD/CNY currency code present")
+    func deepseek_first_entry_fallback() throws {
+        let body = #"""
+        {
+          "is_available": true,
+          "balance_infos": [
+            { "currency": "EUR", "total_balance": "50.00" }
+          ]
+        }
+        """#
+        let parsed = try JSONDecoder().decode(DeepSeekBalanceResponse.self, from: Data(body.utf8))
+        let snap = parsed.toSnapshot()
+        // Neither USD nor CNY → first entry is used; EUR is not a "¥" currency.
+        #expect(snap.totalBalance == 50.00)
+        #expect(snap.currency == "EUR")
+        #expect(snap.balance?.detail == "$50.00 available")
+    }
+
+    @Test("DeepSeek empty balance_infos yields a zero balance without crashing")
+    func deepseek_empty_balance_infos() throws {
+        let body = #"""
+        { "is_available": true, "balance_infos": [] }
+        """#
+        let parsed = try JSONDecoder().decode(DeepSeekBalanceResponse.self, from: Data(body.utf8))
+        let snap = parsed.toSnapshot()
+        #expect(snap.totalBalance == 0)
+        #expect(snap.currency == nil)
+        #expect(snap.balance?.detail == "$0.00 available")
+    }
+
+    @Test("DeepSeek entry missing currency field still surfaces the balance")
+    func deepseek_missing_currency_field() throws {
+        let body = #"""
+        {
+          "is_available": true,
+          "balance_infos": [
+            { "total_balance": "12.34", "granted_balance": "2.34", "topped_up_balance": "10.00" }
+          ]
+        }
+        """#
+        let parsed = try JSONDecoder().decode(DeepSeekBalanceResponse.self, from: Data(body.utf8))
+        let snap = parsed.toSnapshot()
+        #expect(snap.totalBalance == 12.34)
+        #expect(snap.grantedBalance == 2.34)
+        #expect(snap.toppedUpBalance == 10.00)
+        #expect(snap.currency == nil)
+    }
 }

@@ -12,6 +12,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
     public var openrouter: OpenRouterConfig
     public var kimi: KimiConfig
     public var gemini: GeminiConfig
+    public var deepseek: DeepSeekConfig
 
     public init(ui: UIConfig = .init(),
                 thresholds: ThresholdsConfig = .init(),
@@ -23,7 +24,8 @@ public struct AppConfig: Codable, Sendable, Equatable {
                 zai: ZAIConfig = .init(),
                 openrouter: OpenRouterConfig = .init(),
                 kimi: KimiConfig = .init(),
-                gemini: GeminiConfig = .init()) {
+                gemini: GeminiConfig = .init(),
+                deepseek: DeepSeekConfig = .init()) {
         self.ui = ui
         self.thresholds = thresholds
         self.notifications = notifications
@@ -35,6 +37,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         self.openrouter = openrouter
         self.kimi = kimi
         self.gemini = gemini
+        self.deepseek = deepseek
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,6 +53,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         openrouter     = try c.decodeIfPresent(OpenRouterConfig.self, forKey: .openrouter) ?? .init()
         kimi           = try c.decodeIfPresent(KimiConfig.self, forKey: .kimi) ?? .init()
         gemini         = try c.decodeIfPresent(GeminiConfig.self, forKey: .gemini) ?? .init()
+        deepseek       = try c.decodeIfPresent(DeepSeekConfig.self, forKey: .deepseek) ?? .init()
     }
 }
 
@@ -541,9 +545,69 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
     }
 }
 
+public struct DeepSeekConfig: Codable, Sendable, Equatable {
+    public var enabled: Bool = true
+    public var apiKeyEnv: String = "DEEPSEEK_API_KEY"
+    public var apiKey: String?
+    /// Base URL — `https://api.deepseek.com`. Validated to prevent API-key
+    /// exfil via attacker-controlled config: only `https://` and the official
+    /// DeepSeek host are accepted; anything else falls back to the default.
+    public var baseURL: String = "https://api.deepseek.com"
+
+    /// Hosts allowed in `base_url`. Centralized so tests and security review
+    /// can reference the same list. Sub-domains are NOT auto-allowed.
+    public static let allowedHosts: Set<String> = [
+        "api.deepseek.com",
+    ]
+    public static let defaultBaseURL = "https://api.deepseek.com"
+
+    public init(enabled: Bool = true,
+                apiKeyEnv: String = "DEEPSEEK_API_KEY",
+                apiKey: String? = nil,
+                baseURL: String = defaultBaseURL) {
+        self.enabled = enabled
+        self.apiKeyEnv = apiKeyEnv
+        self.apiKey = apiKey
+        self.baseURL = Self.validate(baseURL) ?? Self.defaultBaseURL
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        apiKeyEnv = try c.decodeIfPresent(String.self, forKey: .apiKeyEnv) ?? "DEEPSEEK_API_KEY"
+        apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey)
+        let raw = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? Self.defaultBaseURL
+        if let validated = Self.validate(raw) {
+            baseURL = validated
+        } else {
+            AppLog.config.warning("DeepSeekConfig.base_url \(raw, privacy: .public) rejected (must be https:// to an allowed DeepSeek host) — falling back to default")
+            baseURL = Self.defaultBaseURL
+        }
+    }
+
+    /// Returns `raw` if it is an `https://` URL pointing to an allowed host;
+    /// otherwise nil. Lowercases scheme/host before comparing.
+    public static func validate(_ raw: String) -> String? {
+        guard let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https",
+              let host = url.host?.lowercased(),
+              allowedHosts.contains(host)
+        else { return nil }
+        return raw
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case apiKeyEnv = "api_key_env"
+        case apiKey = "api_key"
+        case baseURL = "base_url"
+    }
+}
+
 extension AppConfig {
     enum CodingKeys: String, CodingKey {
         case ui, thresholds, notifications, security, updates,
-             anthropic, openai, zai, openrouter, kimi, gemini
+             anthropic, openai, zai, openrouter, kimi, gemini, deepseek
     }
 }

@@ -72,6 +72,7 @@ public struct MenuBarLabelView: View {
         case .zai:        return "ZAI"
         case .kimi:       return "Km"
         case .gemini:     return "Gm"
+        case .deepseek:   return "DS"
         }
     }
 

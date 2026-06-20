@@ -202,6 +202,14 @@ public struct ConfigLoader: Sendable {
                 config.gemini.apiKey = nil
             }
         }
+        if let enc = config.deepseek.apiKey, SecretBox.isEncrypted(enc) {
+            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
+                config.deepseek.apiKey = pt
+            } else {
+                AppLog.config.warning("deepseek.api_key encrypted but undecryptable — clearing")
+                config.deepseek.apiKey = nil
+            }
+        }
     }
 
     /// Idempotently appends any vendor section that's missing from the user's
@@ -261,7 +269,7 @@ public struct ConfigLoader: Sendable {
 
         [security]
         # TLS pinning (SPKI hash, Trust-On-First-Use). Empty list = no pinning.
-        # pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai"]
+        # pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com"]
         # pin_audit_only = false
 
         """),
@@ -325,6 +333,15 @@ public struct ConfigLoader: Sendable {
         api_key_env = "GEMINI_API_KEY"
         # api_key   = "AIza..."
         # base_url  = "https://generativelanguage.googleapis.com/v1beta"
+
+        """),
+        ("[deepseek]", """
+
+        [deepseek]
+        enabled     = true
+        api_key_env = "DEEPSEEK_API_KEY"
+        # api_key   = "sk-..."
+        # base_url  = "https://api.deepseek.com"
 
         """),
     ]

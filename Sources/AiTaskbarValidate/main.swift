@@ -112,6 +112,46 @@ section("Wire types: Gemini fixture") {
            "Gemini empty list uses validity hint")
 }
 
+section("Wire types: DeepSeek fixture") {
+    let parsed = try SharedCoders.decoder.decode(
+        DeepSeekBalanceResponse.self,
+        from: Fixtures.data(Fixtures.deepseekBalance200))
+    let s = parsed.toSnapshot()
+    expect(s.planLabel == "DeepSeek", "DeepSeek plan label")
+    expect(s.currency == "USD", "DeepSeek prefers USD over CNY")
+    expect(s.totalBalance == 110.00, "DeepSeek USD total balance")
+    expect(s.grantedBalance == 10.00, "DeepSeek granted (promo) balance")
+    expect(s.toppedUpBalance == 100.00, "DeepSeek topped-up (paid) balance")
+    expect(s.isAvailable == true, "DeepSeek is_available flag")
+    expect(s.balance?.label == "Balance", "DeepSeek balance window label")
+    expect(s.balance?.utilizationPercent == 0, "DeepSeek balance is 0% (no quota)")
+    expect(s.balance?.detail == "$110.00 available", "DeepSeek balance detail")
+
+    // CNY fallback branch.
+    let cny = try SharedCoders.decoder.decode(
+        DeepSeekBalanceResponse.self,
+        from: Fixtures.data(Fixtures.deepseekBalanceCNYOnly200))
+    let cs = cny.toSnapshot()
+    expect(cs.currency == "CNY", "DeepSeek CNY fallback currency")
+    expect(cs.totalBalance == 500.00, "DeepSeek CNY total balance")
+    expect(cs.balance?.detail == "¥500.00 available", "DeepSeek CNY uses ¥ symbol")
+
+    // Numeric (non-string) balance values branch.
+    let num = try SharedCoders.decoder.decode(
+        DeepSeekBalanceResponse.self,
+        from: Fixtures.data(Fixtures.deepseekBalanceNumbers200))
+    let ns = num.toSnapshot()
+    expect(ns.totalBalance == 42.5, "DeepSeek numeric total balance")
+
+    // Insufficient / no balance_infos branch.
+    let ins = try SharedCoders.decoder.decode(
+        DeepSeekBalanceResponse.self,
+        from: Fixtures.data(Fixtures.deepseekBalanceInsufficient200))
+    let is_ = ins.toSnapshot()
+    expect(is_.isAvailable == false, "DeepSeek insufficient flag")
+    expect(is_.totalBalance == 0, "DeepSeek no infos → 0 balance")
+}
+
 section("KimiConfig.validate") {
     expect(KimiConfig.validate("https://api.moonshot.ai/v1") != nil,
            "accepts https://api.moonshot.ai/v1")
@@ -124,6 +164,21 @@ section("KimiConfig.validate") {
     expect(KimiConfig.validate("https://API.MOONSHOT.AI/v1") != nil,
            "scheme/host case-insensitive")
     expect(KimiConfig.validate("not a url") == nil,
+           "rejects garbage")
+}
+
+section("DeepSeekConfig.validate") {
+    expect(DeepSeekConfig.validate("https://api.deepseek.com") != nil,
+           "accepts https://api.deepseek.com")
+    expect(DeepSeekConfig.validate("http://api.deepseek.com") == nil,
+           "rejects http://")
+    expect(DeepSeekConfig.validate("https://attacker.com") == nil,
+           "rejects unknown host")
+    expect(DeepSeekConfig.validate("https://API.DEEPSEEK.COM") != nil,
+           "scheme/host case-insensitive")
+    expect(DeepSeekConfig.validate("https://staging.api.deepseek.com") == nil,
+           "rejects subdomain of allowed host")
+    expect(DeepSeekConfig.validate("not a url") == nil,
            "rejects garbage")
 }
 
@@ -283,6 +338,12 @@ section("Config: full round-trip via TOMLKit") {
     enabled = true
     api_key = "sk-xyz"
     base_url = "https://api.moonshot.cn/v1"
+
+    [deepseek]
+    enabled = true
+    api_key_env = "DEEPSEEK_API_KEY"
+    api_key = "sk-ds"
+    base_url = "https://api.deepseek.com"
     """#
     let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("ai-taskbar-validate-cfg-\(UUID().uuidString).toml")
@@ -301,6 +362,10 @@ section("Config: full round-trip via TOMLKit") {
     expect(cfg.openai.manageOAuthRefresh == true, "openai manage_oauth_refresh parsed")
     expect(cfg.kimi.apiKey == "sk-xyz", "kimi inline api_key")
     expect(cfg.kimi.baseURL == "https://api.moonshot.cn/v1", ".cn base URL accepted")
+    expect(cfg.deepseek.enabled == true, "deepseek enabled")
+    expect(cfg.deepseek.apiKeyEnv == "DEEPSEEK_API_KEY", "deepseek api_key_env")
+    expect(cfg.deepseek.apiKey == "sk-ds", "deepseek inline api_key")
+    expect(cfg.deepseek.baseURL == "https://api.deepseek.com", "deepseek base_url accepted")
 }
 
 section("Config: rejected Kimi base_url falls back") {
@@ -316,6 +381,21 @@ section("Config: rejected Kimi base_url falls back") {
     let cfg = try ConfigLoader(path: tmp).load()
     expect(cfg.kimi.baseURL == "https://api.moonshot.ai/v1",
            "malicious base_url rejected → fallback to default")
+}
+
+section("Config: rejected DeepSeek base_url falls back") {
+    let toml = #"""
+    [deepseek]
+    enabled = true
+    base_url = "http://attacker.com"
+    """#
+    let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("ai-taskbar-validate-badds-\(UUID().uuidString).toml")
+    try Data(toml.utf8).write(to: tmp)
+    defer { try? FileManager.default.removeItem(at: tmp) }
+    let cfg = try ConfigLoader(path: tmp).load()
+    expect(cfg.deepseek.baseURL == "https://api.deepseek.com",
+           "malicious deepseek base_url rejected → fallback to default")
 }
 
 section("UsageHistoryStore: append + load + compact") {

@@ -331,6 +331,27 @@ public struct VendorSectionView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        case .deepseek(let s):
+            VStack(alignment: .leading, spacing: 2) {
+                if let total = s.totalBalance {
+                    Label(L10n.localizedString("balance_fmt", total),
+                          systemImage: "dollarsign.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let granted = s.grantedBalance, granted > 0 {
+                    Label(L10n.localizedString("voucher_fmt", granted),
+                          systemImage: "ticket")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let toppedUp = s.toppedUpBalance, toppedUp > 0 {
+                    Label(L10n.localizedString("cash_fmt", toppedUp),
+                          systemImage: "creditcard")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }
