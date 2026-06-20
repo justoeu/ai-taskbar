@@ -54,6 +54,47 @@ struct WireTypesEdgeTests {
         #expect(snap.weekly == nil)
         #expect(snap.mcp == nil)
         #expect(snap.planLabel == "GLM Pro")
+        // No usageDetails on any entry → topModels stays nil (not an empty array)
+        #expect(snap.topModels == nil)
+    }
+
+    @Test("Z.AI topModels aggregates usageDetails across entries and drops zero-usage models")
+    func zai_top_models_aggregation() throws {
+        let body = #"""
+        {
+          "code": 200, "success": true,
+          "data": {
+            "level": "pro",
+            "limits": [
+              { "type": "TIME_LIMIT", "unit": 5, "number": 1, "usage": 1000,
+                "currentValue": 50, "percentage": 5,
+                "nextResetTime": 1784333321994,
+                "usageDetails": [
+                  { "modelCode": "search-prime", "usage": 30 },
+                  { "modelCode": "web-reader", "usage": 20 },
+                  { "modelCode": "idle-tool", "usage": 0 }
+                ] },
+              { "type": "TOKENS_LIMIT", "unit": 6, "number": 1, "percentage": 10,
+                "nextResetTime": 1782346121993,
+                "usageDetails": [
+                  { "modelCode": "search-prime", "usage": 10 },
+                  { "modelCode": "", "usage": 5 }
+                ] }
+            ]
+          }
+        }
+        """#
+        let parsed = try JSONDecoder().decode(ZAIEnvelope.self, from: Data(body.utf8))
+        let snap = parsed.toSnapshot(configTier: nil)
+
+        // search-prime summed across both entries (30 + 10 = 40), web-reader 20,
+        // idle-tool dropped (usage 0), empty modelCode dropped.
+        #expect(snap.topModels?.map(\.model) == ["search-prime", "web-reader"])
+        #expect(snap.topModels?[0].rawUsage == 40)
+        #expect(snap.topModels?[1].rawUsage == 20)
+        // 40 / 60 total = 66.67% → 67 rounded; 20 / 60 = 33.33% → 33 rounded
+        #expect(Int((snap.topModels?[0].percent ?? 0).rounded()) == 67)
+        #expect(Int((snap.topModels?[1].percent ?? 0).rounded()) == 33)
     }
 
     @Test("Z.AI configTier overrides snapshot.planLabel")

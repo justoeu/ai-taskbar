@@ -105,15 +105,41 @@ public struct ZAISnapshot: Sendable, Equatable, Codable {
     public let session: UsageWindow?
     public let weekly: UsageWindow?
     public let mcp: UsageWindow?
+    /// Top models consumed in the current window, sorted by usage descending.
+    /// Surfaced from the `usageDetails` array Z.AI returns inside the
+    /// TIME_LIMIT entry — the only per-model signal the API exposes. Empty /
+    /// nil when the array is absent (older accounts, nothing used yet).
+    public let topModels: [ModelShare]?
 
     public init(planLabel: String? = nil,
                 session: UsageWindow? = nil,
                 weekly: UsageWindow? = nil,
-                mcp: UsageWindow? = nil) {
+                mcp: UsageWindow? = nil,
+                topModels: [ModelShare]? = nil) {
         self.planLabel = planLabel
         self.session = session
         self.weekly = weekly
         self.mcp = mcp
+        self.topModels = topModels
+    }
+}
+
+/// A single model's share of total usage within a window. Reusable across
+/// vendors — currently populated by Z.AI's `usageDetails`, but any future
+/// vendor that exposes per-model consumption can surface the same shape.
+/// `percent` is the share of total usage (0–100, summing to ~100 across the
+/// array); `rawUsage` is the vendor-native absolute count (calls, tokens,
+/// credits — whatever the wire type carries). Named `ModelShare` (not
+/// `ModelUsage`, which is already taken by the local cost aggregator).
+public struct ModelShare: Sendable, Equatable, Codable {
+    public let model: String
+    public let percent: Double
+    public let rawUsage: Double
+
+    public init(model: String, percent: Double, rawUsage: Double) {
+        self.model = model
+        self.percent = percent
+        self.rawUsage = rawUsage
     }
 }
 

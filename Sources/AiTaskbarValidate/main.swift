@@ -200,6 +200,11 @@ section("Wire types: Z.AI fixture") {
     expect(s.weekly?.label == "Weekly", "Z.AI weekly classification (TOKENS_LIMIT weekly)")
     expect(s.mcp?.label == "Web tools", "Z.AI TIME_LIMIT (web-tool) classification")
     expect(s.mcp?.detail == "40 / 1000", "Z.AI web-tool used/cap detail")
+    // topModels aggregated from usageDetails across all entries.
+    expect(s.topModels?.map(\.model) == ["search-prime", "web-reader", "zread"],
+           "Z.AI top models sorted desc by usage")
+    expect(Int((s.topModels?[0].percent ?? 0).rounded()) == 50, "Z.AI top model share (20/40)")
+    expect(s.topModels?[0].rawUsage == 20, "Z.AI top model raw usage")
 }
 
 section("DiskCache TTL semantics") {

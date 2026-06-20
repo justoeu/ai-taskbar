@@ -98,6 +98,12 @@ struct GoldenSnapshotTests {
         #expect(snap.mcp?.label == "Web tools")
         #expect(Int((snap.mcp?.utilizationPercent ?? 0).rounded()) == 4)
         #expect(snap.mcp?.detail == "40 / 1000")
+        // topModels aggregated from usageDetails (search-prime 20 + web-reader 15 + zread 5 = 40)
+        #expect(snap.topModels?.map(\.model) == ["search-prime", "web-reader", "zread"])
+        #expect(Int((snap.topModels?[0].percent ?? 0).rounded()) == 50) // 20/40
+        #expect(Int((snap.topModels?[1].percent ?? 0).rounded()) == 38) // 15/40 ≈ 37.5
+        #expect(Int((snap.topModels?[2].percent ?? 0).rounded()) == 13) //  5/40 ≈ 12.5
+        #expect(snap.topModels?[0].rawUsage == 20)
     }
 
     // MARK: - Kimi

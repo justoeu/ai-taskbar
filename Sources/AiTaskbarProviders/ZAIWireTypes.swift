@@ -55,9 +55,14 @@ public struct ZAILimitEntry: Decodable {
     public let remaining: Double?
     public let percentage: Double?    // utilization, 0–100
     public let nextResetTime: Double? // epoch milliseconds
+    /// Per-model consumption observed within this window. Z.AI only populates
+    /// this on the TIME_LIMIT (web-tool) entry in practice, but we decode it
+    /// on every entry and aggregate in `toSnapshot` so a future change to
+    /// expose per-model token usage doesn't require a wire-type edit.
+    public let usageDetails: [ZAIModelUsage]?
 
     enum CodingKeys: String, CodingKey {
-        case type, unit, number, usage, currentValue, remaining, percentage, nextResetTime
+        case type, unit, number, usage, currentValue, remaining, percentage, nextResetTime, usageDetails
     }
 
     public init(from decoder: Decoder) throws {
@@ -70,6 +75,25 @@ public struct ZAILimitEntry: Decodable {
         remaining = c.flexibleDoubleIfPresent(forKey: .remaining)
         percentage = c.flexibleDoubleIfPresent(forKey: .percentage)
         nextResetTime = c.flexibleDoubleIfPresent(forKey: .nextResetTime)
+        usageDetails = try c.decodeIfPresent([ZAIModelUsage].self, forKey: .usageDetails)
+    }
+}
+
+/// Per-model usage entry inside a `ZAILimitEntry.usageDetails` array.
+/// `modelCode` is Z.AI's identifier (e.g. `search-prime`, `web-reader`,
+/// `zread`); `usage` is the absolute consumption count within that window.
+public struct ZAIModelUsage: Decodable, Sendable, Equatable {
+    public let modelCode: String?
+    public let usage: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case modelCode, usage
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        modelCode = try c.decodeIfPresent(String.self, forKey: .modelCode)
+        usage = c.flexibleDoubleIfPresent(forKey: .usage)
     }
 }
 
@@ -127,11 +151,36 @@ extension ZAIEnvelope {
         }
         let mcp = timeEntry.map { makeWindow($0, label: "Web tools") }
 
+        // Aggregate per-model usage across every limit entry that carries a
+        // `usageDetails` array. Z.AI only populates this on the TIME_LIMIT
+        // entry today, but summing across entries is robust to the field
+        // appearing elsewhere later. Models with no usage are dropped so the
+        // breakdown shows only what actually consumed quota.
+        var totals: [String: Double] = [:]
+        for entry in data.limits {
+            for detail in entry.usageDetails ?? [] {
+                guard let code = detail.modelCode, !code.isEmpty,
+                      let used = detail.usage, used > 0 else { continue }
+                totals[code, default: 0] += used
+            }
+        }
+        let totalUsage = totals.values.reduce(0, +)
+        let topModels: [ModelShare]? = totalUsage > 0
+            ? totals
+                .map { (code, used) in
+                    ModelShare(model: code,
+                               percent: used / totalUsage * 100,
+                               rawUsage: used)
+                }
+                .sorted { $0.rawUsage > $1.rawUsage }
+            : nil
+
         return ZAISnapshot(
             planLabel: planLabel,
             session: session,
             weekly: weekly,
-            mcp: mcp
+            mcp: mcp,
+            topModels: topModels
         )
     }
 
