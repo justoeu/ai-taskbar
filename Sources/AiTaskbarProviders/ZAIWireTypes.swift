@@ -132,23 +132,17 @@ extension ZAIEnvelope {
             }
         }
 
-        // The soonest-resetting token window is the rolling "session" limit; the
-        // later one is the weekly cap. Ordering by reset time keeps the
-        // classification correct regardless of the numeric `unit` codes — only
-        // the cosmetic hour suffix in `sessionLabel` reads `unit`. The snapshot
-        // has just two token slots, so any third+ window is intentionally
-        // dropped (the live plan only exposes a 5h + a weekly window).
-        tokenEntries.sort {
-            ($0.nextResetTime ?? .greatestFiniteMagnitude)
-                < ($1.nextResetTime ?? .greatestFiniteMagnitude)
-        }
-
-        let session = tokenEntries.first.map {
-            makeWindow($0, label: sessionLabel(for: $0))
-        }
-        let weekly = tokenEntries.dropFirst().first.map {
-            makeWindow($0, label: "Weekly")
-        }
+        // Classify the two token-quota windows by their window-SIZE unit code,
+        // not by which resets sooner. Z.AI encodes the window duration in
+        // `unit` (3 = hour → the rolling N-hour "session", 6 = week → the
+        // weekly cap), and that identity is stable — whereas nextResetTime
+        // crosses: a 5h session near its end can reset AFTER a weekly window
+        // that's mid-cycle, which made the old "soonest reset = session"
+        // heuristic classify the two backwards (the Session tile showed the
+        // weekly's multi-day reset and vice-versa).
+        let slots = Self.classifyTokenEntries(tokenEntries)
+        let session = slots.session.map { makeWindow($0, label: sessionLabel(for: $0)) }
+        let weekly = slots.weekly.map { makeWindow($0, label: "Weekly") }
         let mcp = timeEntry.map { makeWindow($0, label: "Web tools") }
 
         // Aggregate per-model usage across every limit entry that carries a
@@ -191,6 +185,48 @@ extension ZAIEnvelope {
             resetsAt: e.resetDate,
             detail: e.detailString
         )
+    }
+
+    /// Picks the session (rolling hourly, `unit == 3`) and weekly (`unit == 6`)
+    /// windows out of `entries`. Classifies by window-SIZE unit code, which is a
+    /// stable identity — unlike `nextResetTime`, which can put a near-expiry
+    /// weekly window ahead of a 5h session and invert the two. Falls back to
+    /// soonest-reset ordering only when the unit codes are absent/unknown, so a
+    /// future plan exposing windows under new unit codes still surfaces rows.
+    private static func classifyTokenEntries(_ entries: [ZAILimitEntry])
+        -> (session: ZAILimitEntry?, weekly: ZAILimitEntry?) {
+        guard !entries.isEmpty else { return (nil, nil) }
+
+        let sessionIdx = entries.firstIndex { $0.unit == 3 }
+        let weeklyIdx  = entries.firstIndex { $0.unit == 6 }
+
+        // Both recognized → unambiguous classification.
+        if let s = sessionIdx, let w = weeklyIdx, s != w {
+            return (entries[s], entries[w])
+        }
+        // Neither recognized → legacy soonest-reset fallback.
+        if sessionIdx == nil && weeklyIdx == nil {
+            let sorted = entries.enumerated().sorted {
+                ($0.element.nextResetTime ?? .greatestFiniteMagnitude)
+                    < ($1.element.nextResetTime ?? .greatestFiniteMagnitude)
+            }
+            let s = sorted.first?.offset
+            let w = sorted.dropFirst().first?.offset
+            return (s.map { entries[$0] }, w.map { entries[$0] })
+        }
+        // Exactly one recognized: keep it in its slot and fill the other from
+        // the closest remaining entry (by reset time) so a single-window plan
+        // still surfaces a row.
+        let knownIdx = sessionIdx ?? weeklyIdx!
+        let known = entries[knownIdx]
+        let other = entries.enumerated()
+            .filter { $0.offset != knownIdx }
+            .min {
+                ($0.element.nextResetTime ?? .greatestFiniteMagnitude)
+                    < ($1.element.nextResetTime ?? .greatestFiniteMagnitude)
+            }
+            .map { $0.element }
+        return sessionIdx != nil ? (known, other) : (other, known)
     }
 
     /// The session window's duration is the meaningful detail (a 5-hour rolling

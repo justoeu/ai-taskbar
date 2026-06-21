@@ -186,6 +186,40 @@ struct WireTypesEdgeTests {
         #expect(snap.weekly == nil)
     }
 
+    @Test("Z.AI classifies session/weekly by unit code, not by nextResetTime")
+    func zai_inverted_reset_times_classify_by_unit() throws {
+        // Pathological but real timing: the weekly window is near its end so
+        // it resets SOONER than the 5h session. The old "sort by nextResetTime"
+        // heuristic classified the weekly as the session here. The unit code
+        // (3 = hour → session, 6 = week → weekly) must win regardless.
+        let body = #"""
+        {
+          "code": 200, "data": {
+            "level": "pro",
+            "limits": [
+              { "type": "TOKENS_LIMIT", "unit": 6, "number": 1, "percentage": 10,
+                "nextResetTime": 1782017560658 },
+              { "type": "TOKENS_LIMIT", "unit": 3, "number": 5, "percentage": 40,
+                "nextResetTime": 1782582868970 }
+            ]
+          }
+        }
+        """#
+        let parsed = try JSONDecoder().decode(ZAIEnvelope.self, from: Data(body.utf8))
+        let snap = parsed.toSnapshot(configTier: nil)
+
+        // Session is the unit-3 (5h) window even though it resets LATER.
+        #expect(snap.session?.label == "Session (5h)")
+        #expect(snap.session?.utilizationPercent == 40)
+        #expect(snap.session?.resetsAt?.timeIntervalSince1970
+               == Date(timeIntervalSince1970: 1_782_582_868.970).timeIntervalSince1970)
+        // Weekly is the unit-6 window even though it resets SOONER.
+        #expect(snap.weekly?.label == "Weekly")
+        #expect(snap.weekly?.utilizationPercent == 10)
+        #expect(snap.weekly?.resetsAt?.timeIntervalSince1970
+               == Date(timeIntervalSince1970: 1_782_017_560.658).timeIntervalSince1970)
+    }
+
     @Test("KimiBalance toSnapshot when data is nil")
     func kimi_nil_data_branch() throws {
         let body = #"""
