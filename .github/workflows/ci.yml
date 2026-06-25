@@ -1,10 +1,10 @@
 name: CI
 
-# Runs on every push to main + every pull request. Confirms the validation
-# suite passes — same gate `make validate` enforces locally.
+# Runs only on pull requests (and manual dispatch). The PR gate already
+# validates a change before it merges, so re-running the full suite on the
+# merge commit to main is redundant and burns macOS minutes — `release.yml`
+# re-runs the validation suite at publish time as a final sanity check.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
