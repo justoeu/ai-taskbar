@@ -80,8 +80,9 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     /// only OpenAI/Codex `auth.json`). Fires when an external `codex login`
     /// renews the token, so the vendor refreshes immediately instead of
     /// waiting up to 300 s for the next scheduled tick. nil for providers
-    /// without a file-backed credential.
-    private var credWatcherFd: Int32 = -1
+    /// without a file-backed credential. No `deinit`: the source lives for
+    /// the app lifetime, mirroring `ConfigWatcher` (a resumed DispatchSource
+    /// can't be safely cancelled from a nonisolated deinit under Swift 6).
     private var credWatcher: DispatchSourceFileSystemObject?
     private var credDebounce: Task<Void, Never>?
 
@@ -97,11 +98,6 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         if let credPath = provider.credentialFileURL {
             armCredentialWatcher(path: credPath)
         }
-    }
-
-    deinit {
-        credWatcher?.cancel()
-        if credWatcherFd >= 0 { close(credWatcherFd) }
     }
 
     /// Arms a DispatchSource on the credential file. Coalesces rapid writes
@@ -122,17 +118,16 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         }
         src.resume()
         credWatcher = src
-        credWatcherFd = fd
     }
 
     private func handleCredentialChange(events: DispatchSource.FileSystemEvent,
                                         path: URL) {
         // Atomic write (tempfile + rename) leaves the fd pointing at the
-        // unlinked inode — re-arm against the new path, then refresh.
+        // unlinked inode — cancel (fires the cancel handler → closes the old
+        // fd), re-arm against the new path, then refresh.
         if events.contains(.delete) || events.contains(.rename) {
             credWatcher?.cancel()
             credWatcher = nil
-            credWatcherFd = -1
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.armCredentialWatcher(path: path)
                 self?.scheduleCredentialRefresh()
