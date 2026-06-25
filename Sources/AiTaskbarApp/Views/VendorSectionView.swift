@@ -22,6 +22,14 @@ public struct VendorSectionView: View {
     /// (visible as a permanent "Loading…" spinner that never resolves).
     @State private var userExpanded: Bool
 
+    /// Tracks an in-progress CLI re-login triggered by `reloginAffordance`.
+    /// Flips true on click, back to false once the vendor recovers
+    /// (`needsReauth` clears) or after a timeout — whichever comes first.
+    @State private var reloginPending = false
+    /// Set when the login process couldn't even be spawned (very rare —
+    /// `/bin/zsh` missing); surfaces a copy-the-command fallback.
+    @State private var reloginSpawnFailed = false
+
     private static func expansionKey(for vendor: VendorId) -> String {
         "expanded_\(vendor.rawValue)"
     }
@@ -201,18 +209,26 @@ public struct VendorSectionView: View {
                 .foregroundStyle(.secondary)
 
         case .loading, .ok:
-            if let snap = state.outcome?.snapshot {
-                if snap.windows.isEmpty {
-                    L10n.text("no_usage_windows")
-                        .font(.subheadline)
-                        .foregroundStyle(.orange)
-                } else {
-                    renderSnapshot(snap)
+            VStack(alignment: .leading, spacing: 8) {
+                if vm.needsReauth {
+                    reloginAffordance
+                }
+                if let snap = state.outcome?.snapshot {
+                    if snap.windows.isEmpty {
+                        L10n.text("no_usage_windows")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                    } else {
+                        renderSnapshot(snap)
+                    }
                 }
             }
 
         case .failed(let err, let fallback):
             VStack(alignment: .leading, spacing: 6) {
+                if vm.needsReauth {
+                    reloginAffordance
+                }
                 if err.isDisabled {
                     Label(L10n.localizedString("no_credentials_for_vendor_fmt",
                                                vm.vendorId.displayName),
@@ -237,6 +253,105 @@ public struct VendorSectionView: View {
                 }
             }
         }
+    }
+
+    /// Actionable "token expired — re-login" banner. Shown only when the
+    /// vendor's last fetch was a 401 AND the vendor has a CLI login command
+    /// (currently OpenAI/Codex). The button runs that command in the
+    /// background — delegating re-auth to the CLI that owns the token, so the
+    /// monitor never rotates the shared refresh_token itself.
+    @ViewBuilder
+    private var reloginAffordance: some View {
+        if let command = vm.vendorId.reloginCommand {
+            HStack(spacing: 8) {
+                Image(systemName: reloginPending
+                      ? "person.badge.key.fill"
+                      : "person.badge.key.fill")
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    L10n.text("token_expired_title")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    if reloginSpawnFailed {
+                        Text(command)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    } else if reloginPending {
+                        L10n.text("relogin_started")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        L10n.text("token_expired_relogin_hint")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 4)
+                if reloginSpawnFailed {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(command, forType: .string)
+                    } label: {
+                        Label(L10n.localizedString("copy"),
+                              systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                } else {
+                    Button {
+                        runRelogin(command: command)
+                    } label: {
+                        Label(reloginPending
+                              ? L10n.localizedString("relogin_started")
+                              : L10n.localizedString("relogin"),
+                              systemImage: reloginPending
+                                ? "checkmark.circle"
+                                : "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(reloginPending)
+                }
+            }
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.orange.opacity(0.12))
+            )
+        }
+    }
+
+    /// Spawns the vendor's login command in the background via a login shell.
+    /// GUI apps inherit a minimal PATH that excludes `/opt/homebrew/bin`, so
+    /// we run through `/bin/zsh -l -c` to source the user's profile first;
+    /// this finds `codex`. The CLI itself opens the browser for the OAuth
+    /// flow and writes the renewed token — no Terminal window and no macOS
+    /// Automation permission needed (the AppleScript/Terminal approach was
+    /// fragile under ad-hoc signing: TCC dropped the grant on every rebuild).
+    /// `scheduleReauthRetry()` re-checks the token afterwards.
+    private func runRelogin(command: String) {
+        reloginSpawnFailed = false
+        let task = Process()
+        task.launchPath = "/bin/zsh"
+        task.arguments = ["-l", "-c", command]
+        do {
+            try task.run()
+        } catch {
+            reloginSpawnFailed = true
+            return
+        }
+        reloginPending = true
+        vm.scheduleReauthRetry()
+        // Re-arm the button after a grace window so the user can retry if the
+        // browser flow never completed. Cleared earlier by the view when the
+        // vendor recovers (needsReauth flips false → affordance vanishes).
+        let pendingReset = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120 * 1_000_000_000)
+            if !Task.isCancelled { reloginPending = false }
+        }
+        // If the view goes away, cancel the reset (harmless either way).
+        _ = pendingReset
     }
 
     @ViewBuilder

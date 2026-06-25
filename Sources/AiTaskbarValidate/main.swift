@@ -52,6 +52,9 @@ section("AppError") {
     expect(AppError.http(status: 500, body: "x").isTransient, "5xx is transient")
     expect(AppError.http(status: 429, body: "x").isTransient, "429 is transient")
     expect(!AppError.http(status: 401, body: "x").isTransient, "401 is not transient")
+    expect(AppError.http(status: 401, body: "x").isUnauthorized, "401 is unauthorized")
+    expect(!AppError.http(status: 403, body: "x").isUnauthorized, "403 is not unauthorized")
+    expect(!AppError.credentials("x").isUnauthorized, "credentials is not unauthorized")
     expect(a.localizedDescription == "disabled: test",
            "LocalizedError surfaces description")
     let wrapped = AppError.wrapping(a)

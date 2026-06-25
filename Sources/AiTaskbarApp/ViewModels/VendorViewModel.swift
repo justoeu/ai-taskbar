@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Darwin
 import AiTaskbarCore
 import AiTaskbarProviders
 
@@ -36,11 +37,53 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     @Published public private(set) var history: [UsageHistoryStore.Sample] = []
     @Published public private(set) var lastNetworkFetch: Date?
 
+    /// True when the vendor's last fetch was rejected with a 401 — either a
+    /// hard `.failed` on a cold cache, or a stale-but-served snapshot whose
+    /// `lastError` carries the 401. Drives the per-vendor "Re-login" button
+    /// (see `VendorSectionView`). Stays false for non-OAuth vendors that lack
+    /// a `reloginCommand`.
+    public var needsReauth: Bool {
+        switch state {
+        case .failed(let err, _):
+            return err.isUnauthorized
+        case .ok(let outcome) where outcome.isStale:
+            return outcome.lastError?.status == 401
+        default:
+            return false
+        }
+    }
+
+    /// Schedules a couple of delayed re-checks after the user kicks off a CLI
+    /// re-login in a separate Terminal window. The OAuth browser flow takes a
+    /// variable amount of time, so we poke the endpoint again after a delay;
+    /// once the token is renewed the 401 clears, `needsReauth` flips false,
+    /// and the loop bails out early. Keeps the monitor from showing a stale
+    /// "token expired" banner until the next 300 s scheduled tick.
+    public func scheduleReauthRetry() {
+        Task { @MainActor [weak self] in
+            for delaySec in [30, 75] {
+                try? await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+                guard let self else { return }
+                guard self.needsReauth else { return }  // recovered → stop poking
+                self.refresh(forceRefresh: true)
+            }
+        }
+    }
+
     public let historyStore: UsageHistoryStore?
     private weak var notifications: NotificationService?
     /// Bumped on every refresh — used to track in-flight task ownership
     /// without racing on Task identity.
     private var epoch: Int = 0
+
+    /// Filesystem watcher on the provider's `credentialFileURL` (currently
+    /// only OpenAI/Codex `auth.json`). Fires when an external `codex login`
+    /// renews the token, so the vendor refreshes immediately instead of
+    /// waiting up to 300 s for the next scheduled tick. nil for providers
+    /// without a file-backed credential.
+    private var credWatcherFd: Int32 = -1
+    private var credWatcher: DispatchSourceFileSystemObject?
+    private var credDebounce: Task<Void, Never>?
 
     public init(provider: any UsageProvider,
                 notifications: NotificationService? = nil) {
@@ -50,6 +93,62 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         self.historyStore = try? UsageHistoryStore.defaultFor(provider.vendorId)
         if let store = historyStore {
             self.history = store.load(since: Date.now.addingTimeInterval(-24 * 3600))
+        }
+        if let credPath = provider.credentialFileURL {
+            armCredentialWatcher(path: credPath)
+        }
+    }
+
+    deinit {
+        credWatcher?.cancel()
+        if credWatcherFd >= 0 { close(credWatcherFd) }
+    }
+
+    /// Arms a DispatchSource on the credential file. Coalesces rapid writes
+    /// (codex's atomic write = tempfile + rename) into a single delayed
+    /// refresh so we don't fan out redundant network calls.
+    private func armCredentialWatcher(path: URL) {
+        let fd = open(path.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .delete, .rename, .extend],
+            queue: .main)
+        src.setEventHandler { [weak self] in
+            self?.handleCredentialChange(events: src.data, path: path)
+        }
+        src.setCancelHandler { [fd] in
+            if fd >= 0 { close(fd) }
+        }
+        src.resume()
+        credWatcher = src
+        credWatcherFd = fd
+    }
+
+    private func handleCredentialChange(events: DispatchSource.FileSystemEvent,
+                                        path: URL) {
+        // Atomic write (tempfile + rename) leaves the fd pointing at the
+        // unlinked inode — re-arm against the new path, then refresh.
+        if events.contains(.delete) || events.contains(.rename) {
+            credWatcher?.cancel()
+            credWatcher = nil
+            credWatcherFd = -1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.armCredentialWatcher(path: path)
+                self?.scheduleCredentialRefresh()
+            }
+            return
+        }
+        scheduleCredentialRefresh()
+    }
+
+    /// Debounce rapid credential writes into one refresh after 0.5 s.
+    private func scheduleCredentialRefresh() {
+        credDebounce?.cancel()
+        credDebounce = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.refresh(forceRefresh: true)
         }
     }
 

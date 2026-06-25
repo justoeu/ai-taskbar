@@ -57,6 +57,16 @@ struct AppErrorTests {
         #expect(!AppError.io("disk").isRateLimited)
     }
 
+    @Test("isUnauthorized flips only on HTTP 401")
+    func isUnauthorized_flips_only_on_401() {
+        #expect(AppError.http(status: 401, body: "expired token").isUnauthorized)
+        #expect(!AppError.http(status: 403, body: "").isUnauthorized)
+        #expect(!AppError.http(status: 429, body: "").isUnauthorized)
+        #expect(!AppError.http(status: 500, body: "").isUnauthorized)
+        #expect(!AppError.credentials("x").isUnauthorized)
+        #expect(!AppError.transport("net").isUnauthorized)
+    }
+
     @Test("errorDescription mirrors description")
     func errorDescription_mirrors_description() {
         let err = AppError.schema("bad")

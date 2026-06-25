@@ -33,6 +33,11 @@
 "stale_help" = "Mostrando datos en caché — la última actualización falló.";
 "no_credentials_help" = "Sin credenciales configuradas.";
 "last_fetch_failed_help" = "La última actualización falló.";
+"token_expired_title" = "Token de acceso expirado";
+"token_expired_relogin_hint" = "Abre el navegador para iniciar sesión — verificaremos automáticamente.";
+"relogin" = "Re-iniciar sesión";
+"relogin_started" = "Navegador abierto — completa el inicio de sesión.";
+"copy" = "Copiar";
 "locked_help" = "Bloqueado — sin credenciales configuradas.";
 "expand_fmt" = "Expandir %@";
 "collapse_fmt" = "Contraer %@";
@@ -133,9 +138,9 @@
 "settings_codex_auth_path" = "Ruta del auth.json de Codex";
 "settings_manage_oauth_anthropic" = "Gestionar refresh OAuth de Anthropic";
 "settings_manage_oauth_openai" = "Gestionar refresh OAuth de OpenAI/Codex";
-"settings_manage_oauth_help" = "Cuando ESTÁ ACTIVO, la app refresca el token OAuth en vez de leer el que mantiene la CLI. PUEDE TIRAR OTRAS SESIONES CLI ACTIVAS.";
+"settings_manage_oauth_help" = "Cuando ESTÁ ACTIVO, la app refresca el token OAuth — proactivamente antes de expirar y reactivamente al recibir un 401 — en vez de leer el que mantiene la CLI. PUEDE TIRAR OTRAS SESIONES CLI ACTIVAS.";
 "settings_oauth_confirm_title" = "¿Habilitar refresh OAuth?";
-"settings_oauth_confirm_body" = "Refrescar el token OAuth en esta app rota el refresh_token compartido con la CLI de Claude Code / Codex, lo cual tira otras sesiones CLI activas hasta que se reautentiquen. Solo habilita si usas esta app sin la CLI.";
+"settings_oauth_confirm_body" = "Refrescar el token OAuth en esta app rota el refresh_token compartido con la CLI de Claude Code / Codex, lo cual tira otras sesiones CLI activas hasta que se reautentiquen. También permite que la app se recupere sola cuando un token expirado es rechazado con un 401. Solo habilita si usas esta app sin la CLI.";
 "settings_oauth_confirm_understand" = "Entiendo, habilitar";
 "settings_api_key" = "Clave de API";
 "settings_api_key_env" = "Variable de entorno de la clave";

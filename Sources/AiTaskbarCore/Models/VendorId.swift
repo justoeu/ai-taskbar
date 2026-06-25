@@ -36,4 +36,16 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .deepseek:   return URL(string: "https://platform.deepseek.com/usage")
         }
     }
+
+    /// Shell command the user can run to re-authenticate when the vendor's
+    /// token is rejected with a 401. Returns nil for API-key vendors (a 401
+    /// there means the key is wrong — the fix is editing config, not a CLI
+    /// login). The per-vendor UI surfaces this as a "Re-login" button that
+    /// runs the command in a fresh Terminal window.
+    public var reloginCommand: String? {
+        switch self {
+        case .openai:     return "codex login"
+        default:          return nil
+        }
+    }
 }

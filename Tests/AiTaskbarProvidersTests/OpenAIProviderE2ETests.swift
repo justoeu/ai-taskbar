@@ -105,6 +105,93 @@ struct OpenAIProviderE2ETests {
         StubURLProtocol.reset()
     }
 
+    @Test("reactive refresh on 401: refresh + retry succeeds (manageOAuthRefresh)")
+    func reactive_refresh_on_401_retries() async throws {
+        let oauthBody = #"""
+        {"access_token":"new.acc","refresh_token":"new.ref","id_token":"\#(makeJWT(planType: "pro"))","expires_in":3600}
+        """#
+        var usageHits = 0
+        var oauthHits = 0
+        StubURLProtocol.handler = { req in
+            if req.url?.path.contains("oauth/token") == true {
+                oauthHits += 1
+                return .init(data: Data(oauthBody.utf8))
+            }
+            // Usage endpoint: first call 401s (token rejected server-side
+            // despite a valid-looking JWT), retry after refresh succeeds.
+            usageHits += 1
+            if usageHits == 1 {
+                return .init(status: 401,
+                             data: Data(#"{"error":"expired token"}"#.utf8))
+            }
+            return .init(data: Fixtures.data(Fixtures.openaiUsage200))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .openai, baseDir: tmpDir)
+        // Fresh-looking JWT so the proactive refresh path does NOT fire —
+        // only the reactive 401 path should trigger the exchange.
+        _ = try writeAuthJSON(idToken: makeJWT(planType: "free", expiresIn: 3600))
+        let path = tmpDir.appendingPathComponent("auth.json")
+        let creds = FileCredentialReader(path: path)
+        let provider = OpenAIProvider(credentials: creds, cache: cache,
+                                      http: http, manageOAuthRefresh: true)
+
+        let outcome = try await provider.fetchUsage(forceRefresh: true)
+        _ = outcome
+
+        // The usage endpoint was hit twice (initial 401 + retry), oauth once.
+        #expect(usageHits == 2)
+        #expect(oauthHits == 1)
+        // auth.json on disk now carries the refreshed tokens.
+        let reread = try creds.read()
+        #expect(reread.tokens.accessToken == "new.acc")
+        #expect(reread.tokens.refreshToken == "new.ref")
+        // The retried usage call used the new access token.
+        let lastUsage = StubURLProtocol.captured.last
+        #expect(lastUsage?.value(forHTTPHeaderField: "Authorization") == "Bearer new.acc")
+        try? FileManager.default.removeItem(at: tmpDir)
+        StubURLProtocol.reset()
+    }
+
+    @Test("reactive refresh on 401 is skipped in read-only mode")
+    func reactive_refresh_skipped_in_read_only_mode() async throws {
+        var oauthHits = 0
+        StubURLProtocol.handler = { req in
+            if req.url?.path.contains("oauth/token") == true {
+                oauthHits += 1
+                return .init(data: Data(#"{"access_token":"x"}"#.utf8))
+            }
+            // Usage endpoint always 401.
+            return .init(status: 401,
+                         data: Data(#"{"error":"expired token"}"#.utf8))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .openai, baseDir: tmpDir)
+        _ = try writeAuthJSON(idToken: makeJWT(planType: "free", expiresIn: 3600))
+        let creds = FileCredentialReader(
+            path: tmpDir.appendingPathComponent("auth.json"))
+        let provider = OpenAIProvider(credentials: creds, cache: cache,
+                                      http: http, manageOAuthRefresh: false)
+
+        // Cold cache + 401 → CachedFetch rethrows; read-only mode must NOT
+        // have attempted a refresh.
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected 401 to throw in read-only mode")
+        } catch let err as AppError {
+            if case .http(let status, _) = err {
+                #expect(status == 401)
+            } else {
+                Issue.record("expected .http(401), got \(err)")
+            }
+        } catch {
+            Issue.record("expected AppError, got \(error)")
+        }
+        #expect(oauthHits == 0, "read-only mode must not hit the OAuth endpoint")
+        try? FileManager.default.removeItem(at: tmpDir)
+        StubURLProtocol.reset()
+    }
+
     @Test("read-only mode: expired JWT is NOT refreshed and NOT written back")
     func read_only_mode_skips_refresh_and_writeback() async throws {
         var hitOAuth = false

@@ -8,8 +8,15 @@ public protocol UsageProvider: Sendable {
     /// fresh, returns the cached snapshot without a network call. On network
     /// failure, falls back to a stale cached snapshot when available.
     func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome
+    /// Filesystem path of the file-backed credential backing this provider,
+    /// if any. Watched by the UI so a re-login performed externally (e.g.
+    /// `codex login` run by the user) triggers an immediate refresh instead
+    /// of waiting for the next scheduled tick. nil for providers whose
+    /// credentials live in the Keychain or an env var.
+    var credentialFileURL: URL? { get }
 }
 
 public extension UsageProvider {
     var displayName: String { vendorId.displayName }
+    var credentialFileURL: URL? { nil }
 }

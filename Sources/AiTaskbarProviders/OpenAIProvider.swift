@@ -3,6 +3,7 @@ import AiTaskbarCore
 
 public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
     public let vendorId: VendorId = .openai
+    public var credentialFileURL: URL? { credentials.path }
     private let credentials: FileCredentialReader
     private let fetcher: CachedFetch
     private let http: HTTPClient
@@ -56,39 +57,69 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
             decode: decodeSnapshot,
             fetch: { [self] in
                 var auth = try credentials.read()
-                // Only rotate + persist the shared Codex credential when
-                // explicitly opted in. In the default read-only mode we use
-                // whatever token the Codex CLI maintains; a briefly-expired
-                // token 401s and CachedFetch serves the last cached snapshot
-                // (or surfaces the error when the cache is cold) until the CLI
-                // renews — keeping the monitor from logging out Codex sessions.
+                var didRefresh = false
+                // Proactive: refresh ~5 min before the JWT expires (opt-in
+                // only). In read-only mode we use whatever token the Codex CLI
+                // maintains; a briefly-expired token 401s and CachedFetch
+                // serves the last cached snapshot (or surfaces the error when
+                // the cache is cold) until the CLI renews — keeping the
+                // monitor from logging out Codex sessions.
                 if manageOAuthRefresh,
                    let exp = JWT.expiry(auth.tokens.idToken),
                    exp < Date.now.addingTimeInterval(OpenAIOAuth.refreshBuffer) {
-                    let resp = try await OpenAIOAuth.refresh(
-                        refreshToken: auth.tokens.refreshToken, http: http)
+                    auth = try await refreshAndWriteBack(auth)
+                    didRefresh = true
+                }
+                // Reactive: if the usage endpoint rejects the token with 401,
+                // do a one-shot refresh + retry. Catches the case where the
+                // JWT looked valid but the access_token was invalidated
+                // server-side (clock skew, early revocation, proactive-refresh
+                // window miss). Opt-in only — in read-only mode the 401
+                // propagates to CachedFetch unchanged. Skipped when we already
+                // refreshed proactively above: a second rotation can't fix an
+                // account-level rejection and just churns the shared token.
+                do {
+                    return try await fetchUsageBytes(auth: auth)
+                } catch AppError.http(401, _) where manageOAuthRefresh && !didRefresh {
                     try Task.checkCancellation()
-                    auth.tokens = CodexTokens(
-                        accessToken: resp.access_token,
-                        refreshToken: resp.refresh_token ?? auth.tokens.refreshToken,
-                        idToken: resp.id_token ?? auth.tokens.idToken
-                    )
-                    try credentials.writeBack(auth)
+                    auth = try await refreshAndWriteBack(auth)
+                    return try await fetchUsageBytes(auth: auth)
                 }
-                // Refresh the memoized label whenever we have fresh auth.
-                primeLabelCache(idToken: auth.tokens.idToken)
-                var req = URLRequest(url: Self.usageURL)
-                req.timeoutInterval = 10
-                req.setValue("Bearer \(auth.tokens.accessToken)",
-                             forHTTPHeaderField: "Authorization")
-                req.setValue("codex-cli", forHTTPHeaderField: "User-Agent")
-                if let acc = auth.accountId {
-                    req.setValue(acc, forHTTPHeaderField: "ChatGPT-Account-Id")
-                }
-                let rawBytes = try await http.fetchPayload(req)
-                return try Self.stripPII(from: rawBytes)
             }
         )
+    }
+
+    /// Exchanges the refresh_token for fresh access/id tokens and persists the
+    /// rotated credential to `~/.codex/auth.json`. Returns the updated auth.
+    /// Opt-in only — see `manageOAuthRefresh`.
+    private func refreshAndWriteBack(_ auth: CodexAuth) async throws -> CodexAuth {
+        let resp = try await OpenAIOAuth.refresh(
+            refreshToken: auth.tokens.refreshToken, http: http)
+        try Task.checkCancellation()
+        var updated = auth
+        updated.tokens = CodexTokens(
+            accessToken: resp.access_token,
+            refreshToken: resp.refresh_token ?? auth.tokens.refreshToken,
+            idToken: resp.id_token ?? auth.tokens.idToken
+        )
+        try credentials.writeBack(updated)
+        return updated
+    }
+
+    /// Builds the usage request with the given credential and returns the
+    /// PII-scrubbed payload bytes.
+    private func fetchUsageBytes(auth: CodexAuth) async throws -> Data {
+        primeLabelCache(idToken: auth.tokens.idToken)
+        var req = URLRequest(url: Self.usageURL)
+        req.timeoutInterval = 10
+        req.setValue("Bearer \(auth.tokens.accessToken)",
+                     forHTTPHeaderField: "Authorization")
+        req.setValue("codex-cli", forHTTPHeaderField: "User-Agent")
+        if let acc = auth.accountId {
+            req.setValue(acc, forHTTPHeaderField: "ChatGPT-Account-Id")
+        }
+        let rawBytes = try await http.fetchPayload(req)
+        return try Self.stripPII(from: rawBytes)
     }
 
     /// Removes `user_id`, `account_id`, `email` from the response before

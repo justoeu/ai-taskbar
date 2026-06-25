@@ -51,6 +51,15 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
         return false
     }
 
+    /// True only when the vendor responded with HTTP 401 (Unauthorized). Used
+    /// by the per-vendor UI to surface a "re-login" affordance instead of a
+    /// generic red error — a 401 on an OAuth vendor (Codex/Claude) means the
+    /// access token expired and a fresh login is the recovery, not a retry.
+    public var isUnauthorized: Bool {
+        if case .http(let s, _) = self, s == 401 { return true }
+        return false
+    }
+
     /// Wraps any error into an `AppError`, passing through if it's already one.
     /// Eliminates the `(error as? AppError) ?? AppError.other("\(error)")`
     /// boilerplate previously duplicated across all five providers.

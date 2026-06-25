@@ -33,6 +33,11 @@
 "stale_help" = "Dados em cache — última busca falhou.";
 "no_credentials_help" = "Sem credenciais configuradas.";
 "last_fetch_failed_help" = "Última busca falhou.";
+"token_expired_title" = "Token de acesso expirado";
+"token_expired_relogin_hint" = "Abre o navegador para entrar — vamos verificar automaticamente.";
+"relogin" = "Re-login";
+"relogin_started" = "Navegador aberto — complete o login.";
+"copy" = "Copiar";
 "locked_help" = "Bloqueado — sem credenciais configuradas.";
 "expand_fmt" = "Expandir %@";
 "collapse_fmt" = "Recolher %@";
@@ -133,9 +138,9 @@
 "settings_codex_auth_path" = "Caminho do auth.json do Codex";
 "settings_manage_oauth_anthropic" = "Gerenciar refresh OAuth do Anthropic";
 "settings_manage_oauth_openai" = "Gerenciar refresh OAuth do OpenAI/Codex";
-"settings_manage_oauth_help" = "Quando LIGADO, o app atualiza o token OAuth em vez de ler o que o CLI mantém. PODE DERRUBAR outras sessões CLI ativas.";
+"settings_manage_oauth_help" = "Quando LIGADO, o app atualiza o token OAuth — proativamente antes de expirar e reativamente ao receber um 401 — em vez de ler o que o CLI mantém. PODE DERRUBAR outras sessões CLI ativas.";
 "settings_oauth_confirm_title" = "Habilitar refresh OAuth?";
-"settings_oauth_confirm_body" = "Atualizar o token OAuth neste app rotaciona o refresh_token compartilhado com a CLI do Claude Code / Codex, o que derruba outras sessões CLI ativas até que reautentiquem. Só habilite se você usa este app sem a CLI.";
+"settings_oauth_confirm_body" = "Atualizar o token OAuth neste app rotaciona o refresh_token compartilhado com a CLI do Claude Code / Codex, o que derruba outras sessões CLI ativas até que reautentiquem. Também permite que o app se recupere sozinho quando um token expirado é rejeitado com um 401. Só habilite se você usa este app sem a CLI.";
 "settings_oauth_confirm_understand" = "Entendi, habilitar";
 "settings_api_key" = "Chave de API";
 "settings_api_key_env" = "Variável de ambiente da chave";
