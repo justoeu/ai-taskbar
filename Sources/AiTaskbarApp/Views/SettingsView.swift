@@ -692,6 +692,7 @@ struct FieldHelpButton: View {
             }
             .padding(10)
             .frame(maxWidth: 260, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
