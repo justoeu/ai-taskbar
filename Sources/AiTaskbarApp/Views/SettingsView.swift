@@ -20,6 +20,7 @@ public struct SettingsView: View {
     @State private var showResetConfirm = false
     @State private var pinHostsText: String = ""
     @State private var expandedVendor: String? = nil
+    @State private var activeHelpKey: String? = nil
 
     public init(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -65,6 +66,16 @@ public struct SettingsView: View {
                 .fill(.regularMaterial)
                 .shadow(radius: 20)
         )
+        .environment(\.activeHelpKey, $activeHelpKey)
+        .overlay(alignment: .bottom) {
+            if let key = activeHelpKey {
+                HelpBanner(helpKey: key) { activeHelpKey = nil }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 54)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: activeHelpKey)
         .onAppear { syncPinHostsText() }
         .alert(L10n.localizedString("settings_save_failed"),
                isPresented: .init(get: { viewModel.saveError != nil },
@@ -658,16 +669,40 @@ struct SecureInlineField: View {
     }
 }
 
-/// Small "?" affordance placed next to a field label. Click pops a popover
-/// with the help text; hovering also surfaces it as a native macOS tooltip
-/// via `.help`, so both interaction styles work.
+/// Environment plumbing for the field-help banner (see `HelpBanner` below).
+/// `FieldHelpButton` instances are scattered across many leaf views with no
+/// direct line to `SettingsView`'s state, so the "which help key is open"
+/// binding is threaded via environment instead of a constructor param —
+/// avoids touching every one of the ~10 call sites.
+private struct ActiveHelpKeyEnvironmentKey: EnvironmentKey {
+    static let defaultValue: Binding<String?> = .constant(nil)
+}
+
+extension EnvironmentValues {
+    fileprivate var activeHelpKey: Binding<String?> {
+        get { self[ActiveHelpKeyEnvironmentKey.self] }
+        set { self[ActiveHelpKeyEnvironmentKey.self] = newValue }
+    }
+}
+
+/// Small "?" affordance placed next to a field label. Click toggles a
+/// banner (see `HelpBanner`) anchored to the bottom of `SettingsView`;
+/// hovering also surfaces the text as a native macOS tooltip via `.help`.
+///
+/// Deliberately NOT a real `.popover()`: `SettingsView` itself is a fake
+/// "window" rendered in-place inside the menu bar's single real `NSPopover`
+/// (see the comment on `SettingsView`). Attaching a second, real NSPopover
+/// to a button inside that already-popover-hosted view breaks AppKit's
+/// content-size calculation — the popover renders to the full screen
+/// height instead of hugging its content. A `.fixedSize()` on the popover
+/// content does not fix this; the nesting itself is the problem.
 struct FieldHelpButton: View {
     let helpKey: String
-    @State private var showPopover = false
+    @Environment(\.activeHelpKey) private var activeHelpKey
 
     var body: some View {
         Button {
-            showPopover.toggle()
+            activeHelpKey.wrappedValue = (activeHelpKey.wrappedValue == helpKey) ? nil : helpKey
         } label: {
             Image(systemName: "questionmark.circle")
                 .font(.caption)
@@ -675,25 +710,44 @@ struct FieldHelpButton: View {
         }
         .buttonStyle(.borderless)
         .help(L10n.localizedString(helpKey))
-        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.localizedString(helpKey))
+    }
+}
+
+/// The floating help card shown by `FieldHelpButton`. Rendered as an
+/// overlay on `SettingsView`'s root frame (outside the `Form`/`ScrollView`),
+/// so it's never clipped by scroll bounds and always stays within the
+/// fixed 420×540 panel.
+private struct HelpBanner: View {
+    let helpKey: String
+    let onClose: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(L10n.localizedString(helpKey))
+                .font(.caption)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: onClose) {
+                Image(systemName: "xmark.circle.fill")
                     .font(.caption)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button {
-                    showPopover = false
-                } label: {
-                    Text(L10n.localizedString("settings_field_help_close"))
-                        .font(.caption.weight(.medium))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
+                    .foregroundStyle(.orange)
             }
-            .padding(10)
-            .frame(maxWidth: 260, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
+            .buttonStyle(.borderless)
+            .accessibilityLabel(L10n.localizedString("settings_field_help_close"))
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Deliberately a solid, lighter color — not `.regularMaterial` — so
+        // the banner stands out from the settings panel behind it, which
+        // uses that same material as its own background (see `body` above).
+        .background(Color(nsColor: .controlBackgroundColor),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(.separator)
+        )
+        .shadow(radius: 8, y: 2)
     }
 }
 
