@@ -45,6 +45,11 @@ public enum PricingTable {
         "claude-opus-4-5":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25),
         // Legacy Opus 4.0 / 4.1 — prefix fallback for any unlisted claude-opus-4*.
         "claude-opus-4":         ModelPricing(input: 15, output: 75, cacheRead: 1.5, cacheCreate: 18.75),
+        // Sonnet 5 — sticker $3/$15, but intro pricing $2/$10 is in effect
+        // through 2026-08-31 (verified via the claude-api skill's cached
+        // model table, 2026-06-24). Bump to input:3/output:15/cacheRead:0.3/
+        // cacheCreate:3.75 after that date.
+        "claude-sonnet-5":       ModelPricing(input: 2,  output: 10, cacheRead: 0.2, cacheCreate: 2.5),
         // Sonnet 4.x
         "claude-sonnet-4-6":     ModelPricing(input: 3,  output: 15, cacheRead: 0.3, cacheCreate: 3.75),
         "claude-sonnet-4":       ModelPricing(input: 3,  output: 15, cacheRead: 0.3, cacheCreate: 3.75),
@@ -57,6 +62,13 @@ public enum PricingTable {
     /// Verified against developers.openai.com/api/docs/pricing on 2026-06-14.
     /// OpenAI bills cached input (~10% of input) but has no cache-creation fee.
     public static let openai: [String: ModelPricing] = [
+        // GPT-5.6 — preview only, restricted to select partners as of
+        // 2026-06-30; OpenAI has not published pricing. Estimated by
+        // carrying over the equivalent GPT-5.5/5.4 tier's price. Replace
+        // with real numbers once OpenAI's pricing page lists gpt-5.6.
+        "gpt-5.6-pro":     ModelPricing(input: 30,   output: 180),
+        "gpt-5.6-mini":    ModelPricing(input: 0.75, output: 4.5,  cacheRead: 0.075),
+        "gpt-5.6":         ModelPricing(input: 5,    output: 30,   cacheRead: 0.5),
         // GPT-5.5 (current flagship, shipped 2026-04-23).
         "gpt-5.5-pro":     ModelPricing(input: 30,   output: 180),
         "gpt-5.5":         ModelPricing(input: 5,    output: 30,   cacheRead: 0.5),

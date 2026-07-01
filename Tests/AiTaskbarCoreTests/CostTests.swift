@@ -25,6 +25,28 @@ struct CostTests {
         #expect(m?.outputPer1M == 75)
     }
 
+    @Test("Sonnet 5 has explicit intro pricing")
+    func lookup_sonnet5() {
+        let m = PricingTable.lookup("claude-sonnet-5", table: PricingTable.anthropic)
+        #expect(m?.inputPer1M == 2)
+        #expect(m?.outputPer1M == 10)
+    }
+
+    @Test("GPT-5.6 has an explicit entry, not silently prefix-dropped to gpt-5")
+    func lookup_gpt56() {
+        let m = PricingTable.lookup("gpt-5.6", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 5)
+        #expect(m?.outputPer1M == 30)
+    }
+
+    @Test("GPT-5.6 variants resolve via longest-prefix match")
+    func lookup_gpt56_variants() {
+        let pro = PricingTable.lookup("gpt-5.6-pro", table: PricingTable.openai)
+        #expect(pro?.inputPer1M == 30)
+        let mini = PricingTable.lookup("gpt-5.6-mini", table: PricingTable.openai)
+        #expect(mini?.inputPer1M == 0.75)
+    }
+
     @Test("lookup falls back to prefix")
     func lookup_prefix_match() {
         // Date-suffixed model id resolves to its base entry via prefix match.
