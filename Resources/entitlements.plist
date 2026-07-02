@@ -3,8 +3,9 @@
 <plist version="1.0">
 <dict>
     <!-- Hardened Runtime entitlements. Only honored when signed with a real
-         Developer ID + `codesign --options runtime`. Ad-hoc signed builds
-         ignore these. -->
+         Developer ID + `codesign -o runtime` (note: XML comments must not
+         contain double hyphens, so the long-form flag is not spelled out
+         here). Ad-hoc signed builds ignore these. -->
 
     <!-- App Sandbox: disabled. We need to read ~/.codex/auth.json, the
          macOS Login Keychain, ~/Library/Caches, etc. Sandboxing those
