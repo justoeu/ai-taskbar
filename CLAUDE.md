@@ -150,9 +150,11 @@ triggers `.github/workflows/auto-tag.yml`, which decides the next version,
 bumps it everywhere, tags it, and calls `release.yml` — which validates the
 tagged commit and creates a **draft** GitHub Release with notes. **CI does NOT
 build or attach DMGs** (the Developer ID key stays off the repo on purpose);
-the maintainer publishes assets locally with `make publish` (clean-tree +
-HEAD-is-tagged guards → builds, signs and notarizes the arm64 AND universal
-DMGs → uploads both + checksums → flips draft → published).
+the maintainer publishes assets locally with `make ship` (push → wait for the
+CI tag → pull the bump → `make publish`, which enforces clean-tree +
+HEAD-is-tagged guards, builds, signs and notarizes the arm64 AND universal
+DMGs, uploads both + checksums, and flips draft → published). `ship` aborts
+cleanly on `[skip release]` heads.
 
 - **Bump level** is inferred from commit subjects/bodies since the last `v*`
   tag: `BREAKING CHANGE` / `type!:` / `[bump:major]` → **major**;

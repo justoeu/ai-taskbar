@@ -16,7 +16,7 @@ DMG_ARM64  := ai-taskbar-$(VERSION)-arm64.dmg
 
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
         sign-developer sign-developer-universal dmg-signed notarize staple \
-        release release-arm64 release-universal publish universal-check icon
+        release release-arm64 release-universal publish ship universal-check icon
 
 all: app
 
@@ -260,4 +260,9 @@ publish:
 	gh release upload "v$(VERSION)" $(DMG) $(DMG_ARM64) checksums-$(VERSION).txt --clobber
 	gh release edit "v$(VERSION)" --draft=false
 	@echo "✓ Published v$(VERSION): $(DMG_ARM64) + $(DMG) + checksums"
-	@echo "✓ Release-ready: $(DMG)"
+
+# One-shot release: push main → wait for CI to bump/tag/draft → pull the bump
+# commit → make publish. Aborts cleanly when the head commit opted out via
+# [skip release]. Same env as publish (DEVELOPER_ID + NOTARY_PROFILE/APPLE_*).
+ship:
+	@scripts/ship.sh

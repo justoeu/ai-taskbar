@@ -312,6 +312,7 @@ make sign-developer     # requires DEVELOPER_ID env var
 make notarize           # requires NOTARY_PROFILE (keychain) or APPLE_ID/APPLE_TEAM_ID/APPLE_PASSWORD
 make release            # both notarized DMGs: arm64 + universal (sign app → DMG → sign DMG → notarize → staple)
 make publish            # make release + upload both DMGs & checksums to the GitHub Release, flip draft → published
+make ship               # full ritual: push → wait CI tag → pull bump → make publish
 make clean
 ```
 
@@ -352,13 +353,17 @@ which:
    no DMG is built in CI. The Developer ID private key never leaves the
    maintainer's Mac (no signing secrets in the repo).
 
-The maintainer then publishes the assets locally:
+The maintainer then publishes the assets locally. One command does the whole
+ritual (push → wait for CI to tag → pull the bump → publish):
 
 ```bash
-git pull                                   # grab the bump commit + tag
 export DEVELOPER_ID="Developer ID Application: Your Name (TEAMID12345)"
-NOTARY_PROFILE=my-profile make publish
+NOTARY_PROFILE=my-profile make ship
 ```
+
+(`make publish` is the second half alone, for when the tag already exists
+locally; `ship` aborts cleanly if the head commit opted out via
+`[skip release]`.)
 
 `make publish` refuses to run on a dirty tree or when `HEAD` isn't the tagged
 release commit; then it builds, signs and notarizes **two DMGs** —
