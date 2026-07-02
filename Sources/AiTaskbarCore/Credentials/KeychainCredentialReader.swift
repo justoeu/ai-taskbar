@@ -225,7 +225,27 @@ extension KeychainCredentialReader {
         // op and service are operational identifiers (not secrets).
         // The full remediation command is part of the message — keep it
         // public so users copy-pasting from Console.app get the fix.
-        AppLog.keychain.error("Keychain \(op, privacy: .public) skipped (errSecInteractionNotAllowed). Token kept in memory; persistence will retry next cycle. Silence via: security set-generic-password-partition-list -S apple-tool:,apple:,unsigned: -s \(self.service, privacy: .public) -a \"$(whoami)\" -k login")
+        let cmd = Self.remediationCommand(service: service)
+        AppLog.keychain.error("Keychain \(op, privacy: .public) skipped (errSecInteractionNotAllowed). Token kept in memory; persistence will retry next cycle. Silence via: \(cmd, privacy: .public)")
+    }
+
+    /// The exact `security set-generic-password-partition-list` invocation
+    /// that authorizes THIS build to read `service` without a SecurityAgent
+    /// prompt. Two easy-to-get-wrong details, learned the hard way:
+    /// - No `-a` filter: Claude Code's legacy item has a NULL account
+    ///   attribute, so any `-a` value (even "") fails with "item not found".
+    /// - No `-k`: it is the login-keychain PASSWORD (deprecated flag), not
+    ///   the keychain name. Omitting it makes `security` prompt securely.
+    /// The partition list keeps `apple:`/`apple-tool:`/`unsigned:` so the
+    /// CLI and ad-hoc dev builds retain access, and appends this binary's
+    /// `teamid:` when it's signed with a real identity.
+    internal static func remediationCommand(service: String,
+                                            teamID: String? = CodeSignatureInfo.currentTeamID()) -> String {
+        var partitions = "apple-tool:,apple:,unsigned:"
+        if let teamID {
+            partitions += ",teamid:\(teamID)"
+        }
+        return "security set-generic-password-partition-list -S \"\(partitions)\" -s \"\(service)\" login.keychain-db"
     }
 
     // MARK: - Internals
@@ -377,9 +397,10 @@ extension KeychainCredentialReader {
         case errSecInteractionNotAllowed:
             return .credentials("""
                 Keychain access denied (errSecInteractionNotAllowed). \
-                The Keychain ACL doesn't recognize this build. Fix: open Terminal and run:
-                  security set-generic-password-partition-list -S apple-tool:,apple:,unsigned: -s "Claude Code-credentials" -a "$(whoami)" -k login
-                (you'll be prompted for your login password). Then relaunch AI Taskbar.
+                The item's partition list doesn't include this build's signing \
+                identity ("Always Allow" alone can't add it). Fix: open Terminal and run:
+                  \(remediationCommand(service: "Claude Code-credentials"))
+                (you'll be prompted for your login keychain password once). Then relaunch AI Taskbar.
                 """)
         case errSecAuthFailed:
             return .credentials("Keychain auth failed (-25293). Try unlocking your Login Keychain in Keychain Access.")

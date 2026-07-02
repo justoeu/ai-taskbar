@@ -47,5 +47,34 @@ struct CodeSignatureInfoTests {
         if let name {
             #expect(!name.isEmpty)
         }
+        let team = CodeSignatureInfo.currentTeamID()
+        if let team {
+            #expect(!team.isEmpty)
+        }
+    }
+}
+
+@Suite("Keychain partition-list remediation command")
+struct RemediationCommandTests {
+    @Test("signed build appends its teamid partition")
+    func with_team_id() {
+        let cmd = KeychainCredentialReader.remediationCommand(
+            service: "Claude Code-credentials", teamID: "5HHL78743R")
+        #expect(cmd == #"security set-generic-password-partition-list -S "apple-tool:,apple:,unsigned:,teamid:5HHL78743R" -s "Claude Code-credentials" login.keychain-db"#)
+    }
+
+    @Test("ad-hoc build keeps the base partitions only")
+    func without_team_id() {
+        let cmd = KeychainCredentialReader.remediationCommand(
+            service: "Claude Code-credentials", teamID: nil)
+        #expect(cmd == #"security set-generic-password-partition-list -S "apple-tool:,apple:,unsigned:" -s "Claude Code-credentials" login.keychain-db"#)
+    }
+
+    @Test("never suggests the -a account filter or the deprecated -k flag")
+    func no_footguns() {
+        let cmd = KeychainCredentialReader.remediationCommand(
+            service: "Claude Code-credentials", teamID: "5HHL78743R")
+        #expect(!cmd.contains(" -a "))
+        #expect(!cmd.contains(" -k "))
     }
 }
