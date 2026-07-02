@@ -9,9 +9,11 @@
 #      have local commits. A blind push here bit us on the first run — the
 #      remote already carried the CI's chore(release) commit and rejected it.
 #   3. Poll until HEAD carries a vX.Y.Z tag (the CI bump). While polling,
-#      inspect the newest "Auto Tag & Release" run: a conclusion of
-#      "skipped" ([skip release] / chore(release) head) means no release was
-#      cut — abort gracefully; a failure aborts loudly.
+#      inspect the "Auto Tag & Release" run FOR THE SHA WE PUSHED (matching
+#      the newest run raced against GitHub creating ours and once matched a
+#      stale skipped run): a conclusion of "skipped" ([skip release] /
+#      chore(release) head) means no release was cut — abort gracefully; a
+#      failure aborts loudly. No matching run yet → keep polling.
 #   4. make publish (builds, signs, notarizes and uploads both DMGs, then
 #      flips the draft release to published).
 #
@@ -64,13 +66,15 @@ current_tag() {
     git tag --points-at HEAD | grep -E '^v[0-9]' | head -n1 || true
 }
 info "waiting for the CI bump + tag (Auto Tag & Release)"
+PUSHED_SHA=$(git rev-parse HEAD)   # the run we care about targets THIS sha
 TAG=$(current_tag)
 for _ in $(seq 1 60); do   # up to ~10 min
     [ -n "$TAG" ] && break
-    # Abort early when the newest run on main already concluded badly.
+    # Abort early when OUR run (matched by headSha) already concluded badly.
     RUN_JSON=$(gh run list --workflow "Auto Tag & Release" --branch main \
-               --limit 1 --json status,conclusion \
-               --jq '.[0] | "\(.status) \(.conclusion)"' || echo "")
+               --limit 10 --json status,conclusion,headSha \
+               --jq "[.[] | select(.headSha == \"$PUSHED_SHA\")][0] | \"\(.status) \(.conclusion)\"" \
+               2>/dev/null || echo "")
     STATUS=${RUN_JSON%% *}
     CONCLUSION=${RUN_JSON#* }
     if [ "$STATUS" = "completed" ]; then
