@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# ship.sh — one-shot release: push → wait for CI auto-tag → pull → publish.
+# ship.sh — one-shot release: sync → wait for CI auto-tag → pull → publish.
 #
 # Chains the whole release ritual so the maintainer never has to remember the
 # order. Steps:
 #   1. Guards: on main, clean tree, signing env present, gh authenticated.
-#   2. git push origin main (no-op if already pushed).
-#   3. Wait for the "Auto Tag & Release" run for THIS head SHA to finish.
-#      A conclusion of "skipped" ([skip release] / chore(release) head) means
-#      no release was cut — abort gracefully.
-#   4. git pull --rebase + fetch tags (brings the CI bump commit + vX.Y.Z).
-#   5. make publish (builds, signs, notarizes and uploads both DMGs, then
+#   2. Sync with origin/main: pull --rebase when the remote is ahead (e.g.
+#      the CI bump commit already landed for an earlier push), push when we
+#      have local commits. A blind push here bit us on the first run — the
+#      remote already carried the CI's chore(release) commit and rejected it.
+#   3. Poll until HEAD carries a vX.Y.Z tag (the CI bump). While polling,
+#      inspect the newest "Auto Tag & Release" run: a conclusion of
+#      "skipped" ([skip release] / chore(release) head) means no release was
+#      cut — abort gracefully; a failure aborts loudly.
+#   4. make publish (builds, signs, notarizes and uploads both DMGs, then
 #      flips the draft release to published).
 #
 # Required env (same as make publish):
@@ -39,43 +42,50 @@ if ! gh auth status >/dev/null 2>&1; then
     red "gh CLI not authenticated — run: gh auth login"; exit 1
 fi
 
-HEAD_SHA=$(git rev-parse HEAD)
+# ── 2. sync with origin/main ─────────────────────────────────────────────────
+# Pull first when the remote is ahead (the CI bump for an earlier push may
+# already be there), then push only if we still carry local commits.
+sync_main() {
+    git fetch --quiet origin main
+    git fetch --tags --quiet
+    if ! git merge-base --is-ancestor origin/main HEAD; then
+        git pull --rebase --quiet origin main
+    fi
+    if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+        info "pushing main ($(git rev-parse HEAD))"
+        git push --quiet origin main
+    fi
+}
+info "syncing with origin/main"
+sync_main
 
-# ── 2. push ──────────────────────────────────────────────────────────────────
-info "pushing main ($HEAD_SHA)"
-git push origin main
-
-# ── 3. wait for the auto-tag run on this SHA ─────────────────────────────────
-info "waiting for 'Auto Tag & Release' run for $HEAD_SHA"
-RUN_ID=""
-for _ in $(seq 1 24); do   # up to ~2 min for the run to appear
-    RUN_ID=$(gh run list --workflow "Auto Tag & Release" --branch main \
-             --json databaseId,headSha --limit 10 \
-             --jq "first(.[] | select(.headSha == \"$HEAD_SHA\")) | .databaseId" || true)
-    [ -n "$RUN_ID" ] && break
-    sleep 5
+# ── 3. wait until HEAD carries the CI's release tag ──────────────────────────
+current_tag() {
+    git tag --points-at HEAD | grep -E '^v[0-9]' | head -n1 || true
+}
+info "waiting for the CI bump + tag (Auto Tag & Release)"
+TAG=$(current_tag)
+for _ in $(seq 1 60); do   # up to ~10 min
+    [ -n "$TAG" ] && break
+    # Abort early when the newest run on main already concluded badly.
+    RUN_JSON=$(gh run list --workflow "Auto Tag & Release" --branch main \
+               --limit 1 --json status,conclusion \
+               --jq '.[0] | "\(.status) \(.conclusion)"' || echo "")
+    STATUS=${RUN_JSON%% *}
+    CONCLUSION=${RUN_JSON#* }
+    if [ "$STATUS" = "completed" ]; then
+        case "$CONCLUSION" in
+            skipped) info "run skipped — head commit opted out ([skip release] / chore(release)); nothing to publish"; exit 0 ;;
+            success) : ;;   # bump may still be propagating; keep polling
+            *)       red "Auto Tag & Release concluded: $CONCLUSION — fix CI before publishing"; exit 1 ;;
+        esac
+    fi
+    sleep 10
+    sync_main
+    TAG=$(current_tag)
 done
-if [ -z "$RUN_ID" ]; then
-    red "no workflow run appeared for $HEAD_SHA — check the Actions tab"; exit 1
-fi
-
-# watch may exit non-zero for skipped runs; the conclusion check below decides.
-gh run watch "$RUN_ID" --exit-status >/dev/null 2>&1 || true
-CONCLUSION=$(gh run view "$RUN_ID" --json conclusion --jq .conclusion)
-case "$CONCLUSION" in
-    success) ok "CI tagged and drafted the release" ;;
-    skipped) info "run skipped — head commit opted out ([skip release] / chore(release)); nothing to publish"; exit 0 ;;
-    *)       red "workflow run $RUN_ID ended with: $CONCLUSION — fix CI before publishing"; exit 1 ;;
-esac
-
-# ── 4. pull the bump commit + tag ────────────────────────────────────────────
-info "pulling bump commit + tags"
-git pull --rebase origin main
-git fetch --tags --quiet
-
-TAG=$(git tag --points-at HEAD | grep -E '^v[0-9]' | head -n1 || true)
 if [ -z "$TAG" ]; then
-    red "HEAD is not tagged after pull — did the tag job cut a version?"; exit 1
+    red "timed out waiting for the release tag on HEAD — check the Actions tab"; exit 1
 fi
 ok "HEAD is $TAG"
 
