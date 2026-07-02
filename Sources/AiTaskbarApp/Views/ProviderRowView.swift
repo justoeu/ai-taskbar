@@ -26,9 +26,23 @@ public struct ProviderRowView: View {
                 .tint(SeverityColor.tint(forPercent: percent, thresholds: thresholds))
             HStack(spacing: 8) {
                 if let resetsAt = window.resetsAt {
-                    Text("resets \(resetsAt, style: .relative)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    // SwiftUI's `.relative` date style keeps counting UP once
+                    // the date passes. Poll at 1 Hz (popover-only view) so the
+                    // moment the reset lands we swap the countdown for an
+                    // "awaiting auto-refresh" hint until the next snapshot.
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        if window.isAwaitingReset(now: context.date) {
+                            L10n.text("reset_waiting_refresh")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            (Text(L10n.localizedString("resets_prefix"))
+                                + Text(" ")
+                                + Text(resetsAt, style: .relative))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 if let detail = window.detail {
                     Text(detail)

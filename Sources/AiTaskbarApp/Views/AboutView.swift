@@ -10,6 +10,10 @@ public struct AboutView: View {
         self.onDone = onDone
     }
 
+    /// Read once from the binary's own code signature (Developer ID leaf
+    /// cert). Ad-hoc/dev builds have no cert chain → nil → line is omitted.
+    private static let developerName: String? = CodeSignatureInfo.currentDeveloperName()
+
     private var versionString: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String
@@ -72,6 +76,12 @@ public struct AboutView: View {
                 L10n.text("about_built_with")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                if let developer = Self.developerName {
+                    Label(L10n.localizedString("about_developer_fmt", developer),
+                          systemImage: "checkmark.seal")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             Spacer(minLength: 4)

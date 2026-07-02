@@ -45,6 +45,12 @@
 "refresh_vendor_fmt" = "Refresh %@";
 "open_dashboard_fmt" = "Open %@";
 "approximate_short" = "approx.";
+// Prefix for the reset countdown ("resets in 2 hours"). SwiftUI's relative
+// Text supplies the "in X" part — this is just the verb.
+"resets_prefix" = "resets";
+// Shown once the reset time has passed but the next snapshot hasn't landed
+// yet — instead of letting the countdown climb back up.
+"reset_waiting_refresh" = "reset due — awaiting auto-refresh…";
 "approximate_help" = "Approximate cost based on token usage × pricing table.";
 
 // Cost / details
@@ -71,6 +77,8 @@
 "about_credentials" = "Credentials read from Keychain + ~/.codex/auth.json";
 "about_security" = "All cache + config files are user-only (0o600)";
 "about_built_with" = "Built with SwiftUI · MIT-licensed";
+// %@ = name extracted from the Developer ID certificate that signed the binary.
+"about_developer_fmt" = "Developed by %@";
 "open_config_toml" = "Open config.toml";
 "done" = "Done";
 

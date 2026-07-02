@@ -21,4 +21,12 @@ public struct UsageWindow: Sendable, Equatable, Codable {
         self.resetsAt = resetsAt
         self.detail = detail
     }
+
+    /// True once `resetsAt` has passed but a fresh snapshot hasn't landed
+    /// yet. The UI shows an "awaiting auto-refresh" message in this phase
+    /// instead of letting a relative-date countdown count back up.
+    public func isAwaitingReset(now: Date = Date()) -> Bool {
+        guard let resetsAt else { return false }
+        return resetsAt <= now
+    }
 }

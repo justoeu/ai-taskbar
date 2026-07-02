@@ -44,6 +44,12 @@
 "refresh_vendor_fmt" = "Actualizar %@";
 "open_dashboard_fmt" = "Abrir %@";
 "approximate_short" = "aprox.";
+// Prefijo del contador de reinicio ("reinicia en 2 horas"). El Text relativo
+// de SwiftUI aporta el "en X" — aquí solo el verbo.
+"resets_prefix" = "reinicia";
+// Se muestra cuando la hora de reinicio ya pasó pero el próximo snapshot aún
+// no llega — en lugar de dejar el contador subir.
+"reset_waiting_refresh" = "reiniciado — esperando la actualización automática…";
 "approximate_help" = "Coste aproximado basado en tokens consumidos × tabla de precios.";
 
 // Cost / details
@@ -70,6 +76,8 @@
 "about_credentials" = "Credenciales leídas del Keychain + ~/.codex/auth.json";
 "about_security" = "Archivos de caché + config son user-only (0o600)";
 "about_built_with" = "Construido con SwiftUI · Licencia MIT";
+// %@ = nombre extraído del certificado Developer ID que firmó el binario.
+"about_developer_fmt" = "Desarrollado por %@";
 "open_config_toml" = "Abrir config.toml";
 "done" = "Hecho";
 
