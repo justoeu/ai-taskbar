@@ -4,7 +4,11 @@ name: Auto Tag & Release
 #   1. Decide the bump level from the commit messages since the last tag.
 #   2. Patch the version in Makefile, Bundler.toml, Info.plist, AboutView.
 #   3. Commit "chore(release): vX.Y.Z [skip release]" + push an annotated tag.
-#   4. Call release.yml to build the universal DMG and publish the GitHub Release.
+#   4. Call release.yml to validate the tag and create a DRAFT GitHub Release
+#      with generated notes. The DMGs are NOT built in CI: the maintainer runs
+#      `make publish` locally, which signs + notarizes both DMGs (arm64 +
+#      universal) with the Developer ID key that never leaves their Mac, then
+#      uploads the assets and publishes the draft.
 #
 # Bump rules (matched against commit subjects/bodies since the last v* tag):
 #   - major: a commit with "BREAKING CHANGE", a "type!:" subject, or "[bump:major]"
@@ -125,7 +129,7 @@ jobs:
           echo "version=${TAG}" >> "$GITHUB_OUTPUT"
 
   release:
-    name: Build DMG + publish release
+    name: Validate tag + draft release
     needs: tag
     if: ${{ needs.tag.outputs.version != '' }}
     uses: ./.github/workflows/release.yml

@@ -25,7 +25,7 @@ A gauge icon in your menu bar showing the **highest utilization** across every L
 
 - **Plan label** ("Claude Max 20x", "ChatGPT Plus", "GLM Lite")
 - **Per-window utilization** with color thresholds (green → yellow → red)
-- **Reset countdown** ("resets 4 hrs, 12 min")
+- **Reset countdown** ("resets 4 hrs, 12 min"; once the reset passes it shows "reset due — awaiting auto-refresh…" instead of counting back up)
 - **24-hour sparkline** with dashed threshold lines, current value, and peak marker
 - **Daily + 7-day cost estimates** computed locally from your CLI logs
 - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
@@ -54,13 +54,14 @@ The app runs entirely on-device — **no telemetry, no remote logging, no auto-u
 
 ### Option 1 — Download the DMG (recommended)
 
-1. Download the latest `ai-taskbar-X.Y.Z.dmg` from [Releases](https://github.com/justoeu/ai-taskbar/releases).
+1. Download the DMG matching your Mac from [Releases](https://github.com/justoeu/ai-taskbar/releases):
+   `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon, smaller) or the universal
+   `ai-taskbar-X.Y.Z.dmg` (Intel + Apple Silicon).
 2. Open the DMG and drag **AI Taskbar.app** to **/Applications**.
-3. **First launch only** — Gatekeeper will warn it's from an unidentified developer. Either:
-   - **Right-click `AiTaskbar.app` → Open**, then click *Open* in the dialog.
-   - Or in Terminal: `xattr -dr com.apple.quarantine /Applications/AiTaskbar.app`
-
-The DMG ships a **universal binary** that works on Apple Silicon and Intel Macs.
+3. **First launch** — release DMGs are Developer ID-signed and notarized by
+   Apple, so they open with no Gatekeeper warning. (Only ad-hoc DMGs from
+   old releases or local `make dmg` builds warn; bypass with right-click →
+   Open, or `xattr -dr com.apple.quarantine /Applications/AiTaskbar.app`.)
 
 ### Option 2 — Build from source
 
@@ -132,7 +133,7 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 - 24-hour sparkline with dashed threshold lines (warning + critical), current-value annotation, and peak marker
 - Color-coded gauge in the menu bar (rotating mode optional)
 - Per-model cost breakdown (today / last 7 days side-by-side)
-- About panel with version + GitHub Releases update checker
+- About panel with version + GitHub Releases update checker; on Developer ID-signed builds it also credits the developer, read live from the binary's signing certificate (ad-hoc builds omit the line)
 
 **i18n** — 3 languages out of the box (`en`, `pt-BR`, `es`) with `[ui] language = ...` config override
 
@@ -308,8 +309,9 @@ make dmg                # host-arch DMG
 make dmg-universal      # universal DMG
 make validate           # 160+ assertion suite + 245-test swift-test + coverage ≥90% + smoke launch + perms audit
 make sign-developer     # requires DEVELOPER_ID env var
-make notarize           # requires APPLE_ID/APPLE_TEAM_ID/APPLE_PASSWORD
-make release            # full pipeline: sign → notarize → staple → DMG
+make notarize           # requires NOTARY_PROFILE (keychain) or APPLE_ID/APPLE_TEAM_ID/APPLE_PASSWORD
+make release            # both notarized DMGs: arm64 + universal (sign app → DMG → sign DMG → notarize → staple)
+make publish            # make release + upload both DMGs & checksums to the GitHub Release, flip draft → published
 make clean
 ```
 
@@ -322,25 +324,49 @@ make BUNDLE_ID=com.yourorg.aitaskbar app
 ### Code-signed distribution (optional, requires paid Apple Developer ID)
 
 ```bash
+# One-time: store the app-specific password (from account.apple.com) in the
+# keychain so it never touches env vars or shell history:
+xcrun notarytool store-credentials my-profile --apple-id you@example.com --team-id TEAMID12345
+
 export DEVELOPER_ID="Developer ID Application: Your Name (TEAMID12345)"
-export APPLE_ID="you@example.com"
-export APPLE_TEAM_ID="TEAMID12345"
-export APPLE_PASSWORD="app-specific-pwd-from-appleid.apple.com"
-make release
+NOTARY_PROFILE=my-profile make release
 ```
+
+(Alternatively pass `APPLE_ID` + `APPLE_TEAM_ID` + `APPLE_PASSWORD` env vars
+instead of `NOTARY_PROFILE`.)
 
 Result: a DMG that opens with **no Gatekeeper warnings** on any macOS 11+ Mac. Without this, you get the one-time warning described in [Install](#install).
 
 ## Releasing a new version
 
-Releases are **automatic**. Every push to `main` (typically a PR merge) runs
-[`auto-tag.yml`](.github/workflows/auto-tag.yml), which:
+Tagging is **automatic**, publishing is **local**. Every push to `main`
+(typically a PR merge) runs [`auto-tag.yml`](.github/workflows/auto-tag.yml),
+which:
 
 1. Picks the next version from the commit messages since the last tag.
 2. Bumps the version in `Makefile`, `Bundler.toml`, `Resources/Info.plist`, and
    `AboutView.swift`, then commits `chore(release): vX.Y.Z [skip release]`.
 3. Pushes an annotated `vX.Y.Z` tag.
-4. Calls [`release.yml`](.github/workflows/release.yml) to build + publish.
+4. Calls [`release.yml`](.github/workflows/release.yml), which validates the
+   tagged commit and creates a **draft** GitHub Release with generated notes —
+   no DMG is built in CI. The Developer ID private key never leaves the
+   maintainer's Mac (no signing secrets in the repo).
+
+The maintainer then publishes the assets locally:
+
+```bash
+git pull                                   # grab the bump commit + tag
+export DEVELOPER_ID="Developer ID Application: Your Name (TEAMID12345)"
+NOTARY_PROFILE=my-profile make publish
+```
+
+`make publish` refuses to run on a dirty tree or when `HEAD` isn't the tagged
+release commit; then it builds, signs and notarizes **two DMGs** —
+`ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon, smaller) and the universal
+`ai-taskbar-X.Y.Z.dmg` — uploads both plus a `checksums-X.Y.Z.txt`, and flips
+the release from draft to published. The in-app update checker picks the DMG
+matching the user's architecture (drafts are invisible to it, so users never
+see an asset-less release).
 
 ### Choosing the bump level
 

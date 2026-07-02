@@ -28,8 +28,16 @@ permissions:
   contents: write    # needed to create releases
 
 jobs:
-  build-and-release:
-    name: Build universal .dmg and publish release
+  # Since v0.7.3 this job does NOT build or attach the DMG. The Developer ID
+  # private key deliberately never leaves the maintainer's Mac (keeping it out
+  # of repo secrets closes the workflow-exfiltration surface), so CI's role is
+  # reduced to: validate the tagged commit + create the DRAFT release with
+  # generated notes. The maintainer then runs `make publish` locally, which
+  # builds, signs, notarizes and uploads the two DMGs (arm64 + universal) and
+  # flips the release out of draft. Draft releases are invisible to the
+  # in-app UpdateChecker, so users never see an asset-less release.
+  validate-and-draft:
+    name: Validate tag and draft release
     # macos-15 ships Xcode 16 (Swift 6) which Package.swift requires for
     # `swift-tools-version: 6.0` + Testing.framework. Apple Silicon (M1).
     runs-on: macos-15
@@ -76,29 +84,12 @@ jobs:
           xcodebuild -version || true
           uname -a
 
-      - name: Build universal .app + DMG
-        run: |
-          make dmg-universal VERSION="${{ steps.version.outputs.number }}"
-
-      - name: Verify universal binary
-        run: |
-          file build/AiTaskbar.app/Contents/MacOS/ai-taskbar
-          lipo -archs build/AiTaskbar.app/Contents/MacOS/ai-taskbar
-          codesign --verify --deep --strict --verbose=2 build/AiTaskbar.app
-
       - name: Run validation suite
         run: |
-          # Compile-only validation; smoke launch is skipped in CI because
+          # Compile + runtime asserts; smoke launch is skipped in CI because
           # the runner has no Keychain entries and no `~/.codex/auth.json`.
-          # We rely on the runtime asserts (no network, no creds needed).
           swift run ai-taskbar-validate
-
-      - name: Compute SHA256 (for Homebrew Cask updates)
-        id: shasum
-        run: |
-          SHA256=$(shasum -a 256 "ai-taskbar-${{ steps.version.outputs.number }}.dmg" | awk '{print $1}')
-          echo "sha=$SHA256"   >> "$GITHUB_OUTPUT"
-          echo "DMG SHA256: $SHA256"
+          swift test --no-parallel
 
       - name: Generate changelog from commit history
         id: changelog
@@ -170,17 +161,16 @@ jobs:
           cat > /tmp/release_notes.md <<EOF
           ## AI Taskbar ${{ steps.version.outputs.tag }}
 
-          Universal macOS menu-bar tracker for LLM usage (Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI, Kimi/Moonshot).
+          macOS menu-bar tracker for LLM usage (Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI, Kimi/Moonshot).
 
           ### Install
-          1. Download \`ai-taskbar-${{ steps.version.outputs.number }}.dmg\` below.
+          1. Download the DMG that matches your Mac:
+             - \`ai-taskbar-${{ steps.version.outputs.number }}-arm64.dmg\` — Apple Silicon (M-series), smaller download.
+             - \`ai-taskbar-${{ steps.version.outputs.number }}.dmg\` — universal (Intel + Apple Silicon).
           2. Open the DMG and drag \`AiTaskbar.app\` to the \`Applications\` folder (symlink included in the image).
-          3. First launch: macOS Gatekeeper will warn that the app is from an unidentified developer. Either:
-             - **Right-click \`AiTaskbar.app\` → Open**, then click **Open** in the dialog.
-             - Or run: \`xattr -dr com.apple.quarantine /Applications/AiTaskbar.app\`
+          3. Both DMGs are Developer ID-signed and notarized by Apple — no Gatekeeper warning on first launch. Verify integrity against \`checksums-${{ steps.version.outputs.number }}.txt\` if you like.
 
           ### What you get
-          - Universal binary (Apple Silicon + Intel)
           - macOS 13 (Ventura) or newer
           - Read-only access to your existing Claude / Codex / Z.AI / Kimi / OpenRouter credentials
           - All cache + config locked to \`0o600\` (user-only)
@@ -188,28 +178,24 @@ jobs:
           EOF
           # Append the auto-generated changelog.
           cat /tmp/changelog.md >> /tmp/release_notes.md
-          # Append the asset checksum footer.
           cat >> /tmp/release_notes.md <<EOF
-
-          ### Asset checksum
-          \`\`\`
-          SHA256: ${{ steps.shasum.outputs.sha }}
-          \`\`\`
 
           See [README](https://github.com/${{ github.repository }}/blob/main/README.md) for full setup.
           EOF
           echo "## Final release notes"
           cat /tmp/release_notes.md
 
-      - name: Create / update GitHub Release
+      - name: Create / update draft GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: AI Taskbar ${{ steps.version.outputs.tag }}
           body_path: /tmp/release_notes.md
-          draft: false
+          # Draft until the maintainer uploads the locally-notarized DMGs via
+          # `make publish` (which also flips draft → published). Drafts are
+          # invisible to /releases/latest, so the in-app update checker never
+          # offers a release without assets.
+          draft: true
           prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
-          files: |
-            ai-taskbar-${{ steps.version.outputs.number }}.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -9,9 +9,14 @@ BUILD_DIR  := build
 APP_DIR    := $(BUILD_DIR)/$(APP)
 DMG_STAGING := $(BUILD_DIR)/dmg-staging
 DMG        := ai-taskbar-$(VERSION).dmg
+# Apple Silicon-only DMG published alongside the universal one (half the
+# size). UpdateChecker.pickDMGAsset matches on the "-arm64.dmg" suffix —
+# keep the naming in sync if you ever change it.
+DMG_ARM64  := ai-taskbar-$(VERSION)-arm64.dmg
 
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
-        sign-developer notarize staple release universal-check icon
+        sign-developer sign-developer-universal dmg-signed notarize staple \
+        release release-arm64 release-universal publish universal-check icon
 
 all: app
 
@@ -134,7 +139,7 @@ validate:
 	@scripts/validate.sh
 
 clean:
-	rm -rf .build $(BUILD_DIR) $(DMG) .swiftpm Package.resolved
+	rm -rf .build $(BUILD_DIR) $(DMG) $(DMG_ARM64) checksums-*.txt .swiftpm Package.resolved
 
 # ─── Code signing for distribution ──────────────────────────────────────────
 # These targets require a paid Apple Developer ID. Without one, `make app`
@@ -143,10 +148,16 @@ clean:
 #
 # Required env vars:
 #   DEVELOPER_ID         e.g. "Developer ID Application: Jane Doe (TEAM12345)"
+#
+# Notarization credentials — EITHER:
+#   NOTARY_PROFILE       name of a keychain profile stored once via
+#                        `xcrun notarytool store-credentials <name>`
+#                        (preferred: the app-specific password never touches
+#                        env vars or shell history)
+# OR the explicit trio:
 #   APPLE_ID             your Apple ID email (for notarytool)
 #   APPLE_TEAM_ID        10-char team identifier
-#   APPLE_PASSWORD       app-specific password from appleid.apple.com
-#                        OR use APPLE_API_KEY+APPLE_API_ISSUER+APPLE_API_KEY_PATH
+#   APPLE_PASSWORD       app-specific password from account.apple.com
 
 sign-developer: app
 ifndef DEVELOPER_ID
@@ -159,21 +170,30 @@ endif
 	codesign --verify --deep --strict --verbose=2 $(APP_DIR)
 	@echo "✓ Signed $(APP_DIR) with $(DEVELOPER_ID)"
 
-notarize: dmg
+# Operates on the EXISTING $(DMG) — run `make release` to produce it.
+# Deliberately NOT dependent on `dmg`: that target re-runs `make app`, whose
+# ad-hoc re-sign would clobber the Developer ID signature and Apple would
+# reject the submission.
+notarize:
+	@test -f $(DMG) || { echo "✗ $(DMG) not found — run 'make release' first (builds the Developer ID-signed DMG)"; exit 1; }
+ifdef NOTARY_PROFILE
+	xcrun notarytool submit $(DMG) --keychain-profile "$(NOTARY_PROFILE)" --wait
+else
 ifndef APPLE_ID
-	$(error APPLE_ID not set)
+	$(error APPLE_ID not set — or set NOTARY_PROFILE=<name> stored via 'xcrun notarytool store-credentials')
 endif
 ifndef APPLE_TEAM_ID
 	$(error APPLE_TEAM_ID not set)
 endif
 ifndef APPLE_PASSWORD
-	$(error APPLE_PASSWORD not set — use an app-specific password from appleid.apple.com)
+	$(error APPLE_PASSWORD not set — use an app-specific password from account.apple.com)
 endif
 	xcrun notarytool submit $(DMG) \
 		--apple-id "$(APPLE_ID)" \
 		--team-id "$(APPLE_TEAM_ID)" \
 		--password "$(APPLE_PASSWORD)" \
 		--wait
+endif
 	@echo "✓ Notarized $(DMG)"
 
 staple: notarize
@@ -183,12 +203,61 @@ staple: notarize
 
 # Full release pipeline: build → sign with Developer ID → bundle DMG →
 # notarize → staple. Requires all env vars above.
-release: sign-developer
-	rm -rf $(DMG_STAGING) $(DMG)
+# Same Developer ID signing recipe as `sign-developer`, applied to the
+# universal (arm64 + x86_64) bundle instead of the host-arch one.
+sign-developer-universal: app-universal
+ifndef DEVELOPER_ID
+	$(error DEVELOPER_ID not set. Example: DEVELOPER_ID="Developer ID Application: Your Name (TEAM12345)" make sign-developer-universal)
+endif
+	codesign --force --options runtime --timestamp \
+		--entitlements Resources/entitlements.plist \
+		--sign "$(DEVELOPER_ID)" \
+		$(APP_DIR)
+	codesign --verify --deep --strict --verbose=2 $(APP_DIR)
+	@echo "✓ Signed $(APP_DIR) (universal) with $(DEVELOPER_ID)"
+
+# Internal: bundle the CURRENT $(APP_DIR) into $(DMG_OUT) and sign the DMG
+# container itself (Apple-recommended), BEFORE notarization — any byte change
+# after stapling would invalidate the ticket. Invoked via
+# `$(MAKE) dmg-signed DMG_OUT=<file>` from the release targets below.
+dmg-signed:
+ifndef DMG_OUT
+	$(error dmg-signed is internal — run 'make release' instead)
+endif
+	rm -rf $(DMG_STAGING) $(DMG_OUT)
 	mkdir -p $(DMG_STAGING)
 	cp -R $(APP_DIR) $(DMG_STAGING)/
 	ln -s /Applications $(DMG_STAGING)/Applications
-	hdiutil create -volname "AI Taskbar" -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG)
+	@printf 'AI Taskbar v%s\n\nDrag AiTaskbar.app to the Applications folder.\nIssues: https://github.com/justoeu/ai-taskbar/issues\n' "$(VERSION)" > $(DMG_STAGING)/README.txt
+	hdiutil create -volname "AI Taskbar" -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG_OUT)
 	rm -rf $(DMG_STAGING)
-	$(MAKE) staple
+	codesign --force --timestamp --sign "$(DEVELOPER_ID)" $(DMG_OUT)
+
+# Apple Silicon-only DMG (host-arch build — this repo is developed on arm64).
+release-arm64: sign-developer
+	$(MAKE) dmg-signed DMG_OUT=$(DMG_ARM64) DEVELOPER_ID="$(DEVELOPER_ID)"
+	$(MAKE) staple DMG=$(DMG_ARM64)
+
+# Universal DMG under the canonical name (works on Intel too).
+release-universal: sign-developer-universal
+	$(MAKE) dmg-signed DMG_OUT=$(DMG) DEVELOPER_ID="$(DEVELOPER_ID)"
+	$(MAKE) staple DMG=$(DMG)
+
+# Both notarized DMGs. Serial on purpose: each release-* rebuilds $(APP_DIR)
+# for its architecture set, so they must not interleave.
+release: release-arm64 release-universal
+	@echo "✓ Release-ready: $(DMG_ARM64) (Apple Silicon) + $(DMG) (universal)"
+
+# Upload both notarized DMGs (+ checksums) to the GitHub Release for the
+# current VERSION and flip it from draft to published. Guards: clean tree and
+# HEAD tagged v$(VERSION), so what we notarize is exactly what the tag points
+# at. CI (release.yml) creates the draft release with notes; this publishes it.
+publish:
+	@test -z "$$(git status --porcelain)" || { echo "✗ working tree not clean — commit or stash first"; exit 1; }
+	@git tag --points-at HEAD | grep -qx "v$(VERSION)" || { echo "✗ HEAD is not tagged v$(VERSION) — pull the release bump commit + tag first"; exit 1; }
+	$(MAKE) release
+	shasum -a 256 $(DMG) $(DMG_ARM64) > checksums-$(VERSION).txt
+	gh release upload "v$(VERSION)" $(DMG) $(DMG_ARM64) checksums-$(VERSION).txt --clobber
+	gh release edit "v$(VERSION)" --draft=false
+	@echo "✓ Published v$(VERSION): $(DMG_ARM64) + $(DMG) + checksums"
 	@echo "✓ Release-ready: $(DMG)"

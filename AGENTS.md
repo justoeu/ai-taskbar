@@ -147,8 +147,12 @@ make clean                     # nuke .build, build/, generated DMGs
 **Don't hand-edit version strings to cut a release, and don't push a `v*` tag
 yourself for a normal change.** Every push to `main` (typically a PR merge)
 triggers `.github/workflows/auto-tag.yml`, which decides the next version,
-bumps it everywhere, tags it, and calls `release.yml` to build + publish the
-universal DMG.
+bumps it everywhere, tags it, and calls `release.yml` — which validates the
+tagged commit and creates a **draft** GitHub Release with notes. **CI does NOT
+build or attach DMGs** (the Developer ID key stays off the repo on purpose);
+the maintainer publishes assets locally with `make publish` (clean-tree +
+HEAD-is-tagged guards → builds, signs and notarizes the arm64 AND universal
+DMGs → uploads both + checksums → flips draft → published).
 
 - **Bump level** is inferred from commit subjects/bodies since the last `v*`
   tag: `BREAKING CHANGE` / `type!:` / `[bump:major]` → **major**;
@@ -165,8 +169,11 @@ universal DMG.
 - **Manual / pre-release** tags still work: `git tag v0.3.0-beta1 && git push
   origin v0.3.0-beta1` runs `release.yml` directly (pre-release auto-detected
   from the `-` suffix).
-- `release.yml` re-runs the runtime validation suite before publishing, but it
+- `release.yml` re-runs the runtime validation suite before drafting, but it
   is **not** a substitute for the green `make validate` gate before you push.
+- The two DMG names are a contract with `UpdateChecker.pickDMGAsset`:
+  `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon) and `ai-taskbar-X.Y.Z.dmg`
+  (universal). Renaming either breaks in-app update downloads.
 
 ## Architecture (don't break these)
 
@@ -264,8 +271,10 @@ user edits. See `config.example.toml` for the full schema.
 
 ## Known limitations / future work
 
-- App is ad-hoc signed only. Gatekeeper warns on first launch. Notarization
-  needs an Apple Developer account ($99/yr) — deferred.
+- Distribution DMGs are signed + notarized **locally** (`make release` /
+  `make publish`, credentials via `NOTARY_PROFILE` keychain profile or
+  `APPLE_ID`/`APPLE_TEAM_ID`/`APPLE_PASSWORD`). CI deliberately has no signing
+  secrets — see "Releasing / versioning".
 - v0.2 candidates (open): start-at-login via `SMAppService` works only when
   the `.app` lives in `/Applications`; global hotkey via
   `MenuBarExtraAccess`; OpenAI Platform API (`sk-...`) for actual budget caps.

@@ -102,7 +102,14 @@ public final class UpdateChecker: ObservableObject {
             if raw.prerelease && !config.includePrereleases {
                 throw AppError.other(L10n.localizedString("updates_no_stable"))
             }
-            let asset = raw.assets.first(where: { $0.name.hasSuffix(".dmg") })
+            #if arch(arm64)
+            let isARM64 = true
+            #else
+            let isARM64 = false
+            #endif
+            let pickedName = Self.pickDMGAsset(names: raw.assets.map(\.name),
+                                               isARM64: isARM64)
+            let asset = raw.assets.first(where: { $0.name == pickedName })
             return Release(
                 tag: raw.tag_name,
                 htmlURL: URL(string: raw.html_url) ?? URL(string: "about:blank")!,
@@ -116,6 +123,21 @@ public final class UpdateChecker: ObservableObject {
         } catch {
             throw AppError.schema("decode GitHub release: \(error)")
         }
+    }
+
+    /// Picks the best DMG asset name for this machine. Since local publishing
+    /// (make publish), releases ship two DMGs: `…-arm64.dmg` (Apple
+    /// Silicon-only, half the size) and the universal `ai-taskbar-X.Y.Z.dmg`.
+    /// Apple Silicon prefers the arch-specific image and falls back to the
+    /// universal one (covers old single-DMG releases); Intel only ever takes
+    /// the universal — offering an arm64-only DMG there would download a
+    /// binary that can't run.
+    nonisolated internal static func pickDMGAsset(names: [String],
+                                                  isARM64: Bool) -> String? {
+        let dmgs = names.filter { $0.hasSuffix(".dmg") }
+        let armSpecific = dmgs.first { $0.hasSuffix("-arm64.dmg") }
+        let universal = dmgs.first { !$0.hasSuffix("-arm64.dmg") }
+        return isARM64 ? (armSpecific ?? universal) : universal
     }
 
     // MARK: - Download
