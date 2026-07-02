@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # tag push → GITHUB_REF is the tag. workflow_dispatch/workflow_call →
           # inputs.version is the tag we want to build (e.g. auto-tag.yml just
@@ -186,7 +186,7 @@ jobs:
           cat /tmp/release_notes.md
 
       - name: Create / update draft GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: AI Taskbar ${{ steps.version.outputs.tag }}

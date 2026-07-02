@@ -15,7 +15,7 @@ jobs:
     # Swift 5.10, which can't parse `swift-tools-version: 6.0`.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Select Xcode 16 (Swift 6)
         # Pin to a known Xcode that ships Swift 6.0 so `swift test` finds
