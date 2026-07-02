@@ -30,6 +30,13 @@ public struct VendorSectionView: View {
     /// `/bin/zsh` missing); surfaces a copy-the-command fallback.
     @State private var reloginSpawnFailed = false
 
+    /// In-flight flag for the one-time Keychain authorization (the native
+    /// password dialog blocks until dismissed).
+    @State private var keychainAuthPending = false
+    /// Non-nil after a failed authorization attempt — rendered under the
+    /// banner so the user sees why (canceling sets nothing).
+    @State private var keychainAuthError: String?
+
     private static func expansionKey(for vendor: VendorId) -> String {
         "expanded_\(vendor.rawValue)"
     }
@@ -238,6 +245,8 @@ public struct VendorSectionView: View {
                     L10n.text("no_credentials_hint")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                } else if err.isKeychainACLBlocked {
+                    keychainAuthorizeAffordance
                 } else {
                     Text(err.localizedDescription)
                         .font(.subheadline)
@@ -250,6 +259,68 @@ public struct VendorSectionView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     renderSnapshot(snap)
+                }
+            }
+        }
+    }
+
+    /// Actionable "authorize Keychain access" banner, shown when the last
+    /// fetch died on errSecInteractionNotAllowed (the item's partition list
+    /// doesn't include this build). The button runs the one-time ACL +
+    /// partition-list authorization; macOS shows a single native password
+    /// dialog and afterwards reads are permanently silent. Runs off the main
+    /// actor because SecKeychainItemSetAccess blocks on SecurityAgent UI.
+    @ViewBuilder
+    private var keychainAuthorizeAffordance: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "lock.shield")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                L10n.text("keychain_auth_title")
+                    .font(.subheadline.weight(.semibold))
+                if let message = keychainAuthError {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                } else {
+                    L10n.text(keychainAuthPending ? "keychain_auth_pending"
+                                                  : "keychain_auth_hint")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 4)
+            Button {
+                runKeychainAuthorization()
+            } label: {
+                Label(L10n.localizedString("keychain_auth_button"),
+                      systemImage: "key.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(keychainAuthPending)
+        }
+    }
+
+    private func runKeychainAuthorization() {
+        keychainAuthPending = true
+        keychainAuthError = nil
+        let vm = self.vm
+        Task.detached(priority: .userInitiated) {
+            let result: Result<KeychainAccessAuthorizer.Outcome, Error> = Result {
+                try KeychainAccessAuthorizer.authorize(service: "Claude Code-credentials")
+            }
+            await MainActor.run {
+                keychainAuthPending = false
+                switch result {
+                case .success(.authorized):
+                    vm.refresh(forceRefresh: true)
+                case .success(.canceled):
+                    break   // user changed their mind — banner stays, no error
+                case .failure(let error):
+                    keychainAuthError = (error as? AppError)?.localizedDescription
+                        ?? String(describing: error)
                 }
             }
         }

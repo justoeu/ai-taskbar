@@ -35,6 +35,11 @@
 "no_credentials_help" = "No credentials configured.";
 "last_fetch_failed_help" = "Last fetch failed.";
 "token_expired_title" = "Access token expired";
+// One-time Keychain authorization banner (errSecInteractionNotAllowed).
+"keychain_auth_title" = "Keychain access needed";
+"keychain_auth_hint" = "macOS protects the Claude Code token. Authorize once — your login password is asked in a system dialog, then never again.";
+"keychain_auth_pending" = "Waiting for the system dialog…";
+"keychain_auth_button" = "Authorize";
 "token_expired_relogin_hint" = "Opens a browser to sign in — we'll re-check automatically.";
 "relogin" = "Re-login";
 "relogin_started" = "Browser opened — complete sign-in.";

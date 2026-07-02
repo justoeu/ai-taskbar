@@ -187,10 +187,14 @@ public struct SettingsView: View {
     @ViewBuilder
     private var generalSection: some View {
         Section {
-            Picker(L10n.localizedString("settings_menu_bar_mode"),
-                   selection: menuBarModeSelection) {
+            Picker(selection: menuBarModeSelection) {
                 ForEach(MenuBarMode.allCases, id: \.self) { m in
                     Text(menuBarModeLabel(m)).tag(m)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(L10n.localizedString("settings_menu_bar_mode"))
+                    FieldHelpButton(helpKey: "settings_menu_bar_mode_help")
                 }
             }
             .pickerStyle(.menu)
@@ -207,11 +211,15 @@ public struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Picker(L10n.localizedString("settings_language"),
-                   selection: languageSelection) {
+            Picker(selection: languageSelection) {
                 Text(L10n.localizedString("settings_system_default")).tag(String?.none)
                 ForEach(["en", "pt-BR", "es"], id: \.self) { code in
                     Text(languageDisplayName(code)).tag(Optional(code))
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(L10n.localizedString("settings_language"))
+                    FieldHelpButton(helpKey: "settings_language_help")
                 }
             }
             .pickerStyle(.menu)
@@ -501,12 +509,16 @@ public struct SettingsView: View {
                               value: Binding(
                                 get: { viewModel.draft.zai.apiKey ?? "" },
                                 set: { viewModel.draft.zai.apiKey = $0.isEmpty ? nil : $0 }))
-            Picker(L10n.localizedString("settings_plan_tier"),
-                   selection: Binding(
+            Picker(selection: Binding(
                     get: { viewModel.draft.zai.planTier ?? "" },
                     set: { viewModel.draft.zai.planTier = $0.isEmpty ? nil : $0 })) {
                 Text(L10n.localizedString("settings_system_default")).tag("")
                 ForEach(["lite", "pro", "max"], id: \.self) { Text($0).tag($0) }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(L10n.localizedString("settings_plan_tier"))
+                    FieldHelpButton(helpKey: "settings_plan_tier_help")
+                }
             }
             .pickerStyle(.menu)
             .help(L10n.localizedString("settings_plan_tier_help"))
@@ -556,12 +568,16 @@ public struct SettingsView: View {
                               value: Binding(
                                 get: { viewModel.draft.kimi.apiKey ?? "" },
                                 set: { viewModel.draft.kimi.apiKey = $0.isEmpty ? nil : $0 }))
-            Picker(L10n.localizedString("settings_base_url"),
-                   selection: Binding(
+            Picker(selection: Binding(
                     get: { viewModel.draft.kimi.baseURL },
                     set: { viewModel.draft.kimi.baseURL = $0 })) {
                 Text("api.moonshot.ai").tag("https://api.moonshot.ai/v1")
                 Text("api.moonshot.cn").tag("https://api.moonshot.cn/v1")
+            } label: {
+                HStack(spacing: 4) {
+                    Text(L10n.localizedString("settings_base_url"))
+                    FieldHelpButton(helpKey: "settings_base_url_help")
+                }
             }
             .pickerStyle(.menu)
             .help(L10n.localizedString("settings_base_url_help"))

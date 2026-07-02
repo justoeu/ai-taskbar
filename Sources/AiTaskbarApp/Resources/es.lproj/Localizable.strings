@@ -34,6 +34,11 @@
 "no_credentials_help" = "Sin credenciales configuradas.";
 "last_fetch_failed_help" = "La última actualización falló.";
 "token_expired_title" = "Token de acceso expirado";
+// Banner de autorización única del Keychain (errSecInteractionNotAllowed).
+"keychain_auth_title" = "Se necesita acceso al Keychain";
+"keychain_auth_hint" = "macOS protege el token de Claude Code. Autoriza una vez — la contraseña se pide en un diálogo del sistema, y nunca más.";
+"keychain_auth_pending" = "Esperando el diálogo del sistema…";
+"keychain_auth_button" = "Autorizar";
 "token_expired_relogin_hint" = "Abre el navegador para iniciar sesión — verificaremos automáticamente.";
 "relogin" = "Re-iniciar sesión";
 "relogin_started" = "Navegador abierto — completa el inicio de sesión.";
