@@ -114,4 +114,28 @@ struct KeychainAccessAuthorizerTests {
             try KeychainAccessAuthorizer.authorize(service: "ai-taskbar-definitely-missing-\(UUID())")
         }
     }
+
+    @Test("authorize short-circuits to .authorized when the item already reads silently")
+    func idempotent_when_already_readable() throws {
+        // probeRead == true means the ACL/partition list already admit us:
+        // authorize must NOT touch SecKeychainItemSetAccess (no prompt, no
+        // duplicate ACL entry). It returns .authorized even for a service that
+        // doesn't exist, proving no real Keychain lookup happened.
+        let outcome = try KeychainAccessAuthorizer.authorize(
+            service: "ai-taskbar-definitely-missing-\(UUID())",
+            probeRead: { _ in true })
+        #expect(outcome == .authorized)
+    }
+
+    @Test("authorize proceeds past the gate when the probe says access is blocked")
+    func proceeds_when_probe_blocked() {
+        // probeRead == false forces the real ACL path; against a missing
+        // service that path must fail (item-not-found) rather than silently
+        // returning .authorized.
+        #expect(throws: AppError.self) {
+            try KeychainAccessAuthorizer.authorize(
+                service: "ai-taskbar-definitely-missing-\(UUID())",
+                probeRead: { _ in false })
+        }
+    }
 }

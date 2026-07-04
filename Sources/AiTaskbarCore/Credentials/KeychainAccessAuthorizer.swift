@@ -72,7 +72,39 @@ public enum KeychainAccessAuthorizer {
         case canceled
     }
 
-    public static func authorize(service: String) throws -> Outcome {
+    /// UIFail probe: `true` when this binary can already DECRYPT the item's
+    /// data with no SecurityAgent prompt — i.e. the decrypt ACL + partition
+    /// list already grant access. `kSecUseAuthenticationUIFail` guarantees we
+    /// fast-fail (`errSecInteractionNotAllowed`) instead of ever prompting, so
+    /// this is safe to call from any context. See `KeychainCredentialReader`
+    /// for why the deprecated UIFail key is deliberate for these plain
+    /// generic-password items.
+    public static func canReadSilently(_ service: String) -> Bool {
+        var result: CFTypeRef?
+        let query: [String: Any] = [
+            kSecClass as String:               kSecClassGenericPassword,
+            kSecAttrService as String:         service,
+            kSecMatchLimit as String:          kSecMatchLimitOne,
+            kSecReturnData as String:          true,
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
+        ]
+        return SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
+    }
+
+    /// - Parameter probeRead: injection seam for tests. Production callers use
+    ///   the default (`canReadSilently`); a test can force the short-circuit
+    ///   or the full ACL path deterministically without a real Keychain.
+    public static func authorize(service: String,
+                                 probeRead: (String) -> Bool = KeychainAccessAuthorizer.canReadSilently) throws -> Outcome {
+        // 0. Idempotency gate. If the item already decrypts silently, both ACL
+        //    layers (trusted-app list + partition list) already admit this
+        //    binary. Committing again via `SecKeychainItemSetAccess` would
+        //    re-trigger the login-password dialog (ChangeACL always prompts)
+        //    AND append a duplicate trusted-app entry — the exact pileup that
+        //    left dozens of dead ACL records in the field. Return authorized
+        //    with zero side effects.
+        if probeRead(service) { return .authorized }
+
         // 1. Item reference. Fetching the ref (not the data) needs no ACL
         //    authorization, so UIFail cannot spuriously prompt here.
         var itemRef: CFTypeRef?
