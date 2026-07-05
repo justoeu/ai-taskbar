@@ -64,7 +64,7 @@ struct GoldenSnapshotTests {
 
     // MARK: - OpenRouter
 
-    @Test("OpenRouter golden — credits + key combined snapshot")
+    @Test("OpenRouter golden — credits + key + activity combined snapshot")
     func openrouter_golden() throws {
         let credits = try JSONDecoder().decode(
             OpenRouterCreditsResponse.self,
@@ -72,13 +72,25 @@ struct GoldenSnapshotTests {
         let key = try JSONDecoder().decode(
             OpenRouterKeyResponse.self,
             from: Fixtures.data(Fixtures.openrouterKey200))
-        let snap = OpenRouterCachedPayload(credits: credits, key: key).toSnapshot()
+        let activity = try JSONDecoder().decode(
+            OpenRouterActivityResponse.self,
+            from: Fixtures.data(Fixtures.openrouterActivity200))
+        let snap = OpenRouterCachedPayload(credits: credits, key: key, activity: activity).toSnapshot()
 
         #expect(snap.planLabel == "OpenRouter: primary")
         // total_credits=10, total_usage=2.50 → 25%.
         #expect(Int((snap.balance?.utilizationPercent ?? 0).rounded()) == 25)
         // key.usage=2.50 / key.limit=10 → 25%.
         #expect(Int((snap.monthly?.utilizationPercent ?? 0).rounded()) == 25)
+        // model aggregation from activity: 3.20 + 2.10 + 1.50 = 6.80 total
+        #expect(snap.topModels?.map(\.model) == [
+            "openai/gpt-4.1",
+            "anthropic/claude-sonnet-4.6",
+            "google/gemini-2.5-flash"
+        ])
+        let gptShare = snap.topModels?.first(where: { $0.model == "openai/gpt-4.1" })
+        #expect(Int((gptShare?.percent ?? 0).rounded()) == 47, "3.20 / 6.80 ≈ 47%")
+        #expect(gptShare?.rawUsage == 3.20)
     }
 
     // MARK: - Z.AI

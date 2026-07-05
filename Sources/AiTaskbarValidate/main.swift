@@ -234,17 +234,24 @@ section("Wire types: OpenRouter fixture (combined)") {
     let key = try SharedCoders.decoder.decode(
         OpenRouterKeyResponse.self,
         from: Fixtures.data(Fixtures.openrouterKey200))
-    let combined = OpenRouterCachedPayload(credits: credits, key: key)
+    let activity = try SharedCoders.decoder.decode(
+        OpenRouterActivityResponse.self,
+        from: Fixtures.data(Fixtures.openrouterActivity200))
+    let combined = OpenRouterCachedPayload(credits: credits, key: key, activity: activity)
     let s = combined.toSnapshot()
     expect(s.planLabel == "OpenRouter: primary", "OpenRouter plan label")
     expect(Int((s.balance?.utilizationPercent ?? 0).rounded()) == 25,
            "OpenRouter balance utilization 25% of $10")
+    expect(s.topModels?.map(\.model) == ["openai/gpt-4.1", "anthropic/claude-sonnet-4.6", "google/gemini-2.5-flash"],
+           "OpenRouter topModels from activity data")
     // Round-trip through OpenRouterCachedPayload (P3)
-    let payload = OpenRouterCachedPayload(credits: credits, key: key)
+    let payload = OpenRouterCachedPayload(credits: credits, key: key, activity: activity)
     let bytes = try SharedCoders.encoder.encode(payload)
     let decoded = try SharedCoders.decoder.decode(OpenRouterCachedPayload.self, from: bytes)
     expect(decoded.credits.data.total_credits == 10.0,
            "OpenRouterCachedPayload Codable preserves total_credits")
+    expect(decoded.activity?.data.count == 3,
+           "OpenRouterCachedPayload Codable preserves activity data")
 }
 
 section("Wire types: Z.AI fixture") {

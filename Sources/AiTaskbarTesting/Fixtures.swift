@@ -51,6 +51,24 @@ public enum Fixtures {
     { "data": { "label": "free", "usage": 0.10, "is_free_tier": true } }
     """#
 
+    public static let openrouterActivity200 = #"""
+    { "data": [
+      { "model": "openai/gpt-4.1",   "usage": 3.20, "requests": 12,
+        "prompt_tokens": 8000,  "completion_tokens": 2000,  "reasoning_tokens": 0 },
+      { "model": "anthropic/claude-sonnet-4.6", "usage": 2.10, "requests": 8,
+        "prompt_tokens": 6000,  "completion_tokens": 1500,  "reasoning_tokens": 0 },
+      { "model": "google/gemini-2.5-flash", "usage": 1.50, "requests": 5,
+        "prompt_tokens": 4000,  "completion_tokens": 1000,  "reasoning_tokens": 0 }
+    ] }
+    """#
+
+    public static let openrouterKeyWithPeriods200 = #"""
+    { "data": { "label": "primary", "usage": 12.00, "limit": 50.00,
+                "usage_daily": 2.50, "usage_weekly": 18.00, "usage_monthly": 45.00,
+                "limit_remaining": 38.00, "limit_reset": "monthly",
+                "is_free_tier": false } }
+    """#
+
     /// OpenAI balance encoded as an Int (older format) — exercises the
     /// Int64 branch of OpenAICredits.balance decoding.
     public static let openaiUsageBalanceAsInt200 = #"""

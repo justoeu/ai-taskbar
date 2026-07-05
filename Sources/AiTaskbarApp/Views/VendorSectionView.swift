@@ -457,8 +457,36 @@ public struct VendorSectionView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-        case .openrouter:
-            EmptyView()
+        case .openrouter(let s):
+            if let models = s.topModels, !models.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chart.bar.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        L10n.text("models_label")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 6)
+                    }
+                    ForEach(models.prefix(5), id: \.model) { m in
+                        HStack(spacing: 6) {
+                            Text("•")
+                                .font(.subheadline)
+                                .foregroundStyle(.tertiary)
+                            Text(m.model)
+                                .font(.subheadline.monospaced())
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 4)
+                            Text("\(Int(m.percent.rounded()))%")
+                                .font(.subheadline.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.leading, 4)
+                    }
+                }
+                .padding(.leading, 2)
+            }
         case .zai(let s):
             if let models = s.topModels, !models.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {

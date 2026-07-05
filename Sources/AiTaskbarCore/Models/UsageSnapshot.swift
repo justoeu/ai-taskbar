@@ -239,16 +239,19 @@ public struct OpenRouterSnapshot: Sendable, Equatable, Codable {
     public let daily: UsageWindow?
     public let weekly: UsageWindow?
     public let monthly: UsageWindow?
+    public let topModels: [ModelShare]?
 
     public init(planLabel: String? = nil,
                 balance: UsageWindow? = nil,
                 daily: UsageWindow? = nil,
                 weekly: UsageWindow? = nil,
-                monthly: UsageWindow? = nil) {
+                monthly: UsageWindow? = nil,
+                topModels: [ModelShare]? = nil) {
         self.planLabel = planLabel
         self.balance = balance
         self.daily = daily
         self.weekly = weekly
         self.monthly = monthly
+        self.topModels = topModels
     }
 }
