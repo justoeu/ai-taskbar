@@ -177,6 +177,42 @@ cleanly on `[skip release]` heads.
   `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon) and `ai-taskbar-X.Y.Z.dmg`
   (universal). Renaming either breaks in-app update downloads.
 
+### DMG release runbook (generating the signed DMG)
+
+The `.app` and both DMGs are built, signed, **notarized** and published
+**locally** — CI only tags + drafts. To cut a release from a clean `main`:
+
+1. **One-time setup.** Store an app-specific password (generated at
+   account.apple.com → Sign-In & Security → App-Specific Passwords) as a
+   notarytool keychain profile so it never touches env vars or shell history:
+   ```bash
+   xcrun notarytool store-credentials "ai-taskbar-notary" \
+     --apple-id you@example.com --team-id 5HHL78743R --password <app-specific-pw>
+   ```
+   Verify: `xcrun notarytool history --keychain-profile ai-taskbar-notary`.
+   The Developer ID identity (`Developer ID Application: Valmir Robson Justo
+   (5HHL78743R)`) must already be in the login keychain — check with
+   `security find-identity -v -p codesigning`.
+2. **Gate.** `make validate` must be green **and** the tree must be clean
+   (commit/stash first — `make publish` refuses a dirty tree or an untagged
+   HEAD).
+3. **Ship.** One command does push → wait for the CI tag → pull the bump →
+   build → sign → notarize → staple → upload → flip draft to published:
+   ```bash
+   make ship DEVELOPER_ID="Developer ID Application: Valmir Robson Justo (5HHL78743R)" \
+             NOTARY_PROFILE="ai-taskbar-notary"
+   ```
+   (Or `export` both first.) `APPLE_ID` + `APPLE_TEAM_ID` + `APPLE_PASSWORD`
+   work in place of `NOTARY_PROFILE`.
+
+Related targets: `make publish` is the second half alone (tag already exists
+locally); `make release` builds + notarizes both DMGs without uploading;
+`make dmg` is an unsigned ad-hoc local build for testing only.
+
+**Doc-only commits pushed to `main` MUST carry `[skip release]`** — otherwise
+they trigger a redundant version bump (this is how an accidental extra
+`v0.10.1` got cut alongside `v0.10.0`).
+
 ## Architecture (don't break these)
 
 - **`AiTaskbarCore`** — vendor-agnostic. Models, HTTP, Cache, Credentials,
