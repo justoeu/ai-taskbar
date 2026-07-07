@@ -141,4 +141,66 @@ struct AggregatesComputationTests {
         ])
         #expect(r.maxUtilization == 88)
     }
+
+    // MARK: - Expansion filter (only OPEN cards count toward maxUtilization)
+
+    private func entry(_ state: VendorViewModel.State,
+                       expanded: Bool) -> AggregatesComputation.Entry {
+        .init(state: state, isExpanded: expanded)
+    }
+
+    @Test("collapsed card is excluded from maxUtilization")
+    func collapsed_excluded_from_max() {
+        let r = AggregatesComputation.compute(entries: [
+            entry(.ok(outcome(pct: 90)), expanded: false),  // closed → ignored
+            entry(.ok(outcome(pct: 40)), expanded: true)
+        ])
+        #expect(r.maxUtilization == 40)
+    }
+
+    @Test("expanded card still contributes to maxUtilization")
+    func expanded_contributes_to_max() {
+        let r = AggregatesComputation.compute(entries: [
+            entry(.ok(outcome(pct: 90)), expanded: true),
+            entry(.ok(outcome(pct: 40)), expanded: false)
+        ])
+        #expect(r.maxUtilization == 90)
+    }
+
+    @Test("all cards collapsed → maxUtilization is 0")
+    func all_collapsed_is_zero() {
+        let r = AggregatesComputation.compute(entries: [
+            entry(.ok(outcome(pct: 90)), expanded: false),
+            entry(.ok(outcome(pct: 40)), expanded: false)
+        ])
+        #expect(r.maxUtilization == 0)
+    }
+
+    @Test("collapsed card is STILL counted for hasRateLimitedVendor")
+    func collapsed_still_flags_rate_limit() {
+        // Folding a card must not blind the scheduler back-off: the 429 flag
+        // considers every vendor regardless of expand state.
+        let r = AggregatesComputation.compute(entries: [
+            entry(.ok(outcome(pct: 30, lastErrorStatus: 429)), expanded: false)
+        ])
+        #expect(r.hasRateLimitedVendor)
+        #expect(r.maxUtilization == 0)  // but its % is excluded
+    }
+
+    @Test("collapsed card is STILL counted for isAnyVendorLoading")
+    func collapsed_still_flags_loading() {
+        let r = AggregatesComputation.compute(entries: [
+            entry(.loading, expanded: false)
+        ])
+        #expect(r.isAnyVendorLoading)
+    }
+
+    @Test("compute(states:) treats every vendor as expanded")
+    func states_overload_is_all_expanded() {
+        let r = AggregatesComputation.compute(states: [
+            .ok(outcome(pct: 90)),
+            .ok(outcome(pct: 40))
+        ])
+        #expect(r.maxUtilization == 90)
+    }
 }

@@ -229,10 +229,17 @@ they trigger a redundant version bump (this is how an accidental extra
   (`maxUtilization`, `isAnyVendorLoading`, `hasRateLimitedVendor`) are
   pre-computed inside `recomputeAggregates()` so the per-second header
   TimelineView reads flat `@Published` properties instead of re-scanning
-  vendors. The merged `$state` stream is throttled at 50 ms with
-  `Publishers.MergeMany.throttle(latest:true)` to coalesce the bursts of
-  synchronous `.loading` → `.ok/.failed` transitions a single
-  `refreshAll()` produces. The popover header runs a 1-Hz countdown
+  vendors. **`maxUtilization` only folds vendors whose popover card is
+  expanded (open)** — a collapsed (closed) card is excluded from the menu-bar
+  percentage. The source of truth for that is `VendorViewModel.isExpanded`
+  (seeded from UserDefaults key `expanded_<vendor>`, default open), NOT a
+  view-local `@State`, precisely so the aggregate can read it. The `loading`
+  and `rate-limited` flags still consider every vendor regardless of expand
+  state (they drive the countdown + scheduler back-off). The merged stream
+  now merges both `$state` and `$isExpanded` (erased to `Void`), throttled at
+  50 ms with `Publishers.MergeMany.throttle(latest:true)` to coalesce the
+  bursts of synchronous `.loading` → `.ok/.failed` transitions a single
+  `refreshAll()` produces and to recompute the % when a card is toggled. The popover header runs a 1-Hz countdown
   anchored on `UsageStore.lastScheduledTickAt`; localized strings are
   memoized at type init. `DiskCache` TTL is set in `AppEnvironment` to
   `max(15, refresh_interval_seconds − 5)` so the scheduled tick reliably

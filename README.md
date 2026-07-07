@@ -21,7 +21,7 @@
 
 ## What you get
 
-A gauge icon in your menu bar showing the **highest utilization** across every LLM you have credentials for. Click it for a per-provider breakdown:
+A gauge icon in your menu bar showing the **highest utilization** across your LLM providers. It reflects only the **expanded (open) cards** in the popover — collapse a provider's card to drop it out of the gauge, so you can focus the number on the subscriptions you actually care about. Click it for a per-provider breakdown:
 
 - **Plan label** ("Claude Max 20x", "ChatGPT Plus", "GLM Lite")
 - **Per-window utilization** with color thresholds (green → yellow → red)
@@ -180,7 +180,7 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 ┌────────────▼────────────────────────────────────────────────┐
 │                  UsageStore (coordinator)                   │
 │  Holds 5 × VendorViewModel (per-vendor @ObservableObject).  │
-│  Computes maxUtilization aggregate for the menu bar gauge.  │
+│  maxUtilization = max over EXPANDED cards → menu bar gauge. │
 └────────────┬────────────────────────────────────────────────┘
              │
 ┌────────────▼────────────────────────────────────────────────┐
