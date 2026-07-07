@@ -75,8 +75,16 @@ public final class UsageStore: ObservableObject {
     /// subscription halves the publisher fan-out per refresh cycle.
     private func wireUpAggregates() {
         subscriptions.removeAll()
-        let stateStreams = vendors.map { $0.$state.eraseToAnyPublisher() }
-        Publishers.MergeMany(stateStreams)
+        // Merge both `$state` and `$isExpanded` (erased to `Void`) so the
+        // menu-bar `maxUtilization` recomputes when the user opens/closes a
+        // card, not just when a vendor's fetch resolves.
+        let stateStreams = vendors.map {
+            $0.$state.map { _ in () }.eraseToAnyPublisher()
+        }
+        let expandStreams = vendors.map {
+            $0.$isExpanded.map { _ in () }.eraseToAnyPublisher()
+        }
+        Publishers.MergeMany(stateStreams + expandStreams)
             .throttle(for: .milliseconds(50),
                       scheduler: RunLoop.main,
                       latest: true)
@@ -89,7 +97,11 @@ public final class UsageStore: ObservableObject {
     }
 
     private func recomputeAggregates() {
-        let result = AggregatesComputation.compute(states: vendors.map(\.state))
+        let result = AggregatesComputation.compute(
+            entries: vendors.map {
+                AggregatesComputation.Entry(state: $0.state,
+                                            isExpanded: $0.isExpanded)
+            })
         if result.maxUtilization != maxUtilization { maxUtilization = result.maxUtilization }
         if result.isAnyVendorLoading != isAnyVendorLoading { isAnyVendorLoading = result.isAnyVendorLoading }
         if result.hasRateLimitedVendor != hasRateLimitedVendor { hasRateLimitedVendor = result.hasRateLimitedVendor }
@@ -195,31 +207,56 @@ public enum AggregatesComputation {
         }
     }
 
+    /// One vendor's contribution to the aggregate: its refresh `state` plus
+    /// whether its popover card is currently expanded (open). `isExpanded`
+    /// gates ONLY `maxUtilization` — a collapsed (closed) card is disregarded
+    /// by the menu-bar percentage. The `isAnyVendorLoading` /
+    /// `hasRateLimitedVendor` flags still consider every vendor regardless of
+    /// expand state (they drive the header countdown and the scheduler
+    /// back-off, which must not go blind just because the user folded a card).
+    public struct Entry {
+        public let state: VendorViewModel.State
+        public let isExpanded: Bool
+        public init(state: VendorViewModel.State, isExpanded: Bool) {
+            self.state = state
+            self.isExpanded = isExpanded
+        }
+    }
+
+    /// Back-compat overload: treats every vendor as expanded, i.e. the
+    /// pre-filter behavior where the bar folded all vendors into the max.
     public static func compute(states: [VendorViewModel.State]) -> Result {
+        compute(entries: states.map { Entry(state: $0, isExpanded: true) })
+    }
+
+    public static func compute(entries: [Entry]) -> Result {
         var maxUtil = 0.0
         var loading = false
         var rateLimited = false
         // Single pass so the steady-state cost is O(vendors), not 2×.
-        for state in states {
+        for entry in entries {
+            let state = entry.state
+            // Loading / rate-limit flags fold EVERY vendor — independent of
+            // whether its card is open.
             switch state {
             case .idle:
                 break
             case .loading:
                 loading = true
-                if let m = state.outcome?.snapshot.maxUtilization, m > maxUtil {
-                    maxUtil = m
-                }
             case .ok(let outcome):
                 if outcome.lastError?.status == 429 { rateLimited = true }
-                let m = outcome.snapshot.maxUtilization
-                if m > maxUtil { maxUtil = m }
             case .failed(let err, let fallback):
                 if err.isRateLimited || fallback?.lastError?.status == 429 {
                     rateLimited = true
                 }
-                if let m = fallback?.snapshot.maxUtilization, m > maxUtil {
-                    maxUtil = m
-                }
+            }
+            // maxUtilization only folds OPEN cards. `state.outcome` yields the
+            // fresh outcome for `.ok`, the stale fallback for `.failed`, and
+            // nil for `.idle` / `.loading` — so a just-started refresh keeps
+            // whatever the previous fold produced instead of dropping to 0.
+            guard entry.isExpanded else { continue }
+            if let m = state.outcome?.snapshot.maxUtilization, m > maxUtil {
+                maxUtil = m
             }
         }
         return Result(maxUtilization: maxUtil,

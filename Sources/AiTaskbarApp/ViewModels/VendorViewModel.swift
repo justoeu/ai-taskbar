@@ -37,6 +37,28 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     @Published public private(set) var history: [UsageHistoryStore.Sample] = []
     @Published public private(set) var lastNetworkFetch: Date?
 
+    /// Whether this vendor's card is expanded (open) in the popover. This is
+    /// the single source of truth for BOTH the section chevron UI and the
+    /// menu-bar `maxUtilization` filter: a collapsed (closed) card is excluded
+    /// from the percentage shown in the bar (see `AggregatesComputation`). It
+    /// used to live as a `@State` inside `VendorSectionView`, but the bar
+    /// needs to read it, so it's hoisted here. Seeded from UserDefaults on
+    /// init; the `didSet` persists every change back (the initial assignment
+    /// in `init` does not fire `didSet`, so no redundant write on launch).
+    @Published public var isExpanded: Bool {
+        didSet {
+            guard isExpanded != oldValue else { return }
+            UserDefaults.standard.set(isExpanded,
+                                      forKey: Self.expansionKey(for: vendorId))
+        }
+    }
+
+    /// UserDefaults key backing `isExpanded`. Unchanged from the key the old
+    /// `VendorSectionView` used, so existing users keep their saved layout.
+    public static func expansionKey(for vendor: VendorId) -> String {
+        "expanded_\(vendor.rawValue)"
+    }
+
     /// True when the vendor's last fetch was rejected with a 401 — either a
     /// hard `.failed` on a cold cache, or a stale-but-served snapshot whose
     /// `lastError` carries the 401. Drives the per-vendor "Re-login" button
@@ -91,6 +113,8 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         self.vendorId = provider.vendorId
         self.provider = provider
         self.notifications = notifications
+        self.isExpanded = (UserDefaults.standard
+            .object(forKey: Self.expansionKey(for: provider.vendorId)) as? Bool) ?? true
         self.historyStore = try? UsageHistoryStore.defaultFor(provider.vendorId)
         if let store = historyStore {
             self.history = store.load(since: Date.now.addingTimeInterval(-24 * 3600))

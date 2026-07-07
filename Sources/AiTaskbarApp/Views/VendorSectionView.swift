@@ -12,16 +12,6 @@ public struct VendorSectionView: View {
     /// shared `CostEstimator` flips `isLoading` / `byVendor`.
     public let cost: CostEstimator
 
-    /// User preference (persisted via UserDefaults). Disabled vendors are
-    /// rendered as forced-collapsed regardless of this value — `effectiveExpanded`
-    /// is what the view actually reads.
-    ///
-    /// We deliberately do NOT use `@AppStorage` here. Initializing `@AppStorage`
-    /// from inside `init` causes SwiftUI to re-construct the wrapper on every
-    /// parent re-render, which in turn invalidates the view in a tight loop
-    /// (visible as a permanent "Loading…" spinner that never resolves).
-    @State private var userExpanded: Bool
-
     /// Tracks an in-progress CLI re-login triggered by `reloginAffordance`.
     /// Flips true on click, back to false once the vendor recovers
     /// (`needsReauth` clears) or after a timeout — whichever comes first.
@@ -37,23 +27,12 @@ public struct VendorSectionView: View {
     /// banner so the user sees why (canceling sets nothing).
     @State private var keychainAuthError: String?
 
-    private static func expansionKey(for vendor: VendorId) -> String {
-        "expanded_\(vendor.rawValue)"
-    }
-
     public init(vm: VendorViewModel,
                 thresholds: ThresholdsConfig,
                 cost: CostEstimator) {
         self.vm = vm
         self.thresholds = thresholds
         self.cost = cost
-        let key = Self.expansionKey(for: vm.vendorId)
-        let saved = (UserDefaults.standard.object(forKey: key) as? Bool) ?? true
-        _userExpanded = State(initialValue: saved)
-    }
-
-    private func persistExpansion(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: Self.expansionKey(for: vm.vendorId))
     }
 
     /// True when this vendor is "disabled" (no credentials).
@@ -64,7 +43,7 @@ public struct VendorSectionView: View {
 
     private var effectiveExpanded: Bool {
         // Vendors without credentials stay folded regardless of preference.
-        isDisabled ? false : userExpanded
+        isDisabled ? false : vm.isExpanded
     }
 
     public var body: some View {
@@ -105,8 +84,10 @@ public struct VendorSectionView: View {
             // credentials — the visual chevron is hidden in that case.
             if !isDisabled {
                 Button {
-                    userExpanded.toggle()
-                    persistExpansion(userExpanded)
+                    // Source of truth lives on the VM; the didSet there
+                    // persists to UserDefaults and the menu-bar aggregate
+                    // recomputes so a collapsed card drops out of the %.
+                    vm.isExpanded.toggle()
                 } label: {
                     Image(systemName: effectiveExpanded ? "chevron.down" : "chevron.right")
                         .font(.subheadline.weight(.bold))
