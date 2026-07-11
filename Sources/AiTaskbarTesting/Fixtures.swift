@@ -178,6 +178,46 @@ public enum Fixtures {
     { "is_available": false }
     """#
 
+    /// xAI prepaid balance — `total.val` is USD cents as a signed string
+    /// (purchases are negative; spend is positive). $-45.00 remaining.
+    public static let xaiPrepaidBalance200 = #"""
+    {
+      "changes": [],
+      "total": { "val": "-4500" }
+    }
+    """#
+
+    /// xAI invoice preview for the current billing cycle: $12.50 spent against
+    /// a $200 soft limit, with $45 prepaid on file and $5 prepaid already used.
+    public static let xaiInvoicePreview200 = #"""
+    {
+      "coreInvoice": {
+        "lines": [],
+        "amountAfterVat": "1250",
+        "autoCreditsIssued": "0",
+        "defaultCreditsIssued": "0",
+        "prepaidCredits": { "val": "-4500" },
+        "prepaidCreditsUsed": { "val": "500" }
+      },
+      "effectiveSpendingLimit": "20000",
+      "defaultCredits": "0",
+      "billingCycle": { "year": 2026, "month": 7 }
+    }
+    """#
+
+    /// xAI invoice preview with zero spending limit (prepaid-only mode).
+    public static let xaiInvoicePreviewPrepaidOnly200 = #"""
+    {
+      "coreInvoice": {
+        "amountAfterVat": "0",
+        "prepaidCredits": { "val": "-1000" },
+        "prepaidCreditsUsed": { "val": "0" }
+      },
+      "effectiveSpendingLimit": "0",
+      "billingCycle": { "year": 2026, "month": 7 }
+    }
+    """#
+
     /// Gemini `models.list` payload — heartbeat used as a stand-in for a
     /// quota signal (Google AI doesn't expose one publicly). Three sample
     /// models so the snapshot's modelCount has something to count.

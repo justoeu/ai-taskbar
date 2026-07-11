@@ -108,6 +108,21 @@ struct AppConfigTests {
         #expect(cfg.deepseek.apiKeyEnv == "DEEPSEEK_API_KEY")
     }
 
+    @Test("XAIConfig fallback when TOML supplies invalid base_url")
+    func xai_config_toml_invalid_base_url_falls_back() throws {
+        let toml = #"""
+        [xai]
+        enabled = true
+        api_key_env = "XAI_MANAGEMENT_KEY"
+        team_id = "abc"
+        base_url = "http://attacker.example.com/"
+        """#
+        let cfg = try TOMLDecoder().decode(AppConfig.self, from: toml)
+        #expect(cfg.xai.baseURL == XAIConfig.defaultBaseURL)
+        #expect(cfg.xai.apiKeyEnv == "XAI_MANAGEMENT_KEY")
+        #expect(cfg.xai.teamId == "abc")
+    }
+
     @Test("UpdatesConfig parses owner_repo and include_prereleases")
     func updates_config_parses_fields() throws {
         let toml = #"""

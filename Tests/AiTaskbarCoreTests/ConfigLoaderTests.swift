@@ -156,3 +156,30 @@ struct DeepSeekConfigTests {
         #expect(c.baseURL == DeepSeekConfig.defaultBaseURL)
     }
 }
+
+@Suite("XAIConfig URL allowlist validation")
+struct XAIConfigTests {
+    @Test("default base URL accepted")
+    func default_base_url_accepted() {
+        let c = XAIConfig(baseURL: "https://management-api.x.ai")
+        #expect(c.baseURL == "https://management-api.x.ai")
+    }
+
+    @Test("http (non-TLS) rejected, falls back to default")
+    func http_rejected() {
+        let c = XAIConfig(baseURL: "http://management-api.x.ai")
+        #expect(c.baseURL == XAIConfig.defaultBaseURL)
+    }
+
+    @Test("attacker-controlled host rejected")
+    func unauthorized_host_rejected() {
+        let c = XAIConfig(baseURL: "https://evil.example.com")
+        #expect(c.baseURL == XAIConfig.defaultBaseURL)
+    }
+
+    @Test("inference host api.x.ai NOT allowed")
+    func inference_host_rejected() {
+        let c = XAIConfig(baseURL: "https://api.x.ai")
+        #expect(c.baseURL == XAIConfig.defaultBaseURL)
+    }
+}

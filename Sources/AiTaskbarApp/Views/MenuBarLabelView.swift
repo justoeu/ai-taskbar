@@ -34,7 +34,8 @@ public struct MenuBarLabelView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 if Task.isCancelled { break }
-                let n = store.vendors.count
+                // Follow popover display order (user drag-reorder).
+                let n = store.sortedVendors.count
                 guard n > 0 else { continue }
                 rotateIndex = (rotateIndex + 1) % n
             }
@@ -50,10 +51,11 @@ public struct MenuBarLabelView: View {
 
     @ViewBuilder
     private var rotatingContent: some View {
-        if store.vendors.isEmpty {
+        let rotating = store.sortedVendors.isEmpty ? store.vendors : store.sortedVendors
+        if rotating.isEmpty {
             iconForMaxPercent
         } else {
-            let vm = store.vendors[rotateIndex % store.vendors.count]
+            let vm = rotating[rotateIndex % rotating.count]
             let percent = vm.state.outcome?.snapshot.maxUtilization ?? 0
             Image(systemName: symbolName(for: percent))
                 .symbolRenderingMode(.hierarchical)
@@ -73,6 +75,7 @@ public struct MenuBarLabelView: View {
         case .kimi:       return "Km"
         case .gemini:     return "Gm"
         case .deepseek:   return "DS"
+        case .xai:        return "xAI"
         }
     }
 

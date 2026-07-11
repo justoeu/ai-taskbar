@@ -155,6 +155,60 @@ section("Wire types: DeepSeek fixture") {
     expect(is_.totalBalance == 0, "DeepSeek no infos → 0 balance")
 }
 
+section("Wire types: xAI fixtures") {
+    let prepaid = try SharedCoders.decoder.decode(
+        XAIPrepaidBalanceResponse.self,
+        from: Fixtures.data(Fixtures.xaiPrepaidBalance200))
+    expect(prepaid.total?.val == -4500, "xAI prepaid total cents")
+    expect(prepaid.total?.usd == 45.0, "xAI prepaid absolute USD")
+
+    let preview = try SharedCoders.decoder.decode(
+        XAIInvoicePreviewResponse.self,
+        from: Fixtures.data(Fixtures.xaiInvoicePreview200))
+    expect(preview.coreInvoice?.amountAfterVat == 1250, "xAI spent cents")
+    expect(preview.effectiveSpendingLimit == 20000, "xAI soft limit cents")
+    expect(preview.billingCycle?.year == 2026, "xAI billing year")
+    expect(preview.billingCycle?.month == 7, "xAI billing month")
+
+    let payload = XAICachedPayload(prepaid: prepaid, preview: preview)
+    let s = payload.toSnapshot()
+    expect(s.planLabel == "xAI", "xAI plan label")
+    expect(s.prepaidUSD == 45.0, "xAI prepaid USD")
+    expect(s.spentUSD == 12.5, "xAI spent USD")
+    expect(s.spendingLimitUSD == 200.0, "xAI limit USD")
+    expect(s.prepaidUsedUSD == 5.0, "xAI prepaid used USD")
+    expect(s.billingCycleLabel == "2026-07", "xAI cycle label")
+    expect(s.balance?.label == "Balance", "xAI balance window")
+    expect(s.balance?.utilizationPercent == 0, "xAI balance util 0")
+    expect(s.balance?.detail == "$45.00 available", "xAI balance detail")
+    expect(s.monthly?.label == "Monthly (2026-07)", "xAI monthly label")
+    expect(abs((s.monthly?.utilizationPercent ?? 0) - 6.25) < 0.01, "xAI monthly util 6.25%")
+    expect(s.monthly?.detail == "$12.50 / $200.00", "xAI monthly detail")
+
+    let prepaidOnly = try SharedCoders.decoder.decode(
+        XAIInvoicePreviewResponse.self,
+        from: Fixtures.data(Fixtures.xaiInvoicePreviewPrepaidOnly200))
+    let po = XAICachedPayload(prepaid: nil, preview: prepaidOnly).toSnapshot()
+    expect(po.prepaidUSD == 10.0, "xAI prepaid-only falls back to invoice credits")
+    expect(po.monthly?.utilizationPercent == 0, "xAI prepaid-only monthly util 0")
+    expect(po.monthly?.detail == "$0.00 spent", "xAI prepaid-only detail")
+}
+
+section("XAIConfig.validate") {
+    expect(XAIConfig.validate("https://management-api.x.ai") != nil,
+           "accepts https://management-api.x.ai")
+    expect(XAIConfig.validate("http://management-api.x.ai") == nil,
+           "rejects http://")
+    expect(XAIConfig.validate("https://attacker.com") == nil,
+           "rejects unknown host")
+    expect(XAIConfig.validate("https://api.x.ai") == nil,
+           "rejects inference host (management only)")
+    expect(XAIConfig.validate("https://MANAGEMENT-API.X.AI") != nil,
+           "scheme/host case-insensitive")
+    expect(XAIConfig.validate("not a url") == nil,
+           "rejects garbage")
+}
+
 section("KimiConfig.validate") {
     expect(KimiConfig.validate("https://api.moonshot.ai/v1") != nil,
            "accepts https://api.moonshot.ai/v1")
@@ -354,6 +408,13 @@ section("Config: full round-trip via TOMLKit") {
     api_key_env = "DEEPSEEK_API_KEY"
     api_key = "sk-ds"
     base_url = "https://api.deepseek.com"
+
+    [xai]
+    enabled = true
+    api_key_env = "XAI_MANAGEMENT_KEY"
+    api_key = "xai-mgmt"
+    team_id = "65c1e471-205f-4566-9c5a-07198bcdf4ce"
+    base_url = "https://management-api.x.ai"
     """#
     let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("ai-taskbar-validate-cfg-\(UUID().uuidString).toml")
@@ -376,6 +437,11 @@ section("Config: full round-trip via TOMLKit") {
     expect(cfg.deepseek.apiKeyEnv == "DEEPSEEK_API_KEY", "deepseek api_key_env")
     expect(cfg.deepseek.apiKey == "sk-ds", "deepseek inline api_key")
     expect(cfg.deepseek.baseURL == "https://api.deepseek.com", "deepseek base_url accepted")
+    expect(cfg.xai.enabled == true, "xai enabled")
+    expect(cfg.xai.apiKeyEnv == "XAI_MANAGEMENT_KEY", "xai api_key_env")
+    expect(cfg.xai.apiKey == "xai-mgmt", "xai inline api_key")
+    expect(cfg.xai.teamId == "65c1e471-205f-4566-9c5a-07198bcdf4ce", "xai team_id")
+    expect(cfg.xai.baseURL == "https://management-api.x.ai", "xai base_url accepted")
 }
 
 section("Config: rejected Kimi base_url falls back") {
@@ -406,6 +472,21 @@ section("Config: rejected DeepSeek base_url falls back") {
     let cfg = try ConfigLoader(path: tmp).load()
     expect(cfg.deepseek.baseURL == "https://api.deepseek.com",
            "malicious deepseek base_url rejected → fallback to default")
+}
+
+section("Config: rejected xAI base_url falls back") {
+    let toml = #"""
+    [xai]
+    enabled = true
+    base_url = "http://attacker.com"
+    """#
+    let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("ai-taskbar-validate-badxai-\(UUID().uuidString).toml")
+    try Data(toml.utf8).write(to: tmp)
+    defer { try? FileManager.default.removeItem(at: tmp) }
+    let cfg = try ConfigLoader(path: tmp).load()
+    expect(cfg.xai.baseURL == "https://management-api.x.ai",
+           "malicious xai base_url rejected → fallback to default")
 }
 
 section("UsageHistoryStore: append + load + compact") {

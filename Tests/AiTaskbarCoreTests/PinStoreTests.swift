@@ -287,6 +287,7 @@ struct PinBaselineTests {
         "api.moonshot.cn",
         "generativelanguage.googleapis.com",
         "api.deepseek.com",
+        "management-api.x.ai",
     ]
 
     @Test("every expected vendor host has a baseline pin")

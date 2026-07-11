@@ -123,6 +123,14 @@ public final class AppEnvironment {
                 AppLog.lifecycle.error("deepseek init failed: \(String(describing: error), privacy: .public)")
             }
         }
+        if config.xai.enabled {
+            do {
+                let p = try XAIProvider(config: config.xai, http: http, cacheTTL: ttl)
+                out.append(p)
+            } catch {
+                AppLog.lifecycle.error("xai init failed: \(String(describing: error), privacy: .public)")
+            }
+        }
         return out
     }
 }

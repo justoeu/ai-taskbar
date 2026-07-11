@@ -4,6 +4,7 @@ import AiTaskbarCore
 
 public struct VendorSectionView: View {
     @ObservedObject var vm: VendorViewModel
+    @EnvironmentObject private var store: UsageStore
     public let thresholds: ThresholdsConfig
     /// Plain reference — NOT `@ObservedObject`. The cost footer (the only
     /// consumer of cost data inside this section) is now isolated in
@@ -79,66 +80,67 @@ public struct VendorSectionView: View {
 
     @ViewBuilder
     private func header(state: VendorViewModel.State) -> some View {
-        HStack {
-            // Chevron toggles user preference. Disabled when there are no
-            // credentials — the visual chevron is hidden in that case.
-            if !isDisabled {
+        // Leading block (chevron + title + flexible space) is the expand/
+        // collapse hit target for the whole "header" area. Trailing controls
+        // stay outside that Button so dashboard / reorder / refresh keep
+        // working independently.
+        HStack(spacing: 6) {
+            if isDisabled {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 14)
+                    headerTitle(state: state)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(L10n.localizedString("locked_help"))
+            } else {
                 Button {
                     // Source of truth lives on the VM; the didSet there
                     // persists to UserDefaults and the menu-bar aggregate
                     // recomputes so a collapsed card drops out of the %.
                     vm.isExpanded.toggle()
                 } label: {
-                    Image(systemName: effectiveExpanded ? "chevron.down" : "chevron.right")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 14)
+                    HStack(spacing: 6) {
+                        Image(systemName: effectiveExpanded ? "chevron.down" : "chevron.right")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14, height: 28, alignment: .center)
+                        headerTitle(state: state)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(L10n.localizedString(
                     effectiveExpanded ? "collapse_fmt" : "expand_fmt",
                     vm.vendorId.displayName))
-            } else {
-                Image(systemName: "lock.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 14)
-                    .help(L10n.localizedString("locked_help"))
             }
-            Button {
-                if let url = vm.vendorId.dashboardURL {
+            if let url = vm.vendorId.dashboardURL {
+                Button {
                     NSWorkspace.shared.open(url)
+                } label: {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(vm.vendorId.displayName)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                        if vm.vendorId.dashboardURL != nil {
-                            Image(systemName: "arrow.up.right.square")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if let plan = state.outcome?.snapshot.planLabel {
-                        Text(plan)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                .buttonStyle(.borderless)
+                .help(L10n.localizedString("open_dashboard_fmt", url.host ?? "dashboard"))
             }
-            .buttonStyle(.plain)
-            .modifier(HelpIfPresent(text: vm.vendorId.dashboardURL.map {
-                L10n.localizedString("open_dashboard_fmt", $0.host ?? "dashboard")
-            }))
-            Spacer()
             statusIndicator(state: state)
+            reorderControls
             if !isDisabled {
                 Button {
                     vm.refresh(forceRefresh: true)
                 } label: {
                     Image(systemName: "arrow.clockwise")
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .help(L10n.localizedString("refresh_vendor_fmt", vm.vendorId.displayName))
@@ -146,15 +148,51 @@ public struct VendorSectionView: View {
         }
     }
 
-    private struct HelpIfPresent: ViewModifier {
-        let text: String?
-        func body(content: Content) -> some View {
-            if let text, !text.isEmpty {
-                content.help(text)
-            } else {
-                content
+    @ViewBuilder
+    private func headerTitle(state: VendorViewModel.State) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(vm.vendorId.displayName)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            if let plan = state.outcome?.snapshot.planLabel {
+                Text(plan)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// ↑/↓ reorder — MenuBarExtra windows do not deliver drag-and-drop
+    /// reliably, so explicit buttons are the supported path.
+    @ViewBuilder
+    private var reorderControls: some View {
+        let idx = store.displayIndex(of: vm.vendorId)
+        let count = store.displayCount
+        let canUp = (idx ?? 0) > 0
+        let canDown = idx.map { $0 < count - 1 } ?? false
+        HStack(spacing: 0) {
+            Button {
+                store.moveVendorUp(vm.vendorId)
+            } label: {
+                Image(systemName: "chevron.up")
+                    .font(.caption.weight(.bold))
+                    .frame(width: 18, height: 16)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!canUp)
+            .help(L10n.localizedString("move_vendor_up_help"))
+            Button {
+                store.moveVendorDown(vm.vendorId)
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .frame(width: 18, height: 16)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!canDown)
+            .help(L10n.localizedString("move_vendor_down_help"))
+        }
+        .foregroundStyle(.secondary)
     }
 
     @ViewBuilder
@@ -547,6 +585,23 @@ public struct VendorSectionView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        case .xai(let s):
+            VStack(alignment: .leading, spacing: 2) {
+                if let prepaid = s.prepaidUSD {
+                    Label(L10n.localizedString("balance_fmt", prepaid),
+                          systemImage: "dollarsign.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let spent = s.spentUSD {
+                    Label(L10n.localizedString("cash_fmt", spent),
+                          systemImage: "creditcard")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }
+
+

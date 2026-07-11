@@ -37,11 +37,10 @@ public final class UsageStore: ObservableObject {
     /// steady-state case and let `RefreshScheduler`'s back-off branch sit
     /// idle. Pre-computed in `recomputeAggregates`.
     @Published public private(set) var hasRateLimitedVendor: Bool = false
-    /// `vendors` re-sorted so configured providers (have valid credentials,
-    /// not in the `.failed(.disabled)` no-credentials state) appear before
-    /// unconfigured ones. Within each bucket, alphabetical by `rawValue`.
-    /// Recomputed in `recomputeAggregates` so a vendor that gets configured
-    /// via Settings → Save → Relaunch re-orders on the next refresh.
+    /// `vendors` in display order for the popover. Honors a user-saved order
+    /// from `VendorOrder` (UserDefaults `vendor_order`); when unset, configured
+    /// providers appear before unconfigured, alpha within each bucket.
+    /// Recomputed in `recomputeAggregates` / after drag-reorder.
     @Published public private(set) var sortedVendors: [VendorViewModel] = []
 
     public let thresholds: ThresholdsConfig
@@ -52,15 +51,19 @@ public final class UsageStore: ObservableObject {
     /// effect (same as RefreshScheduler itself), so a `let` is honest.
     public let refreshIntervalSeconds: TimeInterval
     private var subscriptions: Set<AnyCancellable> = []
+    /// User-preferred card order (empty = automatic configured-first sort).
+    private var preferredOrder: [VendorId]
 
     public init(vendors: [VendorViewModel],
                 primary: VendorId?,
                 thresholds: ThresholdsConfig = .init(),
-                refreshIntervalSeconds: TimeInterval = 300) {
+                refreshIntervalSeconds: TimeInterval = 300,
+                preferredOrder: [VendorId] = VendorOrder.load()) {
         self.vendors = vendors
         self.primary = primary
         self.thresholds = thresholds
         self.refreshIntervalSeconds = refreshIntervalSeconds
+        self.preferredOrder = preferredOrder
         wireUpAggregates()
     }
 
@@ -106,26 +109,24 @@ public final class UsageStore: ObservableObject {
         if result.isAnyVendorLoading != isAnyVendorLoading { isAnyVendorLoading = result.isAnyVendorLoading }
         if result.hasRateLimitedVendor != hasRateLimitedVendor { hasRateLimitedVendor = result.hasRateLimitedVendor }
 
-        // Re-sort so configured vendors (have working credentials, not in
-        // the no-credentials `.failed(.disabled)` state) appear before
-        // unconfigured ones. SwiftUI's `ForEach(Identifiable)` keeps view
-        // identity stable across order changes, so this just animates the
-        // reorder rather than rebuilding the sections.
-        let newlySorted = vendors.sorted { a, b in
-            let aConfigured = !Self.isUnconfigured(a)
-            let bConfigured = !Self.isUnconfigured(b)
-            if aConfigured != bConfigured { return aConfigured }
-            return a.vendorId.rawValue < b.vendorId.rawValue
-        }
-        // Only publish if the order actually changed — avoids spurious
-        // @Published fires on every refresh tick.
+        applySortedOrder()
+    }
+
+    /// Recompute `sortedVendors` from `preferredOrder` + current vendor set.
+    private func applySortedOrder() {
+        let ids = VendorOrder.ordered(
+            entries: vendors.map { ($0.vendorId, Self.isUnconfigured($0)) },
+            preferred: preferredOrder
+        )
+        let byId = Dictionary(uniqueKeysWithValues: vendors.map { ($0.vendorId, $0) })
+        let newlySorted = ids.compactMap { byId[$0] }
         let sameOrder = newlySorted.count == sortedVendors.count
             && zip(newlySorted, sortedVendors).allSatisfy { $0.id == $1.id }
         if !sameOrder { sortedVendors = newlySorted }
     }
 
     /// True iff the vendor is in the no-credentials `.failed(.disabled)`
-    /// state. Such vendors sink to the bottom of `sortedVendors`.
+    /// state. Without a custom order, such vendors sink to the bottom.
     private static func isUnconfigured(_ vm: VendorViewModel) -> Bool {
         if case .failed(let err, _) = vm.state, err.isDisabled { return true }
         return false
@@ -139,6 +140,46 @@ public final class UsageStore: ObservableObject {
     public func vendorVM(_ id: VendorId) -> VendorViewModel? {
         vendors.first(where: { $0.vendorId == id })
     }
+
+    /// Place `id` immediately before `target` (or at the end when `target` is nil).
+    public func moveVendor(_ id: VendorId, before target: VendorId?) {
+        let current = sortedVendors.map(\.vendorId)
+        guard !current.isEmpty else { return }
+        let next = VendorOrder.moving(current, id: id, before: target)
+        guard next != current else { return }
+        preferredOrder = next
+        VendorOrder.save(preferredOrder)
+        applySortedOrder()
+    }
+
+    /// Move one step toward the top of the popover list. No-op when already first.
+    public func moveVendorUp(_ id: VendorId) {
+        let current = sortedVendors.map(\.vendorId)
+        guard let idx = current.firstIndex(of: id), idx > 0 else { return }
+        var next = current
+        next.swapAt(idx, idx - 1)
+        preferredOrder = next
+        VendorOrder.save(preferredOrder)
+        applySortedOrder()
+    }
+
+    /// Move one step toward the bottom of the popover list. No-op when already last.
+    public func moveVendorDown(_ id: VendorId) {
+        let current = sortedVendors.map(\.vendorId)
+        guard let idx = current.firstIndex(of: id), idx < current.count - 1 else { return }
+        var next = current
+        next.swapAt(idx, idx + 1)
+        preferredOrder = next
+        VendorOrder.save(preferredOrder)
+        applySortedOrder()
+    }
+
+    /// Index of `id` in the current display order, or nil if absent.
+    public func displayIndex(of id: VendorId) -> Int? {
+        sortedVendors.firstIndex(where: { $0.vendorId == id })
+    }
+
+    public var displayCount: Int { sortedVendors.count }
 
     public func refreshAll(forceRefresh: Bool = false) {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }

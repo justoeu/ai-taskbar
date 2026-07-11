@@ -210,6 +210,14 @@ public struct ConfigLoader: Sendable {
                 config.deepseek.apiKey = nil
             }
         }
+        if let enc = config.xai.apiKey, SecretBox.isEncrypted(enc) {
+            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
+                config.xai.apiKey = pt
+            } else {
+                AppLog.config.warning("xai.api_key encrypted but undecryptable — clearing")
+                config.xai.apiKey = nil
+            }
+        }
     }
 
     /// Idempotently appends any vendor section that's missing from the user's
@@ -269,7 +277,7 @@ public struct ConfigLoader: Sendable {
 
         [security]
         # TLS pinning (SPKI hash, Trust-On-First-Use). Empty list = no pinning.
-        # pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com"]
+        # pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com", "management-api.x.ai"]
         # pin_audit_only = false
 
         """),
@@ -342,6 +350,16 @@ public struct ConfigLoader: Sendable {
         api_key_env = "DEEPSEEK_API_KEY"
         # api_key   = "sk-..."
         # base_url  = "https://api.deepseek.com"
+
+        """),
+        ("[xai]", """
+
+        [xai]
+        enabled     = true
+        api_key_env = "XAI_MANAGEMENT_KEY"
+        # api_key   = "xai-..."          # management key (NOT the inference key)
+        # team_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        # base_url  = "https://management-api.x.ai"
 
         """),
     ]

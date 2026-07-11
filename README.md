@@ -91,6 +91,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 | **Z.AI (GLM)** | API key | Add `api_key = "..."` to `[zai]` in config |
 | **Kimi (Moonshot)** | API key | Add `api_key = "sk-..."` to `[kimi]` in config |
 | **DeepSeek** | API key | Add `api_key = "sk-..."` to `[deepseek]` in config |
+| **xAI (Grok)** | Management key + team ID | Create a management key at [console.x.ai](https://console.x.ai) → Settings → Management Keys; set `api_key` + `team_id` under `[xai]` |
 
 > ⚠️ **macOS env vars footgun:** GUI apps launched from Finder do **not** inherit your shell environment. If you set `OPENROUTER_API_KEY=...` in `~/.zshrc`, the menu bar app **won't see it**. Three workarounds:
 > 1. **Put the key directly in `config.toml`** (file is `chmod 600`).
@@ -242,7 +243,7 @@ notify_at = [90, 100]                # percent thresholds that trigger a notific
 # include_prereleases = false
 
 [security]
-# pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com"]
+# pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com", "management-api.x.ai"]
 # pin_audit_only = false
 
 [anthropic]
@@ -295,6 +296,7 @@ The app **never writes outside these locations**. No telemetry, no remote loggin
 - OpenAI cache strips `user_id`/`account_id`/`email` fields before persisting — only utilization data survives.
 - `KimiConfig.base_url` is allow-listed against `api.moonshot.ai`/`api.moonshot.cn` to prevent API-key exfil via attacker-controlled config.
 - `DeepSeekConfig.base_url` is allow-listed against `api.deepseek.com` for the same reason.
+- `XAIConfig.base_url` is allow-listed against `management-api.x.ai` (management keys only; inference host `api.x.ai` is rejected).
 - Optional **TLS pinning** with Trust-On-First-Use SPKI hashes for paranoid setups.
 - Hardened-runtime entitlements ready for Developer ID signing (see [`Resources/entitlements.plist`](Resources/entitlements.plist)).
 - TOCTOU symlink refusal on cache + support directories.

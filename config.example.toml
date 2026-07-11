@@ -3,7 +3,7 @@
 # Missing file or missing sections fall back to the defaults below.
 
 [ui]
-# primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi | gemini | deepseek
+# primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi | gemini | deepseek | xai
 # menu_bar_mode = "icon_and_percent"  # icon | icon_and_percent | rotating
 # refresh_interval_seconds = 300    # default 300 (5m). Floor 15. Common: 60, 150, 300, 600.
 # language = "pt-BR"                # force UI language (en | pt-BR | es). Default: macOS system locale.
@@ -34,7 +34,7 @@ notify_at = [90, 100]   # percent thresholds that trigger a notification
 # are transparent; MitM with a different cert is rejected.
 # pin_hosts = ["api.anthropic.com", "platform.claude.com", "chatgpt.com",
 #              "auth.openai.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai",
-#              "api.deepseek.com"]
+#              "api.deepseek.com", "management-api.x.ai"]
 # pin_audit_only = false   # true = log mismatches but allow connection
 
 [anthropic]
@@ -90,3 +90,13 @@ api_key_env = "DEEPSEEK_API_KEY"
 # base_url = "https://api.deepseek.com"
 # Note: DeepSeek doesn't expose a usage/quota REST endpoint — this row shows
 # prepaid balance (USD, CNY fallback) via GET /user/balance as a flat 0% bar.
+
+[xai]
+enabled = true
+api_key_env = "XAI_MANAGEMENT_KEY"
+# api_key = "xai-..."         # management key from console.x.ai → Settings → Management Keys
+#                             # (NOT the inference API key used with api.x.ai)
+# team_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # console.x.ai → Team settings
+# base_url = "https://management-api.x.ai"
+# Note: xAI usage/billing is only on the Management API. Surfaces prepaid
+# balance + current-cycle spend vs soft spending limit.

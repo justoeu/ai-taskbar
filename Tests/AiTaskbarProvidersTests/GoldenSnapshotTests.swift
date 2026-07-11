@@ -182,6 +182,32 @@ struct GoldenSnapshotTests {
         #expect(snap.balance?.detail == "$110.00 available")
     }
 
+    // MARK: - xAI
+
+    @Test("xAI golden — prepaid + monthly spend vs limit")
+    func xai_golden() throws {
+        let prepaid = try JSONDecoder().decode(
+            XAIPrepaidBalanceResponse.self,
+            from: Fixtures.data(Fixtures.xaiPrepaidBalance200))
+        let preview = try JSONDecoder().decode(
+            XAIInvoicePreviewResponse.self,
+            from: Fixtures.data(Fixtures.xaiInvoicePreview200))
+        let snap = XAICachedPayload(prepaid: prepaid, preview: preview).toSnapshot()
+
+        #expect(snap.planLabel == "xAI")
+        #expect(snap.prepaidUSD == 45.0)
+        #expect(snap.spentUSD == 12.5)
+        #expect(snap.spendingLimitUSD == 200.0)
+        #expect(snap.prepaidUsedUSD == 5.0)
+        #expect(snap.billingCycleLabel == "2026-07")
+        #expect(snap.balance?.label == "Balance")
+        #expect(snap.balance?.utilizationPercent == 0)
+        #expect(snap.balance?.detail == "$45.00 available")
+        #expect(snap.monthly?.label == "Monthly (2026-07)")
+        #expect(abs((snap.monthly?.utilizationPercent ?? 0) - 6.25) < 0.01)
+        #expect(snap.monthly?.detail == "$12.50 / $200.00")
+    }
+
     // MARK: - Cross-snapshot invariants
 
     @Test("VendorSnapshot.maxUtilization equals the highest window")

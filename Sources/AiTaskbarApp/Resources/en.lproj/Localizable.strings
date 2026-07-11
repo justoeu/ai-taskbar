@@ -158,6 +158,12 @@
 "settings_oauth_confirm_understand" = "I understand, enable";
 "settings_api_key" = "API key";
 "settings_api_key_env" = "API key env var";
+"settings_xai_management_key" = "Management key";
+"settings_xai_management_key_help" = "xAI Management API key from console.x.ai → Settings → Management Keys. This is NOT the inference API key used with api.x.ai. Stored in config.toml with 0600 perms.";
+"settings_xai_management_key_env" = "Management key env var";
+"settings_xai_management_key_env_help" = "Name of the environment variable that holds the management key (default XAI_MANAGEMENT_KEY). GUI apps often miss shell env — prefer the inline key above.";
+"settings_team_id" = "Team ID";
+"settings_team_id_help" = "Team UUID from console.x.ai → Team settings (https://console.x.ai/team/default/settings/team). Required for billing endpoints. You can also GET management-api.x.ai/auth/management-keys/validation with the key and read scopeId.";
 "settings_plan_tier" = "Plan tier";
 "settings_base_url" = "Base URL";
 "settings_save_failed" = "Save failed";
@@ -192,4 +198,7 @@
 "settings_updates_enabled_help" = "Periodically check the repo for new releases and notify when one is available.";
 "settings_updates_prereleases_help" = "Include beta / rc tags when checking for updates. Leave off unless you want cutting-edge builds.";
 "settings_pin_hosts_help" = "Additional hosts to TLS-pin (one per line). Baseline pins for known vendor hosts ship in-binary — leave empty unless you have a private endpoint.";
+"reorder_vendors_help" = "Use the up/down arrows on a card to reorder. Order is saved on this Mac.";
+"move_vendor_up_help" = "Move this card up";
+"move_vendor_down_help" = "Move this card down";
 "settings_notifications_unavailable_tahoe" = "Disabled on macOS 26 (Tahoe) — the usernotifications XPC handshake crashes binaries built against older SDKs. Will be re-enabled once the release pipeline rebuilds on a Tahoe runner.";

@@ -56,4 +56,16 @@ struct ConvenienceInitsTests {
         let provider = try DeepSeekProvider(config: cfg, http: .init())
         #expect(provider.vendorId == .deepseek)
     }
+
+    @Test("XAIProvider builds from XAIConfig")
+    func xai_convenience_init() throws {
+        let cfg = XAIConfig(
+            enabled: true,
+            apiKeyEnv: "_UNSET",
+            apiKey: "key",
+            teamId: "team-1",
+            baseURL: "https://management-api.x.ai")
+        let provider = try XAIProvider(config: cfg, http: .init())
+        #expect(provider.vendorId == .xai)
+    }
 }

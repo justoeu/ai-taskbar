@@ -10,6 +10,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
     case kimi(KimiSnapshot)
     case gemini(GeminiSnapshot)
     case deepseek(DeepSeekSnapshot)
+    case xai(XAISnapshot)
 
     public var vendorId: VendorId {
         switch self {
@@ -20,6 +21,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .kimi:       return .kimi
         case .gemini:     return .gemini
         case .deepseek:   return .deepseek
+        case .xai:        return .xai
         }
     }
 
@@ -32,6 +34,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .kimi(let s):       return s.planLabel
         case .gemini(let s):     return s.planLabel
         case .deepseek(let s):   return s.planLabel
+        case .xai(let s):        return s.planLabel
         }
     }
 
@@ -51,6 +54,8 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             return [s.status].compactMap { $0 }
         case .deepseek(let s):
             return [s.balance].compactMap { $0 }
+        case .xai(let s):
+            return [s.balance, s.monthly].compactMap { $0 }
         }
     }
 
@@ -253,5 +258,43 @@ public struct OpenRouterSnapshot: Sendable, Equatable, Codable {
         self.weekly = weekly
         self.monthly = monthly
         self.topModels = topModels
+    }
+}
+
+/// xAI Management API billing snapshot. Inference API keys cannot read usage —
+/// only a **management key** + team ID can. Surfaces:
+/// - prepaid credit remaining (balance bar at 0% util, detail = $ available)
+/// - current billing-cycle spend vs soft spending limit (monthly % bar when limit > 0)
+public struct XAISnapshot: Sendable, Equatable, Codable {
+    public let planLabel: String?
+    public let balance: UsageWindow?
+    public let monthly: UsageWindow?
+    /// Prepaid credits remaining in USD (absolute dollars).
+    public let prepaidUSD: Double?
+    /// Postpaid spend so far this billing cycle, USD.
+    public let spentUSD: Double?
+    /// Soft spending limit for the cycle, USD (0 = prepaid-only).
+    public let spendingLimitUSD: Double?
+    /// Prepaid credits consumed this cycle, USD.
+    public let prepaidUsedUSD: Double?
+    /// Billing cycle label, e.g. "2026-07".
+    public let billingCycleLabel: String?
+
+    public init(planLabel: String? = nil,
+                balance: UsageWindow? = nil,
+                monthly: UsageWindow? = nil,
+                prepaidUSD: Double? = nil,
+                spentUSD: Double? = nil,
+                spendingLimitUSD: Double? = nil,
+                prepaidUsedUSD: Double? = nil,
+                billingCycleLabel: String? = nil) {
+        self.planLabel = planLabel
+        self.balance = balance
+        self.monthly = monthly
+        self.prepaidUSD = prepaidUSD
+        self.spentUSD = spentUSD
+        self.spendingLimitUSD = spendingLimitUSD
+        self.prepaidUsedUSD = prepaidUsedUSD
+        self.billingCycleLabel = billingCycleLabel
     }
 }

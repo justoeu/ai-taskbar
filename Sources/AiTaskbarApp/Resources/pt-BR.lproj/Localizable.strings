@@ -157,6 +157,12 @@
 "settings_oauth_confirm_understand" = "Entendi, habilitar";
 "settings_api_key" = "Chave de API";
 "settings_api_key_env" = "Variável de ambiente da chave";
+"settings_xai_management_key" = "Management key";
+"settings_xai_management_key_help" = "Chave da Management API da xAI em console.x.ai → Settings → Management Keys. NÃO é a chave de inference de api.x.ai. Guardada no config.toml com permissões 0600.";
+"settings_xai_management_key_env" = "Variável de ambiente da management key";
+"settings_xai_management_key_env_help" = "Nome da variável de ambiente com a management key (padrão XAI_MANAGEMENT_KEY). Apps GUI no macOS costumam não herdar o shell — prefira a chave inline acima.";
+"settings_team_id" = "Team ID";
+"settings_team_id_help" = "UUID do time em console.x.ai → Team settings (https://console.x.ai/team/default/settings/team). Obrigatório para os endpoints de billing. Também dá para GET management-api.x.ai/auth/management-keys/validation com a key e ler scopeId.";
 "settings_plan_tier" = "Tier do plano";
 "settings_base_url" = "URL base";
 "settings_save_failed" = "Falha ao salvar";
@@ -191,4 +197,7 @@
 "settings_updates_enabled_help" = "Verifica periodicamente o repo por novos lançamentos e avisa quando há um disponível.";
 "settings_updates_prereleases_help" = "Inclui tags beta / rc ao buscar atualizações. Deixe desligado exceto se você quer builds de ponta.";
 "settings_pin_hosts_help" = "Hosts adicionais para pin TLS (um por linha). Os pins dos hosts conhecidos já vêm no binário — deixe vazio a menos que você tenha um endpoint privado.";
+"reorder_vendors_help" = "Use as setas para cima/baixo no card para reordenar. A ordem fica salva neste Mac.";
+"move_vendor_up_help" = "Mover este card para cima";
+"move_vendor_down_help" = "Mover este card para baixo";
 "settings_notifications_unavailable_tahoe" = "Desabilitado no macOS 26 (Tahoe) — o handshake XPC de usernotifications crasheia binários compilados contra SDKs antigos. Será reabilitado quando o pipeline de release recompilar num runner Tahoe.";

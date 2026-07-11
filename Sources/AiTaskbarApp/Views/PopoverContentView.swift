@@ -37,6 +37,8 @@ public struct PopoverContentView: View {
                         if store.sortedVendors.isEmpty {
                             emptyState
                         } else {
+                            // Reorder with ↑/↓ on each card. Drag-and-drop does
+                            // not work reliably inside MenuBarExtra windows.
                             ForEach(store.sortedVendors) { vm in
                                 VendorSectionView(vm: vm,
                                                   thresholds: store.thresholds,
@@ -45,6 +47,7 @@ public struct PopoverContentView: View {
                         }
                     }
                     .padding(12)
+                    .animation(.easeInOut(duration: 0.15), value: store.sortedVendors.map(\.id))
                 }
                 Divider()
                 footerBar

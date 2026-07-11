@@ -8,6 +8,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
     case kimi
     case gemini
     case deepseek
+    case xai
 
     public var id: String { rawValue }
 
@@ -20,6 +21,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .kimi:       return "Kimi (Moonshot)"
         case .gemini:     return "Gemini (Google AI)"
         case .deepseek:   return "DeepSeek"
+        case .xai:        return "xAI (Grok)"
         }
     }
 
@@ -34,6 +36,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .kimi:       return URL(string: "https://platform.kimi.ai/console/info/account")
         case .gemini:     return URL(string: "https://aistudio.google.com/apikey")
         case .deepseek:   return URL(string: "https://platform.deepseek.com/usage")
+        case .xai:        return URL(string: "https://console.x.ai/team/default/usage")
         }
     }
 

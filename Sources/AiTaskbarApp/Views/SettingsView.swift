@@ -54,6 +54,8 @@ public struct SettingsView: View {
                         header: { vendorHeader("Gemini", icon: "person.crop.circle") })
                 Section(content: { vendorDeepSeek },
                         header: { vendorHeader("DeepSeek", icon: "person.crop.circle") })
+                Section(content: { vendorXAI },
+                        header: { vendorHeader("xAI (Grok)", icon: "person.crop.circle") })
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -642,6 +644,42 @@ public struct SettingsView: View {
                     get: { viewModel.draft.deepseek.baseURL },
                     set: { viewModel.draft.deepseek.baseURL = $0 })) {
                 Text("api.deepseek.com").tag("https://api.deepseek.com")
+            }
+            .pickerStyle(.menu)
+            .help(L10n.localizedString("settings_base_url_help"))
+        }
+    }
+
+    // MARK: - Vendor: xAI
+
+    @ViewBuilder
+    private var vendorXAI: some View {
+        vendorBody("xAI (Grok)") {
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.xai.enabled },
+                        set: { viewModel.draft.xai.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_xai_management_key_env"),
+                          helpKey: "settings_xai_management_key_env_help",
+                          text: Binding(
+                            get: { viewModel.draft.xai.apiKeyEnv },
+                            set: { viewModel.draft.xai.apiKeyEnv = $0 }))
+            SecureInlineField(label: L10n.localizedString("settings_xai_management_key"),
+                              helpKey: "settings_xai_management_key_help",
+                              value: Binding(
+                                get: { viewModel.draft.xai.apiKey ?? "" },
+                                set: { viewModel.draft.xai.apiKey = $0.isEmpty ? nil : $0 }))
+            HelpTextField(label: L10n.localizedString("settings_team_id"),
+                          helpKey: "settings_team_id_help",
+                          text: Binding(
+                            get: { viewModel.draft.xai.teamId },
+                            set: { viewModel.draft.xai.teamId = $0 }))
+            Picker(L10n.localizedString("settings_base_url"),
+                   selection: Binding(
+                    get: { viewModel.draft.xai.baseURL },
+                    set: { viewModel.draft.xai.baseURL = $0 })) {
+                Text("management-api.x.ai").tag("https://management-api.x.ai")
             }
             .pickerStyle(.menu)
             .help(L10n.localizedString("settings_base_url_help"))

@@ -157,6 +157,12 @@
 "settings_oauth_confirm_understand" = "Entiendo, habilitar";
 "settings_api_key" = "Clave de API";
 "settings_api_key_env" = "Variable de entorno de la clave";
+"settings_xai_management_key" = "Management key";
+"settings_xai_management_key_help" = "Clave de la Management API de xAI en console.x.ai → Settings → Management Keys. NO es la clave de inference de api.x.ai. Se guarda en config.toml con permisos 0600.";
+"settings_xai_management_key_env" = "Variable de entorno de la management key";
+"settings_xai_management_key_env_help" = "Nombre de la variable de entorno con la management key (por defecto XAI_MANAGEMENT_KEY). Las apps GUI en macOS a menudo no heredan el shell — prefiere la clave inline arriba.";
+"settings_team_id" = "Team ID";
+"settings_team_id_help" = "UUID del team en console.x.ai → Team settings (https://console.x.ai/team/default/settings/team). Obligatorio para los endpoints de billing. También puedes GET management-api.x.ai/auth/management-keys/validation con la key y leer scopeId.";
 "settings_plan_tier" = "Tier del plan";
 "settings_base_url" = "URL base";
 "settings_save_failed" = "Error al guardar";
@@ -191,4 +197,7 @@
 "settings_updates_enabled_help" = "Verifica periódicamente el repo por nuevos lanzamientos y avisa cuando hay uno disponible.";
 "settings_updates_prereleases_help" = "Incluye tags beta / rc al buscar actualizaciones. Deja apagado excepto si quieres builds de punta.";
 "settings_pin_hosts_help" = "Hosts adicionales para pin TLS (uno por línea). Los pines de los hosts conocidos ya vienen en el binario — deja vacío a menos que tengas un endpoint privado.";
+"reorder_vendors_help" = "Usa las flechas arriba/abajo en la tarjeta para reordenar. El orden se guarda en este Mac.";
+"move_vendor_up_help" = "Mover esta tarjeta arriba";
+"move_vendor_down_help" = "Mover esta tarjeta abajo";
 "settings_notifications_unavailable_tahoe" = "Deshabilitado en macOS 26 (Tahoe) — el handshake XPC de usernotifications crashea binarios compilados contra SDKs antiguos. Se rehabilitará cuando el pipeline de release recompile en un runner Tahoe.";

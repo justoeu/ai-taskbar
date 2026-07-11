@@ -278,6 +278,23 @@ public final class SettingsViewModel: ObservableObject {
             out.append(.string(section: "deepseek", key: "base_url", value: new.deepseek.baseURL))
         }
 
+        // [xai]
+        if old.xai.enabled != new.xai.enabled {
+            out.append(.bool(section: "xai", key: "enabled", value: new.xai.enabled))
+        }
+        if old.xai.apiKeyEnv != new.xai.apiKeyEnv {
+            out.append(.string(section: "xai", key: "api_key_env", value: new.xai.apiKeyEnv))
+        }
+        if old.xai.apiKey != new.xai.apiKey {
+            out.append(.secret(section: "xai", key: "api_key", plaintext: new.xai.apiKey))
+        }
+        if old.xai.teamId != new.xai.teamId {
+            out.append(.string(section: "xai", key: "team_id", value: new.xai.teamId))
+        }
+        if old.xai.baseURL != new.xai.baseURL {
+            out.append(.string(section: "xai", key: "base_url", value: new.xai.baseURL))
+        }
+
         return out
     }
 }
