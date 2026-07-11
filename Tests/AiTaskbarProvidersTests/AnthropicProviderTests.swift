@@ -16,7 +16,8 @@ struct AnthropicProviderTests {
         #expect(snap.session?.label == "Session (5h)")
         #expect(Int((snap.session?.utilizationPercent ?? 0).rounded()) == 47)
         #expect(snap.weekly?.label == "Weekly (7d)")
-        #expect(snap.extraUsageUSD == 2.45)
+        #expect(snap.scoped.first?.label == "Fable (7d)")
+        #expect(snap.credits?.detail == "$2.45 / $20.00")
     }
 
     @Test("anthropic credentials accept int or float expires_at")

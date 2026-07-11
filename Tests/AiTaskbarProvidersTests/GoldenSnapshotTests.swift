@@ -39,7 +39,14 @@ struct GoldenSnapshotTests {
         // `== "Sonnet/Opus (7d)" || snap.opus != nil` — always true when opus
         // non-nil; the source actually emits "Opus (7d)").
         #expect(snap.opus?.label == "Opus (7d)")
-        #expect(snap.extraUsageUSD == 2.45)
+        // Model-scoped window (Fable) from the generic `limits[]` array.
+        #expect(snap.scoped.count == 1)
+        #expect(snap.scoped.first?.label == "Fable (7d)")
+        #expect(Int((snap.scoped.first?.utilizationPercent ?? 0).rounded()) == 88)
+        // Usage credits window: percent + deterministic money detail.
+        #expect(snap.credits?.label == "Usage credits")
+        #expect(Int((snap.credits?.utilizationPercent ?? 0).rounded()) == 12)
+        #expect(snap.credits?.detail == "$2.45 / $20.00")
     }
 
     // MARK: - OpenAI

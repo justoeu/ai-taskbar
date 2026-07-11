@@ -7,7 +7,18 @@ public enum Fixtures {
                      "used": 471, "limit": 1000 },
       "seven_day": { "utilization": 12.0, "resets_at": "2026-06-02T11:00:00Z" },
       "seven_day_opus": { "utilization": 0.0 },
-      "extra_usage": { "enabled": true, "usage_dollars": 2.45, "limit_dollars": 20.0 }
+      "limits": [
+        { "kind": "session", "group": "session", "percent": 47, "severity": "normal",
+          "resets_at": "2026-05-27T22:00:00Z", "scope": null, "is_active": false },
+        { "kind": "weekly_all", "group": "weekly", "percent": 12, "severity": "normal",
+          "resets_at": "2026-06-02T11:00:00Z", "scope": null, "is_active": false },
+        { "kind": "weekly_scoped", "group": "weekly", "percent": 88, "severity": "warning",
+          "resets_at": "2026-06-02T11:00:00Z",
+          "scope": { "model": { "id": null, "display_name": "Fable" }, "surface": null },
+          "is_active": true }
+      ],
+      "extra_usage": { "is_enabled": true, "monthly_limit": 2000, "used_credits": 245,
+                       "utilization": 12.25, "currency": "USD", "decimal_places": 2 }
     }
     """#
 

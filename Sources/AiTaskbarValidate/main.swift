@@ -258,9 +258,9 @@ section("UsageWindow / VendorSnapshot helpers") {
     let weekly = UsageWindow(label: "Weekly", utilizationPercent: 16, resetsAt: nil)
     let snap = VendorSnapshot.anthropic(
         AnthropicSnapshot(planLabel: "Claude Max 5x", session: session, weekly: weekly,
-                          opus: nil, extraUsageUSD: 2.45))
+                          opus: nil))
     expect(snap.vendorId == .anthropic, "vendorId discriminator")
-    expect(snap.windows.count == 2, "windows omits nil opus")
+    expect(snap.windows.count == 2, "windows omits nil opus/scoped/credits")
     expect(snap.maxUtilization == 47, "maxUtilization picks max across windows")
     expect(snap.planLabel == "Claude Max 5x", "planLabel propagates")
 }
@@ -276,7 +276,13 @@ section("Wire types: Anthropic fixture") {
            "Anthropic session utilization 47%")
     expect(s.weekly?.label == "Weekly (7d)", "Anthropic weekly label")
     expect(s.opus?.label == "Opus (7d)", "Anthropic opus field labeled correctly (not 'sonnet')")
-    expect(s.extraUsageUSD == 2.45, "Anthropic extra usage USD")
+    // Model-scoped window (Fable) parsed generically from `limits[]`.
+    expect(s.scoped.count == 1, "Anthropic one scoped model window")
+    expect(s.scoped.first?.label == "Fable (7d)", "Anthropic scoped label from display_name")
+    expect(Int((s.scoped.first?.utilizationPercent ?? 0).rounded()) == 88, "Anthropic Fable 88%")
+    // Usage credits: percent from utilization, money in detail (USD fixture).
+    expect(Int((s.credits?.utilizationPercent ?? 0).rounded()) == 12, "Anthropic credits utilization 12%")
+    expect(s.credits?.detail == "$2.45 / $20.00", "Anthropic credits money detail")
 }
 
 section("Wire types: OpenAI fixture") {
