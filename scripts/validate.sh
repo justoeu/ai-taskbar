@@ -50,11 +50,18 @@ ok "bundle + ad-hoc signature OK"
 bold "[5/6] smoke launch"
 pkill -f "build/AiTaskbar.app" 2>/dev/null || true
 sleep 1
-open build/AiTaskbar.app
+# Exec the Mach-O directly instead of `open`: dev builds are signed with the
+# same Developer ID identity + bundle id as the installed /Applications app,
+# and LaunchServices resolves `open build/AiTaskbar.app` (even with -n) to
+# the registered/running installed copy — the dev binary never launches and
+# the aliveness check reads as a false "app died". Direct exec still loads
+# the full SwiftUI MenuBarExtra runtime, which is what this step proves.
+build/AiTaskbar.app/Contents/MacOS/ai-taskbar &
+smoke_pid=$!
 sleep 3
-if pgrep -f "build/AiTaskbar.app/Contents/MacOS/ai-taskbar" >/dev/null; then
+if kill -0 "$smoke_pid" 2>/dev/null; then
     ok "app launched and stayed alive 3s"
-    pkill -f "build/AiTaskbar.app" 2>/dev/null || true
+    kill "$smoke_pid" 2>/dev/null || true
 else
     fail "app died within 3s — check Console.app for crash"
 fi

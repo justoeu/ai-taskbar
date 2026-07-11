@@ -61,6 +61,20 @@ section("AppError") {
     expect(wrapped == a, "wrapping AppError returns same instance")
 }
 
+section("Keychain ACL fast-fail mapping") {
+    // Both suppressed-prompt codes must drive the Authorize-banner UX:
+    // -25308 (trusted-app confirmation, UIFail) and -25293 (partition-list
+    // password dialog blocked by KeychainPromptSuppressor).
+    expect(AppError.credentials("denied (errSecInteractionNotAllowed)").isKeychainACLBlocked,
+           "errSecInteractionNotAllowed message is ACL-blocked")
+    expect(AppError.credentials("denied (errSecAuthFailed)").isKeychainACLBlocked,
+           "errSecAuthFailed message is ACL-blocked")
+    expect(!AppError.credentials("no credentials available").isKeychainACLBlocked,
+           "unrelated credentials error is not ACL-blocked")
+    expect(!AppError.http(status: 401, body: "errSecAuthFailed").isKeychainACLBlocked,
+           "non-credentials error is not ACL-blocked")
+}
+
 section("JSONValue round-trip") {
     let payload: JSONValue = .object([
         "tokens": .object([

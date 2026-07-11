@@ -115,14 +115,26 @@ struct KeychainCredentialReaderTests {
         }
     }
 
-    @Test("errorFor maps errSecAuthFailed to specific hint")
+    @Test("errorFor maps errSecAuthFailed to the ACL-blocked message")
     func errorFor_maps_auth_failed() {
+        // With prompts suppressed, the partition-list password dialog degrades
+        // to errSecAuthFailed — it must drive the same Authorize-banner UX.
         let err = KeychainCredentialReader.errorFor(status: -25293, op: "data")
+        #expect(err.isKeychainACLBlocked)
         if case .credentials(let msg) = err {
-            #expect(msg.contains("Keychain auth failed"))
+            #expect(msg.contains("errSecAuthFailed"))
+            #expect(msg.contains("set-generic-password-partition-list"))
         } else {
             Issue.record("expected .credentials")
         }
+    }
+
+    @Test("isACLBlockedStatus covers both fast-fail codes only")
+    func acl_blocked_status_codes() {
+        #expect(KeychainCredentialReader.isACLBlockedStatus(-25308))
+        #expect(KeychainCredentialReader.isACLBlockedStatus(-25293))
+        #expect(!KeychainCredentialReader.isACLBlockedStatus(0))
+        #expect(!KeychainCredentialReader.isACLBlockedStatus(-25300))
     }
 
     @Test("errorFor maps unknown OSStatus to generic message")

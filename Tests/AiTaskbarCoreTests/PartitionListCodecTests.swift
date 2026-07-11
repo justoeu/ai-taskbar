@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import os
 @testable import AiTaskbarCore
 
 @Suite("PartitionListCodec hex-plist round-trip")
@@ -48,9 +49,38 @@ struct KeychainACLBlockedTests {
         #expect(err.isKeychainACLBlocked)
     }
 
+    @Test("matches the errSecAuthFailed credentials error")
+    func matches_auth_failed_block() {
+        let err = AppError.credentials("Keychain access denied (errSecAuthFailed). …")
+        #expect(err.isKeychainACLBlocked)
+    }
+
     @Test("other errors do not match")
     func other_errors() {
         #expect(!AppError.credentials("no credentials available").isKeychainACLBlocked)
         #expect(!AppError.http(status: 401, body: "errSecInteractionNotAllowed").isKeychainACLBlocked)
+    }
+}
+
+@Suite("KeychainPromptSuppressor")
+struct KeychainPromptSuppressorTests {
+    /// The reference counting must disable interaction exactly once on the
+    /// outermost enter and re-enable exactly once on the outermost exit —
+    /// nested sections must not flip the process-global flag mid-way.
+    @Test("nested enter/exit flips the flag only at the boundaries")
+    func nested_reference_counting() {
+        // Thread-safe recorder: the apply seam is @Sendable (it is called
+        // inside the suppressor's own lock), so a bare captured var won't do.
+        let transitions = OSAllocatedUnfairLock(initialState: [Bool]())
+        let record: @Sendable (Bool) -> Void = { flag in
+            transitions.withLock { $0.append(flag) }
+        }
+        KeychainPromptSuppressor.enter(apply: record)
+        KeychainPromptSuppressor.enter(apply: record)
+        #expect(transitions.withLock { $0 } == [false])
+        KeychainPromptSuppressor.exit(apply: record)
+        #expect(transitions.withLock { $0 } == [false])
+        KeychainPromptSuppressor.exit(apply: record)
+        #expect(transitions.withLock { $0 } == [false, true])
     }
 }

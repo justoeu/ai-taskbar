@@ -88,7 +88,12 @@ public enum KeychainAccessAuthorizer {
             kSecReturnData as String:          true,
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
-        return SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
+        // UIFail alone does NOT silence the partition-list password dialog —
+        // only the trusted-app Allow/Deny one. The suppressor guarantees the
+        // probe is truly silent (see KeychainPromptSuppressor).
+        return KeychainPromptSuppressor.withPromptsSuppressed {
+            SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
+        }
     }
 
     /// - Parameter probeRead: injection seam for tests. Production callers use
@@ -221,9 +226,13 @@ public enum KeychainAccessAuthorizer {
 
 public extension AppError {
     /// True when the error is the Keychain ACL/partition-list block that the
-    /// in-app "Authorize access" flow can fix.
+    /// in-app "Authorize access" flow can fix. Matches both fast-fail codes:
+    /// `errSecInteractionNotAllowed` (trusted-app confirmation suppressed by
+    /// UIFail) and `errSecAuthFailed` (partition-list password dialog blocked
+    /// by `KeychainPromptSuppressor`).
     var isKeychainACLBlocked: Bool {
-        if case .credentials(let m) = self, m.contains("errSecInteractionNotAllowed") {
+        if case .credentials(let m) = self,
+           m.contains("errSecInteractionNotAllowed") || m.contains("errSecAuthFailed") {
             return true
         }
         return false

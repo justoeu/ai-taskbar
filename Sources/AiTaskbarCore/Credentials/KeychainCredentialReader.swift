@@ -206,6 +206,14 @@ extension KeychainCredentialReader {
             // Apple has been promising to remove it for years; do not migrate
             // until they ship a working replacement.
             //
+            // UIFail is NOT sufficient on its own: it silences only the
+            // trusted-app Allow/Deny confirmation. The partition-list
+            // PASSWORD dialog ignores it, and only
+            // `SecKeychainSetUserInteractionAllowed(false)` blocks it —
+            // hence every SecItem call here also runs inside
+            // `KeychainPromptSuppressor.withPromptsSuppressed`, under which
+            // that dialog degrades to `errSecAuthFailed` (-25293).
+            //
             // Same rationale applies to the read paths below — they share
             // the brief pointer comment back to here.
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
@@ -221,13 +229,15 @@ extension KeychainCredentialReader {
             query[kSecAttrAccount as String] = account
         }
         let update: [String: Any] = [kSecValueData as String: data]
-        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        let status = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        }
         if status == errSecSuccess {
             setPendingUpdate(nil)
             setLastKnownGood(updated)
             return
         }
-        if status == errSecInteractionNotAllowed {
+        if Self.isACLBlockedStatus(status) {
             // Disk persistence blocked; stash the renewed credentials in
             // memory so the next `read()` returns the rotated tokens
             // instead of the stale on-disk ones.
@@ -239,13 +249,15 @@ extension KeychainCredentialReader {
         if status == errSecItemNotFound {
             var add = query
             add[kSecValueData as String] = data
-            let addStatus = SecItemAdd(add as CFDictionary, nil)
+            let addStatus = KeychainPromptSuppressor.withPromptsSuppressed {
+                SecItemAdd(add as CFDictionary, nil)
+            }
             if addStatus == errSecSuccess {
                 setPendingUpdate(nil)
                 setLastKnownGood(updated)
                 return
             }
-            if addStatus == errSecInteractionNotAllowed {
+            if Self.isACLBlockedStatus(addStatus) {
                 setPendingUpdate(updated)
                 setLastKnownGood(updated)
                 logACLMismatch(op: "add")
@@ -380,7 +392,9 @@ extension KeychainCredentialReader {
             // generic password is not.
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        let status = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecItemCopyMatching(query as CFDictionary, &item)
+        }
         if status == errSecItemNotFound { return [] }
         guard status == errSecSuccess else {
             throw Self.errorFor(status: status, op: "list")
@@ -404,7 +418,9 @@ extension KeychainCredentialReader {
             // generic password is not.
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        let status = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecItemCopyMatching(query as CFDictionary, &item)
+        }
         guard status == errSecSuccess, let data = item as? Data else {
             throw Self.errorFor(status: status, op: "data for '\(account)'")
         }
@@ -428,32 +444,46 @@ extension KeychainCredentialReader {
             // generic password is not.
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        let status = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecItemCopyMatching(query as CFDictionary, &item)
+        }
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = item as? Data else { return nil }
         return KeychainItem(account: "", data: data)
     }
 
-    /// Maps an OSStatus into a meaningful AppError. The common
-    /// `errSecInteractionNotAllowed` (-25308) deserves a specific hint
-    /// because it's what happens on every rebuild — we tell the user
-    /// exactly how to re-authorize via `security set-generic-password-partition-list`.
+    /// The two OSStatus codes an ACL-blocked operation surfaces as while
+    /// prompts are suppressed. `errSecInteractionNotAllowed` (-25308) is the
+    /// UIFail fast-fail on the trusted-app confirmation; `errSecAuthFailed`
+    /// (-25293) is what the partition-list check degrades to when
+    /// `KeychainPromptSuppressor` blocks its password dialog (it also covers
+    /// a locked login keychain — same remediation: the Authorize flow's
+    /// interactive commit unlocks and fixes both).
+    internal static func isACLBlockedStatus(_ status: OSStatus) -> Bool {
+        status == errSecInteractionNotAllowed || status == errSecAuthFailed
+    }
+
+    /// Maps an OSStatus into a meaningful AppError. The two ACL-blocked
+    /// codes (see `isACLBlockedStatus`) deserve a specific hint because
+    /// they're what happens on every rebuild — we tell the user exactly how
+    /// to re-authorize via `security set-generic-password-partition-list`.
     internal static func errorFor(status: OSStatus, op: String) -> AppError {
         switch status {
-        case errSecInteractionNotAllowed:
+        case errSecInteractionNotAllowed, errSecAuthFailed:
             // Message must keep the OSStatus token so
             // `AppError.isKeychainACLBlocked` can match it.
+            let token = status == errSecAuthFailed
+                ? "errSecAuthFailed" : "errSecInteractionNotAllowed"
             return .credentials("""
-                Keychain access denied (errSecInteractionNotAllowed). \
+                Keychain access denied (\(token)). \
                 macOS is blocking this build from reading Claude Code-credentials \
-                (partition list / trusted-app ACL). Common after ad-hoc rebuilds \
-                or when the Claude Code CLI rewrites the item. Tap Authorize in \
-                the Anthropic card (one system password dialog), or run:
+                (partition list / trusted-app ACL), or the login keychain is locked. \
+                Common after ad-hoc rebuilds or when the Claude Code CLI rewrites \
+                the item. Tap Authorize in the Anthropic card (one system password \
+                dialog), or run:
                   \(remediationCommand(service: "Claude Code-credentials"))
                 Prefer the notarized app in /Applications so the signing identity stays stable.
                 """)
-        case errSecAuthFailed:
-            return .credentials("Keychain auth failed (-25293). Try unlocking your Login Keychain in Keychain Access.")
         default:
             return .credentials("SecItemCopyMatching (\(op)) failed (OSStatus \(status))")
         }

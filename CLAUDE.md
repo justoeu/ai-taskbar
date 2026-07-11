@@ -263,13 +263,25 @@ they trigger a redundant version bump (this is how an accidental extra
   literal parses as `Int64`, not `Double`, and TOMLKit will not auto-cast.
 - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
   cleanup, marker writes). If a credential write fails, the user must see it.
-- **Keychain reads AND writes** must pass `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail`.
-  We're an `LSUIElement` menu-bar app, so a SecurityAgent password prompt
-  would freeze the refresh cycle behind an invisible window. The only
-  tolerated swallow is `errSecInteractionNotAllowed` on `SecItemUpdate` /
-  `SecItemAdd` in `KeychainCredentialReader.writeBack` — log via NSLog and
-  return (the renewed token still works in memory; the next OAuth cycle
-  retries persistence). Every other OSStatus must throw.
+- **Keychain reads AND writes** must run inside
+  `KeychainPromptSuppressor.withPromptsSuppressed` AND pass
+  `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail`. UIFail alone only
+  suppresses the trusted-app Allow/Deny confirmation; the **partition-list
+  password dialog ignores it** (verified via securityd `kcacl` logs +
+  two-binary probe on macOS 26) and only
+  `SecKeychainSetUserInteractionAllowed(false)` blocks it. We're an
+  `LSUIElement` menu-bar app, so a SecurityAgent password prompt would
+  freeze the refresh cycle behind an invisible window — and visibly spam
+  the user on every `make validate` smoke launch. Under suppression an
+  ACL-blocked op fast-fails with `errSecInteractionNotAllowed` (-25308) or
+  `errSecAuthFailed` (-25293) — treat BOTH as ACL-blocked
+  (`KeychainCredentialReader.isACLBlockedStatus`); they drive the Authorize
+  banner. The only tolerated swallow is those two codes on `SecItemUpdate` /
+  `SecItemAdd` in `KeychainCredentialReader.writeBack` — log and return (the
+  renewed token still works in memory; the next OAuth cycle retries
+  persistence). Every other OSStatus must throw. The single intentional
+  prompt in the app — `KeychainAccessAuthorizer.authorize`'s commit — must
+  stay OUTSIDE the suppressor (user-initiated by design).
 - **The shared-credential OAuth providers (Anthropic + OpenAI/Codex) must
   default to read-only credentials.** Both `AnthropicConfig.manageOAuthRefresh`
   and `OpenAIConfig.manageOAuthRefresh` default to `false`, and the providers'

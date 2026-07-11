@@ -13,6 +13,18 @@ DMG        := ai-taskbar-$(VERSION).dmg
 # size). UpdateChecker.pickDMGAsset matches on the "-arm64.dmg" suffix —
 # keep the naming in sync if you ever change it.
 DMG_ARM64  := ai-taskbar-$(VERSION)-arm64.dmg
+# Signing identity for local `app` / `app-universal` builds. Ad-hoc ("-")
+# changes the binary's cdhash on every rebuild, so a dev build could never
+# keep silent access to the Claude Code-credentials Keychain item (its ACL
+# trusts stable signing identities, not paths) — every `make validate` smoke
+# launch used to pop a SecurityAgent password dialog. Auto-detect the
+# Developer ID Application identity when the login keychain has one; fall
+# back to ad-hoc on machines without it (contributors, CI).
+APP_SIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null \
+	| awk -F'"' '/Developer ID Application/ {print $$2; exit}')
+ifeq ($(strip $(APP_SIGN_IDENTITY)),)
+APP_SIGN_IDENTITY := -
+endif
 
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
         sign-developer sign-developer-universal dmg-signed notarize staple \
@@ -47,8 +59,8 @@ app: icon
 	-cp -R .build/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_DIR)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $(BUNDLE_ID)" $(APP_DIR)/Contents/Info.plist
-	codesign --force --deep --sign - $(APP_DIR)
-	@echo "Built $(APP_DIR) (host-arch, bundle=$(BUNDLE_ID))"
+	codesign --force --deep --sign "$(APP_SIGN_IDENTITY)" $(APP_DIR)
+	@echo "Built $(APP_DIR) (host-arch, bundle=$(BUNDLE_ID), sign=$(APP_SIGN_IDENTITY))"
 	@file $(APP_DIR)/Contents/MacOS/ai-taskbar
 
 # Universal binary (arm64 + x86_64). Works with Command Line Tools alone —
@@ -75,8 +87,8 @@ app-universal: icon
 	-cp -R .build/arm64-apple-macosx/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_DIR)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $(BUNDLE_ID)" $(APP_DIR)/Contents/Info.plist
-	codesign --force --deep --sign - $(APP_DIR)
-	@echo "==> Built $(APP_DIR) (universal, bundle=$(BUNDLE_ID))"
+	codesign --force --deep --sign "$(APP_SIGN_IDENTITY)" $(APP_DIR)
+	@echo "==> Built $(APP_DIR) (universal, bundle=$(BUNDLE_ID), sign=$(APP_SIGN_IDENTITY))"
 	@file $(APP_DIR)/Contents/MacOS/ai-taskbar
 	@lipo -archs $(APP_DIR)/Contents/MacOS/ai-taskbar
 
