@@ -37,11 +37,28 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     ///   whichever has the later `expiresAtMs` wins. Cleared when the
     ///   disk copy catches up or surpasses it (e.g. Claude Code CLI
     ///   re-auth wrote a fresher token).
+    /// - `lastKnownGood` — last credentials successfully obtained (disk or
+    ///   pending). Used as a process-lifetime read cache so scheduled
+    ///   refreshes do not hammer `SecItemCopyMatching` every cadence while
+    ///   the access token is still valid. Also bridges ACL regressions:
+    ///   if Keychain becomes unreadable mid-session, we keep serving the
+    ///   cached token until it is near expiry.
+    /// - `hadSuccessfulKeychainRead` — true after at least one disk read
+    ///   succeeded this process. Lets us log + surface a clearer "ACL
+    ///   regressed" message when a later read fails with InteractionNotAllowed.
     private struct LockedState {
         var resolvedAccount: String?
         var pendingUpdate: AnthropicCredentials?
+        var lastKnownGood: AnthropicCredentials?
+        var hadSuccessfulKeychainRead: Bool = false
     }
     private let state = OSAllocatedUnfairLock(initialState: LockedState())
+
+    /// How long before `expiresAt` we still treat `lastKnownGood` as
+    /// cacheable without re-hitting Keychain. Matches the OAuth refresh
+    /// buffer so we re-read (and surface ACL issues) before the usage API
+    /// would 401.
+    public static let memoryCacheBuffer: TimeInterval = 300
 
     public init(service: String = "Claude Code-credentials",
                 preferredAccount: String? = nil) {
@@ -50,17 +67,41 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     }
 
     public func read() throws -> AnthropicCredentials {
+        // Fast path: process-lifetime memory cache. Avoids a SecItem call on
+        // every scheduled Anthropic tick while the token is still valid.
+        // Does not skip Keychain when the token is near expiry — we need a
+        // fresh disk/pending copy (or a clear ACL error) before the usage
+        // request would 401.
+        if let cached = getLastKnownGood(),
+           !cached.isExpired(buffer: Self.memoryCacheBuffer) {
+            return cached
+        }
+
         // Always attempt the Keychain read so its side effect — setting
         // `resolvedAccount` — runs regardless of which copy ends up winning.
         // Without that side effect a future `writeBack` would forget which
         // entry to update.
         let diskResult = readFromKeychain()
         let pending = getPendingUpdate()
+        let diskCreds = try? diskResult.get()
+        if diskCreds != nil {
+            markSuccessfulKeychainRead()
+        } else if case .failure(let err) = diskResult, err.isKeychainACLBlocked {
+            logACLRegressionIfNeeded()
+        }
 
         // Pure reconciliation over (disk, pending). Returns nil when neither
         // copy is available — caller throws the original Keychain error.
-        guard let verdict = CredentialReconciliation.pick(disk: try? diskResult.get(),
+        guard let verdict = CredentialReconciliation.pick(disk: diskCreds,
                                                            pending: pending) else {
+            // Last-chance: serve lastKnownGood even if near expiry when the
+            // only failure is ACL (banner still surfaces if the fetch 401s).
+            if case .failure(let err) = diskResult,
+               err.isKeychainACLBlocked,
+               let stale = getLastKnownGood() {
+                AppLog.keychain.warning("Keychain ACL blocked; serving last-known-good token until expiry")
+                return stale
+            }
             // Re-throw the underlying Keychain error (preserves its
             // service/account context for the user-facing message).
             switch diskResult {
@@ -71,6 +112,7 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         if verdict.dropPending {
             setPendingUpdate(nil)
         }
+        setLastKnownGood(verdict.credentials)
         return verdict.credentials
     }
 }
@@ -182,6 +224,7 @@ extension KeychainCredentialReader {
         let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
         if status == errSecSuccess {
             setPendingUpdate(nil)
+            setLastKnownGood(updated)
             return
         }
         if status == errSecInteractionNotAllowed {
@@ -189,6 +232,7 @@ extension KeychainCredentialReader {
             // memory so the next `read()` returns the rotated tokens
             // instead of the stale on-disk ones.
             setPendingUpdate(updated)
+            setLastKnownGood(updated)
             logACLMismatch(op: "update")
             return
         }
@@ -198,10 +242,12 @@ extension KeychainCredentialReader {
             let addStatus = SecItemAdd(add as CFDictionary, nil)
             if addStatus == errSecSuccess {
                 setPendingUpdate(nil)
+                setLastKnownGood(updated)
                 return
             }
             if addStatus == errSecInteractionNotAllowed {
                 setPendingUpdate(updated)
+                setLastKnownGood(updated)
                 logACLMismatch(op: "add")
                 return
             }
@@ -395,12 +441,16 @@ extension KeychainCredentialReader {
     internal static func errorFor(status: OSStatus, op: String) -> AppError {
         switch status {
         case errSecInteractionNotAllowed:
+            // Message must keep the OSStatus token so
+            // `AppError.isKeychainACLBlocked` can match it.
             return .credentials("""
                 Keychain access denied (errSecInteractionNotAllowed). \
-                The item's partition list doesn't include this build's signing \
-                identity ("Always Allow" alone can't add it). Fix: open Terminal and run:
+                macOS is blocking this build from reading Claude Code-credentials \
+                (partition list / trusted-app ACL). Common after ad-hoc rebuilds \
+                or when the Claude Code CLI rewrites the item. Tap Authorize in \
+                the Anthropic card (one system password dialog), or run:
                   \(remediationCommand(service: "Claude Code-credentials"))
-                (you'll be prompted for your login keychain password once). Then relaunch AI Taskbar.
+                Prefer the notarized app in /Applications so the signing identity stays stable.
                 """)
         case errSecAuthFailed:
             return .credentials("Keychain auth failed (-25293). Try unlocking your Login Keychain in Keychain Access.")
@@ -464,5 +514,26 @@ extension KeychainCredentialReader {
     }
     private func getPendingUpdate() -> AnthropicCredentials? {
         state.withLock { $0.pendingUpdate }
+    }
+    private func setLastKnownGood(_ v: AnthropicCredentials?) {
+        state.withLock { $0.lastKnownGood = v }
+    }
+    private func getLastKnownGood() -> AnthropicCredentials? {
+        state.withLock { $0.lastKnownGood }
+    }
+    private func markSuccessfulKeychainRead() {
+        state.withLock { $0.hadSuccessfulKeychainRead = true }
+    }
+    private func hadSuccessfulKeychainRead() -> Bool {
+        state.withLock { $0.hadSuccessfulKeychainRead }
+    }
+
+    /// Logs once-ish when Keychain worked earlier this process but now
+    /// returns InteractionNotAllowed — typically CLI rewrote ACL or the
+    /// user switched from a Developer ID build to ad-hoc.
+    private func logACLRegressionIfNeeded() {
+        guard hadSuccessfulKeychainRead() else { return }
+        let cmd = Self.remediationCommand(service: service)
+        AppLog.keychain.error("Keychain ACL regressed after a successful read this session (errSecInteractionNotAllowed). Claude Code may have rewritten Claude Code-credentials, or this binary's signing identity no longer matches the trusted-app ACL. Tap Authorize on the Anthropic card, or: \(cmd, privacy: .public)")
     }
 }

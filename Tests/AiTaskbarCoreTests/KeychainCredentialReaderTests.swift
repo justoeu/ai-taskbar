@@ -104,9 +104,12 @@ struct KeychainCredentialReaderTests {
     @Test("errorFor maps errSecInteractionNotAllowed to instructive message")
     func errorFor_maps_interaction_not_allowed() {
         let err = KeychainCredentialReader.errorFor(status: -25308, op: "list")
+        // Keep the OSStatus token so VendorSectionView can show Authorize.
+        #expect(err.isKeychainACLBlocked)
         if case .credentials(let msg) = err {
-            #expect(msg.contains("Keychain access denied"))
+            #expect(msg.contains("errSecInteractionNotAllowed"))
             #expect(msg.contains("set-generic-password-partition-list"))
+            #expect(msg.contains("Authorize") || msg.contains("partition"))
         } else {
             Issue.record("expected .credentials")
         }
@@ -304,5 +307,28 @@ struct CredentialReconciliationTests {
         let v = CredentialReconciliation.pick(disk: nil, pending: p)
         #expect(v?.credentials == p)
         #expect(v?.dropPending == false)
+    }
+}
+
+@Suite("Keychain memory-cache buffer")
+struct KeychainMemoryCacheBufferTests {
+    @Test("memoryCacheBuffer matches OAuth-style 5 minute headroom")
+    func buffer_is_five_minutes() {
+        #expect(KeychainCredentialReader.memoryCacheBuffer == 300)
+    }
+
+    @Test("fresh credentials are not expired under the memory-cache buffer")
+    func fresh_token_passes_buffer() {
+        let farFuture = Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000)
+        let c = AnthropicCredentials(accessToken: "a", refreshToken: "r", expiresAtMs: farFuture)
+        #expect(c.isExpired(buffer: KeychainCredentialReader.memoryCacheBuffer) == false)
+    }
+
+    @Test("credentials inside the buffer window are treated as expired for re-read")
+    func near_expiry_forces_reread() {
+        // Expires in 60s — within the 300s buffer → cache miss path.
+        let soon = Int64(Date().addingTimeInterval(60).timeIntervalSince1970 * 1000)
+        let c = AnthropicCredentials(accessToken: "a", refreshToken: "r", expiresAtMs: soon)
+        #expect(c.isExpired(buffer: KeychainCredentialReader.memoryCacheBuffer) == true)
     }
 }
