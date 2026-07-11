@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <b>Native macOS menu-bar tracker for LLM usage across 5 providers.</b><br/>
-  Anthropic Claude · OpenAI Codex/ChatGPT · OpenRouter · Z.AI (GLM) · Kimi (Moonshot)
+  <b>Native macOS menu-bar tracker for LLM usage across 8 providers.</b><br/>
+  Anthropic Claude · OpenAI Codex/ChatGPT · OpenRouter · Z.AI (GLM) · Kimi (Moonshot) · Gemini · DeepSeek · xAI (Grok)
 </p>
 
 <p align="center">
@@ -29,7 +29,8 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
 - **24-hour sparkline** with dashed threshold lines, current value, and peak marker
 - **Daily + 7-day cost estimates** computed locally from your CLI logs
 - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
-- **Click the LLM name** → opens that vendor's official dashboard
+- **Click the card header** (chevron + name + empty space) to expand/collapse; dashboard / reorder / refresh stay on the trailing buttons
+- **Reorder cards** with ↑ / ↓ on each header (order saved on this Mac)
 - **Locked card with explanation** when a provider has no credentials
 
 The app runs entirely on-device — **no telemetry, no remote logging, no auto-update without your click**.
@@ -91,12 +92,17 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 | **Z.AI (GLM)** | API key | Add `api_key = "..."` to `[zai]` in config |
 | **Kimi (Moonshot)** | API key | Add `api_key = "sk-..."` to `[kimi]` in config |
 | **DeepSeek** | API key | Add `api_key = "sk-..."` to `[deepseek]` in config |
-| **xAI (Grok)** | Management key + team ID | Create a management key at [console.x.ai](https://console.x.ai) → Settings → Management Keys; set `api_key` + `team_id` under `[xai]` |
+| **Gemini** | API key | Add `api_key = "AIza..."` to `[gemini]` — **heartbeat only** (see below) |
+| **xAI (Grok)** | Management key + team ID | Create a **management** key at [console.x.ai](https://console.x.ai) → Settings → Management Keys (not the inference API key); copy the team UUID from Team settings; set `api_key` + `team_id` under `[xai]` |
 
 > ⚠️ **macOS env vars footgun:** GUI apps launched from Finder do **not** inherit your shell environment. If you set `OPENROUTER_API_KEY=...` in `~/.zshrc`, the menu bar app **won't see it**. Three workarounds:
 > 1. **Put the key directly in `config.toml`** (file is `chmod 600`).
 > 2. Launch from a terminal: `OPENROUTER_API_KEY=sk-... open /Applications/AiTaskbar.app`.
 > 3. Set it globally: `launchctl setenv OPENROUTER_API_KEY "sk-..."` (until reboot).
+
+### xAI (Grok) — API team billing, not SuperGrok consumer usage
+
+The xAI card reads the **Management API** (`management-api.x.ai`): prepaid credit balance and current-cycle postpaid spend vs soft spending limit. That is **developer/team API billing**, not the weekly SuperGrok / grok.com consumer quota UI. Inference keys on `api.x.ai` cannot read billing; a separate management key + `team_id` are required. SuperGrok subscription limits have no public usage API today.
 
 ### Google Gemini — limited; no usable usage/quota API
 
@@ -112,6 +118,12 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 **Bottom line:** there is no durable, official way to read your Gemini *subscription* usage today. If you don't have (or don't want) a Gemini API key, set `[gemini] enabled = false` in `config.toml` to hide the "no credentials" row. This will be revisited if Google ships a real consumer usage API (OAuth, not web cookies).
 
 ## What's in this version
+
+### v0.12 — xAI billing, reorderable cards, full-header expand
+
+- **Eighth provider — xAI (Grok) via Management API.** Prepaid balance + monthly spend vs soft limit from `management-api.x.ai` (management key + team ID). Inference host `api.x.ai` is rejected by the host allow-list. Settings UI labels the fields as management key / team ID with localized help. Dashboard link points at the console usage page.
+- **Reorder vendor cards** with ↑ / ↓ on each card header. Order is stored in `UserDefaults` (`vendor_order`) on this Mac; rotating menu-bar mode follows the same order. (Drag-and-drop is unreliable inside `MenuBarExtra` windows on macOS, so buttons are the supported path.)
+- **Click anywhere on the leading header** (chevron + name + plan + flexible space) to expand/collapse. Dashboard, reorder, and refresh remain separate trailing controls.
 
 ### v0.2 — Gemini, calmer cadence, honest countdown, no more Keychain prompts
 
@@ -180,12 +192,13 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
              │
 ┌────────────▼────────────────────────────────────────────────┐
 │                  UsageStore (coordinator)                   │
-│  Holds 5 × VendorViewModel (per-vendor @ObservableObject).  │
+│  Holds N × VendorViewModel (per-vendor @ObservableObject).  │
 │  maxUtilization = max over EXPANDED cards → menu bar gauge. │
+│  sortedVendors = user order (↑/↓) or configured-first.      │
 └────────────┬────────────────────────────────────────────────┘
              │
 ┌────────────▼────────────────────────────────────────────────┐
-│              5 × Provider (UsageProvider impl)              │
+│              N × Provider (UsageProvider impl)              │
 │              All use CachedFetch helper:                    │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ 1. Cache check (300s TTL → no network)               │  │
@@ -272,6 +285,24 @@ enabled = true
 api_key_env = "MOONSHOT_API_KEY"
 # api_key = "sk-..."
 # base_url = "https://api.moonshot.ai/v1"   # or https://api.moonshot.cn/v1
+
+[gemini]
+enabled = true
+api_key_env = "GEMINI_API_KEY"
+# api_key = "AIza..."        # heartbeat only — no usage/quota API
+
+[deepseek]
+enabled = true
+api_key_env = "DEEPSEEK_API_KEY"
+# api_key = "sk-..."
+# base_url = "https://api.deepseek.com"
+
+[xai]
+enabled = true
+api_key_env = "XAI_MANAGEMENT_KEY"
+# api_key = "xai-..."        # management key (NOT the inference API key)
+# team_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+# base_url = "https://management-api.x.ai"
 ```
 
 ## Where data lives
@@ -414,7 +445,7 @@ AiTaskbarApp/             SwiftUI MenuBarExtra + popover + About + UpdateChecker
   ViewModels/             UsageStore (coordinator) + VendorViewModel (per vendor)
   Views/                  VendorSectionView (accordion), Sparkline, MenuBarLabel
   Localization/           L10n.swift + Resources/<lang>.lproj/Localizable.strings
-AiTaskbarProviders/       5 providers — all use CachedFetch + OAuthRefresher helpers
+AiTaskbarProviders/       8 providers — all use CachedFetch + OAuthRefresher helpers
 AiTaskbarCore/
   Models/                 UsageSnapshot, FetchOutcome, AppError, VendorId
   Networking/             HTTPClient (ephemeral session), PinStore, PinningDelegate
