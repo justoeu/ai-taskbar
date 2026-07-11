@@ -47,7 +47,6 @@ The app runs entirely on-device — **no telemetry, no remote logging, no auto-u
 - [Build from source](#build-from-source)
 - [Releasing a new version](#releasing-a-new-version)
 - [Architecture](#architecture)
-- [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -461,18 +460,6 @@ Tests/                    XCTest tests (require full Xcode)
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the architectural deep dive, hard rules, and the checklist for adding a new vendor.
-
-## Roadmap
-
-Likely **v0.2** candidates (no commitments):
-
-- [ ] **Sparkle integration** for real silent updates (once Developer ID code signing is in place)
-- [ ] **Global hotkey** to open the popover (`MenuBarExtraAccess`)
-- [ ] **OpenAI Platform API** (`sk-...` key) for hard-budget tracking — separate from ChatGPT/Codex
-- [ ] **Per-window historical chart** in a separate dashboard window
-- [ ] **Cost forecast** ("at current rate, you'll hit weekly limit at 3pm")
-- [ ] **Export usage data** as CSV / JSON
-- [ ] More languages (French, German, Japanese) — translations welcome via PR
 
 ## Contributing
 
