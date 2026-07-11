@@ -105,6 +105,9 @@ public struct AnthropicSnapshot: Sendable, Equatable, Codable {
     // Custom decoder so history persisted before `scoped`/`credits` existed
     // (or the old `extraUsageUSD` shape) still decodes: missing new keys
     // default to empty/nil instead of failing the whole record.
+    // NOTE: `encode(to:)` is synthesized from `CodingKeys`. If you add a stored
+    // property, update `CodingKeys` AND this decoder in lockstep, or the
+    // round-trip silently drops the new field on decode.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         planLabel = try c.decodeIfPresent(String.self, forKey: .planLabel)

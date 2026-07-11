@@ -114,8 +114,12 @@ enum AnthropicMoneyFormat {
     }
 
     static func amount(_ minor: Double, dp: Int) -> String {
-        let divisor = pow(10.0, Double(max(0, dp)))
-        return String(format: "%.\(max(0, dp))f", minor / divisor)
+        // Clamp to a sane range: `dp` comes off the wire, and an absurd value
+        // (e.g. Int.max) would produce a `%.<huge>f` precision token that is UB
+        // in the underlying vasprintf. No real currency exceeds 4 decimals.
+        let places = min(max(0, dp), 6)
+        let divisor = pow(10.0, Double(places))
+        return String(format: "%.\(places)f", minor / divisor)
     }
 
     static func symbol(for currency: String?) -> String {
@@ -145,16 +149,24 @@ extension AnthropicUsageResponse {
                 detail: detail
             )
         }
-        // Model-scoped weekly windows from the generic `limits` array. Any
-        // entry carrying a model display name is a per-model quota (e.g.
+        // Model-scoped WEEKLY windows from the generic `limits` array (e.g.
         // "Fable"); emit them all so a new model appears without a code change.
-        // Skip the plain session / weekly_all entries — those already come
-        // through the flat `five_hour` / `seven_day` fields above.
+        // Restrict to `kind == "weekly_scoped"` on purpose: (a) the plain
+        // `session` / `weekly_all` entries already come through the flat
+        // `five_hour` / `seven_day` fields, and (b) a hypothetical model-scoped
+        // *session* limit would otherwise be mislabeled "(7d)" AND could
+        // collide with a weekly one on the `id: \.label` the UI keys rows by.
+        // Dedupe by label as a belt-and-braces against a scoped entry
+        // duplicating a flat window (e.g. a scoped "Opus" vs `seven_day_opus`).
+        var seenScoped = Set<String>()
         let scoped: [UsageWindow] = (limits ?? []).compactMap { limit in
-            guard let name = limit.scope?.model?.display_name,
+            guard limit.kind == "weekly_scoped",
+                  let name = limit.scope?.model?.display_name,
                   let percent = limit.percent else { return nil }
+            let label = "\(name) (7d)"
+            guard seenScoped.insert(label).inserted else { return nil }
             return UsageWindow(
-                label: "\(name) (7d)",
+                label: label,
                 utilizationPercent: percent,
                 resetsAt: limit.resets_at.flatMap(ISO8601Parsing.parse),
                 detail: nil
