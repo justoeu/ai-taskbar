@@ -24,7 +24,7 @@
 A gauge icon in your menu bar showing the **highest utilization** across your LLM providers. It reflects only the **expanded (open) cards** in the popover — collapse a provider's card to drop it out of the gauge, so you can focus the number on the subscriptions you actually care about. Click it for a per-provider breakdown:
 
 - **Plan label** ("Claude Max 20x", "ChatGPT Plus", "GLM Lite")
-- **Per-window utilization** with color thresholds (green → yellow → red)
+- **Per-window utilization** with color thresholds (green → yellow → red) — for Claude this includes the 5-hour session, 7-day weekly, any **per-model weekly windows** (e.g. Fable), and a **usage-credits** meter (shown with the money spent/limit, e.g. `R$556.68 / R$600.00`). Model windows are parsed generically from the API's `limits[]`, so a newly-launched model appears without an app update.
 - **Reset countdown** ("resets 4 hrs, 12 min"; once the reset passes it shows "reset due — awaiting auto-refresh…" instead of counting back up)
 - **24-hour sparkline** with dashed threshold lines, current value, and peak marker
 - **Daily + 7-day cost estimates** computed locally from your CLI logs

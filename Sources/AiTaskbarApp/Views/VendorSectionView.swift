@@ -457,13 +457,10 @@ public struct VendorSectionView: View {
     @ViewBuilder
     private func extras(for snap: VendorSnapshot) -> some View {
         switch snap {
-        case .anthropic(let s):
-            if let extra = s.extraUsageUSD, extra > 0 {
-                Label(L10n.localizedString("extra_usage_fmt", extra),
-                      systemImage: "dollarsign.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+        case .anthropic:
+            // Usage credits + model-scoped windows (e.g. Fable) now render as
+            // regular rows via `VendorSnapshot.windows`; no extra label needed.
+            EmptyView()
         case .openai(let s):
             if let credits = s.creditsUSD {
                 Label(L10n.localizedString("credits_fmt", credits),

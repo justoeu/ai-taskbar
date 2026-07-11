@@ -41,7 +41,9 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
     public var windows: [UsageWindow] {
         switch self {
         case .anthropic(let s):
-            return [s.session, s.weekly, s.opus].compactMap { $0 }
+            return [s.session, s.weekly].compactMap { $0 }
+                + s.scoped
+                + [s.opus, s.credits].compactMap { $0 }
         case .openai(let s):
             return [s.primary, s.secondary].compactMap { $0 }
         case .zai(let s):
@@ -74,19 +76,46 @@ public struct AnthropicSnapshot: Sendable, Equatable, Codable {
     public let weekly: UsageWindow?
     /// Opus-specific 7-day quota window (wire field: `seven_day_opus`).
     public let opus: UsageWindow?
-    /// Extra usage in dollars, only meaningful when a primary window hit 100%.
-    public let extraUsageUSD: Double?
+    /// Model-scoped weekly windows parsed generically from the wire `limits`
+    /// array (e.g. "Fable (7d)"). Empty when the account has none active.
+    public let scoped: [UsageWindow]
+    /// Usage-credits window (wire `extra_usage`): `utilizationPercent` from the
+    /// credits utilization, `detail` carries the money range ("R$556.68 /
+    /// R$600.00"). nil when the account has no credits enabled.
+    public let credits: UsageWindow?
 
     public init(planLabel: String? = nil,
                 session: UsageWindow? = nil,
                 weekly: UsageWindow? = nil,
                 opus: UsageWindow? = nil,
-                extraUsageUSD: Double? = nil) {
+                scoped: [UsageWindow] = [],
+                credits: UsageWindow? = nil) {
         self.planLabel = planLabel
         self.session = session
         self.weekly = weekly
         self.opus = opus
-        self.extraUsageUSD = extraUsageUSD
+        self.scoped = scoped
+        self.credits = credits
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case planLabel, session, weekly, opus, scoped, credits
+    }
+
+    // Custom decoder so history persisted before `scoped`/`credits` existed
+    // (or the old `extraUsageUSD` shape) still decodes: missing new keys
+    // default to empty/nil instead of failing the whole record.
+    // NOTE: `encode(to:)` is synthesized from `CodingKeys`. If you add a stored
+    // property, update `CodingKeys` AND this decoder in lockstep, or the
+    // round-trip silently drops the new field on decode.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        planLabel = try c.decodeIfPresent(String.self, forKey: .planLabel)
+        session = try c.decodeIfPresent(UsageWindow.self, forKey: .session)
+        weekly = try c.decodeIfPresent(UsageWindow.self, forKey: .weekly)
+        opus = try c.decodeIfPresent(UsageWindow.self, forKey: .opus)
+        scoped = try c.decodeIfPresent([UsageWindow].self, forKey: .scoped) ?? []
+        credits = try c.decodeIfPresent(UsageWindow.self, forKey: .credits)
     }
 }
 

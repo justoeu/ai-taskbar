@@ -350,7 +350,11 @@ extension KeychainCredentialReader {
             // in the field: a 13-day-expired legacy item served instead of the
             // live one → persistent HTTP 401). On an expired hit, fall through
             // to full enumeration + freshest-wins in `select`.
-            if let single = try fetchLegacySingle(),
+            // `try?` (not `try`): an ACL-blocked data read here must NOT
+            // abort the whole resolution — fall through to enumeration, which
+            // reads attributes (never ACL-blocked) and may surface a readable
+            // account-bearing entry the legacy single-query missed.
+            if let single = try? fetchLegacySingle(),
                let creds = try? SharedCoders.decoder
                    .decode(AnthropicCredentialsFile.self, from: single.data)
                    .claudeAiOauth,
@@ -361,15 +365,37 @@ extension KeychainCredentialReader {
         }
         let accounts = try listAccounts()
         if accounts.isEmpty {
+            // `try` (not `try?`): with no account-bearing entries the legacy
+            // item is our only shot, so an ACL block on it must propagate as
+            // the ACL error (→ Authorize banner), not collapse to "not found".
             if let legacy = try fetchLegacySingle() {
                 return [legacy]
             }
             return []
         }
-        return accounts.compactMap { account in
-            guard let data = try? fetchData(for: account) else { return nil }
-            return KeychainItem(account: account, data: data)
+        // Read each enumerated account's DATA. `listAccounts` (attributes) is
+        // never ACL-gated, but the per-account data read IS: when the running
+        // build isn't in the item's partition list, every read fast-fails with
+        // errSecAuthFailed under `KeychainPromptSuppressor`. Do NOT silently
+        // drop those — if EVERY entry is ACL-blocked, re-throw the ACL error so
+        // the Anthropic card shows the Authorize banner instead of a misleading
+        // "Keychain item not found. Run Claude Code" (the wrong remediation).
+        // Non-ACL failures for a single account (e.g. a transient not-found)
+        // are still dropped so a sibling readable entry can win.
+        var items: [KeychainItem] = []
+        var aclError: AppError?
+        for account in accounts {
+            do {
+                let data = try fetchData(for: account)
+                items.append(KeychainItem(account: account, data: data))
+            } catch let err as AppError where err.isKeychainACLBlocked {
+                aclError = err
+            } catch {
+                // Drop non-ACL, per-account failures and keep trying siblings.
+            }
         }
+        if items.isEmpty, let aclError { throw aclError }
+        return items
     }
 
     private func listAccounts() throws -> [String] {
@@ -448,6 +474,14 @@ extension KeychainCredentialReader {
             SecItemCopyMatching(query as CFDictionary, &item)
         }
         if status == errSecItemNotFound { return nil }
+        // An ACL/partition-list block must be distinguishable from "no item":
+        // the fast-path caller swallows it (`try?`) to fall through to
+        // enumeration, but the `accounts.isEmpty` fallback lets it propagate so
+        // a legacy-only, ACL-blocked item still lights up the Authorize banner
+        // instead of reporting a bogus "not found".
+        if Self.isACLBlockedStatus(status) {
+            throw Self.errorFor(status: status, op: "legacy single")
+        }
         guard status == errSecSuccess, let data = item as? Data else { return nil }
         return KeychainItem(account: "", data: data)
     }

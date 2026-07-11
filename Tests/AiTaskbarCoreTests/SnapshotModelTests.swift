@@ -70,8 +70,11 @@ struct SnapshotModelTests {
     @Test("VendorSnapshot Equatable + Codable round-trip")
     func vendor_snapshot_round_trip() throws {
         let session = UsageWindow(label: "Session", utilizationPercent: 47)
+        let credits = UsageWindow(label: "Usage credits", utilizationPercent: 12.25,
+                                  detail: "$2.45 / $20.00")
+        let fable = UsageWindow(label: "Fable (7d)", utilizationPercent: 88)
         let snap = VendorSnapshot.anthropic(.init(
-            planLabel: "Claude Max", session: session, extraUsageUSD: 2.5))
+            planLabel: "Claude Max", session: session, scoped: [fable], credits: credits))
         let data = try JSONEncoder().encode(snap)
         let back = try JSONDecoder().decode(VendorSnapshot.self, from: data)
         #expect(back == snap)
