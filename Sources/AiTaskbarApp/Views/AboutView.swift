@@ -22,7 +22,7 @@ public struct AboutView: View {
             return "v\(short) (\(build))"
         }
         if let short { return "v\(short)" }
-        return "v0.12.0-dev"
+        return "v0.13.0-dev"
     }
 
     public var body: some View {
