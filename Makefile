@@ -4,7 +4,7 @@ APP        := AiTaskbar.app
 # Default points to a generic local namespace so the upstream repo doesn't
 # baked in anyone's personal apple-id namespace.
 BUNDLE_ID  ?= dev.aitaskbar.app
-VERSION    ?= 0.13.0
+VERSION    ?= 0.14.0
 BUILD_DIR  := build
 APP_DIR    := $(BUILD_DIR)/$(APP)
 DMG_STAGING := $(BUILD_DIR)/dmg-staging
