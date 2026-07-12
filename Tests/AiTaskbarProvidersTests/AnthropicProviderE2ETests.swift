@@ -11,13 +11,27 @@ private final class MockKeychainReader: AnthropicCredentialReading, @unchecked S
     var nextRead: AnthropicCredentials
     var writeBackCalls: [AnthropicCredentials] = []
     var interactiveReadCalls = 0
+    var invalidateCalls = 0
+    var readErrorAfterInvalidation: AppError?
+    var nextReadAfterInvalidation: AnthropicCredentials?
 
     init(initial: AnthropicCredentials) { self.nextRead = initial }
 
-    func read() throws -> AnthropicCredentials { nextRead }
+    func read() throws -> AnthropicCredentials {
+        if invalidateCalls > 0, let error = readErrorAfterInvalidation {
+            throw error
+        }
+        return nextRead
+    }
     func readInteractively() throws -> AnthropicCredentials {
         interactiveReadCalls += 1
         return nextRead
+    }
+    func invalidateCachedCredentials() {
+        invalidateCalls += 1
+        if let replacement = nextReadAfterInvalidation {
+            nextRead = replacement
+        }
     }
     func writeBack(_ updated: AnthropicCredentials) throws {
         writeBackCalls.append(updated)
@@ -80,6 +94,70 @@ struct AnthropicProviderE2ETests {
         // No refresh was needed → writeBack not called.
         #expect(mock.writeBackCalls.isEmpty)
         try? FileManager.default.removeItem(at: tmpCache)
+        StubURLProtocol.reset()
+    }
+
+    @Test("401 reloads a rotated Claude Code credential and retries once")
+    func unauthorized_reloads_rotated_credential() async throws {
+        var requestCount = 0
+        StubURLProtocol.handler = { _ in
+            requestCount += 1
+            if requestCount == 1 {
+                return .init(status: 401, data: Data("revoked".utf8))
+            }
+            return .init(data: Fixtures.data(Fixtures.anthropicUsage200))
+        }
+        let old = AnthropicCredentials(
+            accessToken: "revoked", refreshToken: "old-r",
+            expiresAtMs: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000))
+        let fresh = AnthropicCredentials(
+            accessToken: "fresh", refreshToken: "fresh-r",
+            expiresAtMs: Int64(Date().addingTimeInterval(7200).timeIntervalSince1970 * 1000))
+        let mock = MockKeychainReader(initial: old)
+        mock.nextReadAfterInvalidation = fresh
+        let provider = AnthropicProvider(
+            credentialReader: mock,
+            cache: DiskCache(vendor: .anthropic, baseDir: tmpCache),
+            http: .stubbed(protocols: [StubURLProtocol.self]))
+
+        let outcome = try await provider.fetchUsage(forceRefresh: true)
+
+        #expect(outcome.isStale == false)
+        #expect(mock.invalidateCalls == 1)
+        #expect(requestCount == 2)
+        #expect(StubURLProtocol.captured.last?.value(forHTTPHeaderField: "Authorization") == "Bearer fresh")
+        StubURLProtocol.reset()
+    }
+
+    @Test("401 followed by Keychain ACL block surfaces Authorize over stale cache")
+    func unauthorized_then_acl_block_is_actionable() async throws {
+        var shouldReject = false
+        StubURLProtocol.handler = { _ in
+            if shouldReject {
+                return .init(status: 401, data: Data("revoked".utf8))
+            }
+            return .init(data: Fixtures.data(Fixtures.anthropicUsage200))
+        }
+        let creds = AnthropicCredentials(
+            accessToken: "soon-revoked", refreshToken: "r",
+            expiresAtMs: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000))
+        let mock = MockKeychainReader(initial: creds)
+        let provider = AnthropicProvider(
+            credentialReader: mock,
+            cache: DiskCache(vendor: .anthropic, baseDir: tmpCache, ttl: 0.001),
+            http: .stubbed(protocols: [StubURLProtocol.self]))
+        _ = try await provider.fetchUsage(forceRefresh: true)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        shouldReject = true
+        mock.readErrorAfterInvalidation = .credentials(
+            "Keychain access denied (errSecInteractionNotAllowed)")
+
+        let outcome = try await provider.fetchUsage(forceRefresh: true)
+
+        #expect(outcome.isStale)
+        #expect(mock.invalidateCalls == 1)
+        let body = outcome.lastError?.body ?? ""
+        #expect(AppError.credentials(body).isKeychainACLBlocked)
         StubURLProtocol.reset()
     }
 

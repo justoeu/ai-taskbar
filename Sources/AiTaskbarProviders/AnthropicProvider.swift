@@ -51,37 +51,57 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
             forceRefresh: forceRefresh,
             decode: decodeSnapshot,
             fetch: { [self] in
-                var credentials = try credentialReader.read()
-                // Only rotate + persist the shared OAuth token when explicitly
-                // opted in. In the default read-only mode we use whatever token
-                // the Claude Code CLI maintains; if it's briefly expired the
-                // request 401s and CachedFetch serves the last cached snapshot
-                // (or surfaces the error when the cache is cold) until the CLI
-                // renews. This is what keeps the monitor from logging out other
-                // CLI sessions or tripping a Keychain prompt.
-                if manageOAuthRefresh, credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
-                    let resp = try await AnthropicOAuth.refresh(
-                        refreshToken: credentials.refreshToken, http: http)
-                    try Task.checkCancellation()
-                    credentials = credentials.rotated(
-                        accessToken: resp.access_token,
-                        refreshToken: resp.refresh_token,
-                        expiresAt: Date.now.addingTimeInterval(resp.expires_in))
-                    try credentialReader.writeBack(credentials)
-                }
+                let credentials = try await loadCredentials()
                 primeLabelCache(subscriptionType: credentials.subscriptionType,
                                 rateLimit: credentials.rateLimitTier)
-                var req = URLRequest(url: Self.usageURL)
-                req.timeoutInterval = 10
-                req.setValue("Bearer \(credentials.accessToken)",
-                             forHTTPHeaderField: "Authorization")
-                req.setValue(AnthropicOAuth.betaHeader,
-                             forHTTPHeaderField: "anthropic-beta")
-                req.setValue(AnthropicOAuth.userAgent,
-                             forHTTPHeaderField: "User-Agent")
-                return try await http.fetchPayload(req)
+                do {
+                    return try await requestUsage(using: credentials)
+                } catch let error as AppError where error.isUnauthorized {
+                    // Claude Code can rotate/revoke an access token before its
+                    // advertised expiry. Drop the process cache and re-read
+                    // once. If Claude also restored its private Keychain ACL,
+                    // `read()` now throws the actionable ACL error so the stale
+                    // snapshot displays Authorize instead of a misleading 401.
+                    credentialReader.invalidateCachedCredentials()
+                    try Task.checkCancellation()
+                    let reloaded = try await loadCredentials()
+                    primeLabelCache(subscriptionType: reloaded.subscriptionType,
+                                    rateLimit: reloaded.rateLimitTier)
+                    return try await requestUsage(using: reloaded)
+                }
             }
         )
+    }
+
+    private func loadCredentials() async throws -> AnthropicCredentials {
+        var credentials = try credentialReader.read()
+        // Only rotate + persist the shared OAuth token when explicitly opted
+        // in. Read-only mode merely reloads whatever Claude Code owns.
+        if manageOAuthRefresh, credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
+            let resp = try await AnthropicOAuth.refresh(
+                refreshToken: credentials.refreshToken, http: http)
+            try Task.checkCancellation()
+            credentials = credentials.rotated(
+                accessToken: resp.access_token,
+                refreshToken: resp.refresh_token,
+                expiresAt: Date.now.addingTimeInterval(resp.expires_in))
+            try credentialReader.writeBack(credentials)
+        }
+        return credentials
+    }
+
+    private func requestUsage(using credentials: AnthropicCredentials) async throws -> Data {
+        var req = URLRequest(url: Self.usageURL)
+        req.timeoutInterval = 10
+        req.setValue("Bearer \(credentials.accessToken)",
+                     forHTTPHeaderField: "Authorization")
+        req.setValue(AnthropicOAuth.betaHeader,
+                     forHTTPHeaderField: "anthropic-beta")
+        req.setValue(AnthropicOAuth.userAgent,
+                     forHTTPHeaderField: "User-Agent")
+        let payload = try await http.fetchPayload(req)
+        try Task.checkCancellation()
+        return payload
     }
 
     /// Invoked only from the explicit Authorize button. The concrete

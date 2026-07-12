@@ -94,16 +94,10 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         // copy is available — caller throws the original Keychain error.
         guard let verdict = CredentialReconciliation.pick(disk: diskCreds,
                                                            pending: pending) else {
-            // Last-chance: serve lastKnownGood even if near expiry when the
-            // only failure is ACL (banner still surfaces if the fetch 401s).
-            if case .failure(let err) = diskResult,
-               err.isKeychainACLBlocked,
-               let stale = getLastKnownGood() {
-                AppLog.keychain.warning("Keychain ACL blocked; serving last-known-good token until expiry")
-                return stale
-            }
             // Re-throw the underlying Keychain error (preserves its
-            // service/account context for the user-facing message).
+            // service/account context for the user-facing Authorize banner).
+            // The disk snapshot cache, rather than an obsolete access token,
+            // is the safe fallback when Claude Code rewrites the item ACL.
             switch diskResult {
             case .failure(let err): throw err
             case .success:          throw AppError.credentials("no credentials available")
@@ -144,6 +138,17 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         setLastKnownGood(credentials)
         markSuccessfulKeychainRead()
         return credentials
+    }
+
+    /// A 401 means the access token held in process memory was revoked or
+    /// rotated even if its timestamp says it is still valid. Discard every
+    /// in-memory credential copy so the provider's reactive retry must read
+    /// the current Claude Code Keychain item (or surface its ACL block).
+    public func invalidateCachedCredentials() {
+        state.withLock {
+            $0.lastKnownGood = nil
+            $0.pendingUpdate = nil
+        }
     }
 }
 

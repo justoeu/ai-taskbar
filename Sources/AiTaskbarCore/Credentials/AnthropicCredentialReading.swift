@@ -16,10 +16,14 @@ public protocol AnthropicCredentialReading: Sendable {
     /// Production uses it only from the explicit Authorize button; scheduled
     /// reads remain prompt-suppressed.
     func readInteractively() throws -> AnthropicCredentials
+    /// Drops process-memory credentials after the usage API rejects them.
+    /// The next `read()` must consult the backing credential source again.
+    func invalidateCachedCredentials()
     func writeBack(_ updated: AnthropicCredentials) throws
 }
 
 public extension AnthropicCredentialReading {
     /// Test/in-memory readers need no distinct interaction path.
     func readInteractively() throws -> AnthropicCredentials { try read() }
+    func invalidateCachedCredentials() {}
 }
