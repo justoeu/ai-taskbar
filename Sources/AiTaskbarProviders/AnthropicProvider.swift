@@ -84,6 +84,13 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         )
     }
 
+    /// Invoked only from the explicit Authorize button. The concrete
+    /// Keychain reader permits the native prompt and caches the credential in
+    /// memory; mocks use the protocol's non-interactive default.
+    public func authorizeCredentialsInteractively() throws {
+        _ = try credentialReader.readInteractively()
+    }
+
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
         let parsed: AnthropicUsageResponse
         do {

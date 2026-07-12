@@ -115,16 +115,38 @@ struct KeychainAccessAuthorizerTests {
         }
     }
 
-    @Test("authorize short-circuits to .authorized when the item already reads silently")
+    @Test("authorize short-circuits each readable item without committing")
     func idempotent_when_already_readable() throws {
-        // probeRead == true means the ACL/partition list already admit us:
-        // authorize must NOT touch SecKeychainItemSetAccess (no prompt, no
-        // duplicate ACL entry). It returns .authorized even for a service that
-        // doesn't exist, proving no real Keychain lookup happened.
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
         let outcome = try KeychainAccessAuthorizer.authorize(
-            service: "ai-taskbar-definitely-missing-\(UUID())",
-            probeRead: { _ in true })
+            service: Self.service,
+            probeRead: { _, _ in true })
         #expect(outcome == .authorized)
+    }
+
+    @Test("authorize prefers account-bearing item over legacy sibling")
+    func prefers_account_item_over_legacy() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        let legacyAdd: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecValueData as String:   Data("legacy".utf8),
+        ]
+        try #require(SecItemAdd(legacyAdd as CFDictionary, nil) == errSecSuccess)
+
+        var probedAccounts: [String?] = []
+        let outcome = try KeychainAccessAuthorizer.authorize(
+            service: Self.service,
+            probeRead: { _, account in
+                probedAccounts.append(account)
+                return true
+            })
+
+        #expect(outcome == .authorized)
+        #expect(probedAccounts.count == 1)
+        #expect(probedAccounts[0] == "tester")
     }
 
     @Test("authorize proceeds past the gate when the probe says access is blocked")
@@ -135,7 +157,7 @@ struct KeychainAccessAuthorizerTests {
         #expect(throws: AppError.self) {
             try KeychainAccessAuthorizer.authorize(
                 service: "ai-taskbar-definitely-missing-\(UUID())",
-                probeRead: { _ in false })
+                probeRead: { _, _ in false })
         }
     }
 }

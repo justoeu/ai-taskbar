@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import AiTaskbarCore
 
-@Suite("KeychainCredentialReader — non-syscall surface")
+@Suite("KeychainCredentialReader — non-syscall surface", .serialized)
 struct KeychainCredentialReaderTests {
     @Test("default service + preferredAccount nil")
     func init_defaults() {
@@ -190,6 +190,40 @@ struct KeychainCredentialReaderTests {
         #expect(creds.accessToken == "seeded-access")
         #expect(creds.refreshToken == "seeded-refresh")
         #expect(creds.expiresAtMs == 1_764_201_600_000)
+    }
+
+    @Test("interactive read seeds process-memory credentials")
+    func interactive_read_seeds_memory() throws {
+        let service = "ai-taskbar-test-interactive-\(UUID().uuidString)"
+        let account = "interactive@example.com"
+        let payload = #"{"claudeAiOauth":{"accessToken":"interactive-access","refreshToken":"interactive-refresh","expiresAt":2000000000000}}"#
+        let addQuery: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String:   Data(payload.utf8),
+        ]
+        guard SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess else {
+            return
+        }
+        let deleteQuery: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        defer { _ = SecItemDelete(deleteQuery as CFDictionary) }
+
+        let reader = KeychainCredentialReader(service: service,
+                                              preferredAccount: account)
+        let interactive = try reader.readInteractively()
+        #expect(interactive.accessToken == "interactive-access")
+
+        // Remove the backing item: the next scheduled-style read must still
+        // succeed from the process-memory value seeded above.
+        _ = SecItemDelete(deleteQuery as CFDictionary)
+        let cached = try reader.read()
+        #expect(cached.accessToken == "interactive-access")
+        #expect(cached.refreshToken == "interactive-refresh")
     }
 
     @Test("writeBack updates a seeded Keychain entry")

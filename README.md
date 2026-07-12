@@ -85,7 +85,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 
 | Provider | Source | Setup |
 |---|---|---|
-| **Claude** | macOS Keychain entry `Claude Code-credentials` | Run `claude` CLI once. Zero setup. |
+| **Claude** | macOS Keychain entry `Claude Code-credentials` | Run `claude` once; use the in-app interactive authorization when requested |
 | **Codex / ChatGPT** | `~/.codex/auth.json` | Run `codex` CLI once. Zero setup. |
 | **OpenRouter** | API key | Add `api_key = "sk-or-v1-..."` to `[openrouter]` in config |
 | **Z.AI (GLM)** | API key | Add `api_key = "..."` to `[zai]` in config |
@@ -98,6 +98,61 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 > 1. **Put the key directly in `config.toml`** (file is `chmod 600`).
 > 2. Launch from a terminal: `OPENROUTER_API_KEY=sk-... open /Applications/AiTaskbar.app`.
 > 3. Set it globally: `launchctl setenv OPENROUTER_API_KEY "sk-..."` (until reboot).
+
+### Claude Code on macOS — Keychain access
+
+Claude Code stores its OAuth token in the macOS Keychain, not in a user-readable
+file like Codex's `~/.codex/auth.json`. The item is created for Claude Code's
+own signing identity. Scheduled refreshes never display a surprise password
+dialog: when macOS blocks a silent read, click **Authorize** in the Claude card.
+That user-initiated action permits the native Keychain dialog and keeps the
+credential only in process memory; it does not rewrite Claude Code's ACL or
+copy the token to disk. Permission can be requested again after the app or
+Claude Code restarts/re-authenticates.
+
+For users who explicitly prefer a durable ACL grant, the following advanced
+command adds the official signed AI Taskbar build (`teamid:5HHL78743R`) to the
+current macOS user's live Claude credential:
+
+```bash
+security set-generic-password-partition-list \
+  -a "$USER" \
+  -s "Claude Code-credentials" \
+  -S "apple-tool:,apple:,teamid:5HHL78743R" \
+  "$HOME/Library/Keychains/login.keychain-db"
+```
+
+The command prompts for the **login Keychain password** (normally the password
+used to log in to the Mac). Do not add `-k`; that would expose the password in
+the process arguments/shell history. The command changes only the ACL and does
+not print or copy the OAuth token.
+
+If it reports that the item was not found, open **Keychain Access**, search for
+`Claude Code-credentials`, select the most recently modified account-bearing
+entry, and replace `$USER` with its **Account** value. Old Claude Code versions
+can leave an account-less legacy entry beside the live one. A fork signed by a
+different Apple Developer Team must likewise replace `5HHL78743R` with the
+`TeamIdentifier` reported by `codesign -dvv /path/to/AiTaskbar.app`.
+
+Claude Code owns this Keychain item. A later `/login`, token migration, or CLI
+update may recreate it and restore Claude Code's original ACL; if the Keychain
+warning returns, use the in-app interactive read again (or repeat the advanced
+command for the new live entry). This integration is therefore best-effort
+until Anthropic provides a public third-party OAuth/quota API.
+
+### Claude `429 rate_limit_error`
+
+When the warning tooltip contains Anthropic's JSON with
+`"type": "rate_limit_error"`, the server really returned HTTP 429; it is not a
+snapshot-decoding error. AI Taskbar keeps showing the last cached snapshot and
+applies a per-provider exponential cooldown of 5, 10, 20, 40, then 60 minutes.
+Other providers keep their normal schedule, and manual refresh cannot bypass
+the affected provider's active cooldown. The existing scheduler also adds its
+short 60-second global settling delay after a 429 cycle. If 429s persist, you
+can still increase `[ui] refresh_interval_seconds` from `300` to `900` or
+`1800`. The subscription usage endpoint is undocumented and Anthropic publishes
+no polling quota for it, so the app cannot calculate an exact retry time unless
+the response supplies one.
 
 ### xAI (Grok) — API team billing, not SuperGrok consumer usage
 
@@ -127,9 +182,10 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 ### v0.2 — Gemini, calmer cadence, honest countdown, no more Keychain prompts
 
 - **Sixth provider — Google Gemini.** Uses `GET /v1beta/models` as an authenticated heartbeat (Generative Language API has no public quota REST endpoint). Auth via `x-goog-api-key` header, never `?key=` query string. Host allow-listed to `generativelanguage.googleapis.com`. `GeminiConfig.validate` is strict on the API-version segment — `base_url` must be exactly `/v1`, `/v1beta`, or `/v1alpha` (or a sub-path of one). A typo like `/v1xxx` is rejected at config-load with an NSLog warning, instead of producing a silent 404 at first fetch. A future Google rename (`models` → `availableModels`) lands as `AppError.schema` + red row, not as a silently green "no models visible".
-- **Default refresh cadence raised from 150 s → 300 s (5 min).** Comfortable headroom under every vendor's 429 threshold. Floor is still 15 s; override via `[ui] refresh_interval_seconds = …`.
+- **Default refresh cadence raised from 150 s → 300 s (5 min).** A conservative starting point for undocumented usage endpoints; individual vendors can still impose longer or account-wide 429 windows. Floor is still 15 s; override via `[ui] refresh_interval_seconds = …`.
 - **Forward countdown in the popover header.** "Próx. em 4:59" replaces the old "atualizado há …" — anchored on `UsageStore.lastScheduledTickAt`, which is stamped by `RefreshScheduler.markScheduledTick()` immediately before every cycle. When the scheduler is in the 60 s post-429 back-off the label switches to "Aguardando rate-limit…"; while a fetch is in flight it says "Atualizando…". Pre-computed `@Published` aggregates (`isAnyVendorLoading`, `hasRateLimitedVendor`) keep the per-second TimelineView reading flat properties instead of re-scanning the vendor array; localized strings are memoized at type init.
 - **Rate-limit back-off.** When any vendor's most recent refresh ended in HTTP 429, `RefreshScheduler` adds `rateLimitBackoff` (60 s) to the next sleep. Stays applied while at least one vendor keeps 429-ing; clears automatically when responses go green. `UsageStore.hasRateLimitedVendor` detects both `.failed(429, _)` AND stale-`.ok` outcomes whose cached `lastError.status == 429` (CachedFetch hides single 429s as `.ok(stale)` whenever any payload is cached).
+- **Per-provider exponential cooldown.** A vendor that keeps returning 429 is skipped for 5, 10, 20, 40, then at most 60 minutes. Manual refresh respects the same deadline, so repeated clicks cannot turn a temporary throttle into a longer one; providers that are not rate-limited continue refreshing.
 - **Cache TTL automatically derived from the cadence** — `max(15, refresh_interval_seconds − 5)`. Popover opens between scheduled refreshes still serve from cache, but the scheduled tick at T=interval always finds an expired entry (`age ≈ interval > ttl`) and goes straight to the network without needing `forceRefresh: true`. The 5-second margin absorbs Task.sleep jitter.
 - **Keychain write no longer triggers the macOS password prompt.** `KeychainCredentialReader.writeBack` passes `kSecUseAuthenticationUIFail` (the deprecated key — the modern `LAContext.interactionNotAllowed` doesn't work for plain generic-password items without a `SecAccessControl`) and treats `errSecInteractionNotAllowed` as best-effort: logs to Console.app with the exact `security set-generic-password-partition-list` fix and returns. The renewed credentials are mirrored to an in-memory `_pendingUpdate`; the next `read()` reconciles against the on-disk copy by `expiresAtMs` (so an external rotation via Claude Code CLI wins automatically when it lands). Menu-bar app (LSUIElement) no longer freezes behind an invisible SecurityAgent dialog after every `make app` rebuild.
 
@@ -223,7 +279,7 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 
 The **`RefreshScheduler`** fires every `refresh_interval_seconds` (default 300s = 5 min — chosen as a balance between freshness and being polite to the Anthropic / Z.AI / Codex usage endpoints, which rate-limit aggressively below ~60s) and triggers `UsageStore.refreshAll()`, which fans out to each `VendorViewModel`. Per-vendor state updates only invalidate that vendor's `VendorSectionView` — no fan-out re-renders.
 
-If any vendor's last refresh ended in HTTP 429, the scheduler adds **`RefreshScheduler.rateLimitBackoff` = 60 s** to the next sleep. The back-off is read via `UsageStore.hasRateLimitedVendor` between cycles and stays applied for as long as at least one vendor keeps returning 429 — once they clear, the cadence drops back to the configured interval automatically. During the back-off the popover countdown shows "Aguardando rate-limit…" (anchored on `UsageStore.isInRateLimitBackoff`) so the header never silently freezes at 0:00.
+If any vendor's last refresh ended in HTTP 429, the scheduler adds **`RefreshScheduler.rateLimitBackoff` = 60 s** to the next sleep. The back-off is read via `UsageStore.hasRateLimitedVendor` between cycles and stays applied for as long as at least one vendor keeps returning 429 — once they clear, the cadence drops back to the configured interval automatically. During the back-off the popover countdown shows "Aguardando rate-limit…" (anchored on `UsageStore.isInRateLimitBackoff`) so the header never silently freezes at 0:00. Independently, each `VendorViewModel` tracks consecutive 429s and refuses new network work until its own 5/10/20/40/60-minute cooldown expires; this keeps a throttled provider from blocking normal refreshes for the others.
 
 The per-vendor `DiskCache` TTL is wired to `max(15, refresh_interval_seconds − 5)` in `AppEnvironment`. The 5 s margin means a scheduled tick at T=interval always sees an expired cache (`age ≈ interval > ttl`), so the scheduler doesn't need `forceRefresh: true` to defeat the cache. Popover opens between scheduled refreshes still serve from cache.
 
@@ -320,7 +376,7 @@ The app **never writes outside these locations**. No telemetry, no remote loggin
 - Anthropic OAuth tokens stay in the **Keychain** — the app reads them, never copies them to disk.
 - **The OAuth providers are read-only by default** (`[anthropic] manage_oauth_refresh = false` and `[openai] manage_oauth_refresh = false`). A usage monitor shares the `Claude Code-credentials` Keychain item with the Claude Code CLI and `~/.codex/auth.json` with the Codex CLI, and both vendors rotate the refresh token on every exchange — so refreshing it here would invalidate the token other running CLI sessions hold (forcing "please re-login"), and the Anthropic write-back also trips a Keychain ACL prompt on ad-hoc builds. In read-only mode the app uses whatever token the CLI maintains and lets the CLI own renewal; if the token is briefly expired the last cached snapshot is shown until the CLI refreshes (on a cold cache with no prior snapshot the vendor tile shows the error until renewal). Set `manage_oauth_refresh = true` for a vendor only if you run AI Taskbar standalone without that CLI.
 - Keychain reads **and** writes run under `KeychainPromptSuppressor` (`SecKeychainSetUserInteractionAllowed(false)` around every SecItem call) **in addition to** `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail`. The UIFail hint alone only silences the trusted-app Allow/Deny confirmation — the partition-list **password** dialog ignores it and used to pop on every scheduled refresh from a binary the ACL didn't recognize. With both in place, a blocked binary fast-fails (`errSecInteractionNotAllowed` / `errSecAuthFailed`) instead of prompting; the renewed access_token is kept in memory and persistence retries on the next OAuth cycle. The fix is logged to Console.app with the exact `security set-generic-password-partition-list` command to silence it for good.
-- When macOS blocks the read (`errSecInteractionNotAllowed` / `errSecAuthFailed`), the Anthropic tile shows a one-click **Authorize** banner: the app extends the item's partition list + trusted-app ACL itself (`KeychainAccessAuthorizer`) and macOS asks your login password **once** in a native dialog — no terminal, permanent. ("Always Allow" alone never sticks because it edits only the ACL, not the partition list.)
+- When a scheduled read is blocked (`errSecInteractionNotAllowed` / `errSecAuthFailed`), the Anthropic tile shows **Authorize**. That explicit click performs an interactive read using the native macOS dialog and seeds only the process-memory credential cache; it never mutates Claude Code's ACL and never asks for, stores, or passes the login Keychain password itself. The account-specific `security set-generic-password-partition-list` procedure under **Setup per provider** remains an opt-in advanced path for users who want a durable ACL grant.
 - `make app` signs local builds with your **Developer ID Application** identity when the login keychain has one (falling back to ad-hoc otherwise), so dev builds keep a stable signing identity and one Authorize covers every rebuild — an ad-hoc cdhash changes on every build and can never stay authorized.
 - Codex `~/.codex/auth.json` writes go through atomic tempfile with `0o600` set **before** the rename — no race window where fresh refresh tokens are world-readable.
 - Configuration files (`config.toml`) and cache files are `chmod 0600`, support dir `chmod 0700`.

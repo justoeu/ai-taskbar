@@ -24,6 +24,22 @@ public final class VendorViewModel: ObservableObject, Identifiable {
             default: return nil
             }
         }
+
+        /// True when the current state represents the Claude Keychain ACL
+        /// block, including CachedFetch's stale-success shape. A live fetch
+        /// failure with a cached payload is returned as `.ok(isStale: true)`
+        /// rather than `.failed`, so UI affordances must inspect lastError too.
+        public var isKeychainACLBlocked: Bool {
+            switch self {
+            case .failed(let error, _):
+                return error.isKeychainACLBlocked
+            case .ok(let outcome) where outcome.isStale:
+                guard let message = outcome.lastError?.body else { return false }
+                return AppError.credentials(message).isKeychainACLBlocked
+            default:
+                return false
+            }
+        }
     }
 
     // `id` is nonisolated because the underlying `vendorId` is a `let` and
@@ -36,6 +52,8 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     @Published public private(set) var state: State = .idle
     @Published public private(set) var history: [UsageHistoryStore.Sample] = []
     @Published public private(set) var lastNetworkFetch: Date?
+    @Published public private(set) var rateLimitRetryAt: Date?
+    private var consecutiveRateLimits: Int = 0
 
     /// Whether this vendor's card is expanded (open) in the popover. This is
     /// the single source of truth for BOTH the section chevron UI and the
@@ -172,6 +190,9 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     }
 
     public func refresh(forceRefresh: Bool) {
+        // A manual refresh bypasses the disk cache, but must not bypass a
+        // server-imposed cooldown: repeated clicks otherwise amplify a 429.
+        if let retryAt = rateLimitRetryAt, Date.now < retryAt { return }
         epoch += 1
         let myEpoch = epoch
         state = .loading
@@ -182,6 +203,7 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 if Task.isCancelled { return }
                 guard myEpoch == self.epoch else { return }   // newer refresh wins
                 self.state = .ok(outcome)
+                self.observeRateLimit(status: outcome.lastError?.status)
                 if (outcome.cacheAge ?? .greatestFiniteMagnitude) <= 1 {
                     self.lastNetworkFetch = .now
                 }
@@ -195,8 +217,32 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 let appErr = AppError.wrapping(error)
                 let fallback = self.state.outcome
                 self.state = .failed(error: appErr, fallback: fallback)
+                if case .http(let status, _) = appErr {
+                    self.observeRateLimit(status: status)
+                } else {
+                    self.observeRateLimit(status: nil)
+                }
             }
         }
+    }
+
+    private func observeRateLimit(status: Int?) {
+        guard status == 429 else {
+            consecutiveRateLimits = 0
+            rateLimitRetryAt = nil
+            return
+        }
+        consecutiveRateLimits += 1
+        rateLimitRetryAt = Date.now.addingTimeInterval(
+            Self.rateLimitCooldown(forAttempt: consecutiveRateLimits))
+    }
+
+    /// Per-vendor exponential cooldown: 5, 10, 20, 40, then 60 minutes.
+    /// The shared scheduler still gives every provider its normal tick; only
+    /// the rate-limited vendor is skipped until this deadline.
+    public static func rateLimitCooldown(forAttempt attempt: Int) -> TimeInterval {
+        let clamped = max(1, min(attempt, 5))
+        return min(300 * pow(2, Double(clamped - 1)), 3_600)
     }
 
     private func recordHistory(_ maxUtilization: Double) {

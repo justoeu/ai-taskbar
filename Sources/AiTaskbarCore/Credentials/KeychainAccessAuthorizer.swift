@@ -79,15 +79,16 @@ public enum KeychainAccessAuthorizer {
     /// this is safe to call from any context. See `KeychainCredentialReader`
     /// for why the deprecated UIFail key is deliberate for these plain
     /// generic-password items.
-    public static func canReadSilently(_ service: String) -> Bool {
+    public static func canReadSilently(_ service: String, account: String? = nil) -> Bool {
         var result: CFTypeRef?
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String:               kSecClassGenericPassword,
             kSecAttrService as String:         service,
             kSecMatchLimit as String:          kSecMatchLimitOne,
             kSecReturnData as String:          true,
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
+        if let account { query[kSecAttrAccount as String] = account }
         // UIFail alone does NOT silence the partition-list password dialog —
         // only the trusted-app Allow/Deny one. The suppressor guarantees the
         // probe is truly silent (see KeychainPromptSuppressor).
@@ -97,69 +98,80 @@ public enum KeychainAccessAuthorizer {
     }
 
     /// - Parameter probeRead: injection seam for tests. Production callers use
-    ///   the default (`canReadSilently`); a test can force the short-circuit
-    ///   or the full ACL path deterministically without a real Keychain.
+    ///   the account-aware silent read so authorization is verified against
+    ///   the same item whose ACL was changed.
     public static func authorize(service: String,
-                                 probeRead: (String) -> Bool = KeychainAccessAuthorizer.canReadSilently) throws -> Outcome {
-        // 0. Idempotency gate. If the item already decrypts silently, both ACL
-        //    layers (trusted-app list + partition list) already admit this
-        //    binary. Committing again via `SecKeychainItemSetAccess` would
-        //    re-trigger the login-password dialog (ChangeACL always prompts)
-        //    AND append a duplicate trusted-app entry — the exact pileup that
-        //    left dozens of dead ACL records in the field. Return authorized
-        //    with zero side effects.
-        if probeRead(service) { return .authorized }
-
-        // 1. Item reference. Fetching the ref (not the data) needs no ACL
-        //    authorization, so UIFail cannot spuriously prompt here.
-        var itemRef: CFTypeRef?
+                                 probeRead: (String, String?) -> Bool = {
+                                     KeychainAccessAuthorizer.canReadSilently($0, account: $1)
+                                 }) throws -> Outcome {
+        // 1. Enumerate refs + attributes without requesting secret data.
+        // Claude Code migrations can leave an expired, account-less legacy
+        // item beside the live account-bearing item. A service-only MatchOne
+        // used to authorize that arbitrary legacy entry, report success, then
+        // reload into the same ACL error when the reader selected the live
+        // item. Prefer every account-bearing entry; use legacy entries only
+        // when no account-bearing item exists.
+        var matchesRef: CFTypeRef?
         let query: [String: Any] = [
             kSecClass as String:               kSecClassGenericPassword,
             kSecAttrService as String:         service,
-            kSecMatchLimit as String:          kSecMatchLimitOne,
+            kSecMatchLimit as String:          kSecMatchLimitAll,
+            kSecReturnAttributes as String:    true,
             kSecReturnRef as String:           true,
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
-        let findStatus = SecItemCopyMatching(query as CFDictionary, &itemRef)
-        guard findStatus == errSecSuccess, let ref = itemRef else {
+        let findStatus = SecItemCopyMatching(query as CFDictionary, &matchesRef)
+        guard findStatus == errSecSuccess,
+              let matches = matchesRef as? [[String: Any]] else {
             throw AppError.credentials(
                 "Keychain item '\(service)' not found (OSStatus \(findStatus)). Run Claude Code at least once.")
         }
-        let item = ref as! SecKeychainItem  // kSecReturnRef for genp IS a SecKeychainItem
-
-        // 2. Current access object.
-        var accessRef: SecAccess?
-        try check(SecKeychainItemCopyAccess(item, &accessRef), "copy access")
-        guard let access = accessRef else {
-            throw AppError.credentials("Keychain item has no access object")
+        let targets = authorizationTargets(from: matches)
+        guard !targets.isEmpty else {
+            throw AppError.credentials("Keychain item '\(service)' has no usable item references")
         }
 
-        // 3. Extend the partition list with this binary's teamid (or
-        //    "unsigned:" for ad-hoc dev builds).
         let myPartition = CodeSignatureInfo.currentTeamID().map { "teamid:\($0)" } ?? "unsigned:"
-        try extendPartitionList(of: access, with: myPartition)
+        for target in targets {
+            // Per-item idempotency gate. Never commit an already-readable
+            // item: ChangeACL can prompt and used to accumulate duplicates.
+            if probeRead(service, target.account) { continue }
 
-        // 4. Add ourselves to the decrypt ACL's trusted apps so no
-        //    Allow/Deny prompt remains after the partition gate opens.
-        try addSelfToDecryptACL(of: access)
+            var accessRef: SecAccess?
+            try check(SecKeychainItemCopyAccess(target.item, &accessRef), "copy access")
+            guard let access = accessRef else {
+                throw AppError.credentials("Keychain item has no access object")
+            }
+            let partitionChanged = try extendPartitionList(of: access, with: myPartition)
+            let trustedAppChanged = try addSelfToDecryptACL(of: access)
+            guard partitionChanged || trustedAppChanged else {
+                throw AppError.credentials(
+                    "Keychain ACL already contains this app and \(myPartition), but the item is still unreadable. Unlock the login keychain and try again.")
+            }
 
-        // 5. Commit. THIS is the single native password dialog.
-        let commit = SecKeychainItemSetAccess(item, access)
-        if commit == errSecUserCanceled {
-            return .canceled
+            let commit = SecKeychainItemSetAccess(target.item, access)
+            if commit == errSecUserCanceled { return .canceled }
+            try check(commit, "commit access")
+
+            // A successful commit is not proof of access. Verify the exact
+            // account before telling the UI to reload.
+            guard probeRead(service, target.account) else {
+                throw AppError.credentials(
+                    "Keychain authorization was saved but verification still failed for account '\(target.account ?? "legacy")'.")
+            }
         }
-        try check(commit, "commit access")
         return .authorized
     }
 
     // MARK: - ACL surgery
 
+    @discardableResult
     internal static func extendPartitionList(of access: SecAccess,
-                                            with partition: String) throws {
+                                            with partition: String) throws -> Bool {
         guard let acl = findACL(in: access, authorization: "ACLAuthorizationPartitionID") else {
             // Pre-Sierra item without a partition ACL: nothing gates the
             // trusted-app list, so step 4 alone suffices.
-            return
+            return false
         }
         var appsRef: CFArray?
         var descRef: CFString?
@@ -170,17 +182,19 @@ public enum KeychainAccessAuthorizer {
             throw AppError.credentials("unrecognized partition-list format on '\(hex.prefix(32))…'")
         }
         let updated = PartitionListCodec.adding(partition, to: current)
-        guard updated != current else { return }
+        guard updated != current else { return false }
         guard let newHex = PartitionListCodec.encode(partitions: updated) else {
             throw AppError.credentials("failed to re-encode partition list")
         }
         try check(SecACLSetContents(acl, appsRef, newHex as CFString, prompt),
                   "write partition ACL")
+        return true
     }
 
-    internal static func addSelfToDecryptACL(of access: SecAccess) throws {
+    @discardableResult
+    internal static func addSelfToDecryptACL(of access: SecAccess) throws -> Bool {
         guard let acl = findACL(in: access, authorization: "ACLAuthorizationDecrypt") else {
-            return
+            return false
         }
         var appsRef: CFArray?
         var descRef: CFString?
@@ -193,11 +207,37 @@ public enum KeychainAccessAuthorizer {
         }
         // nil app list = "all applications allowed"; adding ourselves to it
         // would RESTRICT access, so leave it untouched.
-        guard let apps = appsRef as? [SecTrustedApplication] else { return }
+        guard let apps = appsRef as? [SecTrustedApplication] else { return false }
+        var meDataRef: CFData?
+        try check(SecTrustedApplicationCopyData(me, &meDataRef), "read self trusted-app data")
+        if let meData = meDataRef as Data?, apps.contains(where: { app in
+            var dataRef: CFData?
+            return SecTrustedApplicationCopyData(app, &dataRef) == errSecSuccess
+                && (dataRef as Data?) == meData
+        }) {
+            return false
+        }
         let updated = apps + [me]
         try check(SecACLSetContents(acl, updated as CFArray,
                                     descRef ?? ("" as CFString), prompt),
                   "write decrypt ACL")
+        return true
+    }
+
+    private struct AuthorizationTarget {
+        let account: String?
+        let item: SecKeychainItem
+    }
+
+    private static func authorizationTargets(from matches: [[String: Any]]) -> [AuthorizationTarget] {
+        let all = matches.compactMap { match -> AuthorizationTarget? in
+            guard let ref = match[kSecValueRef as String] else { return nil }
+            return AuthorizationTarget(
+                account: match[kSecAttrAccount as String] as? String,
+                item: ref as! SecKeychainItem)
+        }
+        let accountBearing = all.filter { !($0.account ?? "").isEmpty }
+        return accountBearing.isEmpty ? all : accountBearing
     }
 
     /// Finds the first ACL entry carrying `authorization` (compared as

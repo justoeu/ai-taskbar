@@ -236,6 +236,9 @@ public struct VendorSectionView: View {
 
         case .loading, .ok:
             VStack(alignment: .leading, spacing: 8) {
+                if state.isKeychainACLBlocked {
+                    keychainAuthorizeAffordance
+                }
                 if vm.needsReauth {
                     reloginAffordance
                 }
@@ -283,12 +286,11 @@ public struct VendorSectionView: View {
         }
     }
 
-    /// Actionable "authorize Keychain access" banner, shown when the last
-    /// fetch died on errSecInteractionNotAllowed (the item's partition list
-    /// doesn't include this build). The button runs the one-time ACL +
-    /// partition-list authorization; macOS shows a single native password
-    /// dialog and afterwards reads are permanently silent. Runs off the main
-    /// actor because SecKeychainItemSetAccess blocks on SecurityAgent UI.
+    /// Actionable Keychain banner shown after a prompt-suppressed scheduled
+    /// read is blocked. The button performs one explicit interactive read and
+    /// seeds the reader's in-memory credential cache. It deliberately does
+    /// not rewrite Claude Code's ACL. Runs off the main actor because the
+    /// native SecurityAgent dialog blocks until the user responds.
     @ViewBuilder
     private var keychainAuthorizeAffordance: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -326,17 +328,16 @@ public struct VendorSectionView: View {
         keychainAuthPending = true
         keychainAuthError = nil
         let vm = self.vm
+        let provider = vm.provider
         Task.detached(priority: .userInitiated) {
-            let result: Result<KeychainAccessAuthorizer.Outcome, Error> = Result {
-                try KeychainAccessAuthorizer.authorize(service: "Claude Code-credentials")
+            let result: Result<Void, Error> = Result {
+                try provider.authorizeCredentialsInteractively()
             }
             await MainActor.run {
                 keychainAuthPending = false
                 switch result {
-                case .success(.authorized):
+                case .success:
                     vm.refresh(forceRefresh: true)
-                case .success(.canceled):
-                    break   // user changed their mind — banner stays, no error
                 case .failure(let error):
                     keychainAuthError = (error as? AppError)?.localizedDescription
                         ?? String(describing: error)
@@ -600,5 +601,3 @@ public struct VendorSectionView: View {
         }
     }
 }
-
-

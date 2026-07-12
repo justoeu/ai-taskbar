@@ -115,6 +115,36 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         setLastKnownGood(verdict.credentials)
         return verdict.credentials
     }
+
+    /// Explicit, user-initiated credential read. Unlike scheduled `read()`,
+    /// this permits SecurityAgent UI and seeds `lastKnownGood` so subsequent
+    /// automatic refreshes can reuse the credential in memory without
+    /// prompting. It does not mutate another app's Keychain ACL.
+    public func readInteractively() throws -> AnthropicCredentials {
+        let interactionStatus = SecKeychainSetUserInteractionAllowed(true)
+        guard interactionStatus == errSecSuccess else {
+            throw Self.errorFor(status: interactionStatus,
+                                op: "enable user-initiated interaction")
+        }
+        let items = try fetchAll(interactive: true)
+        guard !items.isEmpty else {
+            throw AppError.credentials(
+                "Keychain item '\(service)' not found. Run Claude Code at least once.")
+        }
+        let chosen = select(from: items)
+        let credentials: AnthropicCredentials
+        do {
+            credentials = try SharedCoders.decoder
+                .decode(AnthropicCredentialsFile.self, from: chosen.data)
+                .claudeAiOauth
+        } catch {
+            throw AppError.schema("decoding Claude credentials JSON: \(error)")
+        }
+        setResolvedAccount(chosen.account)
+        setLastKnownGood(credentials)
+        markSuccessfulKeychainRead()
+        return credentials
+    }
 }
 
 /// Pure reconciliation between the on-disk Keychain copy and the in-memory
@@ -338,8 +368,8 @@ extension KeychainCredentialReader {
     /// `kSecMatchLimitAll + kSecReturnAttributes + kSecReturnData` in a single
     /// query with `errSecParam` (-50), so the two-pass is unavoidable for
     /// disambiguation.
-    private func fetchAll() throws -> [KeychainItem] {
-        if preferredAccount == nil {
+    private func fetchAll(interactive: Bool = false) throws -> [KeychainItem] {
+        if !interactive, preferredAccount == nil {
             // Fast path: a single ACL operation, so one "Always Allow" click
             // silences future prompts for the overwhelmingly common
             // single-item case. BUT trust it only while the token it returns
@@ -354,7 +384,7 @@ extension KeychainCredentialReader {
             // abort the whole resolution — fall through to enumeration, which
             // reads attributes (never ACL-blocked) and may surface a readable
             // account-bearing entry the legacy single-query missed.
-            if let single = try? fetchLegacySingle(),
+            if let single = try? fetchLegacySingle(interactive: false),
                let creds = try? SharedCoders.decoder
                    .decode(AnthropicCredentialsFile.self, from: single.data)
                    .claudeAiOauth,
@@ -368,7 +398,7 @@ extension KeychainCredentialReader {
             // `try` (not `try?`): with no account-bearing entries the legacy
             // item is our only shot, so an ACL block on it must propagate as
             // the ACL error (→ Authorize banner), not collapse to "not found".
-            if let legacy = try fetchLegacySingle() {
+            if let legacy = try fetchLegacySingle(interactive: interactive) {
                 return [legacy]
             }
             return []
@@ -386,11 +416,12 @@ extension KeychainCredentialReader {
         var aclError: AppError?
         for account in accounts {
             do {
-                let data = try fetchData(for: account)
+                let data = try fetchData(for: account, interactive: interactive)
                 items.append(KeychainItem(account: account, data: data))
             } catch let err as AppError where err.isKeychainACLBlocked {
                 aclError = err
             } catch {
+                if interactive { throw error }
                 // Drop non-ACL, per-account failures and keep trying siblings.
             }
         }
@@ -429,24 +460,24 @@ extension KeychainCredentialReader {
         return array.compactMap { $0[kSecAttrAccount as String] as? String }
     }
 
-    private func fetchData(for account: String) throws -> Data {
+    private func fetchData(for account: String, interactive: Bool = false) throws -> Data {
         var item: CFTypeRef?
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String:               kSecClassGenericPassword,
             kSecAttrService as String:         service,
             kSecAttrAccount as String:         account,
             kSecMatchLimit as String:          kSecMatchLimitOne,
             kSecReturnData as String:          true,
-            // See `writeBack` for why we deliberately stick with the
-            // deprecated `kSecUseAuthenticationUIFail` here. tl;dr: the
-            // LAContext path only works for items stored with an LA-aware
-            // `SecAccessControl`, which the `Claude Code-credentials`
-            // generic password is not.
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
-        let status = KeychainPromptSuppressor.withPromptsSuppressed {
-            SecItemCopyMatching(query as CFDictionary, &item)
+        if !interactive {
+            // See `writeBack` for why we deliberately stick with the
+            // deprecated UIFail key for scheduled reads.
+            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         }
+        let operation = { SecItemCopyMatching(query as CFDictionary, &item) }
+        let status = interactive
+            ? operation()
+            : KeychainPromptSuppressor.withPromptsSuppressed(operation)
         guard status == errSecSuccess, let data = item as? Data else {
             throw Self.errorFor(status: status, op: "data for '\(account)'")
         }
@@ -456,23 +487,21 @@ extension KeychainCredentialReader {
     /// Backward-compat path for keychain items that were created without an
     /// account attribute (older Claude Code versions). Single-limit query
     /// filtered only by service.
-    private func fetchLegacySingle() throws -> KeychainItem? {
+    private func fetchLegacySingle(interactive: Bool = false) throws -> KeychainItem? {
         var item: CFTypeRef?
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String:               kSecClassGenericPassword,
             kSecAttrService as String:         service,
             kSecMatchLimit as String:          kSecMatchLimitOne,
             kSecReturnData as String:          true,
-            // See `writeBack` for why we deliberately stick with the
-            // deprecated `kSecUseAuthenticationUIFail` here. tl;dr: the
-            // LAContext path only works for items stored with an LA-aware
-            // `SecAccessControl`, which the `Claude Code-credentials`
-            // generic password is not.
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
-        let status = KeychainPromptSuppressor.withPromptsSuppressed {
-            SecItemCopyMatching(query as CFDictionary, &item)
+        if !interactive {
+            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         }
+        let operation = { SecItemCopyMatching(query as CFDictionary, &item) }
+        let status = interactive
+            ? operation()
+            : KeychainPromptSuppressor.withPromptsSuppressed(operation)
         if status == errSecItemNotFound { return nil }
         // An ACL/partition-list block must be distinguishable from "no item":
         // the fast-path caller swallows it (`try?`) to fall through to

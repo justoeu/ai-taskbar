@@ -36,8 +36,8 @@
 "token_expired_title" = "Token de acesso expirado";
 // Banner de autorização única do Keychain (errSecInteractionNotAllowed).
 "keychain_auth_title" = "Acesso ao Keychain necessário";
-"keychain_auth_hint" = "O macOS está bloqueando o token do Claude Code para este app. Autorize uma vez (diálogo de senha do sistema). Se voltar após rebuild ou re-login do Claude Code, autorize de novo — prefira o app assinado em /Applications.";
-"keychain_auth_pending" = "Aguardando o diálogo do sistema…";
+"keychain_auth_hint" = "Clique para permitir uma leitura interativa do token do Claude Code. O macOS pode pedir a senha do Keychain; o token fica somente em memória e a permissão pode ser solicitada novamente após re-login.";
+"keychain_auth_pending" = "Aguardando a autorização do macOS…";
 "keychain_auth_button" = "Autorizar";
 "token_expired_relogin_hint" = "Abre o navegador para entrar — vamos verificar automaticamente.";
 "relogin" = "Re-login";

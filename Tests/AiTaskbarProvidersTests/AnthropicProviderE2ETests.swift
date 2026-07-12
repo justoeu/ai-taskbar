@@ -10,10 +10,15 @@ import AiTaskbarTesting
 private final class MockKeychainReader: AnthropicCredentialReading, @unchecked Sendable {
     var nextRead: AnthropicCredentials
     var writeBackCalls: [AnthropicCredentials] = []
+    var interactiveReadCalls = 0
 
     init(initial: AnthropicCredentials) { self.nextRead = initial }
 
     func read() throws -> AnthropicCredentials { nextRead }
+    func readInteractively() throws -> AnthropicCredentials {
+        interactiveReadCalls += 1
+        return nextRead
+    }
     func writeBack(_ updated: AnthropicCredentials) throws {
         writeBackCalls.append(updated)
         nextRead = updated
@@ -29,6 +34,23 @@ struct AnthropicProviderE2ETests {
         tmpCache = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ai-taskbar-ap-\(UUID().uuidString)")
         try Paths.ensureDir(tmpCache)
+    }
+
+    @Test("interactive authorization delegates to the credential reader")
+    func interactive_authorization_delegates() throws {
+        let creds = AnthropicCredentials(
+            accessToken: "fresh", refreshToken: "r",
+            expiresAtMs: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000),
+            subscriptionType: "max", rateLimitTier: "max_5x")
+        let mock = MockKeychainReader(initial: creds)
+        let provider = AnthropicProvider(
+            credentialReader: mock,
+            cache: DiskCache(vendor: .anthropic, baseDir: tmpCache),
+            http: .stubbed(protocols: [StubURLProtocol.self]))
+
+        try provider.authorizeCredentialsInteractively()
+
+        #expect(mock.interactiveReadCalls == 1)
     }
 
     @Test("fresh credentials + 200 → snapshot decoded")

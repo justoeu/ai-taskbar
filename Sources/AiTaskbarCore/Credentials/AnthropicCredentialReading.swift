@@ -12,5 +12,14 @@ import Foundation
 /// security posture if anything ever consumes `AiTaskbarCore` externally.
 public protocol AnthropicCredentialReading: Sendable {
     func read() throws -> AnthropicCredentials
+    /// User-initiated read that may present the native macOS Keychain dialog.
+    /// Production uses it only from the explicit Authorize button; scheduled
+    /// reads remain prompt-suppressed.
+    func readInteractively() throws -> AnthropicCredentials
     func writeBack(_ updated: AnthropicCredentials) throws
+}
+
+public extension AnthropicCredentialReading {
+    /// Test/in-memory readers need no distinct interaction path.
+    func readInteractively() throws -> AnthropicCredentials { try read() }
 }

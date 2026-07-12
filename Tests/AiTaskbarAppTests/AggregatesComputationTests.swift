@@ -110,6 +110,36 @@ struct AggregatesComputationTests {
         #expect(!r.hasRateLimitedVendor)
     }
 
+    @Test("stale cached Keychain ACL error remains actionable")
+    func stale_ok_with_keychain_acl_error_is_actionable() {
+        let stale = FetchOutcome(
+            snapshot: snapshot(pct: 30),
+            isStale: true,
+            lastError: FetchError(
+                status: 0,
+                body: "Keychain access denied (errSecAuthFailed). Tap Authorize."))
+        #expect(VendorViewModel.State.ok(stale).isKeychainACLBlocked)
+    }
+
+    @Test("ordinary stale errors do not show Keychain authorization")
+    func stale_ok_with_other_error_is_not_keychain_blocked() {
+        let stale = FetchOutcome(
+            snapshot: snapshot(pct: 30),
+            isStale: true,
+            lastError: FetchError(status: 500, body: "server unavailable"))
+        #expect(!VendorViewModel.State.ok(stale).isKeychainACLBlocked)
+    }
+
+    @Test("per-vendor rate-limit cooldown grows exponentially and caps at one hour")
+    func rate_limit_cooldown_schedule() {
+        #expect(VendorViewModel.rateLimitCooldown(forAttempt: 1) == 300)
+        #expect(VendorViewModel.rateLimitCooldown(forAttempt: 2) == 600)
+        #expect(VendorViewModel.rateLimitCooldown(forAttempt: 3) == 1_200)
+        #expect(VendorViewModel.rateLimitCooldown(forAttempt: 4) == 2_400)
+        #expect(VendorViewModel.rateLimitCooldown(forAttempt: 5) == 3_600)
+        #expect(VendorViewModel.rateLimitCooldown(forAttempt: 99) == 3_600)
+    }
+
     @Test("mixed: one rate-limited vendor flips flag even if others are clean")
     func mixed_one_rate_limited_flips() {
         let r = AggregatesComputation.compute(states: [
