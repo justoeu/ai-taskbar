@@ -26,6 +26,22 @@ struct VendorIdTests {
         }
     }
 
+    @Test("OAuth vendors expose their CLI re-login commands")
+    func oauth_vendors_expose_relogin_commands() {
+        #expect(VendorId.anthropic.reloginCommand == "claude auth login")
+        #expect(VendorId.openai.reloginCommand == "codex login")
+    }
+
+    @Test("API-key vendors do not expose a misleading re-login command")
+    func api_key_vendors_have_no_relogin_command() {
+        #expect(VendorId.zai.reloginCommand == nil)
+        #expect(VendorId.openrouter.reloginCommand == nil)
+        #expect(VendorId.kimi.reloginCommand == nil)
+        #expect(VendorId.gemini.reloginCommand == nil)
+        #expect(VendorId.deepseek.reloginCommand == nil)
+        #expect(VendorId.xai.reloginCommand == nil)
+    }
+
     @Test("id mirrors rawValue (Identifiable)")
     func id_mirrors_rawValue() {
         for v in VendorId.allCases {

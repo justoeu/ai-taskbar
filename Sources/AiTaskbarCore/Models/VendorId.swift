@@ -47,6 +47,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
     /// runs the command in a fresh Terminal window.
     public var reloginCommand: String? {
         switch self {
+        case .anthropic:  return "claude auth login"
         case .openai:     return "codex login"
         default:          return nil
         }

@@ -348,7 +348,7 @@ public struct VendorSectionView: View {
 
     /// Actionable "token expired — re-login" banner. Shown only when the
     /// vendor's last fetch was a 401 AND the vendor has a CLI login command
-    /// (currently OpenAI/Codex). The button runs that command in the
+    /// (Claude Code or OpenAI/Codex). The button runs that command in the
     /// background — delegating re-auth to the CLI that owns the token, so the
     /// monitor never rotates the shared refresh_token itself.
     @ViewBuilder
@@ -416,7 +416,7 @@ public struct VendorSectionView: View {
     /// Spawns the vendor's login command in the background via a login shell.
     /// GUI apps inherit a minimal PATH that excludes `/opt/homebrew/bin`, so
     /// we run through `/bin/zsh -l -c` to source the user's profile first;
-    /// this finds `codex`. The CLI itself opens the browser for the OAuth
+    /// this finds `claude` or `codex`. The CLI itself opens the browser for the OAuth
     /// flow and writes the renewed token — no Terminal window and no macOS
     /// Automation permission needed (the AppleScript/Terminal approach was
     /// fragile under ad-hoc signing: TCC dropped the grant on every rebuild).
