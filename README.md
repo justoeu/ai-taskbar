@@ -85,8 +85,8 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 
 | Provider | Source | Setup |
 |---|---|---|
-| **Claude** | macOS Keychain entry `Claude Code-credentials` | Run `claude` once; use the in-app interactive authorization when requested |
-| **Codex / ChatGPT** | `~/.codex/auth.json` | Run `codex` CLI once. Zero setup. |
+| **Claude** | macOS Keychain entry `Claude Code-credentials` | Run `claude auth login`; use the in-app Keychain authorization when requested |
+| **Codex / ChatGPT** | `~/.codex/auth.json` | Run `codex login`. Zero setup after the CLI creates the file. |
 | **OpenRouter** | API key | Add `api_key = "sk-or-v1-..."` to `[openrouter]` in config |
 | **Z.AI (GLM)** | API key | Add `api_key = "..."` to `[zai]` in config |
 | **Kimi (Moonshot)** | API key | Add `api_key = "sk-..."` to `[kimi]` in config |
@@ -98,6 +98,27 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 > 1. **Put the key directly in `config.toml`** (file is `chmod 600`).
 > 2. Launch from a terminal: `OPENROUTER_API_KEY=sk-... open /Applications/AiTaskbar.app`.
 > 3. Set it globally: `launchctl setenv OPENROUTER_API_KEY "sk-..."` (until reboot).
+
+### OAuth recovery — **Authorize** vs **Re-login**
+
+These buttons solve different failures and are intentionally kept separate:
+
+| Failure | What the card shows | What the button does |
+|---|---|---|
+| macOS blocks AI Taskbar from silently reading Claude Code's Keychain item (`errSecInteractionNotAllowed` / `errSecAuthFailed`) | **Authorize** | Performs one user-initiated Keychain read through the native macOS dialog and keeps the credential only in process memory. It does not log in to Anthropic or rewrite Claude Code's ACL. |
+| Claude or ChatGPT rejects an existing OAuth access token with HTTP 401 | **Re-login** | Delegates login to the CLI that owns the shared credential: `claude auth login` for Claude or `codex login` for Codex/ChatGPT. The CLI opens the browser and writes the renewed credential. |
+
+The 401 banner appears inside the expanded provider card. AI Taskbar does not
+rotate a shared refresh token in its default read-only mode. After **Re-login**
+starts, it automatically retries the provider after 30 and 75 seconds; changes
+to Codex's `~/.codex/auth.json` also trigger an immediate debounced refresh. If
+the command cannot be launched, the card displays it so it can be copied and
+run manually. When cached usage exists, it remains visible as stale data while
+authentication is being repaired.
+
+An API-key provider does not get a **Re-login** button for 401 responses: its
+recovery is to replace the invalid key in `config.toml` or the configured
+environment variable.
 
 ### Claude Code on macOS — Keychain access
 
