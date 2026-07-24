@@ -29,7 +29,7 @@ public final class CostEstimator: ObservableObject {
         isLoading = true
         Task.detached(priority: .utility) {
             async let claude = Task { ClaudeSessionScanner.estimate() }
-            async let codex  = Task { CodexLogScanner.estimate() }
+            async let codex  = Task { CodexCost.estimate() }
             let claudeEstimate = await claude.value
             let codexEstimate  = await codex.value
             await MainActor.run { [self] in

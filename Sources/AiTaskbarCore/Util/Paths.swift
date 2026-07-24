@@ -54,6 +54,13 @@ public enum Paths {
         return home.appendingPathComponent(".codex/auth.json")
     }
 
+    /// Codex CLI rollout transcripts: `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`.
+    /// These carry the per-turn token accounting `CodexSessionScanner` prices.
+    public static func defaultCodexSessions() -> URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return home.appendingPathComponent(".codex/sessions")
+    }
+
     public static func ensureDir(_ url: URL) throws {
         // TOCTOU defense: refuse to use a symlinked target. If the user (or
         // an attacker with write to the parent) replaced

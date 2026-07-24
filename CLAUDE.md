@@ -112,6 +112,15 @@ contract, not an implementation detail.
 - Keep assertions atomic. One `#expect` per fact. Tests that fail with
   "expected 5, got 3" are useful; tests that fail with "got non-nil"
   send you to the debugger.
+- **NEVER write `#expect(x == true)` or `#expect(x == false)`.** On Swift
+  6.3.2 / Testing 0.99.0 that form **silently passes even when it is false** —
+  `#expect(false == true)` passes, while `#expect(1 == 2)` and `#expect(x)`
+  fail correctly, so the bug is specific to `Bool == Bool` inside the macro.
+  Every assert written that way defends nothing. Use the bare `#expect(x)`,
+  and for optionals `#expect(x ?? false)` — `#expect(s?.contains("a") == true)`
+  is the most common way this sneaks in. `scripts/validate.sh` ratchets the
+  remaining count (43 at the time of writing, spread over 17 files); drive it
+  down when you touch those files, never up.
 - For pure logic without I/O, you can still extend
   `Sources/AiTaskbarValidate/main.swift` — it runs faster than `swift test`
   for sanity checks and double-checks the `Testing` results.
@@ -342,6 +351,13 @@ user edits. See `config.example.toml` for the full schema.
   exposes no usage command and stores auth as encrypted Electron
   cookies/safeStorage. Revisit only if Google ships a real OAuth usage API.
   Do NOT build against `v1internal` or scrape Electron cookies.
+- **`codex-auto-review` is priced by estimate.** Codex writes that model alias
+  to its rollout logs for the automatic review pass, and OpenAI publishes no
+  rate for it, so `PricingTable.openai` carries it at the Codex flagship tier
+  (`gpt-5.3-codex`, $1.75/$14). It is not a negligible slice — on a real 7-day
+  window it was ~6% of the Codex total. Replace with published numbers when
+  they exist; do NOT drop the entry, since a missing key prices every review
+  turn at $0.
 - v0.2 candidates (open): start-at-login via `SMAppService` works only when
   the `.app` lives in `/Applications`; global hotkey via
   `MenuBarExtraAccess`; OpenAI Platform API (`sk-...`) for actual budget caps.

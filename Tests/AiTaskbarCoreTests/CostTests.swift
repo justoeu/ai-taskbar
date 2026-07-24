@@ -18,6 +18,44 @@ struct CostTests {
         #expect(m?.outputPer1M == 50)
     }
 
+    @Test("Opus 5 has explicit pricing at the $5/$25 tier")
+    func lookup_opus5() {
+        let m = PricingTable.lookup("claude-opus-5", table: PricingTable.anthropic)
+        #expect(m?.inputPer1M == 5)
+        #expect(m?.outputPer1M == 25)
+        #expect(m?.cacheReadPer1M == 0.5)
+        #expect(m?.cacheCreatePer1M == 6.25)
+    }
+
+    /// Session logs carry suffixed ids ("claude-opus-5-thinking"). The prefix
+    /// fallback must land on Opus 5's own entry — and critically NOT on
+    /// "claude-opus-4", which is a different (legacy, 3× pricier) tier.
+    @Test("Opus 5 suffixed variants resolve to Opus 5, not the legacy Opus 4 tier")
+    func lookup_opus5_variant() {
+        let m = PricingTable.lookup("claude-opus-5-thinking", table: PricingTable.anthropic)
+        #expect(m?.inputPer1M == 5)
+        #expect(m?.outputPer1M == 25)
+    }
+
+    /// Codex writes deployment-suffixed ids to its rollout logs. "gpt-5.6-sol"
+    /// must resolve to gpt-5.6 ($5) — a first-match scan could pick gpt-5
+    /// ($1.25) and under-report by 4×.
+    @Test("Codex's gpt-5.6-sol resolves to the gpt-5.6 tier")
+    func lookup_gpt56_sol() {
+        let m = PricingTable.lookup("gpt-5.6-sol", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 5)
+        #expect(m?.outputPer1M == 30)
+    }
+
+    /// Codex's auto-review alias has no published rate; an explicit estimate
+    /// beats `nil`, which would silently price every review turn at $0.
+    @Test("codex-auto-review is priced rather than silently dropped")
+    func lookup_codex_auto_review() {
+        let m = PricingTable.lookup("codex-auto-review", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 1.75)
+        #expect(m?.outputPer1M == 14)
+    }
+
     @Test("legacy Opus 4.0/4.1 still price at the old tier via prefix")
     func lookup_legacy_opus() {
         let m = PricingTable.lookup("claude-opus-4-1", table: PricingTable.anthropic)
@@ -32,19 +70,50 @@ struct CostTests {
         #expect(m?.outputPer1M == 10)
     }
 
-    @Test("GPT-5.6 has an explicit entry, not silently prefix-dropped to gpt-5")
-    func lookup_gpt56() {
-        let m = PricingTable.lookup("gpt-5.6", table: PricingTable.openai)
-        #expect(m?.inputPer1M == 5)
-        #expect(m?.outputPer1M == 30)
+    /// The three GPT-5.6 variants that actually exist, each at its own tier.
+    /// A single bare `gpt-5.6` key used to catch all three by prefix, which
+    /// over-reported terra by 2x and luna by 5x — invisible on a machine that
+    /// only runs sol.
+    @Test("each real GPT-5.6 variant prices at its own tier")
+    func lookup_gpt56_variants() {
+        let sol = PricingTable.lookup("gpt-5.6-sol", table: PricingTable.openai)
+        #expect(sol?.inputPer1M == 5)
+        #expect(sol?.outputPer1M == 30)
+        let terra = PricingTable.lookup("gpt-5.6-terra", table: PricingTable.openai)
+        #expect(terra?.inputPer1M == 2.5)
+        #expect(terra?.outputPer1M == 15)
+        let luna = PricingTable.lookup("gpt-5.6-luna", table: PricingTable.openai)
+        #expect(luna?.inputPer1M == 1)
+        #expect(luna?.outputPer1M == 6)
     }
 
-    @Test("GPT-5.6 variants resolve via longest-prefix match")
-    func lookup_gpt56_variants() {
-        let pro = PricingTable.lookup("gpt-5.6-pro", table: PricingTable.openai)
-        #expect(pro?.inputPer1M == 30)
-        let mini = PricingTable.lookup("gpt-5.6-mini", table: PricingTable.openai)
-        #expect(mini?.inputPer1M == 0.75)
+    /// An unlisted 5.6 variant must land on the 5.6 catch-all, NOT fall
+    /// through to `gpt-5` ($1.25) — that would under-report by 4x, and
+    /// under-reporting is the failure mode nobody notices.
+    @Test("unknown GPT-5.6 variant hits the 5.6 catch-all, not gpt-5")
+    func lookup_gpt56_unknown_variant() {
+        let m = PricingTable.lookup("gpt-5.6-nova", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 5)
+    }
+
+    /// `gpt-5.6-pro` and `gpt-5.6-mini` do not exist. Asserting their absence
+    /// keeps a future edit from re-adding fiction the gate would then defend.
+    @Test("fictional GPT-5.6 variants are not exact keys")
+    func no_fictional_gpt56_keys() {
+        #expect(PricingTable.openai["gpt-5.6-pro"] == nil)
+        #expect(PricingTable.openai["gpt-5.6-mini"] == nil)
+    }
+
+    /// The `-pro` models have no prompt caching, so `cacheReadPer1M` is nil by
+    /// design. `CostMath` falls back to the INPUT rate ($30/MTok) for cached
+    /// tokens — harmless only while those models truly report none. This pins
+    /// the reasoning so a stray cached count can't quietly bill 60x.
+    @Test("pro tiers carry no cache rate and fall back to input")
+    func pro_tier_cache_fallback_is_explicit() {
+        let pro = PricingTable.lookup("gpt-5.5-pro", table: PricingTable.openai)
+        #expect(pro?.cacheReadPer1M == nil)
+        let usage = ModelUsage(inputTokens: 0, outputTokens: 0, cacheReadTokens: 1_000_000)
+        #expect(CostMath.cost(usage: usage, pricing: pro!) == 30)
     }
 
     @Test("lookup falls back to prefix")

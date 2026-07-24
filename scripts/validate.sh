@@ -84,5 +84,27 @@ if [ -f "$codex_auth" ]; then
     [ "$perm" = "600" ] && ok "~/.codex/auth.json 0600" || fail "codex auth $perm (expected 600)"
 fi
 
+bold "[7/7] doc mirror + assert sanity"
+# CLAUDE.md and AGENTS.md are the same document for two different agents.
+# They were byte-identical for the project's whole history until an edit
+# landed in one only — and AGENTS.md is what the Codex CLI reads, so the
+# divergence silently hid guidance written FOR that agent. Convention alone
+# didn't hold it; this does.
+if ! cmp -s CLAUDE.md AGENTS.md; then
+    fail "CLAUDE.md and AGENTS.md diverged — run: cp CLAUDE.md AGENTS.md"
+fi
+ok "CLAUDE.md ≡ AGENTS.md"
+
+# `#expect(x == true)` silently PASSES on Swift 6.3.2 / Testing 0.99.0 even
+# when x is false (verified: `#expect(false == true)` passes, while
+# `#expect(1 == 2)` and `#expect(x)` fail correctly). Any assert written that
+# way is vacuous — it can never fail, so it defends nothing. Use the bare
+# `#expect(x)` form instead. Guard the count so the number can only go down.
+vacuous=$(grep -rn '#expect(.*== *\(true\|false\))' Tests/ 2>/dev/null | wc -l | tr -d ' ')
+if [ "$vacuous" -gt 43 ]; then
+    fail "$vacuous vacuous '#expect(… == true/false)' asserts (was 43) — use bare #expect(x)"
+fi
+ok "vacuous asserts: $vacuous (ratchet ≤ 43)"
+
 echo
 bold "✓ All validations passed."
