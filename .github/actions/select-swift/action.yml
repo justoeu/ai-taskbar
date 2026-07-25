@@ -1,0 +1,71 @@
+name: Select Swift toolchain
+description: >
+  Selects the newest Xcode on the runner and fails if its Swift predates the
+  minimum this package compiles with.
+
+# Why this is a shared action rather than a step copied into each workflow:
+#
+# ci.yml and release.yml each picked their own toolchain, and they drifted.
+# CI selected the newest Xcode (Swift 6.2.4) while release.yml stayed pinned to
+# `/Applications/Xcode_16.app` (Swift 6.0) — on the SAME macos-15 runner. The
+# pin did not fail, it just quietly built with a two-minor-versions-older
+# compiler, so `main` was green and the tagged release was not.
+#
+# That is exactly what happened on v0.16.0: `SecretBox.key` is a
+# `static let SymmetricKey`, which is an error under 6.0's CryptoKit (not yet
+# Sendable) and clean from 6.2 on. CI never saw it. The release job did, after
+# the tag was already pushed and unrevocable.
+#
+# One definition, used by every job that compiles, is the only version of this
+# that cannot drift again.
+
+inputs:
+  minimum:
+    description: >
+      Minimum acceptable Swift version as MAJOR.MINOR. Defaults to 6.2 — the
+      oldest toolchain this package is known to compile under. Do NOT lower
+      this to make a runner pass; a runner without a new enough Xcode should
+      fail loudly rather than produce a build the maintainer never tested.
+    required: false
+    default: '6.2'
+
+runs:
+  using: composite
+  steps:
+    - name: Select newest Xcode and verify Swift version
+      shell: bash
+      env:
+        MINIMUM: ${{ inputs.minimum }}
+      run: |
+        set -euo pipefail
+
+        latest=$(find /Applications -maxdepth 1 -name 'Xcode*.app' 2>/dev/null | sort -V | tail -1)
+        if [ -z "$latest" ]; then
+          echo "::error::no Xcode found under /Applications on this runner"
+          exit 1
+        fi
+        sudo xcode-select -s "$latest/Contents/Developer"
+
+        full=$(swift --version 2>&1 | sed -n 's/.*Apple Swift version \([0-9][0-9.]*\).*/\1/p' | head -1)
+        if [ -z "$full" ]; then
+          echo "::error::could not parse a Swift version from: $(swift --version 2>&1 | head -1)"
+          exit 1
+        fi
+
+        major=${full%%.*}
+        rest=${full#*.}
+        minor=${rest%%.*}
+        [ "$minor" = "$full" ] && minor=0
+        need_major=${MINIMUM%%.*}
+        need_minor=${MINIMUM#*.}
+
+        echo "Selected $latest — Swift $full (minimum $MINIMUM)"
+
+        if [ "$major" -lt "$need_major" ] \
+           || { [ "$major" -eq "$need_major" ] && [ "$minor" -lt "$need_minor" ]; }; then
+          echo "::error::Swift $full is older than the required $MINIMUM."
+          echo "The newest Xcode on this runner is $latest. A build from this"
+          echo "toolchain is not one the maintainer has tested — failing rather"
+          echo "than shipping it."
+          exit 1
+        fi

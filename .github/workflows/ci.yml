@@ -17,23 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Select newest Swift 6 toolchain
-        # Was hard-pinned to /Applications/Xcode_16.app, which is brittle (the
-        # runner image drops old Xcodes) and left CI two minor versions behind
-        # the toolchain the release is actually built with locally — a bug that
-        # only manifests on one of them is invisible until release day. Take
-        # the newest Xcode the image offers and FAIL if it predates Swift 6,
-        # rather than silently falling back to a toolchain that can't parse
-        # `swift-tools-version: 6.0`.
-        run: |
-          latest=$(find /Applications -maxdepth 1 -name 'Xcode*.app' 2>/dev/null | sort -V | tail -1)
-          if [ -z "$latest" ]; then echo "no Xcode found on runner"; exit 1; fi
-          sudo xcode-select -s "$latest/Contents/Developer"
-          major=$(swift --version 2>&1 | sed -n 's/.*Apple Swift version \([0-9]*\).*/\1/p' | head -1)
-          echo "Selected $latest (Swift major: $major)"
-          if [ -z "$major" ] || [ "$major" -lt 6 ]; then
-            echo "need Swift 6+, got: $(swift --version 2>&1 | head -1)"; exit 1
-          fi
+      # Shared with release.yml on purpose — see the comment in the action.
+      # These two jobs used to choose independently and drifted a full two
+      # minor versions apart on the same runner image.
+      - uses: ./.github/actions/select-swift
 
       - name: Show toolchain
         run: |
