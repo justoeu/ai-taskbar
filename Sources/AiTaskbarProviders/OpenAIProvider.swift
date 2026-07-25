@@ -15,13 +15,6 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
     private let manageOAuthRefresh: Bool
     private static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
-    /// PII fields the upstream response carries that we strip before caching
-    /// to disk. These travel back to the user via the `user_id`/`account_id`/
-    /// `email` triple — none of which we need for the snapshot.
-    private static let piiFieldsToStrip: Set<String> = [
-        "user_id", "account_id", "email",
-    ]
-
     // Memoize the plan label keyed on the id_token. Reading auth.json + a
     // base64url JWT decode on every cache hit was wasteful; now we re-compute
     // only when the token actually rotates (i.e. after a refresh).
@@ -122,45 +115,13 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
         return try Self.stripPII(from: rawBytes)
     }
 
-    /// Removes `user_id`, `account_id`, `email` from the response before
-    /// persisting. Walks the entire `JSONValue` tree recursively — not just
-    /// the top level — because nested objects (e.g. `{"data":{"user_id":…}}`)
-    /// would otherwise survive into the on-disk cache at
-    /// `~/Library/Caches/ai-taskbar/openai/usage.json`. The cache file is
-    /// already `0600`, but stripping PII at every depth is defense-in-depth
-    /// (the intent of this function is clearly "remove these fields", not
-    /// "remove them only when convenient"). Falls back to returning the raw
-    /// bytes if the response isn't a JSON object.
+    /// Removes identifying fields from the response before persisting it to
+    /// `~/Library/Caches/ai-taskbar/openai/usage.json`. Delegates to the
+    /// shared `PIIScrub` so the success path and `CachedFetch`'s error path
+    /// (which writes `.last_error`) cannot drift apart — they did: only this
+    /// one was scrubbed.
     public static func stripPII(from raw: Data) throws -> Data {
-        guard let value = try? SharedCoders.decoder.decode(JSONValue.self, from: raw) else {
-            return raw
-        }
-        // Only rewrite when the top level is an object — preserves the
-        // original byte-stable behavior for non-object payloads (arrays,
-        // scalars) that have nothing to strip anyway.
-        guard case .object = value else {
-            return raw
-        }
-        let scrubbed = Self.scrubPII(in: value)
-        return try SharedCoders.encoder.encode(scrubbed)
-    }
-
-    /// Recursive PII scrub. Removes the named keys from every object in the
-    /// tree (including nested ones); leaves arrays and scalars untouched.
-    private static func scrubPII(in value: JSONValue) -> JSONValue {
-        switch value {
-        case .object(let obj):
-            var cleaned: [String: JSONValue] = [:]
-            cleaned.reserveCapacity(obj.count)
-            for (k, v) in obj where !piiFieldsToStrip.contains(k) {
-                cleaned[k] = scrubPII(in: v)
-            }
-            return .object(cleaned)
-        case .array(let arr):
-            return .array(arr.map(scrubPII(in:)))
-        default:
-            return value
-        }
+        PIIScrub.scrub(bytes: raw)
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {

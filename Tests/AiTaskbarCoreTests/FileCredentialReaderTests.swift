@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 @testable import AiTaskbarCore
 
@@ -277,7 +278,7 @@ struct CodexReconciliationTests {
         let d = auth(1000)
         let v = CodexReconciliation.pick(disk: d, pending: nil)
         #expect(v?.credentials == d)
-        #expect(v?.dropPending == false)
+        expectFalse(v?.dropPending ?? true)
     }
 
     @Test("pending only → pending (the ACL/I/O failure safety net)")
@@ -285,7 +286,7 @@ struct CodexReconciliationTests {
         let p = auth(2000)
         let v = CodexReconciliation.pick(disk: nil, pending: p)
         #expect(v?.credentials == p)
-        #expect(v?.dropPending == false)
+        expectFalse(v?.dropPending ?? true)
     }
 
     @Test("disk fresher → disk wins, drop pending")
@@ -294,7 +295,7 @@ struct CodexReconciliationTests {
         let p = auth(1000)
         let v = CodexReconciliation.pick(disk: d, pending: p)
         #expect(v?.credentials == d)
-        #expect(v?.dropPending == true)
+        expectTrue(v?.dropPending ?? false)
     }
 
     @Test("pending fresher → pending wins, keep pending")
@@ -303,7 +304,7 @@ struct CodexReconciliationTests {
         let p = auth(2000)
         let v = CodexReconciliation.pick(disk: d, pending: p)
         #expect(v?.credentials == p)
-        #expect(v?.dropPending == false)
+        expectFalse(v?.dropPending ?? true)
     }
 
     @Test("equal exp → disk wins (tiebreak for clean recovery)")
@@ -312,7 +313,7 @@ struct CodexReconciliationTests {
         let p = auth(1500, token: "pending")
         let v = CodexReconciliation.pick(disk: d, pending: p)
         #expect(v?.credentials.tokens.accessToken == "disk")
-        #expect(v?.dropPending == true)
+        expectTrue(v?.dropPending ?? false)
     }
 
     @Test("malformed id_tokens on both → disk wins (Int64.min tiebreak)")
@@ -322,6 +323,6 @@ struct CodexReconciliationTests {
                             accountId: nil)
         let v = CodexReconciliation.pick(disk: bad, pending: bad)
         #expect(v?.credentials == bad)
-        #expect(v?.dropPending == true)
+        expectTrue(v?.dropPending ?? false)
     }
 }

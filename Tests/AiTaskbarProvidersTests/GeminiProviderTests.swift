@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 @testable import AiTaskbarCore
 @testable import AiTaskbarProviders
@@ -64,7 +65,7 @@ struct GeminiProviderTests {
         // Authorization MUST NOT carry a Bearer prefix (this isn't Bearer auth).
         #expect(req?.value(forHTTPHeaderField: "Authorization") == nil)
         // Query string MUST NOT carry the key (header form keeps it out of logs).
-        #expect((req?.url?.query ?? "").contains("key=") == false)
+        expectFalse((req?.url?.query ?? "").contains("key="))
         try? FileManager.default.removeItem(at: tmpCacheDir)
         StubURLProtocol.reset()
     }
@@ -119,7 +120,7 @@ struct GeminiProviderTests {
         let parsed = try JSONDecoder().decode(GeminiModelsResponse.self, from: payload)
         let snap = parsed.toSnapshot()
         #expect(snap.modelCount == 0)
-        #expect(snap.status?.detail?.contains("Unexpected response shape") == true)
+        expectTrue(snap.status?.detail?.contains("Unexpected response shape") ?? false)
     }
 
     @Test("missing `models` field surfaces AppError.schema from the production decode path")

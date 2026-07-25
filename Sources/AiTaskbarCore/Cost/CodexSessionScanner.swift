@@ -95,6 +95,9 @@ public enum CodexSessionScanner {
         var loss = ScanLoss()
 
         for case let url as URL in walker {
+            // See ClaudeSessionScanner: cooperate with cancellation so a
+            // superseded refresh stops instead of finishing for nobody.
+            if Task.isCancelled { break }
             guard url.pathExtension == "jsonl" else { continue }
             if let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
                let mtime = attrs.contentModificationDate, mtime < sevenDaysAgo {
@@ -266,7 +269,7 @@ public enum CodexSessionScanner {
 
             let parsed: RolloutLine
             do {
-                parsed = try SharedCoders.decoder.decode(RolloutLine.self, from: Data(line))
+                parsed = try SharedCoders.decoder.decode(RolloutLine.self, from: line)
             } catch {
                 // A line that passed the byte prefilter but won't decode is a
                 // schema drift signal — exactly how the sqlite scanner died

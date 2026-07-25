@@ -12,26 +12,26 @@ struct UsageWindowResetTests {
     func future_reset() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let w = window(resetsAt: now.addingTimeInterval(60))
-        #expect(w.isAwaitingReset(now: now) == false)
+        #expect(!w.isAwaitingReset(now: now))
     }
 
     @Test("past reset awaits refresh")
     func past_reset() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let w = window(resetsAt: now.addingTimeInterval(-1))
-        #expect(w.isAwaitingReset(now: now) == true)
+        #expect(w.isAwaitingReset(now: now))
     }
 
     @Test("reset exactly now awaits refresh")
     func boundary_reset() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let w = window(resetsAt: now)
-        #expect(w.isAwaitingReset(now: now) == true)
+        #expect(w.isAwaitingReset(now: now))
     }
 
     @Test("nil resetsAt never awaits")
     func nil_reset() {
         let now = Date(timeIntervalSince1970: 1_000_000)
-        #expect(window(resetsAt: nil).isAwaitingReset(now: now) == false)
+        #expect(!(window(resetsAt: nil).isAwaitingReset(now: now)))
     }
 }

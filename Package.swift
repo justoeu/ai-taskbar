@@ -46,6 +46,16 @@ let package = Package(
             dependencies: ["AiTaskbarCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // Assertion helpers for the test targets only. Kept OUT of
+        // AiTaskbarTesting because that one is linked by the
+        // AiTaskbarValidate executable, which must not pull in swift-testing.
+        .target(
+            name: "AiTaskbarTestSupport",
+            dependencies: [
+                .product(name: "Testing", package: "swift-testing"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         .executableTarget(
             name: "AiTaskbarValidate",
             dependencies: ["AiTaskbarCore", "AiTaskbarProviders", "AiTaskbarTesting"],
@@ -54,14 +64,14 @@ let package = Package(
         .testTarget(
             name: "AiTaskbarCoreTests",
             dependencies: [
-                "AiTaskbarCore", "AiTaskbarTesting",
+                "AiTaskbarCore", "AiTaskbarTesting", "AiTaskbarTestSupport",
                 .product(name: "Testing", package: "swift-testing"),
             ]
         ),
         .testTarget(
             name: "AiTaskbarProvidersTests",
             dependencies: [
-                "AiTaskbarProviders", "AiTaskbarTesting",
+                "AiTaskbarProviders", "AiTaskbarTesting", "AiTaskbarTestSupport",
                 .product(name: "Testing", package: "swift-testing"),
             ]
         ),
@@ -71,6 +81,7 @@ let package = Package(
                 "AiTaskbarApp",
                 "AiTaskbarCore",
                 "AiTaskbarProviders",
+                "AiTaskbarTestSupport",
                 .product(name: "Testing", package: "swift-testing"),
             ]
         ),

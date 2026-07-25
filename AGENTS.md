@@ -112,15 +112,30 @@ contract, not an implementation detail.
 - Keep assertions atomic. One `#expect` per fact. Tests that fail with
   "expected 5, got 3" are useful; tests that fail with "got non-nil"
   send you to the debugger.
-- **NEVER write `#expect(x == true)` or `#expect(x == false)`.** On Swift
-  6.3.2 / Testing 0.99.0 that form **silently passes even when it is false** —
-  `#expect(false == true)` passes, while `#expect(1 == 2)` and `#expect(x)`
-  fail correctly, so the bug is specific to `Bool == Bool` inside the macro.
-  Every assert written that way defends nothing. Use the bare `#expect(x)`,
-  and for optionals `#expect(x ?? false)` — `#expect(s?.contains("a") == true)`
-  is the most common way this sneaks in. `scripts/validate.sh` ratchets the
-  remaining count (43 at the time of writing, spread over 17 files); drive it
-  down when you touch those files, never up.
+- **`#expect` cannot be trusted with `Bool`-typed sub-expressions on this
+  toolchain (Apple Swift 6.3.2 / Testing 0.99.0).** Every one of these PASSES
+  with a value that makes it false — verified by running them, not inferred:
+
+  ```swift
+  #expect(false == true)                                 // passes (!)
+  let x: Bool? = false; #expect(x ?? false)               // passes (!)
+  let x: Bool? = true;  #expect(x == Optional(false))     // passes (!)
+  let x: Bool? = true;  #expect(x.map { !$0 } ?? false)   // passes (!)
+  ```
+
+  and one is inverted outright: `#expect(!(x ?? true))` **fails** for
+  `x == .some(false)`, where plain Swift evaluates the same expression to
+  `true`. This was found because 43 asserts across 16 files were written the
+  `== true` way and none of them could ever fail; fixing them surfaced a real
+  dead-code bug in `ClaudeSessionScanner` that had been invisible for months.
+
+  **Rule:** for any condition involving an optional, use `expectTrue` /
+  `expectFalse` from `AiTaskbarTestSupport`. They take a plain `Bool`
+  *parameter*, so the condition is evaluated as ordinary Swift at the call
+  site and the macro only ever sees a bare identifier. A non-optional
+  `#expect(flag)` / `#expect(!flag)` is safe, and so are non-`Bool`
+  comparisons (`#expect(3 == 4)` and `#expect(s == "b")` fail correctly).
+  `scripts/validate.sh` fails the build on any known-vacuous form.
 - For pure logic without I/O, you can still extend
   `Sources/AiTaskbarValidate/main.swift` — it runs faster than `swift test`
   for sanity checks and double-checks the `Testing` results.
@@ -351,6 +366,14 @@ user edits. See `config.example.toml` for the full schema.
   exposes no usage command and stores auth as encrypted Electron
   cookies/safeStorage. Revisit only if Google ships a real OAuth usage API.
   Do NOT build against `v1internal` or scrape Electron cookies.
+- **TOMLKit is the single runtime dependency and is effectively unmaintained**
+  (no release in ~2.5 years, no commits in ~18 months, pinned at 0.6.0 in
+  `Package.resolved`). It is not currently a problem — it parses a local
+  config file we write the schema for, it has no network surface, and the
+  pinned version is reproducible. It is a *migration risk*: if it stops
+  building on a future Swift, the options are vendoring the ~2k lines we
+  actually use or hand-rolling the small TOML subset `AppConfig` needs.
+  Re-evaluate whenever a Swift major lands; don't swap it out preemptively.
 - **`codex-auto-review` is priced by estimate.** Codex writes that model alias
   to its rollout logs for the automatic review pass, and OpenAI publishes no
   rate for it, so `PricingTable.openai` carries it at the Codex flagship tier

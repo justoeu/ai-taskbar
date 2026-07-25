@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 @testable import AiTaskbarCore
 @testable import AiTaskbarProviders
@@ -15,7 +16,7 @@ struct WireTypesEdgeTests {
                                      fallbackNow: Date(timeIntervalSince1970: 0))
         #expect(snap.creditsUSD == 7)
         // Approx cloud messages branch (cloud → "cloud msgs left").
-        #expect(snap.messageCountRange?.contains("cloud") == true)
+        expectTrue(snap.messageCountRange?.contains("cloud") ?? false)
     }
 
     @Test("OpenRouter free tier uses fallback planLabel")

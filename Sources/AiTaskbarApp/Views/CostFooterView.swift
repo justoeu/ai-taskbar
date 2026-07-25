@@ -145,6 +145,12 @@ public struct CostFooterView: View {
             Text(Self.shortModelName(row.name))
                 .font(.subheadline.monospaced())
                 .foregroundStyle(.secondary)
+                // The model id comes from a transcript we don't control, so
+                // its length and content are untrusted: a 500-character id or
+                // one containing a newline would otherwise stretch or wrap the
+                // popover around it.
+                .lineLimit(1)
+                .truncationMode(.middle)
             Spacer(minLength: 6)
             if row.usdToday > 0 {
                 Text(String(format: "$%.2f", row.usdToday))

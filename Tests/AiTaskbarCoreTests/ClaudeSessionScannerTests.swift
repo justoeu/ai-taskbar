@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 @testable import AiTaskbarCore
 
@@ -112,7 +113,7 @@ struct ClaudeSessionScannerTests {
             .appendingPathComponent("ai-taskbar-no-such-\(UUID().uuidString)")
         let est = ClaudeSessionScanner.estimate(projectsDir: nonexistent)
         #expect(est.usdToday == 0)
-        #expect(est.note?.contains("No ~/.claude/projects directory.") == true)
+        expectTrue(est.note?.contains("No ~/.claude/projects directory.") ?? false)
     }
 
     @Test("estimate with empty projectsDir → returns 'no recent sessions' note")
@@ -123,7 +124,7 @@ struct ClaudeSessionScannerTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let est = ClaudeSessionScanner.estimate(projectsDir: dir)
         #expect(est.usdToday == 0)
-        #expect(est.note?.contains("No recent Claude sessions") == true)
+        expectTrue(est.note?.contains("No recent Claude sessions") ?? false)
     }
 
     @Test("estimate(now:) on missing ~/.claude/projects returns empty estimate")

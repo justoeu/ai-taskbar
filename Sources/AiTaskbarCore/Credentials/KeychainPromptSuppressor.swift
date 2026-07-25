@@ -39,6 +39,24 @@ public enum KeychainPromptSuppressor {
         return try body()
     }
 
+    /// Runs `body` with SecurityAgent prompts explicitly ENABLED, then
+    /// restores whatever state the current suppression depth implies.
+    ///
+    /// The user-initiated read used to call
+    /// `SecKeychainSetUserInteractionAllowed(true)` directly. That flag is
+    /// process-global, so doing it outside this lock could flip interaction on
+    /// underneath a concurrent suppressed section — and when that section
+    /// exited it would restore `true` regardless, leaving the process able to
+    /// prompt on a scheduled refresh. Going through the same lock makes the
+    /// interactive window explicit and bounded.
+    public static func withPromptsAllowed<T>(_ body: () throws -> T) rethrows -> T {
+        depth.withLock { _ in setInteractionAllowed(true) }
+        defer {
+            depth.withLock { d in setInteractionAllowed(d == 0) }
+        }
+        return try body()
+    }
+
     /// Internal-visibility seam so tests can drive the reference counting
     /// without touching the real (process-global) securityd flag.
     internal static func enter(apply: @Sendable (Bool) -> Void = Self.setInteractionAllowed) {

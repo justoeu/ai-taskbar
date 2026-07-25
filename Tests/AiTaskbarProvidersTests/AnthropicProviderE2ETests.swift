@@ -122,7 +122,7 @@ struct AnthropicProviderE2ETests {
 
         let outcome = try await provider.fetchUsage(forceRefresh: true)
 
-        #expect(outcome.isStale == false)
+        #expect(!outcome.isStale)
         #expect(mock.invalidateCalls == 1)
         #expect(requestCount == 2)
         #expect(StubURLProtocol.captured.last?.value(forHTTPHeaderField: "Authorization") == "Bearer fresh")
@@ -229,7 +229,7 @@ struct AnthropicProviderE2ETests {
 
         // No OAuth exchange, no Keychain write-back: the monitor left the
         // shared credential untouched.
-        #expect(hitOAuth == false)
+        #expect(!hitOAuth)
         #expect(mock.writeBackCalls.isEmpty)
         // The stored (expired) access token was used as-is.
         let auth = StubURLProtocol.captured.last?.value(forHTTPHeaderField: "Authorization")

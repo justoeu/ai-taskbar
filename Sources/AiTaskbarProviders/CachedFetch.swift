@@ -40,14 +40,20 @@ public struct CachedFetch: Sendable {
             // surface why the live fetch failed (credential ACL mismatch,
             // schema drift, transport error, etc.). status = 0 conventionally
             // means "no HTTP response" — distinguishes from 4xx/5xx.
+            // Scrub before persisting: `.last_error` is written to disk, and
+            // a vendor's 4xx body can echo the account back (user_id, email).
+            // The success path has always been scrubbed; this one had not.
             if case .http(let status, let body) = appErr {
-                cache.markFailed(FetchError(status: status, body: body))
+                cache.markFailed(FetchError(status: status,
+                                            body: PIIScrub.scrub(diagnostic: body)))
             } else {
-                cache.markFailed(FetchError(status: 0, body: appErr.description))
+                cache.markFailed(FetchError(status: 0,
+                                            body: PIIScrub.scrub(diagnostic: appErr.description)))
             }
             return try fallback(error: appErr, decode: decode)
         } catch {
-            cache.markFailed(FetchError(status: 0, body: String(describing: error)))
+            cache.markFailed(FetchError(status: 0,
+                                        body: PIIScrub.scrub(diagnostic: String(describing: error))))
             return try fallback(error: error, decode: decode)
         }
     }

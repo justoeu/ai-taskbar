@@ -7,7 +7,10 @@ build/
 xcuserdata/
 
 # SPM resolved (regenerated on swift build; commit if you want reproducible dep versions)
-Package.resolved
+# Package.resolved IS committed on purpose: it pins the exact revision of
+# every dependency, so a signed/notarized release can be rebuilt bit-for-bit
+# later. Ignoring it means `make release` resolves whatever upstream tags
+# point at that day — the artifact users install is then unreproducible.
 
 # macOS
 .DS_Store

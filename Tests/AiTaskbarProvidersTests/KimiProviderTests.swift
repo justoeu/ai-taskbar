@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 @testable import AiTaskbarCore
 @testable import AiTaskbarProviders
@@ -26,7 +27,7 @@ struct KimiProviderTests {
         #expect(snap.voucherUSD == 30.00)
         #expect(snap.cashUSD == 57.65)
         #expect(snap.balance?.label == "Balance")
-        #expect(snap.balance?.detail?.contains("87.65") == true)
+        expectTrue(snap.balance?.detail?.contains("87.65") ?? false)
         #expect(snap.planLabel == "Moonshot · Kimi")
     }
 

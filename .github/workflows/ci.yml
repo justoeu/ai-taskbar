@@ -17,10 +17,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Select Xcode 16 (Swift 6)
-        # Pin to a known Xcode that ships Swift 6.0 so `swift test` finds
-        # `Testing.framework` and the testTargets compile.
-        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+      - name: Select newest Swift 6 toolchain
+        # Was hard-pinned to /Applications/Xcode_16.app, which is brittle (the
+        # runner image drops old Xcodes) and left CI two minor versions behind
+        # the toolchain the release is actually built with locally — a bug that
+        # only manifests on one of them is invisible until release day. Take
+        # the newest Xcode the image offers and FAIL if it predates Swift 6,
+        # rather than silently falling back to a toolchain that can't parse
+        # `swift-tools-version: 6.0`.
+        run: |
+          latest=$(find /Applications -maxdepth 1 -name 'Xcode*.app' 2>/dev/null | sort -V | tail -1)
+          if [ -z "$latest" ]; then echo "no Xcode found on runner"; exit 1; fi
+          sudo xcode-select -s "$latest/Contents/Developer"
+          major=$(swift --version 2>&1 | sed -n 's/.*Apple Swift version \([0-9]*\).*/\1/p' | head -1)
+          echo "Selected $latest (Swift major: $major)"
+          if [ -z "$major" ] || [ "$major" -lt 6 ]; then
+            echo "need Swift 6+, got: $(swift --version 2>&1 | head -1)"; exit 1
+          fi
 
       - name: Show toolchain
         run: |
@@ -28,13 +41,24 @@ jobs:
           xcodebuild -version || true
           uname -a
 
+      - name: Doc mirror + assert sanity
+        # These live in scripts/validate.sh, which CI does not run end to end.
+        # Without them a diverged AGENTS.md or a vacuous #expect only gets
+        # caught on whichever machine happens to run validate next.
+        run: |
+          cmp -s CLAUDE.md AGENTS.md || { echo "CLAUDE.md and AGENTS.md diverged — run: cp CLAUDE.md AGENTS.md"; exit 1; }
+          if grep -rnE '#expect\((.*== *(true|false)\)|.*\?\? *(true|false)\)|.*== *Optional\()' Tests/; then
+            echo "vacuous #expect form(s) — use expectTrue/expectFalse (AiTaskbarTestSupport)"; exit 1
+          fi
+          echo "OK"
+
       - name: Compile (debug)
         run: swift build -c debug
 
       - name: Runtime validation suite
-        # Mirrors the suite that `make validate` runs locally — 145+
-        # assertions covering wire types, JSONValue, KimiConfig URL whitelist,
-        # OpenAI PII strip, DiskCache TTL, AtomicFileWrite perms, etc.
+        # Mirrors the suite that `make validate` runs locally (251 assertions
+        # at the time of writing) covering wire types, JSONValue, KimiConfig
+        # URL whitelist, PII scrub, DiskCache TTL, AtomicFileWrite perms, etc.
         run: swift run ai-taskbar-validate
 
       - name: swift test + coverage gate (≥90%)

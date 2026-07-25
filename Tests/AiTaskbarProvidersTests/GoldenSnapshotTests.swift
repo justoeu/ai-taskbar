@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 @testable import AiTaskbarCore
 @testable import AiTaskbarProviders
@@ -183,7 +184,7 @@ struct GoldenSnapshotTests {
         #expect(snap.totalBalance == 110.00)
         #expect(snap.grantedBalance == 10.00)
         #expect(snap.toppedUpBalance == 100.00)
-        #expect(snap.isAvailable == true)
+        expectTrue(snap.isAvailable ?? false)
         #expect(snap.balance?.label == "Balance")
         #expect(snap.balance?.utilizationPercent == 0)
         #expect(snap.balance?.detail == "$110.00 available")

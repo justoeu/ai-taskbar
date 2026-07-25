@@ -95,16 +95,28 @@ if ! cmp -s CLAUDE.md AGENTS.md; then
 fi
 ok "CLAUDE.md ≡ AGENTS.md"
 
-# `#expect(x == true)` silently PASSES on Swift 6.3.2 / Testing 0.99.0 even
-# when x is false (verified: `#expect(false == true)` passes, while
-# `#expect(1 == 2)` and `#expect(x)` fail correctly). Any assert written that
-# way is vacuous — it can never fail, so it defends nothing. Use the bare
-# `#expect(x)` form instead. Guard the count so the number can only go down.
-vacuous=$(grep -rn '#expect(.*== *\(true\|false\))' Tests/ 2>/dev/null | wc -l | tr -d ' ')
-if [ "$vacuous" -gt 43 ]; then
-    fail "$vacuous vacuous '#expect(… == true/false)' asserts (was 43) — use bare #expect(x)"
+# `#expect` mis-evaluates Bool-typed sub-expressions on Swift 6.3.2 /
+# Testing 0.99.0. These forms all PASS with values that make them false —
+# verified by running them, not by reading the macro:
+#
+#   #expect(false == true)                    #expect(opt ?? false)
+#   #expect(opt == Optional(false))           #expect(opt.map { !$0 } ?? false)
+#
+# and `#expect(!(opt ?? true))` is inverted outright: it FAILS where plain
+# Swift evaluates the same expression to true. An assert written any of these
+# ways defends nothing. Use expectTrue/expectFalse from AiTaskbarTestSupport,
+# which take a plain Bool parameter so the condition is evaluated as ordinary
+# Swift before the macro sees it. Bare `#expect(flag)` / `#expect(!flag)` on a
+# non-optional Bool is fine, as are non-Bool comparisons.
+vacuous_re='#expect\((.*== *(true|false)\)|.*\?\? *(true|false)\)|.*== *Optional\()'
+# `|| true` is load-bearing under `set -o pipefail`: grep exits 1 when it finds
+# nothing, which is the PASSING case here and would otherwise abort the script.
+vacuous=$(grep -rnE "$vacuous_re" Tests/ 2>/dev/null | wc -l | tr -d ' ' || true)
+if [ "${vacuous:-0}" -gt 0 ]; then
+    grep -rnE "$vacuous_re" Tests/ | head -5 || true
+    fail "$vacuous vacuous #expect form(s) — use expectTrue/expectFalse (AiTaskbarTestSupport)"
 fi
-ok "vacuous asserts: $vacuous (ratchet ≤ 43)"
+ok "no vacuous #expect forms"
 
 echo
 bold "✓ All validations passed."

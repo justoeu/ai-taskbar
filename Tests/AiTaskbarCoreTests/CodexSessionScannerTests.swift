@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 import SQLite3
 @testable import AiTaskbarCore
@@ -371,7 +372,7 @@ struct CodexSessionScannerEstimateTests {
         let missing = URL(fileURLWithPath: "/tmp/ai-taskbar-codex-missing-\(UUID().uuidString)")
         let est = CodexSessionScanner.estimate(sessionsDir: missing)
         #expect(est.usdToday == 0)
-        #expect(est.note?.contains("No ~/.codex/sessions") ?? false)
+        expectTrue(est.note?.contains("No ~/.codex/sessions") ?? false)
     }
 
     @Test("estimate on an empty tree reports no recent sessions")
@@ -380,7 +381,7 @@ struct CodexSessionScannerEstimateTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let est = CodexSessionScanner.estimate(sessionsDir: root)
         #expect(est.usdToday == 0)
-        #expect(est.note?.contains("No recent Codex sessions") ?? false)
+        expectTrue(est.note?.contains("No recent Codex sessions") ?? false)
     }
 
     /// The two "nothing to show" states must not produce the same message.
@@ -396,7 +397,7 @@ struct CodexSessionScannerEstimateTests {
         let missingNote = CodexSessionScanner.estimate(sessionsDir: missing).note
         let emptyNote = CodexSessionScanner.estimate(sessionsDir: empty).note
         #expect(missingNote != emptyNote)
-        #expect(missingNote?.contains("No ~/.codex/sessions") ?? false)
+        expectTrue(missingNote?.contains("No ~/.codex/sessions") ?? false)
     }
 
     /// A model absent from `PricingTable` prices to $0 but is NOT absent data.
@@ -417,7 +418,7 @@ struct CodexSessionScannerEstimateTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let est = CodexSessionScanner.estimate(now: now, sessionsDir: root)
         #expect(est.usdToday == 0)
-        #expect(est.note?.contains("gpt-7-unreleased") ?? false)
+        expectTrue(est.note?.contains("gpt-7-unreleased") ?? false)
     }
 
     /// Opt-in only. Reading the developer's real `~/.codex/sessions` makes the
@@ -522,7 +523,7 @@ struct CodexCostTests {
 
         let est = CodexCost.estimate(now: now, sessionsDir: root, dbPath: db.path)
         #expect(est.usdToday == 0, "live source has data; legacy must not take over")
-        #expect(est.note?.contains("gpt-7-unreleased") ?? false)
+        expectTrue(est.note?.contains("gpt-7-unreleased") ?? false)
     }
 
     /// With no session data at all, the note should come from the session
@@ -534,7 +535,7 @@ struct CodexCostTests {
             sessionsDir: URL(fileURLWithPath: "/tmp/ai-taskbar-none-\(UUID().uuidString)"),
             dbPath: "/tmp/ai-taskbar-none-\(UUID().uuidString).sqlite")
         #expect(est.usdToday == 0)
-        #expect(est.note?.contains("~/.codex/sessions") ?? false)
+        expectTrue(est.note?.contains("~/.codex/sessions") ?? false)
     }
 
     private func makeLegacyDB(nowSeconds: Int, body: String) throws -> URL {

@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 @testable import AiTaskbarCore
 
@@ -304,7 +305,7 @@ struct CredentialReconciliationTests {
         let d = creds(1000)
         let v = CredentialReconciliation.pick(disk: d, pending: nil)
         #expect(v?.credentials == d)
-        #expect(v?.dropPending == false)
+        expectFalse(v?.dropPending ?? true)
     }
 
     @Test("pending only → return pending, do not drop (nothing to drop)")
@@ -312,7 +313,7 @@ struct CredentialReconciliationTests {
         let p = creds(2000)
         let v = CredentialReconciliation.pick(disk: nil, pending: p)
         #expect(v?.credentials == p)
-        #expect(v?.dropPending == false)
+        expectFalse(v?.dropPending ?? true)
     }
 
     @Test("disk fresher → return disk, drop pending (disk won)")
@@ -321,7 +322,7 @@ struct CredentialReconciliationTests {
         let p = creds(1000)
         let v = CredentialReconciliation.pick(disk: d, pending: p)
         #expect(v?.credentials == d)
-        #expect(v?.dropPending == true)
+        expectTrue(v?.dropPending ?? false)
     }
 
     @Test("pending fresher → return pending, keep pending")
@@ -330,7 +331,7 @@ struct CredentialReconciliationTests {
         let p = creds(2000)
         let v = CredentialReconciliation.pick(disk: d, pending: p)
         #expect(v?.credentials == p)
-        #expect(v?.dropPending == false)
+        expectFalse(v?.dropPending ?? true)
     }
 
     @Test("equal expiry → disk wins (>=), drop pending")
@@ -341,7 +342,7 @@ struct CredentialReconciliationTests {
         let p = creds(1500)
         let v = CredentialReconciliation.pick(disk: d, pending: p)
         #expect(v?.credentials == d)
-        #expect(v?.dropPending == true)
+        expectTrue(v?.dropPending ?? false)
     }
 
     @Test("ACL block path: disk nil but pending present serves pending")
@@ -352,7 +353,7 @@ struct CredentialReconciliationTests {
         let p = creds(999_999)
         let v = CredentialReconciliation.pick(disk: nil, pending: p)
         #expect(v?.credentials == p)
-        #expect(v?.dropPending == false)
+        expectFalse(v?.dropPending ?? true)
     }
 }
 
@@ -367,7 +368,7 @@ struct KeychainMemoryCacheBufferTests {
     func fresh_token_passes_buffer() {
         let farFuture = Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000)
         let c = AnthropicCredentials(accessToken: "a", refreshToken: "r", expiresAtMs: farFuture)
-        #expect(c.isExpired(buffer: KeychainCredentialReader.memoryCacheBuffer) == false)
+        #expect(!c.isExpired(buffer: KeychainCredentialReader.memoryCacheBuffer))
     }
 
     @Test("credentials inside the buffer window are treated as expired for re-read")
@@ -375,6 +376,6 @@ struct KeychainMemoryCacheBufferTests {
         // Expires in 60s — within the 300s buffer → cache miss path.
         let soon = Int64(Date().addingTimeInterval(60).timeIntervalSince1970 * 1000)
         let c = AnthropicCredentials(accessToken: "a", refreshToken: "r", expiresAtMs: soon)
-        #expect(c.isExpired(buffer: KeychainCredentialReader.memoryCacheBuffer) == true)
+        #expect(c.isExpired(buffer: KeychainCredentialReader.memoryCacheBuffer))
     }
 }
