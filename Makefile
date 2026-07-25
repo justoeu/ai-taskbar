@@ -92,9 +92,32 @@ app-universal: icon
 	@file $(APP_DIR)/Contents/MacOS/ai-taskbar
 	@lipo -archs $(APP_DIR)/Contents/MacOS/ai-taskbar
 
+# Asserts the built app is genuinely universal. This used to `file` + `lipo`
+# and print "(single-arch)" on failure — with no exit code, so it was a report
+# nobody read rather than a check anything depended on. Nothing in the release
+# path called it either.
+#
+# What it protects: `$(DMG)` is the UNIVERSAL filename, and it is what
+# `UpdateChecker.pickDMGAsset` hands to an Intel Mac. `make dmg` writes an
+# arm64-only app to that exact name (it depends on `app`, not `app-universal`),
+# so the name alone is not evidence. `make release` rebuilds it universal, and
+# this is what proves it did — an arm64-only binary shipped under that name is
+# an app that cannot launch for every Intel user who takes the update.
+#
+# Requires x86_64 AND arm64 specifically. Apple's own system binaries are
+# `arm64e`; a Swift app built here is `arm64`, so `arm64e` appearing would mean
+# something built in a way we do not ship and is worth failing on.
 universal-check:
-	@file $(APP_DIR)/Contents/MacOS/ai-taskbar
-	@lipo -info $(APP_DIR)/Contents/MacOS/ai-taskbar 2>/dev/null || echo "(single-arch)"
+	@bin="$(APP_DIR)/Contents/MacOS/ai-taskbar"; \
+	test -f "$$bin" || { echo "✗ universal-check: $$bin not found — build 'app-universal' first"; exit 1; }; \
+	archs=$$(lipo -archs "$$bin" 2>/dev/null); \
+	for a in x86_64 arm64; do \
+		printf '%s\n' "$$archs" | tr ' ' '\n' | grep -qx "$$a" \
+			|| { echo "✗ universal-check: $$bin is missing $$a (has: $$archs)"; \
+			     echo "  $(DMG) is the file Intel Macs download — refusing to package a single-arch binary under it."; \
+			     exit 1; }; \
+	done; \
+	echo "✓ universal-check: $$archs"
 
 # `make dmg-staging-src` builds a DMG staging directory containing:
 #   - AiTaskbar.app
@@ -111,6 +134,7 @@ dmg-staging-src: app
 	@echo "==> Staged $(DMG_STAGING)"
 
 dmg-universal: app-universal
+	$(MAKE) universal-check
 	rm -rf $(DMG_STAGING) $(DMG)
 	mkdir -p $(DMG_STAGING)
 	cp -R $(APP_DIR) $(DMG_STAGING)/
@@ -257,6 +281,7 @@ release-arm64: sign-developer
 
 # Universal DMG under the canonical name (works on Intel too).
 release-universal: sign-developer-universal
+	$(MAKE) universal-check
 	$(MAKE) dmg-signed DMG_OUT=$(DMG) DEVELOPER_ID="$(DEVELOPER_ID)"
 	$(MAKE) staple DMG=$(DMG)
 
