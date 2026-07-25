@@ -53,20 +53,25 @@ jobs:
           echo "OK"
 
       - name: Warnings ratchet
-        # CI is the AUTHORITY for this check, not the developer's machine.
-        # Swift 6.3.x emits none of the legacy-keychain deprecations while
-        # 6.2.4 emits eight, so measuring only locally produces a confident
-        # "zero warnings" that is wrong here. Everything outside the
-        # legacy-keychain files must be clean.
+        # `2>&1` is load-bearing: SwiftPM writes compiler diagnostics to
+        # STDOUT. An earlier version of this step sent stdout to /dev/null and
+        # grepped stderr, so it reported "0 warnings" unconditionally and could
+        # not fail. `scripts/warn-ratchet-selftest.sh` is the positive control —
+        # run it if you change this.
+        #
+        # Everything outside the three legacy-keychain files must be clean;
+        # those carry ~18 unavoidable SecKeychain/SecACL deprecations (the only
+        # route to classic file-keychain ACLs, no per-call suppression exists).
         run: |
           KEYCHAIN_LEGACY='Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor)\.swift'
-          swift build --build-tests --scratch-path "$RUNNER_TEMP/warnscratch" >/dev/null 2>"$RUNNER_TEMP/w.log" || true
-          other=$(grep -E 'warning:' "$RUNNER_TEMP/w.log" | grep -vE "$KEYCHAIN_LEGACY" | sort -u || true)
-          legacy=$(grep -E 'warning:' "$RUNNER_TEMP/w.log" | grep -E "$KEYCHAIN_LEGACY" | sort -u | wc -l | tr -d ' ' || true)
+          swift build --build-tests --scratch-path "$RUNNER_TEMP/warnscratch" >"$RUNNER_TEMP/w.log" 2>&1 || true
+          distinct=$(grep -oE "Sources/[^ ]+\.swift:[0-9]+:[0-9]+: warning:" "$RUNNER_TEMP/w.log" | sort -u || true)
+          other=$(printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | grep -c . || true)
+          legacy=$(printf '%s\n' "$distinct" | grep -cE "$KEYCHAIN_LEGACY" || true)
           echo "allowlisted legacy-keychain warnings: ${legacy:-0}"
-          if [ -n "$other" ]; then
-            echo "$other" | head -20
-            echo "::error::compiler warnings outside the legacy-keychain allowlist"
+          if [ "${other:-0}" -gt 0 ]; then
+            printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | head -20
+            echo "::error::${other} compiler warning(s) outside the legacy-keychain allowlist"
             exit 1
           fi
           echo "OK — no warnings outside the allowlist"

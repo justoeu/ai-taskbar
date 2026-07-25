@@ -123,34 +123,33 @@ ok "no vacuous #expect forms"
 # Measured on a CLEAN build (--scratch-path to a temp dir): an incremental
 # build recompiles nothing and reports zero no matter how bad things are.
 #
-# The bar is "zero warnings OUTSIDE the legacy-keychain files", not "zero
-# warnings", and that distinction was learned the hard way. The
-# `SecKeychain*` / `SecACL*` / `kSecUseAuthenticationUI` deprecations are
+# `2>&1` is load-bearing. SwiftPM writes compiler diagnostics to STDOUT, not
+# stderr — an earlier version of this check sent stdout to /dev/null and
+# grepped stderr, so it reported "0 warnings" unconditionally and could not
+# fail. Two commits were landed on the strength of that number. If you touch
+# this, re-run the positive control in `scripts/warn-ratchet-selftest.sh`,
+# which plants a warning and asserts the gate catches it.
+#
+# The bar is "zero warnings OUTSIDE the legacy-keychain files", not "zero".
+# The `SecKeychain*` / `SecACL*` / `kSecUseAuthenticationUI` deprecations are
 # unavoidable — they are the only route to classic file-keychain ACLs (see
 # KeychainAccessAuthorizer's type doc) and Swift has no per-call suppression.
 # Marking the enclosing functions `@available(deprecated:)` was tried and
 # REVERTED: it silences the call *into* the C API but makes every caller of
 # the annotated function warn instead, turning one warning into four.
-#
-# It is also toolchain-dependent: Swift 6.3.x emits none of these, 6.2.4 (what
-# CI runs) emits eight. Anyone measuring only locally will conclude the tree is
-# clean when it isn't — which is exactly what happened. CI runs this same
-# check, and CI is the authority.
 KEYCHAIN_LEGACY='Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor)\.swift'
 warn_scratch=$(mktemp -d)
-swift build --build-tests --scratch-path "$warn_scratch" >/dev/null 2>"$warn_scratch/w.log" || true
-other=$(grep -E 'warning:' "$warn_scratch/w.log" 2>/dev/null \
-        | grep -vE "$KEYCHAIN_LEGACY" | sort -u | wc -l | tr -d ' ' || true)
-legacy=$(grep -E 'warning:' "$warn_scratch/w.log" 2>/dev/null \
-         | grep -E "$KEYCHAIN_LEGACY" | sort -u | wc -l | tr -d ' ' || true)
+swift build --build-tests --scratch-path "$warn_scratch" >"$warn_scratch/w.log" 2>&1 || true
+distinct=$(grep -oE "Sources/[^ ]+\.swift:[0-9]+:[0-9]+: warning:" "$warn_scratch/w.log" 2>/dev/null | sort -u || true)
+other=$(printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | grep -c . || true)
+legacy=$(printf '%s\n' "$distinct" | grep -cE "$KEYCHAIN_LEGACY" || true)
 if [ "${other:-0}" -gt 0 ]; then
-    grep -E 'warning:' "$warn_scratch/w.log" | grep -vE "$KEYCHAIN_LEGACY" \
-        | sed "s|$PWD/||" | sort -u | head -10 || true
+    printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | head -10 || true
     rm -rf "$warn_scratch"
     fail "$other compiler warning(s) outside the legacy-keychain allowlist"
 fi
 rm -rf "$warn_scratch"
-ok "0 warnings outside legacy keychain (${legacy:-0} allowlisted, toolchain-dependent)"
+ok "0 warnings outside legacy keychain (${legacy:-0} allowlisted)"
 
 echo
 bold "✓ All validations passed."

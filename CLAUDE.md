@@ -167,10 +167,14 @@ Two things this bar encodes, both learned by getting them wrong:
   — it silences the call *into* the C API but makes every caller of the
   annotated function warn instead, turning one warning into four. Allowlisting
   is honest; annotating was cosmetics that made it worse.
-- **CI is the authority, not your machine.** These warnings are
-  toolchain-dependent: Swift 6.3.x emits none of them, 6.2.4 (what CI runs)
-  emits eight. A local "zero warnings" measurement is not evidence the tree is
-  clean. This is why the ratchet runs in `ci.yml` too.
+- **The check must capture STDOUT.** SwiftPM writes compiler diagnostics to
+  stdout, not stderr. The first version of this ratchet sent stdout to
+  `/dev/null` and grepped stderr, so it reported "0 warnings" unconditionally
+  and could not fail — two commits landed on that number, including one whose
+  message claimed a clean tree. `scripts/warn-ratchet-selftest.sh` plants a
+  warning and asserts the gate catches it; run it whenever you touch the
+  pipeline. A gate that cannot fail is worse than no gate, because it stops
+  anyone from looking.
 
 The failure mode being guarded against is not "a warning appeared" but
 "warnings piled up until nobody read them": the `swift-testing` package was
