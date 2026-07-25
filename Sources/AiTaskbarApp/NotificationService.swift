@@ -46,10 +46,15 @@ public final class NotificationService {
     private func ensureAuthorizedBeforeSend() {
         guard config.enabled, !authorizationRequested else { return }
         authorizationRequested = true
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
+        // Re-fetch `current()` inside the callback instead of capturing it.
+        // `UNUserNotificationCenter` is not `Sendable`, and the settings
+        // callback is `@Sendable`, so capturing the outer reference was a
+        // concurrency hole rather than a style nit. `current()` returns the
+        // same process-wide singleton, so this is free.
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard settings.authorizationStatus == .notDetermined else { return }
-            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
     }
 

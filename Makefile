@@ -200,7 +200,12 @@ endif
 ifndef APPLE_PASSWORD
 	$(error APPLE_PASSWORD not set — use an app-specific password from account.apple.com)
 endif
-	xcrun notarytool submit $(DMG) \
+	@echo "xcrun notarytool submit $(DMG) --apple-id \"$(APPLE_ID)\" --team-id \"$(APPLE_TEAM_ID)\" --password <redacted> --wait"
+	@# Leading `@` is load-bearing: without it Make echoes the EXPANDED recipe,
+	@# which puts the app-specific password in the build log (and in CI output,
+	@# and in any `make notarize | tee` a maintainer runs). The echo above keeps
+	@# the command visible for debugging with the secret masked.
+	@xcrun notarytool submit $(DMG) \
 		--apple-id "$(APPLE_ID)" \
 		--team-id "$(APPLE_TEAM_ID)" \
 		--password "$(APPLE_PASSWORD)" \

@@ -25,7 +25,7 @@ struct ConfigLoaderSecretTests {
             .double(section: "thresholds", key: "warning", value: 75),
         ])
         let cfg = try loader.load()
-        #expect(cfg.anthropic.enabled == true)
+        #expect(cfg.anthropic.enabled)
         #expect(cfg.thresholds.warning == 75)
     }
 
@@ -110,7 +110,7 @@ struct ConfigLoaderSecretTests {
         #expect(cfg.ui.refreshIntervalSeconds == 600)
         #expect(cfg.thresholds.warning == 80)
         #expect(cfg.thresholds.critical == 95)
-        #expect(cfg.notifications.enabled == true)
+        #expect(cfg.notifications.enabled)
     }
 
     @Test("onAfterSave hook fires exactly once per applyChanges call")

@@ -236,9 +236,10 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 - Optional TLS pinning via TOFU SPKI hashes
 
 **Cost tracking**
-- Reads `~/.claude/projects/*/*.jsonl` (Claude Code sessions) — byte prefilter rejects ~73% of lines without JSON parse
-- Reads `~/.codex/logs_2.sqlite` via libsqlite3 — regex-based `model=`/`total_usage_tokens=` extraction
-- Pricing table for Anthropic + OpenAI models, used by the local Claude/Codex log scanners (longest-prefix matching tolerates date-suffixed variants). Gemini/Kimi/OpenRouter/Z.AI surface cost or balance straight from each vendor's API, so they don't use this table.
+- Reads `~/.claude/projects/*/*.jsonl` (Claude Code sessions) — byte prefilter rejects ~78% of lines without JSON parse (measured on the largest local transcript: 22.541 of 28.870 lines; the ratio depends on how tool-heavy your sessions are)
+- Reads `~/.codex/sessions/**/rollout-*.jsonl` (Codex CLI transcripts) — per-turn `token_count` events give a real input/output/cached split, attributed to the model named by the enclosing `turn_context`
+- Falls back to `~/.codex/logs_2.sqlite` (regex `model=`/`total_usage_tokens=`) only when the rollout scan prices nothing — current Codex builds stopped emitting that field, and the two sources describe the same turns, so they're never summed
+- Pricing table for Anthropic + OpenAI models, used by the local Claude/Codex scanners (longest-prefix matching tolerates date- and deployment-suffixed variants such as `claude-opus-5-thinking` or `gpt-5.6-sol`). Gemini/Kimi/OpenRouter/Z.AI surface cost or balance straight from each vendor's API, so they don't use this table.
 - Per-model breakdown for today **and** last 7 days
 
 **Build / distribution**
@@ -293,7 +294,7 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 │  Cache (DiskCache + AtomicFileWrite) ·                      │
 │  Credentials (Keychain, File, EnvOrConfig) ·                │
 │  Config (TOMLKit) · Cost (ClaudeSessionScanner +            │
-│  CodexLogScanner + PricingTable) ·                          │
+│  CodexSessionScanner/CodexCost + PricingTable) ·            │
 │  History (UsageHistoryStore — JSONL append + compact 24h)   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -529,7 +530,9 @@ AiTaskbarCore/
   Cache/                  DiskCache (TTL+stale fallback), AtomicFileWrite
   Credentials/            Keychain, File, EnvOrConfig readers + JSONValue
   Config/                 AppConfig + ConfigLoader (TOMLKit) + flexibleDouble
-  Cost/                   ClaudeSessionScanner, CodexLogScanner, PricingTable
+  Cost/                   ClaudeSessionScanner, CodexSessionScanner,
+                          CodexCost (source selection), CodexLogScanner
+                          (legacy sqlite fallback), PricingTable
   History/                UsageHistoryStore (persistent JSONL + NSLock)
   Util/                   Paths, JWT, Semver, SharedCoders
 AiTaskbarValidate/        160+ runtime asserts (replaces XCTest on CLT-only setups)

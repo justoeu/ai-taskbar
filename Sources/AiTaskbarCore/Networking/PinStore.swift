@@ -62,7 +62,7 @@ public final class PinStore: @unchecked Sendable {
 
     public func clear(host: String) {
         let key = host.lowercased()
-        memo.withLock { $0.removeValue(forKey: key) }
+        _ = memo.withLock { $0.removeValue(forKey: key) }
         try? FileManager.default.removeItem(at: fileURL(for: key))
     }
 

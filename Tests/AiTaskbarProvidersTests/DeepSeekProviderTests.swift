@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 @testable import AiTaskbarCore
 @testable import AiTaskbarProviders
@@ -104,7 +105,7 @@ struct DeepSeekProviderTests {
         #expect(snap.totalBalance == 110.00)
         #expect(snap.grantedBalance == 10.00)
         #expect(snap.toppedUpBalance == 100.00)
-        #expect(snap.isAvailable == true)
+        expectTrue(snap.isAvailable ?? false)
         #expect(snap.balance?.detail == "$110.00 available")
         try? FileManager.default.removeItem(at: tmpCacheDir)
         StubURLProtocol.reset()
@@ -138,7 +139,7 @@ struct DeepSeekProviderTests {
             DeepSeekBalanceResponse.self,
             from: Fixtures.data(Fixtures.deepseekBalanceInsufficient200))
         let snap = parsed.toSnapshot()
-        #expect(snap.isAvailable == false)
+        expectFalse(snap.isAvailable ?? true)
         #expect(snap.totalBalance == 0)
         #expect(snap.currency == nil)
     }

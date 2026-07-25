@@ -33,16 +33,16 @@ struct AggregatesComputationTests {
     func empty_states() {
         let r = AggregatesComputation.compute(states: [])
         #expect(r.maxUtilization == 0)
-        #expect(r.isAnyVendorLoading == false)
-        #expect(r.hasRateLimitedVendor == false)
+        #expect(!r.isAnyVendorLoading)
+        #expect(!r.hasRateLimitedVendor)
     }
 
     @Test("idle states do not flip aggregates")
     func idle_states_inert() {
         let r = AggregatesComputation.compute(states: [.idle, .idle, .idle])
         #expect(r.maxUtilization == 0)
-        #expect(r.isAnyVendorLoading == false)
-        #expect(r.hasRateLimitedVendor == false)
+        #expect(!r.isAnyVendorLoading)
+        #expect(!r.hasRateLimitedVendor)
     }
 
     @Test("one loading state flips isAnyVendorLoading")
@@ -59,7 +59,7 @@ struct AggregatesComputationTests {
             .ok(outcome(pct: 12))
         ])
         #expect(r.maxUtilization == 75)
-        #expect(r.hasRateLimitedVendor == false)
+        #expect(!r.hasRateLimitedVendor)
     }
 
     @Test("HEADLINE: stale-.ok with lastError=429 flips hasRateLimitedVendor")

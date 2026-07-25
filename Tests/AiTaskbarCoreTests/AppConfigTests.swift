@@ -16,8 +16,8 @@ struct AppConfigTests {
         #expect(cfg.anthropic.enabled)
         // Read-only is the safe default: the monitor must not rotate the
         // shared Claude Code / Codex OAuth tokens unless explicitly opted in.
-        #expect(cfg.anthropic.manageOAuthRefresh == false)
-        #expect(cfg.openai.manageOAuthRefresh == false)
+        #expect(!cfg.anthropic.manageOAuthRefresh)
+        #expect(!cfg.openai.manageOAuthRefresh)
         #expect(cfg.zai.apiKeyEnv == "ZAI_API_KEY")
     }
 
@@ -49,9 +49,9 @@ struct AppConfigTests {
         let cfg = try TOMLDecoder().decode(AppConfig.self, from: toml)
         #expect(cfg.ui.primary == .zai)
         #expect(!cfg.anthropic.enabled)
-        #expect(cfg.anthropic.manageOAuthRefresh == true)
+        #expect(cfg.anthropic.manageOAuthRefresh)
         #expect(cfg.openai.codexAuthPath == "/tmp/auth.json")
-        #expect(cfg.openai.manageOAuthRefresh == true)
+        #expect(cfg.openai.manageOAuthRefresh)
         #expect(cfg.zai.apiKey == "abc")
         #expect(cfg.zai.planTier == "pro")
         #expect(!cfg.openrouter.enabled)

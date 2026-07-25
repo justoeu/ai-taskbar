@@ -84,5 +84,72 @@ if [ -f "$codex_auth" ]; then
     [ "$perm" = "600" ] && ok "~/.codex/auth.json 0600" || fail "codex auth $perm (expected 600)"
 fi
 
+bold "[7/7] doc mirror + assert sanity"
+# CLAUDE.md and AGENTS.md are the same document for two different agents.
+# They were byte-identical for the project's whole history until an edit
+# landed in one only — and AGENTS.md is what the Codex CLI reads, so the
+# divergence silently hid guidance written FOR that agent. Convention alone
+# didn't hold it; this does.
+if ! cmp -s CLAUDE.md AGENTS.md; then
+    fail "CLAUDE.md and AGENTS.md diverged — run: cp CLAUDE.md AGENTS.md"
+fi
+ok "CLAUDE.md ≡ AGENTS.md"
+
+# `#expect` mis-evaluates Bool-typed sub-expressions on Swift 6.3.2 /
+# Testing 0.99.0. These forms all PASS with values that make them false —
+# verified by running them, not by reading the macro:
+#
+#   #expect(false == true)                    #expect(opt ?? false)
+#   #expect(opt == Optional(false))           #expect(opt.map { !$0 } ?? false)
+#
+# and `#expect(!(opt ?? true))` is inverted outright: it FAILS where plain
+# Swift evaluates the same expression to true. An assert written any of these
+# ways defends nothing. Use expectTrue/expectFalse from AiTaskbarTestSupport,
+# which take a plain Bool parameter so the condition is evaluated as ordinary
+# Swift before the macro sees it. Bare `#expect(flag)` / `#expect(!flag)` on a
+# non-optional Bool is fine, as are non-Bool comparisons.
+vacuous_re='#expect\((.*== *(true|false)\)|.*\?\? *(true|false)\)|.*== *Optional\()'
+# `|| true` is load-bearing under `set -o pipefail`: grep exits 1 when it finds
+# nothing, which is the PASSING case here and would otherwise abort the script.
+vacuous=$(grep -rnE "$vacuous_re" Tests/ 2>/dev/null | wc -l | tr -d ' ' || true)
+if [ "${vacuous:-0}" -gt 0 ]; then
+    grep -rnE "$vacuous_re" Tests/ | head -5 || true
+    fail "$vacuous vacuous #expect form(s) — use expectTrue/expectFalse (AiTaskbarTestSupport)"
+fi
+ok "no vacuous #expect forms"
+
+# Warnings ratchet.
+#
+# Measured on a CLEAN build (--scratch-path to a temp dir): an incremental
+# build recompiles nothing and reports zero no matter how bad things are.
+#
+# `2>&1` is load-bearing. SwiftPM writes compiler diagnostics to STDOUT, not
+# stderr — an earlier version of this check sent stdout to /dev/null and
+# grepped stderr, so it reported "0 warnings" unconditionally and could not
+# fail. Two commits were landed on the strength of that number. If you touch
+# this, re-run the positive control in `scripts/warn-ratchet-selftest.sh`,
+# which plants a warning and asserts the gate catches it.
+#
+# The bar is "zero warnings OUTSIDE the legacy-keychain files", not "zero".
+# The `SecKeychain*` / `SecACL*` / `kSecUseAuthenticationUI` deprecations are
+# unavoidable — they are the only route to classic file-keychain ACLs (see
+# KeychainAccessAuthorizer's type doc) and Swift has no per-call suppression.
+# Marking the enclosing functions `@available(deprecated:)` was tried and
+# REVERTED: it silences the call *into* the C API but makes every caller of
+# the annotated function warn instead, turning one warning into four.
+KEYCHAIN_LEGACY='Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor)\.swift'
+warn_scratch=$(mktemp -d)
+swift build --build-tests --scratch-path "$warn_scratch" >"$warn_scratch/w.log" 2>&1 || true
+distinct=$(grep -oE "Sources/[^ ]+\.swift:[0-9]+:[0-9]+: warning:" "$warn_scratch/w.log" 2>/dev/null | sort -u || true)
+other=$(printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | grep -c . || true)
+legacy=$(printf '%s\n' "$distinct" | grep -cE "$KEYCHAIN_LEGACY" || true)
+if [ "${other:-0}" -gt 0 ]; then
+    printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | head -10 || true
+    rm -rf "$warn_scratch"
+    fail "$other compiler warning(s) outside the legacy-keychain allowlist"
+fi
+rm -rf "$warn_scratch"
+ok "0 warnings outside legacy keychain (${legacy:-0} allowlisted)"
+
 echo
 bold "✓ All validations passed."

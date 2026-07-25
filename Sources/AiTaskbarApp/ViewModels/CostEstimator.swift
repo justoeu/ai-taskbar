@@ -15,6 +15,8 @@ public final class CostEstimator: ObservableObject {
     public static let supportedVendors: Set<VendorId> = [.anthropic, .openai]
     /// Skip recomputation if the last result is younger than this.
     private let minRecomputeInterval: TimeInterval = 60
+    /// The running scan, so it can be cancelled on teardown or supersession.
+    private var inFlight: Task<Void, Never>?
 
     public init() {}
 
@@ -27,17 +29,33 @@ public final class CostEstimator: ObservableObject {
             return
         }
         isLoading = true
-        Task.detached(priority: .utility) {
+        // Held so a teardown (or a superseding refresh) can cancel the scan.
+        // Both scanners poll `Task.isCancelled` between files; without a
+        // handle to cancel, that cooperation had nothing to cooperate with.
+        inFlight?.cancel()
+        inFlight = Task.detached(priority: .utility) {
             async let claude = Task { ClaudeSessionScanner.estimate() }
-            async let codex  = Task { CodexLogScanner.estimate() }
+            async let codex  = Task { CodexCost.estimate() }
             let claudeEstimate = await claude.value
             let codexEstimate  = await codex.value
+            // A cancelled scan returns a PARTIAL total (the scanners break out
+            // of the file loop). Publishing that would show a number that is
+            // silently too low, so drop it and let the next tick recompute.
+            guard !Task.isCancelled else { return }
             await MainActor.run { [self] in
                 self.byVendor[.anthropic] = claudeEstimate
                 self.byVendor[.openai] = codexEstimate
                 self.lastComputedAt = .now
                 self.isLoading = false
+                self.inFlight = nil
             }
         }
+    }
+
+    /// Cancels an in-flight scan. Safe to call when none is running.
+    public func cancel() {
+        inFlight?.cancel()
+        inFlight = nil
+        isLoading = false
     }
 }

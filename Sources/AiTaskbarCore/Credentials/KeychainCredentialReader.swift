@@ -115,11 +115,12 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     /// automatic refreshes can reuse the credential in memory without
     /// prompting. It does not mutate another app's Keychain ACL.
     public func readInteractively() throws -> AnthropicCredentials {
-        let interactionStatus = SecKeychainSetUserInteractionAllowed(true)
-        guard interactionStatus == errSecSuccess else {
-            throw Self.errorFor(status: interactionStatus,
-                                op: "enable user-initiated interaction")
+        try KeychainPromptSuppressor.withPromptsAllowed {
+            try readInteractivelyLocked()
         }
+    }
+
+    private func readInteractivelyLocked() throws -> AnthropicCredentials {
         let items = try fetchAll(interactive: true)
         guard !items.isEmpty else {
             throw AppError.credentials(

@@ -11,11 +11,30 @@ import Foundation
 ///  - Files are memory-mapped (`.mappedIfSafe`) so large transcripts don't
 ///    cause `LineStream.buffer.removeSubrange` O(n²) shifts.
 public enum ClaudeSessionScanner {
+    /// Process-wide memo so a refresh only re-parses files that changed.
+    /// Static because the scanner is a stateless enum called from a detached
+    /// task; the memo is the one thing that must survive between calls.
+    private static let memo = ScanMemo()
+
     public static func estimate(now: Date = .init(),
                                 projectsDir: URL? = nil) -> CostEstimate {
         let projects: URL = projectsDir ?? FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects")
+        // `FileManager.enumerator` hands back a NON-nil enumerator that yields
+        // zero items for a missing directory, so a bare `guard let` on it is
+        // dead code: the "never ran Claude Code" user fell through to the same
+        // "no recent sessions" note as someone whose transcripts are merely
+        // older than the window. The absent-directory case has to be tested
+        // explicitly. (The `guard let` stays as a genuine failure path — it
+        // fires when the URL is unreadable rather than absent.)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: projects.path, isDirectory: &isDir),
+              isDir.boolValue else {
+            return CostEstimate(usdToday: 0, usdLast7Days: 0,
+                                isApproximate: true,
+                                note: "No ~/.claude/projects directory.")
+        }
         guard let walker = FileManager.default.enumerator(
             at: projects,
             includingPropertiesForKeys: [.contentModificationDateKey],
@@ -23,7 +42,7 @@ public enum ClaudeSessionScanner {
         ) else {
             return CostEstimate(usdToday: 0, usdLast7Days: 0,
                                 isApproximate: true,
-                                note: "No ~/.claude/projects directory.")
+                                note: "Could not enumerate ~/.claude/projects.")
         }
 
         let cal = Calendar.current
@@ -35,21 +54,66 @@ public enum ClaudeSessionScanner {
         var filesScanned = 0
         var unparseableTimestamps = 0
 
+        var seenPaths = Set<String>()
         for case let url as URL in walker {
+            // Cooperate with cancellation. A full scan is 2-6 s of CPU over
+            // hundreds of files; without this a refresh that the scheduler
+            // has already superseded runs to completion anyway, burning a
+            // cooperative-pool thread the next one needs. Checked per file
+            // rather than per line — file granularity is fine at this size
+            // and keeps the inner loop branch-free.
+            if Task.isCancelled { break }
             guard url.pathExtension == "jsonl" else { continue }
-            if let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
-               let mtime = attrs.contentModificationDate, mtime < sevenDaysAgo {
+            let attrs = try? url.resourceValues(
+                forKeys: [.contentModificationDateKey, .fileSizeKey])
+            if let mtime = attrs?.contentModificationDate, mtime < sevenDaysAgo {
                 continue
             }
-            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }
             filesScanned += 1
+            seenPaths.insert(url.path)
+
+            // Replay the memo when the file is byte-for-byte the same as last
+            // pass. Transcripts are append-only, so on a steady-state refresh
+            // nearly every file takes this branch and never gets read.
+            if let mtime = attrs?.contentModificationDate,
+               let size = attrs?.fileSize,
+               let hit = memo.lookup(path: url.path, size: size,
+                                     mtime: mtime, day: startOfToday) {
+                for (model, usage) in hit.today {
+                    CostAggregator.add(usage, into: &totalsToday, model: model)
+                }
+                for (model, usage) in hit.week {
+                    CostAggregator.add(usage, into: &totalsLast7, model: model)
+                }
+                continue
+            }
+
+            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }
+            // Scan into per-file buckets so the file's own contribution can be
+            // memoized; merge into the running totals afterwards.
+            var fileToday: [String: ModelUsage] = [:]
+            var fileWeek: [String: ModelUsage] = [:]
             scan(data: data,
                  startOfToday: startOfToday,
                  sevenDaysAgo: sevenDaysAgo,
-                 totalsToday: &totalsToday,
-                 totalsLast7: &totalsLast7,
+                 totalsToday: &fileToday,
+                 totalsLast7: &fileWeek,
                  unparseableTimestamps: &unparseableTimestamps)
+            for (model, usage) in fileToday {
+                CostAggregator.add(usage, into: &totalsToday, model: model)
+            }
+            for (model, usage) in fileWeek {
+                CostAggregator.add(usage, into: &totalsLast7, model: model)
+            }
+            if let mtime = attrs?.contentModificationDate, let size = attrs?.fileSize {
+                memo.store(path: url.path,
+                           entry: ScanMemo.Entry(size: size, mtime: mtime,
+                                                 computedForDay: startOfToday,
+                                                 today: fileToday, week: fileWeek))
+            }
         }
+        // Files that aged out of the window stop being tracked.
+        memo.retain(paths: seenPaths)
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.anthropic)
@@ -123,10 +187,12 @@ public enum ClaudeSessionScanner {
             guard line.range(of: usageMarker) != nil else { continue }
             guard line.range(of: typeAssistantMarker) != nil else { continue }
 
-            // Pass the slice as Data to JSONDecoder.
+            // Decode straight from the slice: `Data(line)` copied every
+            // surviving line (62.8 MB per refresh on a real transcript set)
+            // for nothing — JSONDecoder accepts any DataProtocol slice.
             let parsed: AssistantLine
             do {
-                parsed = try SharedCoders.decoder.decode(AssistantLine.self, from: Data(line))
+                parsed = try SharedCoders.decoder.decode(AssistantLine.self, from: line)
             } catch {
                 continue
             }

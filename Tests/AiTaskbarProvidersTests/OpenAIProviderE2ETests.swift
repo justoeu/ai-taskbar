@@ -214,7 +214,7 @@ struct OpenAIProviderE2ETests {
         _ = try await provider.fetchUsage(forceRefresh: true)
 
         // No OAuth exchange and the on-disk token is untouched.
-        #expect(hitOAuth == false)
+        #expect(!hitOAuth)
         let reread = try creds.read()
         #expect(reread.tokens.idToken == expiredToken)
         // The stored (expired) access token was used as-is on the usage call.

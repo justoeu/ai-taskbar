@@ -1,4 +1,5 @@
 import Testing
+import AiTaskbarTestSupport
 import Foundation
 import SQLite3
 @testable import AiTaskbarCore
@@ -42,7 +43,7 @@ struct CodexLogScannerTests {
         let nonexistent = "/tmp/ai-taskbar-codex-missing-\(UUID().uuidString).sqlite"
         let est = CodexLogScanner.estimate(dbPath: nonexistent)
         #expect(est.usdToday == 0)
-        #expect(est.note?.contains("No ~/.codex/logs_2.sqlite") == true)
+        expectTrue(est.note?.contains("No ~/.codex/logs_2.sqlite") ?? false)
     }
 
     @Test("estimate falls back gracefully when sqlite file missing")

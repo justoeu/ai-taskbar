@@ -71,7 +71,15 @@ jobs:
           LOG="$(git log --format='%s%n%b' "$RANGE")"
 
           LEVEL="patch"
-          if printf '%s\n' "$LOG" | grep -qiE 'BREAKING CHANGE|^[a-z]+(\(.+\))?!:|\[bump:major\]'; then
+          # `BREAKING CHANGE` is matched CASE-SENSITIVELY and only as a footer
+          # (line start + colon), per Conventional Commits. With `-i` and no
+          # anchor, ordinary prose in a commit body — "this is not a breaking
+          # change", "avoids a breaking change" — bumped MAJOR. That push is
+          # irreversible: the tag ships and the version is public. The `!:`
+          # and `[bump:*]` markers stay case-insensitive; they are explicit
+          # opt-ins that cannot appear by accident.
+          if printf '%s\n' "$LOG" | grep -qE '^BREAKING[ -]CHANGE:' \
+             || printf '%s\n' "$LOG" | grep -qiE '^[a-z]+(\(.+\))?!:|\[bump:major\]'; then
             LEVEL="major"
           elif printf '%s\n' "$LOG" | grep -qiE '^feat(\(.+\))?:|\[bump:minor\]'; then
             LEVEL="minor"

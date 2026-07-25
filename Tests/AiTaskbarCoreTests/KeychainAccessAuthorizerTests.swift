@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import Testing
+import AiTaskbarTestSupport
 @testable import AiTaskbarCore
 
 /// Exercises the ACL-surgery helpers against a REAL temporary keychain item
@@ -65,7 +66,7 @@ struct KeychainAccessAuthorizerTests {
         var prompt = SecKeychainPromptSelector()
         try #require(SecACLCopyContents(acl!, &appsRef, &descRef, &prompt) == errSecSuccess)
         let partitions = PartitionListCodec.decode(hexDescription: (descRef as String?) ?? "")
-        #expect(partitions?.contains("teamid:TESTTEAM01") == true)
+        expectTrue(partitions?.contains("teamid:TESTTEAM01") ?? false)
     }
 
     @Test("extending twice is idempotent (second call is a no-op)")

@@ -32,9 +32,23 @@ notify_at = [90, 100]   # percent thresholds that trigger a notification
 #   ~/Library/Application Support/ai-taskbar/pins/<host>.txt
 # Every subsequent connection must match. Cert rotations on the same SPKI
 # are transparent; MitM with a different cert is rejected.
+#
+# Pinning is OFF by default on purpose: a corporate TLS-inspecting proxy
+# presents its own cert for every host, and pinning would make the app fail
+# closed for those users with an error that looks like a bug. Turn it on when
+# you control the network path. `pin_audit_only = true` is the safe way to
+# find out which it is — it logs mismatches without blocking.
+#
+# The list below is every host the app talks to, INCLUDING the OAuth
+# endpoints. Those matter most: `auth.openai.com` and `api.openai.com` carry
+# the token exchange, so a MitM there yields a credential rather than a usage
+# number. An earlier version of this example omitted `api.openai.com`, which
+# left the one host handling token refresh unpinned while everything else was
+# covered.
 # pin_hosts = ["api.anthropic.com", "platform.claude.com", "chatgpt.com",
-#              "auth.openai.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai",
-#              "api.deepseek.com", "management-api.x.ai"]
+#              "auth.openai.com", "api.openai.com", "openrouter.ai",
+#              "api.z.ai", "api.moonshot.ai", "api.deepseek.com",
+#              "management-api.x.ai"]
 # pin_audit_only = false   # true = log mismatches but allow connection
 
 [anthropic]

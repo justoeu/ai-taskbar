@@ -18,7 +18,7 @@ public struct EnvOrConfigCredentialReader: Sendable {
         // `getenv` is O(1) and doesn't materialize the full environment dict
         // like `ProcessInfo.processInfo.environment` does.
         if let rawC = getenv(envVarName),
-           let env = String(validatingUTF8: rawC),
+           let env = String(validatingCString: rawC),
            !env.trimmingCharacters(in: .whitespaces).isEmpty {
             return env
         }

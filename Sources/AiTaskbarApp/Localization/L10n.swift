@@ -31,7 +31,7 @@ public enum L10n {
     /// places resource bundles, falls back to the dev-mode build dir, and
     /// degrades gracefully to `Bundle.main` (untranslated UI is annoying
     /// but the app stays alive) if nothing matches.
-    nonisolated(unsafe) private static let resourceBundle: Bundle = {
+    private static let resourceBundle: Bundle = {
         let bundleName = "ai-taskbar_AiTaskbarApp.bundle"
         let candidates: [URL?] = [
             // Packaged .app: SwiftPM resource bundle copied to

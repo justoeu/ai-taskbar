@@ -112,6 +112,30 @@ contract, not an implementation detail.
 - Keep assertions atomic. One `#expect` per fact. Tests that fail with
   "expected 5, got 3" are useful; tests that fail with "got non-nil"
   send you to the debugger.
+- **`#expect` cannot be trusted with `Bool`-typed sub-expressions on this
+  toolchain (Apple Swift 6.3.2 / Testing 0.99.0).** Every one of these PASSES
+  with a value that makes it false — verified by running them, not inferred:
+
+  ```swift
+  #expect(false == true)                                 // passes (!)
+  let x: Bool? = false; #expect(x ?? false)               // passes (!)
+  let x: Bool? = true;  #expect(x == Optional(false))     // passes (!)
+  let x: Bool? = true;  #expect(x.map { !$0 } ?? false)   // passes (!)
+  ```
+
+  and one is inverted outright: `#expect(!(x ?? true))` **fails** for
+  `x == .some(false)`, where plain Swift evaluates the same expression to
+  `true`. This was found because 43 asserts across 16 files were written the
+  `== true` way and none of them could ever fail; fixing them surfaced a real
+  dead-code bug in `ClaudeSessionScanner` that had been invisible for months.
+
+  **Rule:** for any condition involving an optional, use `expectTrue` /
+  `expectFalse` from `AiTaskbarTestSupport`. They take a plain `Bool`
+  *parameter*, so the condition is evaluated as ordinary Swift at the call
+  site and the macro only ever sees a bare identifier. A non-optional
+  `#expect(flag)` / `#expect(!flag)` is safe, and so are non-`Bool`
+  comparisons (`#expect(3 == 4)` and `#expect(s == "b")` fail correctly).
+  `scripts/validate.sh` fails the build on any known-vacuous form.
 - For pure logic without I/O, you can still extend
   `Sources/AiTaskbarValidate/main.swift` — it runs faster than `swift test`
   for sanity checks and double-checks the `Testing` results.
@@ -125,6 +149,48 @@ contract, not an implementation detail.
   permission check to `scripts/validate.sh`.
 - **UI-only changes** that can't be asserted headlessly → exercise via the
   smoke launch and document what was visually verified in the PR.
+
+### 5. Zero warnings OUTSIDE the legacy-keychain files
+
+`scripts/validate.sh` and CI both fail on any compiler warning that is not in
+`Credentials/Keychain{AccessAuthorizer,CredentialReader,PromptSuppressor}.swift`.
+Both measure with a **clean** build (`--scratch-path` to a temp dir): an
+incremental build recompiles nothing and reports zero no matter how bad things
+are.
+
+Two things this bar encodes, both learned by getting them wrong:
+
+- **The legacy-keychain deprecations are unavoidable.** `SecKeychain*`,
+  `SecACL*` and `kSecUseAuthenticationUI` are the only route to classic
+  file-keychain ACLs, and Swift has no per-call suppression. Annotating the
+  enclosing function `@available(macOS, deprecated:)` was tried and **reverted**
+  — it silences the call *into* the C API but makes every caller of the
+  annotated function warn instead, turning one warning into four. Allowlisting
+  is honest; annotating was cosmetics that made it worse.
+- **The check must capture STDOUT.** SwiftPM writes compiler diagnostics to
+  stdout, not stderr. The first version of this ratchet sent stdout to
+  `/dev/null` and grepped stderr, so it reported "0 warnings" unconditionally
+  and could not fail — two commits landed on that number, including one whose
+  message claimed a clean tree. `scripts/warn-ratchet-selftest.sh` plants a
+  warning and asserts the gate catches it; run it whenever you touch the
+  pipeline. A gate that cannot fail is worse than no gate, because it stops
+  anyone from looking.
+
+The failure mode being guarded against is not "a warning appeared" but
+"warnings piled up until nobody read them": the `swift-testing` package was
+emitting a deprecation on every `@Test`/`@Suite` — hundreds — which is how a
+double-optional bug in `AppConfig.flexibleDoubleIfPresent` and a non-Sendable
+capture in `NotificationService` sat in plain sight.
+
+Two conventions came out of that cleanup:
+
+- **`swift-testing` is NOT a dependency of the testTargets.** Swift 6 toolchains
+  ship Testing; declaring the package too is what produced the deprecations. It
+  remains a dependency of `AiTaskbarTestSupport` only, because regular (non-test)
+  targets do not get the bundled module — removing it there fails with
+  `missing required module '_TestingInternals'`.
+- **Don't reach for `@available(deprecated:)` to hide a warning you could fix.**
+  See above for why it usually doesn't even hide it.
 
 ## Build commands
 
@@ -342,6 +408,21 @@ user edits. See `config.example.toml` for the full schema.
   exposes no usage command and stores auth as encrypted Electron
   cookies/safeStorage. Revisit only if Google ships a real OAuth usage API.
   Do NOT build against `v1internal` or scrape Electron cookies.
+- **TOMLKit is the single runtime dependency and is effectively unmaintained**
+  (no release in ~2.5 years, no commits in ~18 months, pinned at 0.6.0 in
+  `Package.resolved`). It is not currently a problem — it parses a local
+  config file we write the schema for, it has no network surface, and the
+  pinned version is reproducible. It is a *migration risk*: if it stops
+  building on a future Swift, the options are vendoring the ~2k lines we
+  actually use or hand-rolling the small TOML subset `AppConfig` needs.
+  Re-evaluate whenever a Swift major lands; don't swap it out preemptively.
+- **`codex-auto-review` is priced by estimate.** Codex writes that model alias
+  to its rollout logs for the automatic review pass, and OpenAI publishes no
+  rate for it, so `PricingTable.openai` carries it at the Codex flagship tier
+  (`gpt-5.3-codex`, $1.75/$14). It is not a negligible slice — on a real 7-day
+  window it was ~6% of the Codex total. Replace with published numbers when
+  they exist; do NOT drop the entry, since a missing key prices every review
+  turn at $0.
 - v0.2 candidates (open): start-at-login via `SMAppService` works only when
   the `.app` lives in `/Applications`; global hotkey via
   `MenuBarExtraAccess`; OpenAI Platform API (`sk-...`) for actual budget caps.

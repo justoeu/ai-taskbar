@@ -186,7 +186,11 @@ jobs:
           cat /tmp/release_notes.md
 
       - name: Create / update draft GitHub Release
-        uses: softprops/action-gh-release@v3
+        # Pinned to the commit SHA of v3.0.2, not the mutable `v3` tag:
+        # this job runs with repository secrets, so whoever can move that
+        # tag could otherwise ship new code straight into a privileged
+        # step. Update deliberately, re-reading the diff.
+        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: AI Taskbar ${{ steps.version.outputs.tag }}
