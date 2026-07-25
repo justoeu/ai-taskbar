@@ -38,8 +38,8 @@ jobs:
   # in-app UpdateChecker, so users never see an asset-less release.
   validate-and-draft:
     name: Validate tag and draft release
-    # macos-15 ships Xcode 16 (Swift 6) which Package.swift requires for
-    # `swift-tools-version: 6.0` + Testing.framework. Apple Silicon (M1).
+    # Same image as ci.yml, and — since v0.16.1 — the same toolchain selection,
+    # which is the part that actually matters. Apple Silicon (M1).
     runs-on: macos-15
 
     steps:
@@ -56,8 +56,12 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Select Xcode 16 (Swift 6)
-        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+      # This step used to hard-pin /Applications/Xcode_16.app. The pin did not
+      # fail — it succeeded and built with Swift 6.0 while ci.yml, on the very
+      # same macos-15 image, was building with 6.2.4. v0.16.0 tagged green and
+      # then failed here on a `SymmetricKey` Sendable error that only 6.0
+      # diagnoses. Shared action so the two cannot diverge again.
+      - uses: ./.github/actions/select-swift
 
       - name: Resolve version
         id: version
