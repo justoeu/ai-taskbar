@@ -17,9 +17,13 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0"),
-        // swift-testing is bundled with Swift 6 toolchains, but Command Line
-        // Tools doesn't auto-link it for testTargets the way Xcode does.
-        // Pull it in explicitly so `import Testing` resolves.
+        // swift-testing is declared ONLY for AiTaskbarTestSupport, which is a
+        // regular target — those do not get the toolchain's bundled Testing
+        // (removing the dependency outright fails it with "missing required
+        // module '_TestingInternals'"). The three testTargets deliberately do
+        // NOT list it: they resolve Testing from the Swift 6 toolchain, and
+        // linking the standalone package there emitted a deprecation on every
+        // single @Test/@Suite — hundreds of warnings that buried the real ones.
         .package(url: "https://github.com/apple/swift-testing.git", from: "0.10.0"),
     ],
     targets: [
@@ -65,14 +69,12 @@ let package = Package(
             name: "AiTaskbarCoreTests",
             dependencies: [
                 "AiTaskbarCore", "AiTaskbarTesting", "AiTaskbarTestSupport",
-                .product(name: "Testing", package: "swift-testing"),
             ]
         ),
         .testTarget(
             name: "AiTaskbarProvidersTests",
             dependencies: [
                 "AiTaskbarProviders", "AiTaskbarTesting", "AiTaskbarTestSupport",
-                .product(name: "Testing", package: "swift-testing"),
             ]
         ),
         .testTarget(
@@ -82,7 +84,6 @@ let package = Package(
                 "AiTaskbarCore",
                 "AiTaskbarProviders",
                 "AiTaskbarTestSupport",
-                .product(name: "Testing", package: "swift-testing"),
             ]
         ),
     ]

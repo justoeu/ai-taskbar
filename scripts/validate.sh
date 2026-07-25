@@ -118,5 +118,23 @@ if [ "${vacuous:-0}" -gt 0 ]; then
 fi
 ok "no vacuous #expect forms"
 
+# Warnings ratchet. The tree built clean at the time this was added, and a
+# clean build is the only way to see them — an incremental build recompiles
+# nothing and reports zero regardless. The failure mode this guards against is
+# not "a warning appeared" but "warnings piled up until nobody read them": the
+# swift-testing package alone was emitting hundreds, which is how a
+# double-optional bug in AppConfig and a non-Sendable capture in
+# NotificationService sat in plain sight.
+warn_scratch=$(mktemp -d)
+swift build --build-tests --scratch-path "$warn_scratch" >/dev/null 2>"$warn_scratch/w.log" || true
+warns=$(grep -cE 'warning:' "$warn_scratch/w.log" 2>/dev/null | tr -d ' ' || true)
+if [ "${warns:-0}" -gt 0 ]; then
+    grep -E 'warning:' "$warn_scratch/w.log" | sed "s|$PWD/||" | sort -u | head -10 || true
+    rm -rf "$warn_scratch"
+    fail "$warns compiler warning(s) — the tree builds clean; keep it that way"
+fi
+rm -rf "$warn_scratch"
+ok "clean build, 0 warnings"
+
 echo
 bold "✓ All validations passed."

@@ -188,19 +188,23 @@ extension KeyedDecodingContainer {
     /// the `(try? decodeIfPresent Double) ?? (try? decodeIfPresent Int64)
     /// .map(Double.init) ?? nil` boilerplate that used to live in every wire
     /// type.
+    /// The `if let outer: Double? = try? …` shape this used to have was a
+    /// no-op with a misleading name: since Swift 5, `try?` flattens, so
+    /// annotating the binding as `Double?` re-promoted it to `Double??` and
+    /// the outer `if let` could never fail — the real unwrap was the second
+    /// clause. Behaviour is identical either way (a throw and an absent key
+    /// both yield nil), but the compiler was right to flag it: the code read
+    /// as if it distinguished "decode failed" from "key missing", and it
+    /// never did.
     public func flexibleDoubleIfPresent(forKey key: Key) -> Double? {
-        if let outer: Double? = try? decodeIfPresent(Double.self, forKey: key),
-           let d = outer { return d }
-        if let outer: Int64? = try? decodeIfPresent(Int64.self, forKey: key),
-           let i = outer { return Double(i) }
+        if let d = try? decodeIfPresent(Double.self, forKey: key) { return d }
+        if let i = try? decodeIfPresent(Int64.self, forKey: key) { return Double(i) }
         return nil
     }
 
     public func flexibleDoubleArray(forKey key: Key, default defaultValue: [Double]) -> [Double] {
-        if let outer: [Double]? = try? decodeIfPresent([Double].self, forKey: key),
-           let arr = outer { return arr }
-        if let outer: [Int64]? = try? decodeIfPresent([Int64].self, forKey: key),
-           let arr = outer { return arr.map(Double.init) }
+        if let arr = try? decodeIfPresent([Double].self, forKey: key) { return arr }
+        if let arr = try? decodeIfPresent([Int64].self, forKey: key) { return arr.map(Double.init) }
         return defaultValue
     }
 }

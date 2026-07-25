@@ -150,6 +150,32 @@ contract, not an implementation detail.
 - **UI-only changes** that can't be asserted headlessly → exercise via the
   smoke launch and document what was visually verified in the PR.
 
+### 5. The tree builds with ZERO warnings — keep it that way
+
+`scripts/validate.sh` fails on any compiler warning, measured with a **clean**
+build (`--scratch-path` to a temp dir): an incremental build recompiles nothing
+and reports zero no matter how bad things are.
+
+This is a ratchet, not perfectionism. Warnings had accumulated to the point of
+being unreadable — the `swift-testing` package emitted a deprecation on every
+single `@Test`/`@Suite`, hundreds of them, and buried a double-optional bug in
+`AppConfig.flexibleDoubleIfPresent` and a non-Sendable capture in
+`NotificationService` that were sitting in plain sight.
+
+Two conventions came out of that cleanup:
+
+- **`swift-testing` is NOT a dependency of the testTargets.** Swift 6 toolchains
+  ship Testing; declaring the package too is what produced the deprecations. It
+  remains a dependency of `AiTaskbarTestSupport` only, because regular (non-test)
+  targets do not get the bundled module — removing it there fails with
+  `missing required module '_TestingInternals'`.
+- **Deliberate deprecated-API use is marked, not ignored.** The `SecKeychain*` /
+  `SecACL*` calls are the only route to classic file-keychain ACLs, so the
+  functions that use them carry
+  `@available(macOS, deprecated: 10.10, message: "…used on purpose")`. That
+  silences ~20 unavoidable warnings while putting the intent in the API surface
+  instead of a comment. Do NOT reach for this to hide a warning you could fix.
+
 ## Build commands
 
 ```bash

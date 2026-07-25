@@ -14,7 +14,7 @@ public enum ClaudeSessionScanner {
     /// Process-wide memo so a refresh only re-parses files that changed.
     /// Static because the scanner is a stateless enum called from a detached
     /// task; the memo is the one thing that must survive between calls.
-    nonisolated(unsafe) private static let memo = ScanMemo()
+    private static let memo = ScanMemo()
 
     public static func estimate(now: Date = .init(),
                                 projectsDir: URL? = nil) -> CostEstimate {

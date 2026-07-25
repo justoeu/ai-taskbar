@@ -440,7 +440,7 @@ section("Config: full round-trip via TOMLKit") {
         .appendingPathComponent("ai-taskbar-validate-cfg-\(UUID().uuidString).toml")
     try Data(toml.utf8).write(to: tmp)
     defer { try? FileManager.default.removeItem(at: tmp) }
-    let loader = try ConfigLoader(path: tmp)
+    let loader = ConfigLoader(path: tmp)
     let cfg = try loader.load()
 
     expect(cfg.ui.primary == .zai, "UI primary parsed")
