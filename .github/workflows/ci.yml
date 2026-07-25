@@ -52,6 +52,25 @@ jobs:
           fi
           echo "OK"
 
+      - name: Warnings ratchet
+        # CI is the AUTHORITY for this check, not the developer's machine.
+        # Swift 6.3.x emits none of the legacy-keychain deprecations while
+        # 6.2.4 emits eight, so measuring only locally produces a confident
+        # "zero warnings" that is wrong here. Everything outside the
+        # legacy-keychain files must be clean.
+        run: |
+          KEYCHAIN_LEGACY='Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor)\.swift'
+          swift build --build-tests --scratch-path "$RUNNER_TEMP/warnscratch" >/dev/null 2>"$RUNNER_TEMP/w.log" || true
+          other=$(grep -E 'warning:' "$RUNNER_TEMP/w.log" | grep -vE "$KEYCHAIN_LEGACY" | sort -u || true)
+          legacy=$(grep -E 'warning:' "$RUNNER_TEMP/w.log" | grep -E "$KEYCHAIN_LEGACY" | sort -u | wc -l | tr -d ' ' || true)
+          echo "allowlisted legacy-keychain warnings: ${legacy:-0}"
+          if [ -n "$other" ]; then
+            echo "$other" | head -20
+            echo "::error::compiler warnings outside the legacy-keychain allowlist"
+            exit 1
+          fi
+          echo "OK — no warnings outside the allowlist"
+
       - name: Compile (debug)
         run: swift build -c debug
 

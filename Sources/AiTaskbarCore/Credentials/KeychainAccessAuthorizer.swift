@@ -79,12 +79,6 @@ public enum KeychainAccessAuthorizer {
     /// this is safe to call from any context. See `KeychainCredentialReader`
     /// for why the deprecated UIFail key is deliberate for these plain
     /// generic-password items.
-    /// Calls deprecated `SecKeychain*` / `SecACL*` API deliberately — see the
-    /// type doc. Marking the function itself deprecated is what silences the
-    /// per-call warnings: they are unavoidable (no modern equivalent expresses
-    /// partition lists) and ~20 of them were drowning out the actionable
-    /// diagnostics. Availability, not a pragma, so the intent is in the API.
-    @available(macOS, deprecated: 10.10, message: "Legacy file-keychain ACL API, used on purpose")
     public static func canReadSilently(_ service: String, account: String? = nil) -> Bool {
         var result: CFTypeRef?
         var query: [String: Any] = [
@@ -106,12 +100,6 @@ public enum KeychainAccessAuthorizer {
     /// - Parameter probeRead: injection seam for tests. Production callers use
     ///   the account-aware silent read so authorization is verified against
     ///   the same item whose ACL was changed.
-    /// Calls deprecated `SecKeychain*` / `SecACL*` API deliberately — see the
-    /// type doc. Marking the function itself deprecated is what silences the
-    /// per-call warnings: they are unavoidable (no modern equivalent expresses
-    /// partition lists) and ~20 of them were drowning out the actionable
-    /// diagnostics. Availability, not a pragma, so the intent is in the API.
-    @available(macOS, deprecated: 10.10, message: "Legacy file-keychain ACL API, used on purpose")
     public static func authorize(service: String,
                                  probeRead: (String, String?) -> Bool = {
                                      KeychainAccessAuthorizer.canReadSilently($0, account: $1)
@@ -178,12 +166,6 @@ public enum KeychainAccessAuthorizer {
     // MARK: - ACL surgery
 
     @discardableResult
-    /// Calls deprecated `SecKeychain*` / `SecACL*` API deliberately — see the
-    /// type doc. Marking the function itself deprecated is what silences the
-    /// per-call warnings: they are unavoidable (no modern equivalent expresses
-    /// partition lists) and ~20 of them were drowning out the actionable
-    /// diagnostics. Availability, not a pragma, so the intent is in the API.
-    @available(macOS, deprecated: 10.10, message: "Legacy file-keychain ACL API, used on purpose")
     internal static func extendPartitionList(of access: SecAccess,
                                             with partition: String) throws -> Bool {
         guard let acl = findACL(in: access, authorization: "ACLAuthorizationPartitionID") else {
@@ -210,12 +192,6 @@ public enum KeychainAccessAuthorizer {
     }
 
     @discardableResult
-    /// Calls deprecated `SecKeychain*` / `SecACL*` API deliberately — see the
-    /// type doc. Marking the function itself deprecated is what silences the
-    /// per-call warnings: they are unavoidable (no modern equivalent expresses
-    /// partition lists) and ~20 of them were drowning out the actionable
-    /// diagnostics. Availability, not a pragma, so the intent is in the API.
-    @available(macOS, deprecated: 10.10, message: "Legacy file-keychain ACL API, used on purpose")
     internal static func addSelfToDecryptACL(of access: SecAccess) throws -> Bool {
         guard let acl = findACL(in: access, authorization: "ACLAuthorizationDecrypt") else {
             return false
@@ -267,12 +243,6 @@ public enum KeychainAccessAuthorizer {
     /// Finds the first ACL entry carrying `authorization` (compared as
     /// strings, so we don't depend on which kSecACLAuthorization* constants
     /// the SDK exposes).
-    /// Calls deprecated `SecKeychain*` / `SecACL*` API deliberately — see the
-    /// type doc. Marking the function itself deprecated is what silences the
-    /// per-call warnings: they are unavoidable (no modern equivalent expresses
-    /// partition lists) and ~20 of them were drowning out the actionable
-    /// diagnostics. Availability, not a pragma, so the intent is in the API.
-    @available(macOS, deprecated: 10.10, message: "Legacy file-keychain ACL API, used on purpose")
     internal static func findACL(in access: SecAccess, authorization: String) -> SecACL? {
         var aclsRef: CFArray?
         guard SecAccessCopyACLList(access, &aclsRef) == errSecSuccess,

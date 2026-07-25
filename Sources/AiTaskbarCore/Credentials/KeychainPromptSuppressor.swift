@@ -73,7 +73,6 @@ public enum KeychainPromptSuppressor {
         }
     }
 
-    @available(macOS, deprecated: 10.10, message: "Legacy file-keychain API, used on purpose")
     private static func setInteractionAllowed(_ allowed: Bool) {
         let status = SecKeychainSetUserInteractionAllowed(allowed)
         if status != errSecSuccess {

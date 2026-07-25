@@ -150,17 +150,33 @@ contract, not an implementation detail.
 - **UI-only changes** that can't be asserted headlessly → exercise via the
   smoke launch and document what was visually verified in the PR.
 
-### 5. The tree builds with ZERO warnings — keep it that way
+### 5. Zero warnings OUTSIDE the legacy-keychain files
 
-`scripts/validate.sh` fails on any compiler warning, measured with a **clean**
-build (`--scratch-path` to a temp dir): an incremental build recompiles nothing
-and reports zero no matter how bad things are.
+`scripts/validate.sh` and CI both fail on any compiler warning that is not in
+`Credentials/Keychain{AccessAuthorizer,CredentialReader,PromptSuppressor}.swift`.
+Both measure with a **clean** build (`--scratch-path` to a temp dir): an
+incremental build recompiles nothing and reports zero no matter how bad things
+are.
 
-This is a ratchet, not perfectionism. Warnings had accumulated to the point of
-being unreadable — the `swift-testing` package emitted a deprecation on every
-single `@Test`/`@Suite`, hundreds of them, and buried a double-optional bug in
-`AppConfig.flexibleDoubleIfPresent` and a non-Sendable capture in
-`NotificationService` that were sitting in plain sight.
+Two things this bar encodes, both learned by getting them wrong:
+
+- **The legacy-keychain deprecations are unavoidable.** `SecKeychain*`,
+  `SecACL*` and `kSecUseAuthenticationUI` are the only route to classic
+  file-keychain ACLs, and Swift has no per-call suppression. Annotating the
+  enclosing function `@available(macOS, deprecated:)` was tried and **reverted**
+  — it silences the call *into* the C API but makes every caller of the
+  annotated function warn instead, turning one warning into four. Allowlisting
+  is honest; annotating was cosmetics that made it worse.
+- **CI is the authority, not your machine.** These warnings are
+  toolchain-dependent: Swift 6.3.x emits none of them, 6.2.4 (what CI runs)
+  emits eight. A local "zero warnings" measurement is not evidence the tree is
+  clean. This is why the ratchet runs in `ci.yml` too.
+
+The failure mode being guarded against is not "a warning appeared" but
+"warnings piled up until nobody read them": the `swift-testing` package was
+emitting a deprecation on every `@Test`/`@Suite` — hundreds — which is how a
+double-optional bug in `AppConfig.flexibleDoubleIfPresent` and a non-Sendable
+capture in `NotificationService` sat in plain sight.
 
 Two conventions came out of that cleanup:
 
@@ -169,12 +185,8 @@ Two conventions came out of that cleanup:
   remains a dependency of `AiTaskbarTestSupport` only, because regular (non-test)
   targets do not get the bundled module — removing it there fails with
   `missing required module '_TestingInternals'`.
-- **Deliberate deprecated-API use is marked, not ignored.** The `SecKeychain*` /
-  `SecACL*` calls are the only route to classic file-keychain ACLs, so the
-  functions that use them carry
-  `@available(macOS, deprecated: 10.10, message: "…used on purpose")`. That
-  silences ~20 unavoidable warnings while putting the intent in the API surface
-  instead of a comment. Do NOT reach for this to hide a warning you could fix.
+- **Don't reach for `@available(deprecated:)` to hide a warning you could fix.**
+  See above for why it usually doesn't even hide it.
 
 ## Build commands
 
