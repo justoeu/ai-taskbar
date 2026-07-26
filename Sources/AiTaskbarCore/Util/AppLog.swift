@@ -24,6 +24,7 @@ public enum AppLog {
     public static let lifecycle   = Logger(subsystem: subsystem, category: "lifecycle")
     public static let updates     = Logger(subsystem: subsystem, category: "updates")
     public static let scheduler   = Logger(subsystem: subsystem, category: "scheduler")
+    public static let cost        = Logger(subsystem: subsystem, category: "cost")
 
     public static let subsystem = "ai-taskbar"
 }
