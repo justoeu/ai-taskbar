@@ -43,6 +43,21 @@ public final class CostEstimator: ObservableObject {
     private let minRecomputeInterval: TimeInterval = 60
     /// The running scan, so it can be cancelled on teardown or supersession.
     private var inFlight: Task<Void, Never>?
+    /// The opencode scan, tracked separately so it can be cancelled without
+    /// touching the scan that owns `isLoading`.
+    private var opencodeTask: Task<Void, Never>?
+    /// Bumped on every `refresh`. A task only writes state if this still
+    /// matches the value it captured — otherwise a scan superseded while a
+    /// NEWER one was already running would clear that newer scan's `isLoading`
+    /// and null its `inFlight`, stranding it.
+    ///
+    /// Honest status: this is defensive, NOT test-covered. Reaching the race
+    /// needs a cancelled scan to finish while a later one is still in flight,
+    /// and with warm memos both complete too fast to force. A test asserting it
+    /// was written, passed with the guard deleted, and was removed rather than
+    /// kept as false coverage. The guard stays because it is cheap and the
+    /// failure it prevents is silent.
+    private var generation: UInt64 = 0
 
     public init() {}
 
@@ -54,6 +69,8 @@ public final class CostEstimator: ObservableObject {
            Date.now.timeIntervalSince(last) < minRecomputeInterval {
             return
         }
+        generation &+= 1
+        let gen = generation
         isLoading = true
         // Held so a teardown (or a superseding refresh) can cancel the scan.
         // Both scanners poll `Task.isCancelled` between files; without a
@@ -62,29 +79,66 @@ public final class CostEstimator: ObservableObject {
         inFlight = Task.detached(priority: .utility) {
             async let claude = Task { ClaudeSessionScanner.estimate() }
             async let codex  = Task { CodexCost.estimate() }
-            // One SQLite pass per vendor. Each is ~1s against a 19 GB database
-            // because opencode indexes `message` by (session_id, time_created)
-            // and there is no index on time alone, so a window query scans.
-            // Run alongside the file scanners rather than after them.
-            async let opencode = Task {
-                Self.opencodeProviders.compactMapValues {
-                    OpencodeScanner.scan(provider: $0)
-                }
-            }
+            let started = Date()
             let claudeEstimate = await claude.value
             let codexEstimate  = await codex.value
-            let opencodeScans  = await opencode.value
+            // Kept in the shipping build. The cold Claude scan dominates this
+            // (5s on the maintainer's machine) and the Models section shows
+            // "Loading…" for its whole duration, which is indistinguishable
+            // from being stuck. When someone reports it hanging, this line is
+            // the difference between measuring and guessing.
+            AppLog.cost.info(
+                "cost scan finished in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s")
             // A cancelled scan returns a PARTIAL total (the scanners break out
             // of the file loop). Publishing that would show a number that is
             // silently too low, so drop it and let the next tick recompute.
-            guard !Task.isCancelled else { return }
+            //
+            // `isLoading` MUST still be cleared on the way out. It gates every
+            // future refresh (`if isLoading { return }`), so returning while it
+            // is true wedges the Models section on "Loading…" permanently, with
+            // no path back — the next refresh bails before it can fix anything.
+            guard !Task.isCancelled else {
+                await MainActor.run { [self] in
+                    guard self.generation == gen else { return }
+                    self.isLoading = false
+                    self.inFlight = nil
+                }
+                return
+            }
             await MainActor.run { [self] in
+                guard self.generation == gen else { return }
                 self.byVendor[.anthropic] = claudeEstimate
                 self.byVendor[.openai] = codexEstimate
-                self.opencode = opencodeScans
                 self.lastComputedAt = .now
                 self.isLoading = false
                 self.inFlight = nil
+            }
+        }
+
+        // opencode is scanned on its OWN task rather than inside the one above.
+        //
+        // It reads a 19 GB SQLite file with no index on time alone, so a window
+        // query scans: measured 1.51s for the openai provider and 0.23s for
+        // xai. Awaiting that before publishing made the whole Models section
+        // wait on it — a cold first open went from ~5s (the Claude scan, which
+        // dominates and always has) to ~6.5s, which reads as "it never loads".
+        //
+        // The two are genuinely independent: nothing in the vendor cost
+        // estimate depends on the opencode scan, and the opencode rows render
+        // in their own section. Letting each publish when it is ready keeps the
+        // slower source from holding the faster one hostage. It also keeps
+        // `isLoading` — which drives the spinner and gates refreshes — tied
+        // only to the scanners the spinner is actually describing.
+        opencodeTask?.cancel()
+        opencodeTask = Task.detached(priority: .utility) {
+            let scans = Self.opencodeProviders.compactMapValues {
+                OpencodeScanner.scan(provider: $0)
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [self] in
+                guard self.generation == gen else { return }
+                self.opencode = scans
+                self.opencodeTask = nil
             }
         }
     }
@@ -93,6 +147,8 @@ public final class CostEstimator: ObservableObject {
     public func cancel() {
         inFlight?.cancel()
         inFlight = nil
+        opencodeTask?.cancel()
+        opencodeTask = nil
         isLoading = false
     }
 }
