@@ -260,11 +260,16 @@ The `.app` and both DMGs are built, signed, **notarized** and published
    (5HHL78743R)`) must already be in the login keychain — check with
    `security find-identity -v -p codesigning`.
 
-   This step is genuinely required and is **not** something the agent or CI can
-   do for you: it types an Apple ID and an app-specific password. Check whether
-   it was ever done on this machine with
-   `security find-generic-password -s "com.apple.gke.notary.tool"` — no output
-   means no profile, and every release will stop at `notarize`.
+   Storing a profile types an Apple ID and an app-specific password, so it is
+   the maintainer's step, not the agent's. **But check before asking anyone to
+   do it, and check by USING the profile** — `xcrun notarytool history
+   --keychain-profile <name>`. A keychain query
+   (`security find-generic-password -s "com.apple.gke.notary.tool"`) returns
+   nothing even when working profiles exist; on 2026-07-25 that false negative
+   produced a confident "notarization is blocked" and a pointless request to
+   re-run `store-credentials`, when `ai-taskbar-notary` and `ai-taskbar` had
+   both been working since July 2nd. Absence of evidence from the wrong query
+   is not evidence of absence.
 
    `DEVELOPER_ID` is auto-detected when the keychain holds exactly one
    `Developer ID Application` certificate, so you normally do not pass it. With

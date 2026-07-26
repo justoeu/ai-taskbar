@@ -445,12 +445,18 @@ xcrun notarytool store-credentials my-profile --apple-id you@example.com --team-
 NOTARY_PROFILE=my-profile make release
 ```
 
-This one-time step is easy to assume was done — it is per-machine, and without
-it every release builds both DMGs and then stops at `notarize`. Check with:
+This one-time step is per-machine, and without it every release builds both
+DMGs and then stops at `notarize`. Check whether it was already done by
+**using** the profile — never by searching the keychain:
 
 ```bash
-security find-generic-password -s "com.apple.gke.notary.tool"   # no output = no profile
+xcrun notarytool history --keychain-profile my-profile
 ```
+
+`Successfully received submission history` means it works. A keychain query
+like `security find-generic-password -s "com.apple.gke.notary.tool"` returns
+nothing **even when working profiles exist** — notarytool does not store them
+where that looks, so its silence is a false negative, not an answer.
 
 `DEVELOPER_ID` is auto-detected when the login keychain holds exactly one
 `Developer ID Application` certificate. Set it explicitly when you have more
