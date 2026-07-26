@@ -201,3 +201,4 @@
 "move_vendor_up_help" = "Mover este card para cima";
 "move_vendor_down_help" = "Mover este card para baixo";
 "settings_notifications_unavailable_tahoe" = "Desabilitado no macOS 26 (Tahoe) — o handshake XPC de usernotifications crasheia binários compilados contra SDKs antigos. Será reabilitado quando o pipeline de release recompilar num runner Tahoe.";
+"opencode_label" = "opencode";

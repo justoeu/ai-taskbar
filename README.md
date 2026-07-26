@@ -29,6 +29,7 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
 - **24-hour sparkline** with dashed threshold lines, current value, and peak marker
 - **Daily + 7-day cost estimates** computed locally from your CLI logs
 - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
+- **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
 - **Click the card header** (chevron + name + empty space) to expand/collapse; dashboard / reorder / refresh stay on the trailing buttons
 - **Reorder cards** with ↑ / ↓ on each header (order saved on this Mac)
 - **Locked card with explanation** when a provider has no credentials

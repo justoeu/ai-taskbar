@@ -17,6 +17,7 @@ public struct CostFooterView: View {
 
     public var body: some View {
         let estimate = cost.byVendor[vendorId]
+        let opencodeScan = cost.opencode[vendorId]
         let hasData = (estimate?.usdToday ?? 0) > 0 || (estimate?.usdLast7Days ?? 0) > 0
         let supportsLocal = CostEstimator.supportedVendors.contains(vendorId)
         // Render the footer when we already have data, OR while we're loading
@@ -43,6 +44,18 @@ public struct CostFooterView: View {
                     }
                 }
                 modelBreakdownDetailed(for: estimate)
+                if let scan = opencodeScan, !scan.isEmpty {
+                    opencodeSection(scan)
+                }
+            }
+        } else if let scan = opencodeScan, !scan.isEmpty {
+            // The vendor has no local CLI scanner of its own (xAI), so there is
+            // no cost estimate to hang this off. Its usage still arrived
+            // through opencode and is still worth attributing, so the footer
+            // renders for the breakdown alone.
+            Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                opencodeSection(scan)
             }
         } else if supportsLocal && cost.isLoading {
             Divider()
@@ -132,6 +145,85 @@ public struct CostFooterView: View {
             }
             .padding(.leading, 2)
         }
+    }
+
+    /// Usage this vendor received through opencode, kept visually separate
+    /// from the vendor's own CLI totals above.
+    ///
+    /// Whether a row shows dollars or tokens is decided by the DATA, not by
+    /// hardcoding which vendor is which: opencode records a per-turn cost only
+    /// for pay-per-token traffic and leaves it at zero for anything covered by
+    /// a subscription. So a zero-cost model is one whose tokens were already
+    /// paid for by a plan, and printing a dollar figure for it would invent
+    /// spending that never happened.
+    ///
+    /// The dollars shown here are opencode's own arithmetic, not a re-pricing
+    /// from `PricingTable` — it applied the vendor's rates at the time of the
+    /// turn, which a hand-maintained table cannot promise to match. They are a
+    /// breakdown of a total the vendor card already reports from its API, not
+    /// an addition to it.
+    @ViewBuilder
+    private func opencodeSection(_ scan: OpencodeScan) -> some View {
+        let models = Set(scan.last7DaysByModel.keys).union(scan.todayByModel.keys)
+        if !models.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    L10n.text("opencode_label")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 6)
+                }
+                ForEach(models.sorted(), id: \.self) { model in
+                    let usd7d = scan.costLast7DaysByModel[model] ?? 0
+                    HStack(spacing: 0) {
+                        Text("•  ")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                        Text(Self.shortModelName(model))
+                            .font(.subheadline.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 6)
+                        if usd7d > 0 {
+                            Text(String(format: "$%.2f", usd7d))
+                                .font(.subheadline.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        } else if let usage = scan.last7DaysByModel[model] {
+                            Text(Self.compactTokens(usage))
+                                .font(.subheadline.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+            }
+            .padding(.leading, 2)
+        }
+    }
+
+    /// "169M in · 2.7B cache · 12M out" — the three buckets that differ by
+    /// orders of magnitude, so a single total would hide the cache reads that
+    /// dominate. Cache is shown because it is usually the largest number and
+    /// its absence would make the row look wrong next to the plan's own meter.
+    static func compactTokens(_ u: ModelUsage) -> String {
+        // Thresholds sit where the ROUNDED value would reach the next unit, not
+        // at the unit itself. Splitting on 1_000_000 renders 999_999 as
+        // "1000k" — arithmetically fine, and it reads as a bug.
+        func short(_ n: Int) -> String {
+            switch n {
+            case 999_500_000...: return String(format: "%.1fB", Double(n) / 1e9)
+            case 999_500...:     return String(format: "%.0fM", Double(n) / 1e6)
+            case 1_000...:       return String(format: "%.0fk", Double(n) / 1e3)
+            default:             return "\(n)"
+            }
+        }
+        var parts = ["\(short(u.inputTokens)) in"]
+        if u.cacheReadTokens > 0 { parts.append("\(short(u.cacheReadTokens)) cache") }
+        parts.append("\(short(u.outputTokens)) out")
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
