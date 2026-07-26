@@ -317,6 +317,29 @@ they trigger a redundant version bump (this is how an accidental extra
 
 - **`AiTaskbarCore`** — vendor-agnostic. Models, HTTP, Cache, Credentials,
   Config, Cost helpers, History, Util (JSONValue, SharedCoders).
+
+### Cost scanners — token semantics differ per source, do not generalize
+
+Each scanner reads a different vendor's local records, and the same-sounding
+fields do not mean the same thing. Copying an assumption from one into another
+produces numbers that are wrong by multiples while looking plausible:
+
+| | `input` includes cached? | reasoning tokens |
+|---|---|---|
+| `CodexSessionScanner` (`~/.codex/sessions`) | **yes** — cached is subtracted out | folded into output |
+| `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
+
+Both were established against real data, not documentation, and both are pinned
+by tests that fail if the other reading is applied. `OpencodeScanner` reads
+per-MESSAGE, never `session.model` — that column holds the last model a session
+used, so session-level attribution files every pre-switch token under the wrong
+model (measured: ~20M tokens on this machine).
+
+opencode is a **client, not a vendor**. Its usage is attributed to whichever
+vendor billed it and is never merged into that vendor's own totals: OpenAI
+traffic rides a subscription (zero marginal cost, so tokens are shown and
+dollars are not), and xAI's card already reports account-wide cycle spend from
+the Management API, so adding opencode's dollars there would double-count.
 - **`AiTaskbarProviders`** — one file per vendor. All providers use the
   `CachedFetch` helper for the cache → fetch → write → decode → stale fallback
   lifecycle. **Do NOT re-introduce per-provider boilerplate.** If a vendor
