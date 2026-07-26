@@ -259,6 +259,17 @@ The `.app` and both DMGs are built, signed, **notarized** and published
    The Developer ID identity (`Developer ID Application: Valmir Robson Justo
    (5HHL78743R)`) must already be in the login keychain — check with
    `security find-identity -v -p codesigning`.
+
+   This step is genuinely required and is **not** something the agent or CI can
+   do for you: it types an Apple ID and an app-specific password. Check whether
+   it was ever done on this machine with
+   `security find-generic-password -s "com.apple.gke.notary.tool"` — no output
+   means no profile, and every release will stop at `notarize`.
+
+   `DEVELOPER_ID` is auto-detected when the keychain holds exactly one
+   `Developer ID Application` certificate, so you normally do not pass it. With
+   two or more it stays unset on purpose — picking one silently could sign a
+   release under the wrong team.
 2. **Gate.** `make validate` must be green **and** the tree must be clean
    (commit/stash first — `make publish` refuses a dirty tree or an untagged
    HEAD).
@@ -274,6 +285,24 @@ The `.app` and both DMGs are built, signed, **notarized** and published
 Related targets: `make publish` is the second half alone (tag already exists
 locally); `make release` builds + notarizes both DMGs without uploading;
 `make dmg` is an unsigned ad-hoc local build for testing only.
+
+**Publishing a tag that `main` has already moved past.** `make publish` requires
+`HEAD` to carry the `v$(VERSION)` tag, so once any commit lands on `main` after
+the bump, publishing from `main` refuses. Check out the tag instead — the tree
+is clean and `HEAD` carries it, which is all the guard wants:
+
+```bash
+git checkout v0.16.1 && make publish && git checkout main
+```
+
+**Where releases actually go wrong** (each of these has happened):
+
+| Symptom | Cause | Now |
+|---|---|---|
+| `DEVELOPER_ID not set` after a 3-minute build | `publish` had no up-front guard and `DEVELOPER_ID` had no default, while `APP_SIGN_IDENTITY` auto-detected the same certificate one line above | auto-detected when unambiguous; `publish` checks signing + notarization credentials in its first second |
+| Release job fails on a tag that CI passed | `ci.yml` and `release.yml` selected Swift independently and drifted (6.2.4 vs 6.0) | both call `.github/actions/select-swift`, which requires >= 6.2 |
+| Universal DMG that is arm64-only | `make dmg` writes a host-arch app to `$(DMG)`, the universal name `UpdateChecker.pickDMGAsset` serves to Intel Macs | `universal-check` asserts x86_64 + arm64 and gates `release-universal` |
+| Release notes missing the actual feature | the changelog spans previous-tag..this-tag; a tag that never produced a release swallows everything before it | regenerate with `gh release edit <tag> --notes-file` over the right range |
 
 **Doc-only commits pushed to `main` MUST carry `[skip release]`** — otherwise
 they trigger a redundant version bump (this is how an accidental extra

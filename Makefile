@@ -20,10 +20,32 @@ DMG_ARM64  := ai-taskbar-$(VERSION)-arm64.dmg
 # launch used to pop a SecurityAgent password dialog. Auto-detect the
 # Developer ID Application identity when the login keychain has one; fall
 # back to ad-hoc on machines without it (contributors, CI).
-APP_SIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null \
+DEVELOPER_ID_CANDIDATES := $(shell security find-identity -v -p codesigning 2>/dev/null \
+	| grep -c 'Developer ID Application')
+DETECTED_DEVELOPER_ID := $(shell security find-identity -v -p codesigning 2>/dev/null \
 	| awk -F'"' '/Developer ID Application/ {print $$2; exit}')
+
+APP_SIGN_IDENTITY ?= $(DETECTED_DEVELOPER_ID)
 ifeq ($(strip $(APP_SIGN_IDENTITY)),)
 APP_SIGN_IDENTITY := -
+endif
+
+# `DEVELOPER_ID` is the release identity — the one that goes through hardened
+# runtime, notarization and out to users. It used to have no default at all,
+# while APP_SIGN_IDENTITY right above auto-detected the very same certificate.
+# So `make publish` would build the app, sign it with the auto-detected
+# identity, print that identity on screen, and only then abort with
+# "DEVELOPER_ID not set" — three minutes in, asking the maintainer to retype a
+# string it had already found.
+#
+# Default it to the detected identity, but ONLY when the keychain holds exactly
+# one candidate. With two (personal + company team, say), silently picking the
+# first would sign a release with the wrong team and nobody would notice until
+# the notarization came back attached to the wrong account — so that case keeps
+# failing and makes the choice explicit. Setting DEVELOPER_ID on the command
+# line still wins over both.
+ifeq ($(strip $(DEVELOPER_ID_CANDIDATES)),1)
+DEVELOPER_ID ?= $(DETECTED_DEVELOPER_ID)
 endif
 
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
@@ -297,6 +319,22 @@ release: release-arm64 release-universal
 publish:
 	@test -z "$$(git status --porcelain)" || { echo "✗ working tree not clean — commit or stash first"; exit 1; }
 	@git tag --points-at HEAD | grep -qx "v$(VERSION)" || { echo "✗ HEAD is not tagged v$(VERSION) — pull the release bump commit + tag first"; exit 1; }
+	@# Check the signing/notarization environment BEFORE building. `make ship`
+	@# has guarded this since it existed; `make publish` did not, so running it
+	@# directly built and signed the whole app first and only then died inside
+	@# sign-developer — and a missing NOTARY_PROFILE got discovered even later,
+	@# after both DMGs were already built. Fail in the first second instead.
+	@test -n "$(DEVELOPER_ID)" || { \
+		echo "✗ DEVELOPER_ID not set and not auto-detectable."; \
+		echo "  Found $(DEVELOPER_ID_CANDIDATES) 'Developer ID Application' identit(y/ies) in the keychain."; \
+		echo "  Pass one explicitly: DEVELOPER_ID=\"Developer ID Application: Name (TEAM)\" make publish"; \
+		exit 1; }
+	@test -n "$(NOTARY_PROFILE)$(APPLE_ID)" || { \
+		echo "✗ notarization credentials missing — publish would build both DMGs and then fail at notarize."; \
+		echo "  One-time setup:  xcrun notarytool store-credentials \"ai-taskbar-notary\""; \
+		echo "  Then:            NOTARY_PROFILE=ai-taskbar-notary make publish"; \
+		echo "  (or APPLE_ID + APPLE_TEAM_ID + APPLE_PASSWORD)"; \
+		exit 1; }
 	$(MAKE) release
 	shasum -a 256 $(DMG) $(DMG_ARM64) > checksums-$(VERSION).txt
 	gh release upload "v$(VERSION)" $(DMG) $(DMG_ARM64) checksums-$(VERSION).txt --clobber
