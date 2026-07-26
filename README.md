@@ -420,7 +420,8 @@ make icon               # regenerate Resources/AppIcon.icns from Swift drawing s
 make dmg                # host-arch DMG
 make dmg-universal      # universal DMG
 make validate           # 160+ assertion suite + 245-test swift-test + coverage ≥90% + smoke launch + perms audit
-make sign-developer     # requires DEVELOPER_ID env var
+make universal-check    # asserts the built app really is x86_64 + arm64
+make sign-developer     # DEVELOPER_ID auto-detected when the keychain has exactly one
 make notarize           # requires NOTARY_PROFILE (keychain) or APPLE_ID/APPLE_TEAM_ID/APPLE_PASSWORD
 make release            # both notarized DMGs: arm64 + universal (sign app → DMG → sign DMG → notarize → staple)
 make publish            # make release + upload both DMGs & checksums to the GitHub Release, flip draft → published
@@ -441,8 +442,30 @@ make BUNDLE_ID=com.yourorg.aitaskbar app
 # keychain so it never touches env vars or shell history:
 xcrun notarytool store-credentials my-profile --apple-id you@example.com --team-id TEAMID12345
 
-export DEVELOPER_ID="Developer ID Application: Your Name (TEAMID12345)"
 NOTARY_PROFILE=my-profile make release
+```
+
+This one-time step is per-machine, and without it every release builds both
+DMGs and then stops at `notarize`. Check whether it was already done by
+**using** the profile — never by searching the keychain:
+
+```bash
+xcrun notarytool history --keychain-profile my-profile
+```
+
+`Successfully received submission history` means it works. A keychain query
+like `security find-generic-password -s "com.apple.gke.notary.tool"` returns
+nothing **even when working profiles exist** — notarytool does not store them
+where that looks, so its silence is a false negative, not an answer.
+
+`DEVELOPER_ID` is auto-detected when the login keychain holds exactly one
+`Developer ID Application` certificate. Set it explicitly when you have more
+than one — the Makefile refuses to guess, because signing a release under the
+wrong team only surfaces once notarization comes back attached to the wrong
+account:
+
+```bash
+export DEVELOPER_ID="Developer ID Application: Your Name (TEAMID12345)"
 ```
 
 (Alternatively pass `APPLE_ID` + `APPLE_TEAM_ID` + `APPLE_PASSWORD` env vars
@@ -477,8 +500,16 @@ NOTARY_PROFILE=my-profile make ship
 locally; `ship` aborts cleanly if the head commit opted out via
 `[skip release]`.)
 
-`make publish` refuses to run on a dirty tree or when `HEAD` isn't the tagged
-release commit; then it builds, signs and notarizes **two DMGs** —
+`make publish` checks the signing identity and notarization credentials in its
+first second — before building anything — then refuses to run on a dirty tree or
+when `HEAD` isn't the tagged release commit. Once a later commit lands on
+`main`, publish from the tag instead:
+
+```bash
+git checkout v0.16.1 && make publish && git checkout main
+```
+
+It then builds, signs and notarizes **two DMGs** —
 `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon, smaller) and the universal
 `ai-taskbar-X.Y.Z.dmg` — uploads both plus a `checksums-X.Y.Z.txt`, and flips
 the release from draft to published. The in-app update checker picks the DMG
@@ -491,7 +522,7 @@ The level is matched against the commit subjects/bodies since the last `v*` tag:
 
 | Bump  | Trigger                                                              |
 |-------|---------------------------------------------------------------------|
-| major | a `BREAKING CHANGE` body, a `type!:` subject, or `[bump:major]`      |
+| major | a body line **starting** with `BREAKING CHANGE:` (exact case), a `type!:` subject, or `[bump:major]` |
 | minor | a `feat:` / `feat(scope):` subject, or `[bump:minor]`               |
 | patch | anything else (the default — this repo uses free-form subjects)      |
 
@@ -507,12 +538,16 @@ git tag v0.2.0-beta1
 git push origin v0.2.0-beta1
 ```
 
-The [release workflow](.github/workflows/release.yml) runs on GitHub-hosted macOS runners:
-1. Build universal DMG via `make dmg-universal`
-2. Verify code signature
-3. Run the 160-assertion validation suite (plus the swift-test coverage gate)
-4. Compute SHA256 of the DMG
-5. Create a GitHub Release with auto-generated notes + the DMG attached
+The [release workflow](.github/workflows/release.yml) runs on GitHub-hosted
+macOS runners and does exactly two things:
+
+1. Run the validation suite against the tagged commit.
+2. Create a **draft** GitHub Release with auto-generated notes.
+
+It builds **no DMG and attaches no asset** — that has been true since v0.7.3,
+for the reason given above: the Developer ID private key stays on the
+maintainer's Mac. Pushing a tag therefore gets you a draft and nothing else;
+run `make publish` locally to put binaries on it.
 
 Pre-releases: tag like `v0.2.0-beta1` — the workflow marks them as pre-release automatically.
 
