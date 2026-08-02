@@ -47,7 +47,7 @@ struct AggregatesComputationTests {
 
     @Test("one loading state flips isAnyVendorLoading")
     func loading_flips_flag() {
-        let r = AggregatesComputation.compute(states: [.idle, .loading])
+        let r = AggregatesComputation.compute(states: [.idle, .loading(previous: nil)])
         #expect(r.isAnyVendorLoading)
     }
 
@@ -153,14 +153,13 @@ struct AggregatesComputationTests {
 
     @Test("loading state with prior outcome still contributes max utilization")
     func loading_keeps_old_outcome_for_max() {
-        // A refresh that just started still holds the previous outcome in
-        // its state — the icon color shouldn't flicker to 0 while loading.
-        let loadingWithOutcome = VendorViewModel.State.loading
-        // State.loading doesn't carry an outcome in the current enum shape,
-        // so max stays 0 here. This test documents that behavior.
+        // A refresh that just started carries the previous outcome so the
+        // menu bar does not flicker to 0% (BUG-ART-003).
+        let loadingWithOutcome = VendorViewModel.State.loading(
+            previous: outcome(pct: 81))
         let r = AggregatesComputation.compute(states: [loadingWithOutcome])
         #expect(r.isAnyVendorLoading)
-        #expect(r.maxUtilization == 0)
+        #expect(r.maxUtilization == 81)
     }
 
     @Test("failed state's fallback contributes to max utilization")
@@ -220,7 +219,7 @@ struct AggregatesComputationTests {
     @Test("collapsed card is STILL counted for isAnyVendorLoading")
     func collapsed_still_flags_loading() {
         let r = AggregatesComputation.compute(entries: [
-            entry(.loading, expanded: false)
+            entry(.loading(previous: nil), expanded: false)
         ])
         #expect(r.isAnyVendorLoading)
     }

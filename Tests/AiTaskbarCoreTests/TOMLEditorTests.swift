@@ -43,6 +43,27 @@ struct TOMLEditorTests {
         #expect(out.contains("warning  = 70"))
     }
 
+    @Test("preserves # inside string values when rewriting trailing comment (BUG-ART-005)")
+    func hash_inside_string_not_treated_as_comment() throws {
+        let src = """
+        [openrouter]
+        api_key = "sk-or-#frag"  # personal
+        """
+        let out = try TOMLEditor.setValue(
+            in: src, section: "openrouter", key: "enabled",
+            value: .bool(true))
+        // Existing api_key line untouched — and if we rewrite api_key, comment stays real.
+        let rewritten = try TOMLEditor.setValue(
+            in: src, section: "openrouter", key: "api_key",
+            value: .string("sk-or-#frag"))
+        #expect(rewritten.contains("\"sk-or-#frag\""))
+        #expect(rewritten.contains("# personal"))
+        // Bug mode started the trailing comment at the in-string '#',
+        // producing a broken RHS like: = "#frag"  # personal
+        #expect(!rewritten.contains("= \"#frag\""))
+        #expect(out.contains("enabled = true"))
+    }
+
     @Test("replaces double value (integer form when whole)")
     func replace_double_integer_form() throws {
         let out = try TOMLEditor.setValue(

@@ -205,7 +205,23 @@ extension KeyedDecodingContainer {
     public func flexibleDoubleArray(forKey key: Key, default defaultValue: [Double]) -> [Double] {
         if let arr = try? decodeIfPresent([Double].self, forKey: key) { return arr }
         if let arr = try? decodeIfPresent([Int64].self, forKey: key) { return arr.map(Double.init) }
-        return defaultValue
+        // Mixed int/float arrays (e.g. [90, 99.5]) fail homogeneous decodes
+        // in TOMLKit — walk element-by-element (BUG-ART-007).
+        guard contains(key),
+              var container = try? nestedUnkeyedContainer(forKey: key) else {
+            return defaultValue
+        }
+        var out: [Double] = []
+        while !container.isAtEnd {
+            if let d = try? container.decode(Double.self) {
+                out.append(d)
+            } else if let i = try? container.decode(Int64.self) {
+                out.append(Double(i))
+            } else {
+                return defaultValue
+            }
+        }
+        return out.isEmpty ? defaultValue : out
     }
 }
 

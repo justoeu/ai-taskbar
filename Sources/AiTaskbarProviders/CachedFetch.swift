@@ -23,16 +23,18 @@ public struct CachedFetch: Sendable {
         fetch: () async throws -> Data
     ) async throws -> FetchOutcome {
         try Task.checkCancellation()
-        if !forceRefresh, let cached = cache.freshPayload() {
-            return try makeOutcome(from: cached, decode: decode,
-                                    isStale: false, cacheAge: cache.payloadAge())
+        if !forceRefresh, let hit = cache.freshPayloadWithAge() {
+            return try makeOutcome(from: hit.0, decode: decode,
+                                    isStale: false, cacheAge: hit.1,
+                                    lastError: nil)
         }
         do {
             let data = try await fetch()
             try Task.checkCancellation()
             try cache.writePayload(data)
             return try makeOutcome(from: data, decode: decode,
-                                    isStale: false, cacheAge: 0)
+                                    isStale: false, cacheAge: 0,
+                                    lastError: nil)
         } catch is CancellationError {
             throw CancellationError()
         } catch let appErr as AppError {
@@ -43,37 +45,44 @@ public struct CachedFetch: Sendable {
             // Scrub before persisting: `.last_error` is written to disk, and
             // a vendor's 4xx body can echo the account back (user_id, email).
             // The success path has always been scrubbed; this one had not.
+            let fe: FetchError
             if case .http(let status, let body) = appErr {
-                cache.markFailed(FetchError(status: status,
-                                            body: PIIScrub.scrub(diagnostic: body)))
+                fe = FetchError(status: status,
+                                body: PIIScrub.scrub(diagnostic: body))
             } else {
-                cache.markFailed(FetchError(status: 0,
-                                            body: PIIScrub.scrub(diagnostic: appErr.description)))
+                fe = FetchError(status: 0,
+                                body: PIIScrub.scrub(diagnostic: appErr.description))
             }
-            return try fallback(error: appErr, decode: decode)
+            cache.markFailed(fe)
+            return try fallback(error: appErr, decode: decode, lastError: fe)
         } catch {
-            cache.markFailed(FetchError(status: 0,
-                                        body: PIIScrub.scrub(diagnostic: String(describing: error))))
-            return try fallback(error: error, decode: decode)
+            let fe = FetchError(status: 0,
+                                body: PIIScrub.scrub(diagnostic: String(describing: error)))
+            cache.markFailed(fe)
+            return try fallback(error: error, decode: decode, lastError: fe)
         }
     }
 
     private func makeOutcome(from data: Data,
                              decode: (Data) throws -> VendorSnapshot,
-                             isStale: Bool, cacheAge: TimeInterval?) throws -> FetchOutcome {
+                             isStale: Bool,
+                             cacheAge: TimeInterval?,
+                             lastError: FetchError?) throws -> FetchOutcome {
         FetchOutcome(
             snapshot: try decode(data),
             isStale: isStale,
-            lastError: cache.lastError(),
+            lastError: lastError ?? cache.lastError(),
             cacheAge: cacheAge
         )
     }
 
     private func fallback(error: Error,
-                          decode: (Data) throws -> VendorSnapshot) throws -> FetchOutcome {
-        if let data = cache.anyPayload() {
-            return try makeOutcome(from: data, decode: decode,
-                                    isStale: true, cacheAge: cache.payloadAge())
+                          decode: (Data) throws -> VendorSnapshot,
+                          lastError: FetchError) throws -> FetchOutcome {
+        if let hit = cache.anyPayloadWithAge() {
+            return try makeOutcome(from: hit.0, decode: decode,
+                                    isStale: true, cacheAge: hit.1,
+                                    lastError: lastError)
         }
         throw AppError.wrapping(error)
     }

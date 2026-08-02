@@ -57,11 +57,17 @@ public final class PinningDelegate: NSObject, URLSessionDelegate, @unchecked Sen
 
         // 2. Compute SPKI hash of the leaf certificate.
         let leafHash = Self.spkiHash(forLeafOf: serverTrust)
-        // Resolve the effective stored hash: TOFU'd file pin first, then the
-        // baked-in `PinBaseline` (which prevents first-connection MitM by
-        // shipping pin values in-binary for known vendor hosts). When neither
-        // has a value for `host`, TOFU seeding applies.
-        let stored = store.get(host: host) ?? PinBaseline.pin(for: host)
+        // Effective pin: baked-in PinBaseline ALWAYS wins over on-disk TOFU.
+        // A poisoned pins/<host>.txt must not shadow the binary baseline
+        // (SEC-SEN-001 / CQ-FOR-001). Disk pins that disagree are dropped.
+        let baseline = PinBaseline.pin(for: host)
+        let disk = store.get(host: host)
+        let stored = Self.effectivePin(diskPin: disk, baselinePin: baseline)
+        if let baseline, let disk, disk != baseline {
+            store.clear(host: host)
+            AppLog.pinning.warning(
+                "discarded on-disk pin for \(host, privacy: .public) — disagreed with PinBaseline")
+        }
 
         // 3. Pure decision over (leafHash, stored, auditOnly). Centralized so
         // the TOFU + mismatch + audit-only logic is unit-testable without a
@@ -81,7 +87,7 @@ public final class PinningDelegate: NSObject, URLSessionDelegate, @unchecked Sen
             // baseline. Skip the write but still accept (the baseline already
             // matches the presented hash, since evaluate() returned .seed
             // only when `storedHash == nil`).
-            if PinBaseline.pin(for: host) == nil {
+            if baseline == nil {
                 store.set(host: host, hash: hash)
                 AppLog.pinning.info("TLS pin SEEDED for \(host, privacy: .public) → \(hash, privacy: .private)")
             }
@@ -121,6 +127,14 @@ public final class PinningDelegate: NSObject, URLSessionDelegate, @unchecked Sen
                 }
             }
         }
+    }
+
+    /// Resolves the pin that enforcement uses. Baseline always wins; a disk
+    /// pin is only used when no baseline exists for the host.
+    @inline(__always)
+    public static func effectivePin(diskPin: String?, baselinePin: String?) -> String? {
+        if let baselinePin { return baselinePin }
+        return diskPin
     }
 
     @inline(__always)

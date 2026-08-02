@@ -25,6 +25,7 @@ public enum TOMLEditor {
         case bool(Bool)
         case string(String)
         case stringArray([String])
+        case doubleArray([Double])
         /// Pre-encrypted value (output of `SecretBox.encrypt`) — emitted as
         /// a regular TOML string, but flagged so the encoder knows to wrap
         /// in double quotes without escaping the `:` characters (which need
@@ -35,13 +36,7 @@ public enum TOMLEditor {
         public var rendered: String {
             switch self {
             case .double(let d):
-                // TOML accepts `70` and `70.0` for a float key. Prefer the
-                // integer form when the value is a whole number — cleaner
-                // round-trip for thresholds like `warning = 70`.
-                if d == d.rounded() && abs(d) < 1e15 {
-                    return String(Int64(d))
-                }
-                return String(d)
+                return Self.renderDouble(d)
             case .bool(let b):
                 return b ? "true" : "false"
             case .string(let s):
@@ -51,7 +46,20 @@ public enum TOMLEditor {
             case .stringArray(let arr):
                 let inner = arr.map { Self.quote($0) }.joined(separator: ", ")
                 return "[\(inner)]"
+            case .doubleArray(let arr):
+                let inner = arr.map { Self.renderDouble($0) }.joined(separator: ", ")
+                return "[\(inner)]"
             }
+        }
+
+        private static func renderDouble(_ d: Double) -> String {
+            // TOML accepts `70` and `70.0` for a float key. Prefer the
+            // integer form when the value is a whole number — cleaner
+            // round-trip for thresholds like `warning = 70`.
+            if d == d.rounded() && abs(d) < 1e15 {
+                return String(Int64(d))
+            }
+            return String(d)
         }
 
         /// Renders a Swift string as a TOML double-quoted string literal,
@@ -190,22 +198,32 @@ public enum TOMLEditor {
     }
 
     /// Returns the trailing `# comment` portion of a RHS string, if present.
-    /// Naive — does NOT account for `#` inside string literals. Acceptable
-    /// because `parseKeyLine` only matched lines whose value the editor
-    /// itself wrote or that the schema controls (no `#` in api_key values).
+    /// Tracks string state so `#` inside quotes (e.g. `api_key = "sk-#x"`)
+    /// is not treated as a comment start (BUG-ART-005).
     private static func extractTrailingComment(_ rhs: String) -> String? {
-        // Skip the first token (the value), then look for `#`.
-        // Cheap approach: find first `#` that's preceded by whitespace.
         var inString = false
+        var escaped = false
         var prev: Character = " "
-        for c in rhs {
-            if c == "\"" { inString.toggle() }
-            if c == "#" && !inString && prev == " " {
-                // Return from `#` to end (trimmed).
-                let idx = rhs.firstIndex(of: "#")!
-                return String(rhs[idx...]).trimmingCharacters(in: .whitespaces)
+        var i = rhs.startIndex
+        while i < rhs.endIndex {
+            let c = rhs[i]
+            if inString {
+                if escaped {
+                    escaped = false
+                } else if c == "\\" {
+                    escaped = true
+                } else if c == "\"" {
+                    inString = false
+                }
+            } else {
+                if c == "\"" {
+                    inString = true
+                } else if c == "#" && (prev == " " || prev == "\t") {
+                    return String(rhs[i...]).trimmingCharacters(in: .whitespaces)
+                }
             }
             prev = c
+            i = rhs.index(after: i)
         }
         return nil
     }

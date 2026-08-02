@@ -47,6 +47,10 @@ import Foundation
 ///    breakdown, so that one derived field drifts by exactly their sum. We
 ///    never read it.
 public enum CodexSessionScanner {
+    /// Process-wide memo (same shape as ClaudeSessionScanner) so warm refreshes
+    /// skip unchanged rollouts (N1-NEX-003).
+    private static let memo = ScanMemo()
+
     public static func estimate(now: Date = .init(),
                                 sessionsDir: URL? = nil) -> CostEstimate {
         estimateDetailed(now: now, sessionsDir: sessionsDir).estimate
@@ -93,25 +97,60 @@ public enum CodexSessionScanner {
         var totalsLast7: [String: ModelUsage] = [:]
         var filesScanned = 0
         var loss = ScanLoss()
+        var seenPaths = Set<String>()
 
         for case let url as URL in walker {
             // See ClaudeSessionScanner: cooperate with cancellation so a
             // superseded refresh stops instead of finishing for nobody.
             if Task.isCancelled { break }
             guard url.pathExtension == "jsonl" else { continue }
-            if let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
-               let mtime = attrs.contentModificationDate, mtime < sevenDaysAgo {
+            let attrs = try? url.resourceValues(
+                forKeys: [.contentModificationDateKey, .fileSizeKey])
+            if let mtime = attrs?.contentModificationDate, mtime < sevenDaysAgo {
                 continue
             }
-            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }
             filesScanned += 1
+            seenPaths.insert(url.path)
+
+            if let mtime = attrs?.contentModificationDate,
+               let size = attrs?.fileSize,
+               let hit = memo.lookup(path: url.path, size: size,
+                                     mtime: mtime, day: startOfToday) {
+                for (model, usage) in hit.today {
+                    CostAggregator.add(usage, into: &totalsToday, model: model)
+                }
+                for (model, usage) in hit.week {
+                    CostAggregator.add(usage, into: &totalsLast7, model: model)
+                }
+                continue
+            }
+
+            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }
+            var fileToday: [String: ModelUsage] = [:]
+            var fileWeek: [String: ModelUsage] = [:]
+            var fileLoss = ScanLoss()
             scan(data: data,
                  startOfToday: startOfToday,
                  sevenDaysAgo: sevenDaysAgo,
-                 totalsToday: &totalsToday,
-                 totalsLast7: &totalsLast7,
-                 loss: &loss)
+                 totalsToday: &fileToday,
+                 totalsLast7: &fileWeek,
+                 loss: &fileLoss)
+            loss.merge(fileLoss)
+            for (model, usage) in fileToday {
+                CostAggregator.add(usage, into: &totalsToday, model: model)
+            }
+            for (model, usage) in fileWeek {
+                CostAggregator.add(usage, into: &totalsLast7, model: model)
+            }
+            if let mtime = attrs?.contentModificationDate,
+               let size = attrs?.fileSize {
+                memo.store(path: url.path,
+                           entry: ScanMemo.Entry(size: size, mtime: mtime,
+                                                 computedForDay: startOfToday,
+                                                 today: fileToday, week: fileWeek))
+            }
         }
+        memo.retain(paths: seenPaths)
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.openai)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.openai)
@@ -159,6 +198,13 @@ public enum CodexSessionScanner {
         var decodeFailures = 0
         var undatedEvents = 0
         var droppedEmptyUsage = 0
+
+        mutating func merge(_ other: ScanLoss) {
+            unattributedEvents += other.unattributedEvents
+            decodeFailures += other.decodeFailures
+            undatedEvents += other.undatedEvents
+            droppedEmptyUsage += other.droppedEmptyUsage
+        }
 
         var note: String? {
             var parts: [String] = []

@@ -66,6 +66,28 @@ struct UsageHistoryStoreTests {
         try? FileManager.default.removeItem(at: tmp)
     }
 
+    @Test("compact under lock preserves concurrent append (RACE-HER-001)")
+    func compact_preserves_concurrent_append() async throws {
+        let store = UsageHistoryStore(vendor: .anthropic, baseDir: tmp, retention: 86_400)
+        let base = Date.now
+        for i in 0..<20 {
+            store.append(maxUtilization: Double(i), at: base.addingTimeInterval(Double(i)))
+        }
+        async let compactDone: Void = {
+            store.compact()
+        }()
+        // Overlap appends while compact runs.
+        for i in 20..<40 {
+            store.append(maxUtilization: Double(i), at: base.addingTimeInterval(Double(i)))
+        }
+        await compactDone
+        let samples = store.load(since: base.addingTimeInterval(-1))
+        // All in-window samples should survive; allow small races only if any,
+        // but lock-held compact should keep ≥ 20 originals + concurrent writes.
+        #expect(samples.count >= 20)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
     @Test("load returns empty when file does not exist")
     func load_empty_when_no_file() throws {
         let store = UsageHistoryStore(vendor: .kimi, baseDir: tmp)

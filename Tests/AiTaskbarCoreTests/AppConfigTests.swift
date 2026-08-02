@@ -148,6 +148,18 @@ struct AppConfigTests {
         #expect(cfg.notifications.notifyAt == [90, 100])
     }
 
+    @Test("flexibleDoubleArray accepts mixed int/float arrays (BUG-ART-007)")
+    func flexible_double_array_mixed_int_float() throws {
+        let toml = #"""
+        [notifications]
+        notify_at = [90, 99.5]
+        """#
+        let cfg = try TOMLDecoder().decode(AppConfig.self, from: toml)
+        #expect(cfg.notifications.notifyAt.count == 2)
+        #expect(cfg.notifications.notifyAt[0] == 90)
+        #expect(cfg.notifications.notifyAt[1] == 99.5)
+    }
+
     @Test("SecurityConfig parses pin_hosts and audit_only")
     func security_config_parses_pin_hosts() throws {
         let toml = #"""

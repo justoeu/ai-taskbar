@@ -5,10 +5,9 @@ let package = Package(
     name: "ai-taskbar",
     defaultLocalization: "en",
     platforms: [.macOS(.v13)],
-    // Swift 6 tools (so testTargets can `import Testing`), but the source
-    // targets keep Swift 5 language mode to avoid the strict-concurrency
-    // diagnostics we don't have the bandwidth to chase right now.
-    // Bump per-target to .v6 when we're ready to enforce Sendable.
+    // Swift 6 tools + Swift 6 language mode on all targets (see per-target
+    // swiftSettings). Testing comes from the toolchain for testTargets;
+    // swift-testing is only linked into AiTaskbarTestSupport.
     products: [
         .executable(name: "ai-taskbar", targets: ["AiTaskbarApp"]),
         .executable(name: "ai-taskbar-validate", targets: ["AiTaskbarValidate"]),

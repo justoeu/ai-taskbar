@@ -103,11 +103,24 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             case .success:          throw AppError.credentials("no credentials available")
             }
         }
-        if verdict.dropPending {
-            setPendingUpdate(nil)
+        // Apply dropPending + lastKnownGood under ONE lock with CAS on the
+        // pending identity we reconciled, so a concurrent writeBack that
+        // installed a newer pending is not wiped (RACE-HER-004).
+        let pendingSnapshot = pending
+        let dropPending = verdict.dropPending
+        let chosen = verdict.credentials
+        let snapExp = pendingSnapshot?.expiresAtMs
+        let snapTok = pendingSnapshot?.accessToken
+        state.withLock { s in
+            if dropPending {
+                if s.pendingUpdate?.expiresAtMs == snapExp,
+                   s.pendingUpdate?.accessToken == snapTok {
+                    s.pendingUpdate = nil
+                }
+            }
+            s.lastKnownGood = chosen
         }
-        setLastKnownGood(verdict.credentials)
-        return verdict.credentials
+        return chosen
     }
 
     /// Explicit, user-initiated credential read. Unlike scheduled `read()`,

@@ -13,7 +13,9 @@ import AiTaskbarProviders
 public final class VendorViewModel: ObservableObject, Identifiable {
     public enum State: Equatable {
         case idle
-        case loading
+        /// In-flight refresh. Carries the previous good outcome so UI and
+        /// menu-bar aggregates do not drop to empty/0% (BUG-ART-002/003).
+        case loading(previous: FetchOutcome?)
         case ok(FetchOutcome)
         case failed(error: AppError, fallback: FetchOutcome?)
 
@@ -21,7 +23,8 @@ public final class VendorViewModel: ObservableObject, Identifiable {
             switch self {
             case .ok(let o): return o
             case .failed(_, let o): return o
-            default: return nil
+            case .loading(let previous): return previous
+            case .idle: return nil
             }
         }
 
@@ -189,14 +192,20 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         }
     }
 
+    /// In-flight refresh Task — cancelled on supersession so network/OAuth
+    /// work does not stack (RACE-HER-002 / BP-HYD-003).
+    private var refreshTask: Task<Void, Never>?
+
     public func refresh(forceRefresh: Bool) {
         // A manual refresh bypasses the disk cache, but must not bypass a
         // server-imposed cooldown: repeated clicks otherwise amplify a 429.
         if let retryAt = rateLimitRetryAt, Date.now < retryAt { return }
         epoch += 1
         let myEpoch = epoch
-        state = .loading
-        Task { [weak self] in
+        let previous = state.outcome
+        state = .loading(previous: previous)
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let outcome = try await self.provider.fetchUsage(forceRefresh: forceRefresh)
@@ -215,7 +224,9 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 if Task.isCancelled { return }
                 guard myEpoch == self.epoch else { return }
                 let appErr = AppError.wrapping(error)
-                let fallback = self.state.outcome
+                // Prefer the pre-refresh snapshot — `state` is `.loading` here
+                // and already carries `previous` via associated value.
+                let fallback = previous ?? self.state.outcome
                 self.state = .failed(error: appErr, fallback: fallback)
                 if case .http(let status, _) = appErr {
                     self.observeRateLimit(status: status)

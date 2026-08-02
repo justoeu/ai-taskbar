@@ -229,7 +229,7 @@ public struct VendorSectionView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-        case .loading where state.outcome == nil:
+        case .loading(previous: nil):
             L10n.text("loading")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

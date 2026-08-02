@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AiTaskbarCore
 
 public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
@@ -73,21 +74,42 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         )
     }
 
+    /// Single-flight OAuth refresh (RACE-HER-003) — same RT rotation hazard as OpenAI.
+    private let refreshFlight = OSAllocatedUnfairLock(
+        initialState: Optional<Task<AnthropicCredentials, Error>>.none)
+
     private func loadCredentials() async throws -> AnthropicCredentials {
         var credentials = try credentialReader.read()
         // Only rotate + persist the shared OAuth token when explicitly opted
         // in. Read-only mode merely reloads whatever Claude Code owns.
         if manageOAuthRefresh, credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
+            credentials = try await refreshAndWriteBack(credentials)
+        }
+        return credentials
+    }
+
+    private func refreshAndWriteBack(_ credentials: AnthropicCredentials) async throws -> AnthropicCredentials {
+        if let existing = refreshFlight.withLock({ $0 }) {
+            return try await existing.value
+        }
+        let task = Task<AnthropicCredentials, Error> {
+            defer { refreshFlight.withLock { $0 = nil } }
             let resp = try await AnthropicOAuth.refresh(
                 refreshToken: credentials.refreshToken, http: http)
             try Task.checkCancellation()
-            credentials = credentials.rotated(
+            let updated = credentials.rotated(
                 accessToken: resp.access_token,
                 refreshToken: resp.refresh_token,
                 expiresAt: Date.now.addingTimeInterval(resp.expires_in))
-            try credentialReader.writeBack(credentials)
+            try credentialReader.writeBack(updated)
+            return updated
         }
-        return credentials
+        let winner: Task<AnthropicCredentials, Error> = refreshFlight.withLock { slot in
+            if let existing = slot { return existing }
+            slot = task
+            return task
+        }
+        return try await winner.value
     }
 
     private func requestUsage(using credentials: AnthropicCredentials) async throws -> Data {

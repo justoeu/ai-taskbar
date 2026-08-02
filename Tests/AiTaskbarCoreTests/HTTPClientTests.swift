@@ -91,8 +91,8 @@ struct HTTPClientTests {
     }
 
     @Test("pinned with empty hosts falls back to default ephemeral client")
-    func pinned_with_no_hosts_falls_back_to_default() {
-        let client = HTTPClient.pinned(pinnedHosts: [])
+    func pinned_with_no_hosts_falls_back_to_default() throws {
+        let client = try HTTPClient.pinned(pinnedHosts: [])
         #expect(client.sessionConfiguration.urlCache == nil)
     }
 
@@ -135,8 +135,8 @@ struct HTTPClientTests {
     }
 
     @Test("pinned with non-empty hosts builds a pinned client")
-    func pinned_with_hosts_builds_client() {
-        let client = HTTPClient.pinned(pinnedHosts: ["api.example.com"])
+    func pinned_with_hosts_builds_client() throws {
+        let client = try HTTPClient.pinned(pinnedHosts: ["api.example.com"])
         // Configuration is still ephemeral.
         #expect(client.sessionConfiguration.urlCache == nil)
         // We can't verify pinning end-to-end without a real TLS handshake,

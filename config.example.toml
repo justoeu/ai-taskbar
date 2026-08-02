@@ -39,16 +39,12 @@ notify_at = [90, 100]   # percent thresholds that trigger a notification
 # you control the network path. `pin_audit_only = true` is the safe way to
 # find out which it is — it logs mismatches without blocking.
 #
-# The list below is every host the app talks to, INCLUDING the OAuth
-# endpoints. Those matter most: `auth.openai.com` and `api.openai.com` carry
-# the token exchange, so a MitM there yields a credential rather than a usage
-# number. An earlier version of this example omitted `api.openai.com`, which
-# left the one host handling token refresh unpinned while everything else was
-# covered.
-# pin_hosts = ["api.anthropic.com", "platform.claude.com", "chatgpt.com",
-#              "auth.openai.com", "api.openai.com", "openrouter.ai",
-#              "api.z.ai", "api.moonshot.ai", "api.deepseek.com",
-#              "management-api.x.ai"]
+# Optional extra pin_hosts beyond the in-binary PinBaseline. Known vendor
+# OAuth/API hosts (auth.openai.com, chatgpt.com, platform.claude.com, …)
+# already ship pins — leave empty unless you have a private endpoint.
+# Do NOT list api.openai.com: the app does not call it (token exchange is
+# auth.openai.com; usage is chatgpt.com).
+# pin_hosts = []
 # pin_audit_only = false   # true = log mismatches but allow connection
 
 [anthropic]

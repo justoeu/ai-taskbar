@@ -12,6 +12,9 @@ public enum ConfigChange: Sendable, Equatable {
     /// for all Optional<String> fields in the AppConfig schema).
     case string(section: String, key: String, value: String?)
     case stringArray(section: String, key: String, value: [String])
+    /// Numeric array written as unquoted TOML numbers (`[80, 95]`), not
+    /// strings — required for `flexibleDoubleArray` round-trip (BUG-ART-001).
+    case doubleArray(section: String, key: String, value: [Double])
     /// Plaintext secret. Nil clears the slot. Non-nil is auto-encrypted
     /// before write.
     case secret(section: String, key: String, plaintext: String?)
@@ -22,6 +25,7 @@ public enum ConfigChange: Sendable, Equatable {
              .bool(let s, _, _),
              .string(let s, _, _),
              .stringArray(let s, _, _),
+             .doubleArray(let s, _, _),
              .secret(let s, _, _):
             return s
         }
@@ -33,6 +37,7 @@ public enum ConfigChange: Sendable, Equatable {
              .bool(_, let k, _),
              .string(_, let k, _),
              .stringArray(_, let k, _),
+             .doubleArray(_, let k, _),
              .secret(_, let k, _):
             return k
         }
@@ -94,15 +99,35 @@ public struct ConfigLoader: Sendable {
 
     public func save(_ config: AppConfig) throws {
         do {
+            // Re-encrypt any plaintext api_key fields before TOML encode so
+            // load()→save() cannot strip enc:v1: (ARCH-ATL-002 / CQ-FOR-003).
+            var toWrite = config
+            try Self.encryptSecretsForDisk(in: &toWrite)
             let encoder = TOMLEncoder()
-            let s = try encoder.encode(config)
+            let s = try encoder.encode(toWrite)
             // config.toml may contain inline `api_key = "..."` — lock it down
             // to user-only at write time.
             try AtomicFileWrite.write(Data(s.utf8), to: path, permissions: 0o600)
             onAfterSave()
+        } catch let app as AppError {
+            throw app
         } catch {
             throw AppError.toml("encode config.toml: \(error)")
         }
+    }
+
+    /// Encrypts non-empty vendor api_key fields that are not already `enc:v1:`.
+    private static func encryptSecretsForDisk(in config: inout AppConfig) throws {
+        func seal(_ key: inout String?) throws {
+            guard let plain = key, !plain.isEmpty, !SecretBox.isEncrypted(plain) else { return }
+            key = try SecretBox.encrypt(plain)
+        }
+        try seal(&config.zai.apiKey)
+        try seal(&config.openrouter.apiKey)
+        try seal(&config.kimi.apiKey)
+        try seal(&config.gemini.apiKey)
+        try seal(&config.deepseek.apiKey)
+        try seal(&config.xai.apiKey)
     }
 
     /// Surgical write path: applies a batch of changes to the existing file
@@ -145,6 +170,7 @@ public struct ConfigLoader: Sendable {
                 // same semantic effect for every Optional<String> in the schema.
                 encoded = .string("")
             case .stringArray(_, _, let v):  encoded = .stringArray(v)
+            case .doubleArray(_, _, let v):  encoded = .doubleArray(v)
             case .secret(_, _, let plaintext?):
                 let enc = try SecretBox.encrypt(plaintext)
                 encoded = .encrypted(enc)
@@ -231,8 +257,14 @@ public struct ConfigLoader: Sendable {
         var appended: [String] = []
         var addition = ""
 
+        // Match real section headers only (line-anchored), not comments or
+        // string values that happen to contain "[anthropic]" (BUG-ART-008).
+        let presentHeaders = Set(
+            existing.split(whereSeparator: \.isNewline)
+                .compactMap { TOMLEditor.parseSectionHeader(String($0)).map { "[\($0)]" } }
+        )
         for (header, snippet) in Self.defaultSnippets {
-            if !existing.contains(header) {
+            if !presentHeaders.contains(header) {
                 addition += snippet
                 appended.append(header)
             }

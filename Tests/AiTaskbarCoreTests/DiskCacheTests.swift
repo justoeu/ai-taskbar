@@ -70,6 +70,22 @@ struct DiskCacheTests {
         }
     }
 
+    @Test("freshPayloadWithAge returns data and age in one hit (N1-NEX-004)")
+    func freshPayloadWithAge_single_hit() throws {
+        let cache = DiskCache(vendor: .anthropic, baseDir: tmp, ttl: 60)
+        try cache.writePayload(Data("payload".utf8))
+        let hit = cache.freshPayloadWithAge()
+        #expect(hit?.0 == Data("payload".utf8))
+        #expect((hit?.1 ?? 99) < 5)
+        try cache.writePayload(Data("ok".utf8))
+        cache.markFailed(FetchError(status: 500, body: "x"))
+        // write after fail clears markers when writePayload runs last:
+        try cache.writePayload(Data("clean".utf8))
+        #expect(!cache.isStale())
+        #expect(cache.lastError() == nil)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
     @Test("anyPayload returns nil after exceeding maxStale")
     func anyPayload_returns_nil_after_maxStale() throws {
         let cache = DiskCache(vendor: .anthropic, baseDir: tmp,

@@ -108,23 +108,32 @@ public final class UsageHistoryStore: @unchecked Sendable {
 
     // MARK: - Compact
 
-    /// Removes entries older than `retention`. Closes the write handle for
-    /// the duration so the atomic replace can swap files cleanly.
+    /// Removes entries older than `retention`. Holds the lock across the
+    /// entire close → read → filter → replace so concurrent `append` cannot
+    /// write lines that the subsequent atomic rewrite would drop (RACE-HER-001).
     public func compact() {
         state.withLock { s in
             try? s.writeHandle?.close()
             s.writeHandle = nil
+            guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]) else { return }
+            let cutoff = Date.now.addingTimeInterval(-retention).timeIntervalSince1970
+            var kept = Data()
+            for line in data.split(separator: 0x0a) {
+                guard let sample = try? SharedCoders.decoder.decode(Sample.self, from: Data(line)),
+                      sample.at >= cutoff else { continue }
+                kept.append(line)
+                kept.append(0x0a)
+            }
+            do {
+                try AtomicFileWrite.write(kept, to: fileURL, permissions: 0o600)
+            } catch {
+                // Don't swallow — silent fail lets JSONL grow without bound
+                // (LEAK-HYD-001). Next compact will retry.
+                AppLog.lifecycle.error(
+                    "history compact write failed for \(self.vendor.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
+            // Handle stays nil; next append reopens the post-replace inode.
         }
-        guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]) else { return }
-        let cutoff = Date.now.addingTimeInterval(-retention).timeIntervalSince1970
-        var kept = Data()
-        for line in data.split(separator: 0x0a) {
-            guard let sample = try? SharedCoders.decoder.decode(Sample.self, from: Data(line)),
-                  sample.at >= cutoff else { continue }
-            kept.append(line)
-            kept.append(0x0a)
-        }
-        try? AtomicFileWrite.write(kept, to: fileURL, permissions: 0o600)
     }
 
     deinit {
