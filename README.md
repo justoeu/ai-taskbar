@@ -1,7 +1,7 @@
 # AI Taskbar
 
 <p align="center">
-  <img src="docs/icon_preview.png" alt="AI Taskbar icon" width="128" height="128"/>
+  <img src="Resources/icon_preview.png" alt="AI Taskbar icon" width="128" height="128"/>
 </p>
 
 <p align="center">
