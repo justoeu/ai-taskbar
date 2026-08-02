@@ -69,11 +69,29 @@ public final class ConfigWatcher: ObservableObject {
         let task = Process()
         task.launchPath = "/bin/sh"
         task.arguments = ["-c", "sleep 1; /usr/bin/open \"\(bundlePath)\""]
-        try? task.run()
+        do {
+            try task.run()
+        } catch {
+            // Never terminate if the replacement process failed to spawn
+            // (BUG-ART-006) — user would lose the menu-bar monitor.
+            AppLog.lifecycle.error("relaunch spawn failed: \(String(describing: error), privacy: .public)")
+            return
+        }
         NSApplication.shared.terminate(nil)
     }
 
+    /// Cancels a pending re-arm so rename storms don't stack DispatchSources
+    /// (RACE-HER-007).
+    private var rearmWorkItem: DispatchWorkItem?
+
     private func arm() {
+        // Cancel any previous source before opening a new fd (idempotent).
+        source?.cancel()
+        source = nil
+        if fd >= 0 {
+            close(fd)
+            fd = -1
+        }
         // O_EVTONLY = open for event monitoring; does not count against the
         // process's open-file limit the way O_RDONLY would.
         let cfgPath = path.path
@@ -89,8 +107,9 @@ public final class ConfigWatcher: ObservableObject {
         src.setEventHandler { [weak self] in
             self?.handleEvent(src.data)
         }
-        src.setCancelHandler { [fd] in
-            if fd >= 0 { close(fd) }
+        let capturedFd = fd
+        src.setCancelHandler {
+            if capturedFd >= 0 { close(capturedFd) }
         }
         src.resume()
         source = src
@@ -106,11 +125,15 @@ public final class ConfigWatcher: ObservableObject {
             fd = -1
             // Small delay lets the editor finish the rename before we
             // re-open; otherwise we sometimes catch the brief window where
-            // the path doesn't exist yet.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            // the path doesn't exist yet. Cancel prior scheduled rearm so
+            // storms don't leak sources/fds.
+            rearmWorkItem?.cancel()
+            let work = DispatchWorkItem { [weak self] in
                 self?.arm()
                 self?.checkForChange()
             }
+            rearmWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
             return
         }
         checkForChange()

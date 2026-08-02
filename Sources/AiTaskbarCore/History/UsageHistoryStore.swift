@@ -124,7 +124,14 @@ public final class UsageHistoryStore: @unchecked Sendable {
                 kept.append(line)
                 kept.append(0x0a)
             }
-            try? AtomicFileWrite.write(kept, to: fileURL, permissions: 0o600)
+            do {
+                try AtomicFileWrite.write(kept, to: fileURL, permissions: 0o600)
+            } catch {
+                // Don't swallow — silent fail lets JSONL grow without bound
+                // (LEAK-HYD-001). Next compact will retry.
+                AppLog.lifecycle.error(
+                    "history compact write failed for \(self.vendor.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
             // Handle stays nil; next append reopens the post-replace inode.
         }
     }

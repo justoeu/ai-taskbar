@@ -99,15 +99,35 @@ public struct ConfigLoader: Sendable {
 
     public func save(_ config: AppConfig) throws {
         do {
+            // Re-encrypt any plaintext api_key fields before TOML encode so
+            // load()→save() cannot strip enc:v1: (ARCH-ATL-002 / CQ-FOR-003).
+            var toWrite = config
+            try Self.encryptSecretsForDisk(in: &toWrite)
             let encoder = TOMLEncoder()
-            let s = try encoder.encode(config)
+            let s = try encoder.encode(toWrite)
             // config.toml may contain inline `api_key = "..."` — lock it down
             // to user-only at write time.
             try AtomicFileWrite.write(Data(s.utf8), to: path, permissions: 0o600)
             onAfterSave()
+        } catch let app as AppError {
+            throw app
         } catch {
             throw AppError.toml("encode config.toml: \(error)")
         }
+    }
+
+    /// Encrypts non-empty vendor api_key fields that are not already `enc:v1:`.
+    private static func encryptSecretsForDisk(in config: inout AppConfig) throws {
+        func seal(_ key: inout String?) throws {
+            guard let plain = key, !plain.isEmpty, !SecretBox.isEncrypted(plain) else { return }
+            key = try SecretBox.encrypt(plain)
+        }
+        try seal(&config.zai.apiKey)
+        try seal(&config.openrouter.apiKey)
+        try seal(&config.kimi.apiKey)
+        try seal(&config.gemini.apiKey)
+        try seal(&config.deepseek.apiKey)
+        try seal(&config.xai.apiKey)
     }
 
     /// Surgical write path: applies a batch of changes to the existing file
@@ -237,8 +257,14 @@ public struct ConfigLoader: Sendable {
         var appended: [String] = []
         var addition = ""
 
+        // Match real section headers only (line-anchored), not comments or
+        // string values that happen to contain "[anthropic]" (BUG-ART-008).
+        let presentHeaders = Set(
+            existing.split(whereSeparator: \.isNewline)
+                .compactMap { TOMLEditor.parseSectionHeader(String($0)).map { "[\($0)]" } }
+        )
         for (header, snippet) in Self.defaultSnippets {
-            if !existing.contains(header) {
+            if !presentHeaders.contains(header) {
                 addition += snippet
                 appended.append(header)
             }
