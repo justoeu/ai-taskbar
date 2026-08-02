@@ -135,6 +135,57 @@ struct ConfigLoaderSecretTests {
         #expect(counter.value == 2)
     }
 
+    @Test("save() re-encrypts plaintext api_keys (ARCH-ATL-002)")
+    func save_re_encrypts_plaintext_api_keys() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-save-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let loader = try makeLoader(in: tmp)
+        var cfg = AppConfig()
+        cfg.zai.enabled = true
+        cfg.zai.apiKey = "sk-plain-on-save"
+        try loader.save(cfg)
+        let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
+        #expect(onDisk.contains("enc:v1:"))
+        #expect(!onDisk.contains("sk-plain-on-save"))
+        let loaded = try loader.load()
+        #expect(loaded.zai.apiKey == "sk-plain-on-save")
+    }
+
+    @Test("ensureAllVendorSections ignores headers only mentioned in comments (BUG-ART-008)")
+    func ensure_sections_ignores_comment_headers() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-ens-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let path = tmp.appendingPathComponent("config.toml")
+        try AtomicFileWrite.write(Data("# see [gemini] docs\n[ui]\n".utf8),
+                                  to: path, permissions: 0o600)
+        let loader = ConfigLoader(path: path)
+        let appended = try loader.ensureAllVendorSections()
+        #expect(appended.contains("[gemini]"))
+        let raw = try String(contentsOf: path, encoding: .utf8)
+        #expect(raw.contains("\n[gemini]\n") || raw.contains("\n[gemini]\r"))
+    }
+
+    @Test("tampered enc:v1: clears key without failing load (TEST-ARG-003)")
+    func tampered_ciphertext_clears_key() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-tamp-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let path = tmp.appendingPathComponent("config.toml")
+        try AtomicFileWrite.write(Data("""
+        [zai]
+        enabled = true
+        api_key = "enc:v1:not-valid-ciphertext=="
+        """.utf8), to: path, permissions: 0o600)
+        let loader = ConfigLoader(path: path)
+        let cfg = try loader.load()
+        #expect(cfg.zai.apiKey == nil)
+    }
+
     @Test("applyChanges(.doubleArray) writes unquoted numbers for notify_at (BUG-ART-001)")
     func applyChanges_double_array_notify_at_round_trip() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
