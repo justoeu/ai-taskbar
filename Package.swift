@@ -23,7 +23,9 @@ let package = Package(
         // NOT list it: they resolve Testing from the Swift 6 toolchain, and
         // linking the standalone package there emitted a deprecation on every
         // single @Test/@Suite — hundreds of warnings that buried the real ones.
-        .package(url: "https://github.com/apple/swift-testing.git", from: "0.10.0"),
+        // Exact pin — Package.resolved already locks this; avoid 0.x drift on
+        // fresh resolves without the lockfile (DEP-PRI-003).
+        .package(url: "https://github.com/apple/swift-testing.git", exact: "0.99.0"),
     ],
     targets: [
         .executableTarget(

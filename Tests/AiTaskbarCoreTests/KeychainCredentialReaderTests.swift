@@ -359,6 +359,17 @@ struct CredentialReconciliationTests {
 
 @Suite("Keychain memory-cache buffer")
 struct KeychainMemoryCacheBufferTests {
+    @Test("invalidateCachedCredentials clears seeded lastKnownGood (TEST-ARG-004)")
+    func invalidate_clears_memory_cache() {
+        let reader = KeychainCredentialReader(service: "test-invalidate-svc")
+        let far = Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000)
+        let c = AnthropicCredentials(accessToken: "tok", refreshToken: "r", expiresAtMs: far)
+        reader.seedLastKnownGoodForTesting(c)
+        #expect(reader.testingLastKnownGood?.accessToken == "tok")
+        reader.invalidateCachedCredentials()
+        #expect(reader.testingLastKnownGood == nil)
+    }
+
     @Test("memoryCacheBuffer matches OAuth-style 5 minute headroom")
     func buffer_is_five_minutes() {
         #expect(KeychainCredentialReader.memoryCacheBuffer == 300)

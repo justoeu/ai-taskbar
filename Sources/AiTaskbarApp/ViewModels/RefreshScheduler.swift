@@ -64,6 +64,12 @@ public final class RefreshScheduler: ObservableObject {
                 // nil and CachedFetch goes to the network without needing
                 // a force flag. The 5-second margin absorbs Task.sleep
                 // jitter without ever letting the boundary equal the TTL.
+                // Single-flight tick: if any vendor is still loading from the
+                // previous cycle, skip stacking another fan-out (BP-HYD-005).
+                // Cancel-on-supersede in VendorViewModel covers the rest.
+                if self.store?.isAnyVendorLoading == true {
+                    continue
+                }
                 self.store?.markScheduledTick()
                 self.store?.refreshAll(forceRefresh: false)
             }
