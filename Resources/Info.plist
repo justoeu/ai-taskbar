@@ -13,9 +13,9 @@
     <key>CFBundleDisplayName</key>
     <string>AI Taskbar</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.17.2</string>
+    <string>0.17.3</string>
     <key>CFBundleVersion</key>
-    <string>45</string>
+    <string>46</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
