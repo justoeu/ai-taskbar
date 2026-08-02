@@ -20,7 +20,7 @@ warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
 fail() { printf "  \033[31m✗\033[0m %s\n" "$1"; exit 1; }
 
 # Coverage gate. Hard-fail under this percentage. Override with
-# COVERAGE_FLOOR=<n>. The 90 target lives in CLAUDE.md / AGENTS.md.
+# Hard floor 90% on Core+Providers (CI + local). Override only for experiments.
 COVERAGE_FLOOR="${COVERAGE_FLOOR:-90}"
 
 bold "[1/6] swift build"
