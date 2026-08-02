@@ -137,8 +137,16 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         self.isExpanded = (UserDefaults.standard
             .object(forKey: Self.expansionKey(for: provider.vendorId)) as? Bool) ?? true
         self.historyStore = try? UsageHistoryStore.defaultFor(provider.vendorId)
+        // Load history off the MainActor so multi-vendor launch does not
+        // block the popover on JSONL decode (N1-NEX-006).
         if let store = historyStore {
-            self.history = store.load(since: Date.now.addingTimeInterval(-24 * 3600))
+            let cutoff = Date.now.addingTimeInterval(-24 * 3600)
+            Task { @MainActor [weak self] in
+                let samples = await Task.detached(priority: .utility) {
+                    store.load(since: cutoff)
+                }.value
+                self?.history = samples
+            }
         }
         if let credPath = provider.credentialFileURL {
             armCredentialWatcher(path: credPath)

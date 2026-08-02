@@ -95,10 +95,27 @@ public final class UsageHistoryStore: @unchecked Sendable {
         let cutoff = since.timeIntervalSince1970
         var out: [Sample] = []
         out.reserveCapacity(2048)
-        for line in data.split(separator: 0x0a) {
-            guard let sample = try? SharedCoders.decoder.decode(Sample.self, from: Data(line))
-            else { continue }
-            if sample.at >= cutoff { out.append(sample) }
+        // Decode from the mmap slice without allocating a fresh Data(line)
+        // copy per sample (N1-NEX-006). ContiguousBytes → JSONDecoder.
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return }
+            var start = 0
+            let n = raw.count
+            while start < n {
+                var end = start
+                while end < n && base[end] != 0x0a { end += 1 }
+                let len = end - start
+                if len > 0 {
+                    let slice = Data(bytesNoCopy: UnsafeMutableRawPointer(mutating: base + start),
+                                     count: len,
+                                     deallocator: .none)
+                    if let sample = try? SharedCoders.decoder.decode(Sample.self, from: slice),
+                       sample.at >= cutoff {
+                        out.append(sample)
+                    }
+                }
+                start = end + 1
+            }
         }
         // Defensive sort — the file is append-only and time-ordered, but
         // protect downstream chart/sparkline code from any future skew.

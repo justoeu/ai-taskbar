@@ -164,6 +164,16 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             $0.pendingUpdate = nil
         }
     }
+
+    /// Test seam: seed the process memory cache without touching Keychain.
+    internal func seedLastKnownGoodForTesting(_ credentials: AnthropicCredentials) {
+        setLastKnownGood(credentials)
+    }
+
+    /// Test seam: observe memory cache after invalidate.
+    internal var testingLastKnownGood: AnthropicCredentials? {
+        getLastKnownGood()
+    }
 }
 
 /// Pure reconciliation between the on-disk Keychain copy and the in-memory

@@ -447,11 +447,14 @@ public struct VendorSectionView: View {
 
     @ViewBuilder
     private func renderSnapshot(_ snap: VendorSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(snap.windows, id: \.label) { w in
-                ProviderRowView(window: w, thresholds: thresholds)
+        // One 1 Hz TimelineView for all windows in this card (N1-NEX-005).
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(snap.windows, id: \.label) { w in
+                    ProviderRowView(window: w, thresholds: thresholds, now: context.date)
+                }
+                extras(for: snap)
             }
-            extras(for: snap)
         }
     }
 
