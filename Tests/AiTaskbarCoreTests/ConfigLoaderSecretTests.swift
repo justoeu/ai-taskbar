@@ -135,6 +135,29 @@ struct ConfigLoaderSecretTests {
         #expect(counter.value == 2)
     }
 
+    @Test("applyChanges(.doubleArray) writes unquoted numbers for notify_at (BUG-ART-001)")
+    func applyChanges_double_array_notify_at_round_trip() throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfg-da-\(UUID().uuidString)")
+        try Paths.ensureDir(dir)
+        let path = dir.appendingPathComponent("config.toml")
+        try AtomicFileWrite.write(Data("""
+        [notifications]
+        enabled = true
+        notify_at = [90, 100]
+        """.utf8), to: path, permissions: 0o600)
+        let loader = ConfigLoader(path: path)
+        try loader.applyChanges([
+            .doubleArray(section: "notifications", key: "notify_at", value: [80, 95])
+        ])
+        let raw = try String(contentsOf: path, encoding: .utf8)
+        #expect(raw.contains("notify_at = [80, 95]") || raw.contains("notify_at=[80, 95]"))
+        #expect(!raw.contains("\"80\""))
+        let cfg = try loader.load()
+        #expect(cfg.notifications.notifyAt == [80, 95])
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     @Test("permissions are 0o600 after applyChanges (audit compliance)")
     func permissions_0o600() throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())

@@ -843,11 +843,11 @@ section("DEF-1: PinningDelegate is constructable + idempotent") {
 
 section("DEF-1: HTTPClient.pinned falls back gracefully") {
     // Empty pinHosts → default ephemeral client (no pinning).
-    let nothing = HTTPClient.pinned(pinnedHosts: [])
+    let nothing = try! HTTPClient.pinned(pinnedHosts: [])
     expect(nothing.sessionConfiguration.urlCache == nil,
            "empty pin list still returns ephemeral session")
-    // Non-empty list → constructable.
-    let pinned = HTTPClient.pinned(pinnedHosts: ["api.anthropic.com"])
+    // Non-empty list → constructable (throws if PinStore cannot open).
+    let pinned = try! HTTPClient.pinned(pinnedHosts: ["api.anthropic.com"])
     expect(pinned.sessionConfiguration.urlCache == nil,
            "pinned client is also ephemeral")
 }

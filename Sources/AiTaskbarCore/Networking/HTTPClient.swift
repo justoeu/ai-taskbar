@@ -29,11 +29,21 @@ public final class HTTPClient: @unchecked Sendable {
     /// Build a client whose `URLSession` is bound to a TLS pinning delegate.
     /// Non-pinned hosts fall through to system trust; pinned hosts use TOFU
     /// SPKI hashes stored on disk.
+    ///
+    /// Empty `pinnedHosts` returns a plain ephemeral client (no pinning).
+    /// Non-empty list **fails closed** if `PinStore` cannot be created —
+    /// never silently returns an unpinned client while the caller believes
+    /// pinning is active (SEC-SEN-003).
     public static func pinned(pinnedHosts: [String],
-                              auditOnly: Bool = false) -> HTTPClient {
-        guard !pinnedHosts.isEmpty,
-              let store = try? PinStore.defaultStore() else {
-            return HTTPClient()   // no pinning configured → default ephemeral
+                              auditOnly: Bool = false) throws -> HTTPClient {
+        guard !pinnedHosts.isEmpty else {
+            return HTTPClient()
+        }
+        let store: PinStore
+        do {
+            store = try PinStore.defaultStore()
+        } catch {
+            throw AppError.io("PinStore unavailable while pin_hosts is set: \(error)")
         }
         let delegate = PinningDelegate(pinnedHosts: pinnedHosts,
                                        store: store,
@@ -47,6 +57,33 @@ public final class HTTPClient: @unchecked Sendable {
         cfg.urlCredentialStorage = nil
         let session = URLSession(configuration: cfg, delegate: delegate, delegateQueue: nil)
         return HTTPClient(session: session)
+    }
+
+    /// Download a remote resource to a temp file via this client's session
+    /// (so pinning / ephemeral policy apply). Caller moves/copies the file.
+    public func download(_ request: URLRequest) async throws -> (URL, HTTPURLResponse) {
+        try Task.checkCancellation()
+        var req = request
+        if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
+            req.timeoutInterval = max(defaultTimeout, 120)
+        }
+        do {
+            let (tmp, response) = try await session.download(for: req)
+            try Task.checkCancellation()
+            guard let http = response as? HTTPURLResponse else {
+                throw AppError.transport("non-HTTP download response")
+            }
+            return (tmp, http)
+        } catch let appErr as AppError {
+            throw appErr
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let urlErr as URLError {
+            if urlErr.code == .cancelled { throw CancellationError() }
+            throw AppError.transport("URLError \(urlErr.code.rawValue): \(urlErr.localizedDescription)")
+        } catch {
+            throw AppError.transport(error.localizedDescription)
+        }
     }
 
     /// For tests — produce a client backed by URLSession with a custom

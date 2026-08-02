@@ -76,12 +76,15 @@ public final class CostEstimator: ObservableObject {
         // Both scanners poll `Task.isCancelled` between files; without a
         // handle to cancel, that cooperation had nothing to cooperate with.
         inFlight?.cancel()
+        // Run scanners as child tasks of this detached task (not nested
+        // unstructured Task {}) so cancel() cooperates with Task.isCancelled
+        // inside Claude/Codex scanners (BP-HYD-001 / N1-NEX-001).
         inFlight = Task.detached(priority: .utility) {
-            async let claude = Task { ClaudeSessionScanner.estimate() }
-            async let codex  = Task { CodexCost.estimate() }
+            async let claude = ClaudeSessionScanner.estimate()
+            async let codex = CodexCost.estimate()
             let started = Date()
-            let claudeEstimate = await claude.value
-            let codexEstimate  = await codex.value
+            let claudeEstimate = await claude
+            let codexEstimate = await codex
             // Kept in the shipping build. The cold Claude scan dominates this
             // (5s on the maintainer's machine) and the Models section shows
             // "Loading…" for its whole duration, which is indistinguishable

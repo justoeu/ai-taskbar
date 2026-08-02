@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import CryptoKit
 import AiTaskbarCore
 
 /// Polls GitHub Releases for a newer tag than the running build's
@@ -34,7 +35,19 @@ public final class UpdateChecker: ObservableObject {
         public let publishedAt: Date?
         public let dmgURL: URL?
         public let dmgSize: Int64?
+        /// Optional SHA-256 hex from a sibling `checksums-*.txt` asset.
+        public let dmgSHA256: String?
     }
+
+    /// Hosts allowed for DMG download (SEC-SEN-002). Release API stays on
+    /// api.github.com via `http`; asset bytes must come from GitHub CDNs only.
+    nonisolated internal static let allowedDownloadHosts: Set<String> = [
+        "github.com",
+        "www.github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "github-releases.githubusercontent.com",
+    ]
 
     @Published public private(set) var status: Status = .idle
 
@@ -110,13 +123,24 @@ public final class UpdateChecker: ObservableObject {
             let pickedName = Self.pickDMGAsset(names: raw.assets.map(\.name),
                                                isARM64: isARM64)
             let asset = raw.assets.first(where: { $0.name == pickedName })
+            let dmgURL = asset.flatMap { URL(string: $0.browser_download_url) }
+            let checksumsAsset = raw.assets.first {
+                $0.name.hasPrefix("checksums-") && $0.name.hasSuffix(".txt")
+            }
+            var dmgSHA: String?
+            if let dmgName = asset?.name,
+               let cURL = checksumsAsset.flatMap({ URL(string: $0.browser_download_url) }),
+               Self.isAllowedDownloadURL(cURL) {
+                dmgSHA = try? await self.fetchChecksum(for: dmgName, from: cURL)
+            }
             return Release(
                 tag: raw.tag_name,
                 htmlURL: URL(string: raw.html_url) ?? URL(string: "about:blank")!,
                 prerelease: raw.prerelease,
                 publishedAt: Self.parseDate(raw.published_at),
-                dmgURL: asset.flatMap { URL(string: $0.browser_download_url) },
-                dmgSize: asset.map { Int64($0.size) }
+                dmgURL: dmgURL,
+                dmgSize: asset.map { Int64($0.size) },
+                dmgSHA256: dmgSHA
             )
         } catch let appErr as AppError {
             throw appErr
@@ -147,6 +171,10 @@ public final class UpdateChecker: ObservableObject {
             status = .failed(message: L10n.localizedString("updates_no_asset"))
             return
         }
+        guard Self.isAllowedDownloadURL(dmgURL) else {
+            status = .failed(message: L10n.localizedString("updates_bad_repo"))
+            return
+        }
         status = .downloading(progress: 0, latest: release)
         // Drop the DMG in ~/Downloads (NOT the system temp dir) so the user
         // can find it later from Finder's sidebar. Falls back to temp if the
@@ -160,7 +188,28 @@ public final class UpdateChecker: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let (tmp, _) = try await URLSession.shared.download(from: dmgURL)
+                // Route through the injected HTTPClient (pinned/ephemeral),
+                // never URLSession.shared (ARCH-ATL-001 / SEC-SEN-002).
+                var req = URLRequest(url: dmgURL)
+                req.setValue("ai-taskbar/\(self.currentVersion)",
+                             forHTTPHeaderField: "User-Agent")
+                let (tmp, http) = try await self.http.download(req)
+                guard (200..<300).contains(http.statusCode) else {
+                    throw AppError.http(status: http.statusCode, body: "DMG download")
+                }
+                if let expected = release.dmgSize, expected > 0 {
+                    let attrs = try FileManager.default.attributesOfItem(atPath: tmp.path)
+                    let size = (attrs[.size] as? NSNumber)?.int64Value ?? -1
+                    if size != expected {
+                        throw AppError.other("DMG size mismatch (got \(size), expected \(expected))")
+                    }
+                }
+                if let want = release.dmgSHA256?.lowercased(), !want.isEmpty {
+                    let got = try Self.sha256Hex(ofFileAt: tmp)
+                    guard got == want else {
+                        throw AppError.other("DMG checksum mismatch")
+                    }
+                }
                 try FileManager.default.moveItem(at: tmp, to: dest)
                 self.status = .downloaded(localURL: dest, latest: release)
                 // Reveal the DMG in Finder so the user can drag the new app
@@ -176,6 +225,40 @@ public final class UpdateChecker: ObservableObject {
                 self.status = .failed(message: error.localizedDescription)
             }
         }
+    }
+
+    nonisolated internal static func isAllowedDownloadURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), scheme == "https",
+              let host = url.host?.lowercased() else { return false }
+        if allowedDownloadHosts.contains(host) { return true }
+        // Allow nested githubusercontent hosts.
+        return host.hasSuffix(".githubusercontent.com")
+    }
+
+    private func fetchChecksum(for assetName: String, from url: URL) async throws -> String? {
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 15
+        req.setValue("ai-taskbar/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await http.send(req)
+        guard (200..<300).contains(response.statusCode),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        // Lines: "<sha256>  <filename>" or "<sha256> *filename"
+        for line in text.split(whereSeparator: \.isNewline) {
+            let parts = line.split(whereSeparator: \.isWhitespace)
+            guard parts.count >= 2 else { continue }
+            let hash = String(parts[0]).lowercased()
+            let name = String(parts[1]).trimmingCharacters(in: CharacterSet(charactersIn: "*"))
+            if name == assetName, hash.count == 64, hash.allSatisfy(\.isHexDigit) {
+                return hash
+            }
+        }
+        return nil
+    }
+
+    nonisolated internal static func sha256Hex(ofFileAt url: URL) throws -> String {
+        let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     public func openReleasePage(_ release: Release) {

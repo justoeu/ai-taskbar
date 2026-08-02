@@ -24,10 +24,12 @@ public final class AppEnvironment {
                 AppLog.lifecycle.info("appended missing config sections: \(appended.joined(separator: ", "), privacy: .public)")
             }
             // Build HTTP client with TLS pinning if configured.
+            // Fail closed: if pin_hosts is set but PinStore cannot open, do
+            // not silently fall back to an unpinned client.
             let http: HTTPClient
             if !cfg.security.pinHosts.isEmpty {
-                http = HTTPClient.pinned(pinnedHosts: cfg.security.pinHosts,
-                                         auditOnly: cfg.security.pinAuditOnly)
+                http = try HTTPClient.pinned(pinnedHosts: cfg.security.pinHosts,
+                                             auditOnly: cfg.security.pinAuditOnly)
                 let suffix = cfg.security.pinAuditOnly ? " (audit only)" : ""
                 AppLog.pinning.notice("TLS pinning active for \(cfg.security.pinHosts.count, privacy: .public) host(s)\(suffix, privacy: .public)")
             } else {

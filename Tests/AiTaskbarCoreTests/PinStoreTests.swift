@@ -268,6 +268,27 @@ struct PinningDelegateEvaluateTests {
         #expect(enforced == audited)
         #expect(enforced == .accept)
     }
+
+    @Test("effectivePin prefers baseline over disk (SEC-SEN-001)")
+    func effective_pin_baseline_wins() {
+        #expect(PinningDelegate.effectivePin(diskPin: "attacker", baselinePin: "baseline")
+                == "baseline")
+        #expect(PinningDelegate.effectivePin(diskPin: "tofu", baselinePin: nil) == "tofu")
+        #expect(PinningDelegate.effectivePin(diskPin: nil, baselinePin: "baseline")
+                == "baseline")
+        #expect(PinningDelegate.effectivePin(diskPin: nil, baselinePin: nil) == nil)
+    }
+
+    @Test("poisoned disk pin + baseline → evaluate against baseline, not disk")
+    func poisoned_disk_rejected_when_leaf_matches_disk() {
+        // Attacker planted disk pin matching their MitM leaf; baseline is real.
+        // effectivePin returns baseline → leaf(attacker) vs baseline → reject.
+        let stored = PinningDelegate.effectivePin(diskPin: "attacker-spki",
+                                                  baselinePin: "real-spki")
+        let decision = PinningDelegate.evaluate(
+            leafHash: "attacker-spki", storedHash: stored, auditOnly: false)
+        #expect(decision == .reject(.mismatch))
+    }
 }
 
 /// Sanity tests for the populated baseline — confirms the binary actually

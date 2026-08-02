@@ -40,4 +40,16 @@ struct UpdateCheckerAssetTests {
         #expect(UpdateChecker.pickDMGAsset(names: ["notes.txt"], isARM64: true) == nil)
         #expect(UpdateChecker.pickDMGAsset(names: [], isARM64: false) == nil)
     }
+
+    @Test("DMG download host allowlist rejects off-platform URLs (SEC-SEN-002)")
+    func download_host_allowlist() {
+        #expect(UpdateChecker.isAllowedDownloadURL(
+            URL(string: "https://objects.githubusercontent.com/github-production-release-asset/1")!))
+        #expect(UpdateChecker.isAllowedDownloadURL(
+            URL(string: "https://github.com/owner/repo/releases/download/v1/a.dmg")!))
+        #expect(!UpdateChecker.isAllowedDownloadURL(
+            URL(string: "https://evil.example/payload.dmg")!))
+        #expect(!UpdateChecker.isAllowedDownloadURL(
+            URL(string: "http://objects.githubusercontent.com/a.dmg")!))
+    }
 }

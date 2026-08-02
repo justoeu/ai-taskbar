@@ -12,6 +12,9 @@ public enum ConfigChange: Sendable, Equatable {
     /// for all Optional<String> fields in the AppConfig schema).
     case string(section: String, key: String, value: String?)
     case stringArray(section: String, key: String, value: [String])
+    /// Numeric array written as unquoted TOML numbers (`[80, 95]`), not
+    /// strings — required for `flexibleDoubleArray` round-trip (BUG-ART-001).
+    case doubleArray(section: String, key: String, value: [Double])
     /// Plaintext secret. Nil clears the slot. Non-nil is auto-encrypted
     /// before write.
     case secret(section: String, key: String, plaintext: String?)
@@ -22,6 +25,7 @@ public enum ConfigChange: Sendable, Equatable {
              .bool(let s, _, _),
              .string(let s, _, _),
              .stringArray(let s, _, _),
+             .doubleArray(let s, _, _),
              .secret(let s, _, _):
             return s
         }
@@ -33,6 +37,7 @@ public enum ConfigChange: Sendable, Equatable {
              .bool(_, let k, _),
              .string(_, let k, _),
              .stringArray(_, let k, _),
+             .doubleArray(_, let k, _),
              .secret(_, let k, _):
             return k
         }
@@ -145,6 +150,7 @@ public struct ConfigLoader: Sendable {
                 // same semantic effect for every Optional<String> in the schema.
                 encoded = .string("")
             case .stringArray(_, _, let v):  encoded = .stringArray(v)
+            case .doubleArray(_, _, let v):  encoded = .doubleArray(v)
             case .secret(_, _, let plaintext?):
                 let enc = try SecretBox.encrypt(plaintext)
                 encoded = .encrypted(enc)

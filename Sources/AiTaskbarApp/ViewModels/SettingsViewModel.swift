@@ -140,15 +140,11 @@ public final class SettingsViewModel: ObservableObject {
                              value: new.notifications.enabled))
         }
         if old.notifications.notifyAt != new.notifications.notifyAt {
-            // Array of doubles → TOML encodes as `[90, 100]`. The decoder
-            // uses `flexibleDoubleArray` so ints are accepted too.
-            let asStrings: [String] = new.notifications.notifyAt.map { d in
-                // Whole numbers render as ints to match the canonical
-                // snippet table style.
-                d == d.rounded() ? String(Int64(d)) : String(d)
-            }
-            out.append(.stringArray(section: "notifications", key: "notify_at",
-                                    value: asStrings))
+            // Unquoted TOML numbers (`[80, 95]`). stringArray would write
+            // `["80", "95"]` which flexibleDoubleArray cannot decode and
+            // silently falls back to defaults (BUG-ART-001).
+            out.append(.doubleArray(section: "notifications", key: "notify_at",
+                                    value: new.notifications.notifyAt))
         }
         if old.notifications.discreet != new.notifications.discreet {
             out.append(.bool(section: "notifications", key: "discreet",

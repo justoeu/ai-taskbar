@@ -115,7 +115,11 @@ public enum OpencodeScanner {
         sqlite3_bind_text(stmt, 3, provider, -1, SQLITE_TRANSIENT)
 
         var scan = OpencodeScan()
+        var stepped = 0
         while sqlite3_step(stmt) == SQLITE_ROW {
+            // Cooperate with cancellation on multi-GB DBs (BP-HYD-002).
+            stepped += 1
+            if stepped % 64 == 0, Task.isCancelled { return nil }
             let rows = Int(sqlite3_column_int64(stmt, 8))
             // A turn with no `modelID` cannot be attributed to anything. Count
             // it rather than folding it into an arbitrary bucket.

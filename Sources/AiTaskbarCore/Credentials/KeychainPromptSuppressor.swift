@@ -28,7 +28,14 @@ import os
 /// `KeychainAccessAuthorizer` it remains the only mechanism that governs
 /// classic file-keychain prompts.
 public enum KeychainPromptSuppressor {
-    private static let depth = OSAllocatedUnfairLock(initialState: 0)
+    private struct State {
+        var depth: Int = 0
+        /// User-initiated interactive window (Authorize). While true, `enter`
+        /// must not force prompts off underneath the interactive body
+        /// (RACE-HER-005).
+        var interactiveHold: Bool = false
+    }
+    private static let state = OSAllocatedUnfairLock(initialState: State())
 
     /// Runs `body` with SecurityAgent keychain prompts disabled for this
     /// process, restoring interaction when the outermost suppressed section
@@ -42,17 +49,21 @@ public enum KeychainPromptSuppressor {
     /// Runs `body` with SecurityAgent prompts explicitly ENABLED, then
     /// restores whatever state the current suppression depth implies.
     ///
-    /// The user-initiated read used to call
-    /// `SecKeychainSetUserInteractionAllowed(true)` directly. That flag is
-    /// process-global, so doing it outside this lock could flip interaction on
-    /// underneath a concurrent suppressed section — and when that section
-    /// exited it would restore `true` regardless, leaving the process able to
-    /// prompt on a scheduled refresh. Going through the same lock makes the
-    /// interactive window explicit and bounded.
+    /// Never forces `allowed=true` while a suppressed section is nested
+    /// (`depth > 0`). Sets `interactiveHold` so concurrent `enter()` cannot
+    /// flip prompts off mid-Authorize (RACE-HER-005).
     public static func withPromptsAllowed<T>(_ body: () throws -> T) rethrows -> T {
-        depth.withLock { _ in setInteractionAllowed(true) }
+        state.withLock { s in
+            s.interactiveHold = true
+            if s.depth == 0 {
+                setInteractionAllowed(true)
+            }
+        }
         defer {
-            depth.withLock { d in setInteractionAllowed(d == 0) }
+            state.withLock { s in
+                s.interactiveHold = false
+                setInteractionAllowed(s.depth == 0)
+            }
         }
         return try body()
     }
@@ -60,16 +71,21 @@ public enum KeychainPromptSuppressor {
     /// Internal-visibility seam so tests can drive the reference counting
     /// without touching the real (process-global) securityd flag.
     internal static func enter(apply: @Sendable (Bool) -> Void = Self.setInteractionAllowed) {
-        depth.withLock { d in
-            if d == 0 { apply(false) }
-            d += 1
+        state.withLock { s in
+            if s.depth == 0 && !s.interactiveHold { apply(false) }
+            s.depth += 1
         }
     }
 
     internal static func exit(apply: @Sendable (Bool) -> Void = Self.setInteractionAllowed) {
-        depth.withLock { d in
-            d -= 1
-            if d == 0 { apply(true) }
+        state.withLock { s in
+            s.depth -= 1
+            if s.depth == 0 {
+                // Depth 0 steady state is prompts allowed (interactiveHold
+                // also wants true; suppressed sections always restore true
+                // when the outermost exits).
+                apply(true)
+            }
         }
     }
 

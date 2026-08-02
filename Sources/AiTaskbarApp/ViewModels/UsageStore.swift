@@ -293,8 +293,8 @@ public enum AggregatesComputation {
             }
             // maxUtilization only folds OPEN cards. `state.outcome` yields the
             // fresh outcome for `.ok`, the stale fallback for `.failed`, and
-            // nil for `.idle` / `.loading` — so a just-started refresh keeps
-            // whatever the previous fold produced instead of dropping to 0.
+            // the previous snapshot for `.loading(previous:)` — so a just-
+            // started refresh does not drop the menu bar to 0%.
             guard entry.isExpanded else { continue }
             if let m = state.outcome?.snapshot.maxUtilization, m > maxUtil {
                 maxUtil = m
