@@ -1,0 +1,11 @@
+{
+  "root": "/Users/justoeu/Developer/Workspace/ai-taskbar",
+  "languages": [
+    "swift",
+    "python"
+  ],
+  "frameworks": [
+    "spm"
+  ],
+  "catalog": "catalogs/classic-bugs.md"
+}

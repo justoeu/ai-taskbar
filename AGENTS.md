@@ -76,13 +76,9 @@ filtered to those two targets only. Excluded:
 - `AiTaskbarTesting` (fixtures/stubs by definition).
 - `AiTaskbarValidate` (it IS a test runner; covering its body is circular).
 
-Enforce with `COVERAGE_FLOOR=90 make validate`. Current ramp:
-
-| Phase | `COVERAGE_FLOOR` | Status |
-|-------|------------------|--------|
-| now   | `0` (warn only)  | infra is in place; we report % but don't fail |
-| soon  | `40` → `60` → `80` | tighten as gaps close |
-| goal  | `90`             | hard fail in CI + `make validate` |
+Enforce with `COVERAGE_FLOOR=90 make validate` (default in `Makefile` and
+`scripts/validate.sh`). **Hard fail at 90%** in CI and local `make validate`.
+Override only for local experiments (`COVERAGE_FLOOR=0 make coverage`).
 
 Don't ship new code that adds uncovered surface area. New file → new test.
 
@@ -467,12 +463,12 @@ user edits. See `config.example.toml` for the full schema.
   Do NOT build against `v1internal` or scrape Electron cookies.
 - **TOMLKit is the single runtime dependency and is effectively unmaintained**
   (no release in ~2.5 years, no commits in ~18 months, pinned at 0.6.0 in
-  `Package.resolved`). It is not currently a problem — it parses a local
-  config file we write the schema for, it has no network surface, and the
-  pinned version is reproducible. It is a *migration risk*: if it stops
-  building on a future Swift, the options are vendoring the ~2k lines we
-  actually use or hand-rolling the small TOML subset `AppConfig` needs.
-  Re-evaluate whenever a Swift major lands; don't swap it out preemptively.
+  `Package.resolved`). **Accepted residual risk** (ultra-deep DEP-PRI-001):
+  it parses a local config file we write the schema for, has no network
+  surface, and the pin is reproducible. Migration risk only — if it stops
+  building on a future Swift, vendor the ~2k lines we use or hand-roll the
+  small TOML subset `AppConfig` needs. Re-evaluate on Swift major; don't
+  swap preemptively.
 - **`codex-auto-review` is priced by estimate.** Codex writes that model alias
   to its rollout logs for the automatic review pass, and OpenAI publishes no
   rate for it, so `PricingTable.openai` carries it at the Codex flagship tier
