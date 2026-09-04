@@ -265,5 +265,297 @@ public enum Fixtures {
     { "access_token": "new.acc.tk", "refresh_token": "new.ref.tk", "expires_in": 28800 }
     """#
 
+    // MARK: - Statuspage v2 service status
+
+    /// Canonical Statuspage summary. The unrelated component is deliberately
+    /// down while the page indicator is green so descriptor scoping is pinned.
+    public static let statuspageSummaryOperational200 = #"""
+    {
+      "page": {
+        "id": "page-claude",
+        "name": "Claude",
+        "url": "https://status.claude.com",
+        "time_zone": "Etc/UTC",
+        "updated_at": "2026-09-03T11:59:00.000Z"
+      },
+      "status": { "indicator": "none", "description": "All Systems Operational" },
+      "components": [
+        {
+          "id": "k8w3r06qmzrp",
+          "name": "Claude API (api.anthropic.com)",
+          "status": "operational",
+          "created_at": "2023-07-11T17:53:10.880Z",
+          "updated_at": "2026-09-03T11:58:00.000Z",
+          "position": 3,
+          "description": null,
+          "group_id": null
+        },
+        {
+          "id": "yyzkbfz2thpt",
+          "name": "Claude Code",
+          "status": "operational",
+          "created_at": "2025-05-22T21:35:29.822Z",
+          "updated_at": "2026-09-03T11:57:00.000Z",
+          "position": 4,
+          "description": "Command-line and IDE clients",
+          "group_id": null
+        },
+        {
+          "id": "unrelated-component",
+          "name": "Unrelated product",
+          "status": "major_outage",
+          "created_at": "2025-01-01T00:00:00Z",
+          "updated_at": "2026-09-03T11:56:00Z",
+          "position": 99,
+          "description": null,
+          "group_id": null
+        }
+      ],
+      "incidents": [],
+      "scheduled_maintenances": []
+    }
+    """#
+
+    public static let statuspageSummaryDegraded200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "minor", "description": "Minor Service Outage" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "degraded_performance",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    public static let statuspageSummaryPartialOutage200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "major", "description": "Partial System Outage" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "partial_outage",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    public static let statuspageSummaryMajorOutage200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "critical", "description": "Major System Outage" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "major_outage",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    public static let statuspageSummaryMaintenance200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "maintenance", "description": "Service Under Maintenance" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "under_maintenance",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    /// Unknown indicator and component tokens must decode successfully and
+    /// map to the honest domain-level `unknown` state.
+    public static let statuspageSummaryUnknown200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "new_upstream_state", "description": "New state" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "brand_new_state",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    /// At `2026-09-03T12:00:00Z`: active/global/long incidents intersect the
+    /// six-hour window; `inc-old` ends one minute before it and `inc-future`
+    /// starts one hour after now. `inc-other` is explicitly scoped away.
+    public static let statuspageIncidentsWindow200 = #"""
+    {
+      "page": {
+        "id": "page-claude",
+        "name": "Claude",
+        "url": "https://status.claude.com",
+        "time_zone": "Etc/UTC",
+        "updated_at": "2026-09-03T11:59:30Z"
+      },
+      "incidents": [
+        {
+          "id": "inc-active",
+          "name": "Elevated API errors",
+          "status": "monitoring",
+          "impact": "minor",
+          "created_at": "2026-09-03T10:00:00Z",
+          "updated_at": "2026-09-03T11:50:00Z",
+          "started_at": "2026-09-03T10:00:00Z",
+          "resolved_at": null,
+          "shortlink": "https://status.claude.com/incidents/inc-active",
+          "components": [
+            { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "degraded_performance",
+              "updated_at": "2026-09-03T11:50:00Z" },
+            { "id": "yyzkbfz2thpt", "name": "Claude Code", "status": "degraded_performance",
+              "updated_at": "2026-09-03T11:50:00Z" }
+          ],
+          "incident_updates": [
+            {
+              "id": "update-active",
+              "status": "monitoring",
+              "body": "A fix is deployed and recovery is being monitored.",
+              "incident_id": "inc-active",
+              "created_at": "2026-09-03T11:50:00Z",
+              "updated_at": "2026-09-03T11:50:00Z",
+              "display_at": "2026-09-03T11:50:00Z",
+              "affected_components": [
+                { "code": "k8w3r06qmzrp", "name": "Claude API",
+                  "old_status": "partial_outage", "new_status": "degraded_performance" },
+                { "code": "yyzkbfz2thpt", "name": "Claude Code",
+                  "old_status": "partial_outage", "new_status": "degraded_performance" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "inc-long",
+          "name": "Long-running issue",
+          "status": "resolved",
+          "impact": "major",
+          "created_at": "2026-09-03T02:00:00Z",
+          "updated_at": "2026-09-03T10:05:00Z",
+          "started_at": "2026-09-03T02:00:00Z",
+          "resolved_at": "2026-09-03T10:00:00Z",
+          "shortlink": "https://status.claude.com/incidents/inc-long",
+          "components": [
+            { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "operational",
+              "updated_at": "2026-09-03T10:00:00Z" }
+          ],
+          "incident_updates": []
+        },
+        {
+          "id": "inc-global",
+          "name": "Page-wide incident without component IDs",
+          "status": "resolved",
+          "impact": "critical",
+          "created_at": "2026-09-03T10:30:00Z",
+          "updated_at": "2026-09-03T11:20:00Z",
+          "started_at": "2026-09-03T10:30:00Z",
+          "resolved_at": "2026-09-03T11:00:00Z",
+          "shortlink": "https://status.claude.com/incidents/inc-global",
+          "incident_updates": []
+        },
+        {
+          "id": "inc-old",
+          "name": "Old incident",
+          "status": "resolved",
+          "impact": "minor",
+          "created_at": "2026-09-02T23:00:00Z",
+          "updated_at": "2026-09-03T05:59:00Z",
+          "started_at": "2026-09-02T23:00:00Z",
+          "resolved_at": "2026-09-03T05:59:00Z",
+          "incident_updates": []
+        },
+        {
+          "id": "inc-future",
+          "name": "Future incident",
+          "status": "scheduled",
+          "impact": "maintenance",
+          "created_at": "2026-09-03T11:00:00Z",
+          "updated_at": "2026-09-03T11:10:00Z",
+          "started_at": "2026-09-03T13:00:00Z",
+          "resolved_at": null,
+          "incident_updates": []
+        },
+        {
+          "id": "inc-other",
+          "name": "Unrelated component incident",
+          "status": "investigating",
+          "impact": "critical",
+          "created_at": "2026-09-03T11:00:00Z",
+          "updated_at": "2026-09-03T11:55:00Z",
+          "started_at": "2026-09-03T11:00:00Z",
+          "resolved_at": null,
+          "components": [
+            { "id": "unrelated-component", "name": "Unrelated product", "status": "major_outage",
+              "updated_at": "2026-09-03T11:55:00Z" }
+          ],
+          "incident_updates": []
+        }
+      ]
+    }
+    """#
+
+    public static let statuspageMaintenancesWindow200 = #"""
+    {
+      "page": {
+        "id": "page-claude",
+        "name": "Claude",
+        "url": "https://status.claude.com",
+        "updated_at": "2026-09-03T11:59:40Z"
+      },
+      "scheduled_maintenances": [
+        {
+          "id": "maint-active",
+          "name": "API database maintenance",
+          "status": "in_progress",
+          "impact": "maintenance",
+          "created_at": "2026-09-03T08:30:00Z",
+          "updated_at": "2026-09-03T11:40:00Z",
+          "started_at": "2026-09-03T09:00:00Z",
+          "resolved_at": null,
+          "shortlink": "https://attacker.example/redirect",
+          "scheduled_for": "2026-09-03T09:00:00Z",
+          "scheduled_until": "2026-09-03T13:00:00Z",
+          "components": [
+            { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "under_maintenance",
+              "updated_at": "2026-09-03T11:40:00Z" }
+          ],
+          "incident_updates": [
+            {
+              "id": "update-maint",
+              "status": "in_progress",
+              "body": "Maintenance is in progress.",
+              "incident_id": "maint-active",
+              "created_at": "2026-09-03T11:40:00Z",
+              "updated_at": "2026-09-03T11:40:00Z",
+              "display_at": "2026-09-03T11:40:00Z",
+              "affected_components": [
+                { "code": "k8w3r06qmzrp", "name": "Claude API",
+                  "old_status": "operational", "new_status": "under_maintenance" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    """#
+
+    public static let statuspageIncidentUnknownTokens200 = #"""
+    {
+      "incidents": [
+        {
+          "id": "inc-unknown",
+          "name": "New upstream states",
+          "status": "new_phase",
+          "impact": "novel_impact",
+          "created_at": "2026-09-03T11:00:00Z",
+          "updated_at": "2026-09-03T11:30:00Z",
+          "started_at": "2026-09-03T11:00:00Z",
+          "resolved_at": null,
+          "incident_updates": []
+        }
+      ]
+    }
+    """#
+
     public static func data(_ s: String) -> Data { Data(s.utf8) }
 }

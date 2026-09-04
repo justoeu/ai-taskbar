@@ -322,6 +322,68 @@ section("Service status domain") {
            "generic cached outcome preserves service-status alias")
 }
 
+section("Wire types: Statuspage v2 fixtures") {
+    let summary = try SharedCoders.decoder.decode(
+        StatuspageSummary.self,
+        from: Fixtures.data(Fixtures.statuspageSummaryDegraded200))
+    let incidents = try SharedCoders.decoder.decode(
+        StatuspageIncidentList.self,
+        from: Fixtures.data(Fixtures.statuspageIncidentsWindow200))
+    let maintenances = try SharedCoders.decoder.decode(
+        StatuspageMaintenanceList.self,
+        from: Fixtures.data(Fixtures.statuspageMaintenancesWindow200))
+    let payload = StatuspageCachedPayload(
+        summary: summary,
+        incidents: incidents,
+        scheduledMaintenances: maintenances)
+    let encoded = try SharedCoders.encoder.encode(payload)
+    let decoded = try SharedCoders.decoder.decode(StatuspageCachedPayload.self, from: encoded)
+
+    expect(decoded == payload, "Statuspage combined cache payload Codable round-trip")
+    expect(summary.status.indicator == "minor", "Statuspage summary indicator parsed")
+    expect(incidents.incidents.count == 6, "Statuspage incident list parsed")
+    expect(maintenances.scheduledMaintenances.count == 1,
+           "Statuspage maintenance list parsed")
+    expect(incidents.incidents.first?.incidentUpdates.first?.affectedComponents?.count == 2,
+           "Statuspage affected-component metadata parsed")
+
+    let now = ISO8601Parsing.parse("2026-09-03T12:00:00Z")!
+    let source = StatuspageSource(descriptor: .anthropic)
+    let status = try source.makeStatus(from: payload, now: now)
+    expect(status.vendorId == .anthropic, "Statuspage descriptor carries vendor ID")
+    expect(status.level == .degradedPerformance, "Statuspage minor maps to degraded")
+    expect(status.coverage == .full, "Statuspage coverage is full")
+    expect(status.incidents.map(\.id) == ["inc-active", "maint-active", "inc-global", "inc-long"],
+           "Statuspage uses component scope plus six-hour intersection")
+    expect(status.incidents.first?.affectedComponents == ["Claude API", "Claude Code"],
+           "Statuspage component IDs map to stable labels")
+    expect(status.incidents.first?.message == "A fix is deployed and recovery is being monitored.",
+           "Statuspage latest update becomes the incident message")
+    expect(status.incidents.first(where: { $0.id == "maint-active" })?.sourceURL == nil,
+           "Statuspage rejects incident links outside the exact host")
+
+    let unknownSummary = try SharedCoders.decoder.decode(
+        StatuspageSummary.self,
+        from: Fixtures.data(Fixtures.statuspageSummaryUnknown200))
+    let unknownIncidentList = try SharedCoders.decoder.decode(
+        StatuspageIncidentList.self,
+        from: Fixtures.data(Fixtures.statuspageIncidentUnknownTokens200))
+    let unknownPayload = StatuspageCachedPayload(
+        summary: unknownSummary,
+        incidents: unknownIncidentList,
+        scheduledMaintenances: StatuspageMaintenanceList(scheduledMaintenances: []))
+    let unknown = try source.makeStatus(from: unknownPayload, now: now)
+    expect(unknown.level == .unknown, "Statuspage unknown indicator stays unknown")
+    expect(unknown.incidents.first?.level == .unknown,
+           "Statuspage unknown impact stays unknown")
+    expect(unknown.incidents.first?.phase == .unknown,
+           "Statuspage unknown phase stays unknown")
+    expect(ServiceStatusProviderFactory.descriptor(for: .kimi) == .kimi,
+           "Statuspage factory exposes Kimi descriptor")
+    expect(ServiceStatusProviderFactory.descriptor(for: .openrouter) == nil,
+           "Statuspage factory leaves unsupported sources untouched")
+}
+
 section("Wire types: Anthropic fixture") {
     let parsed = try SharedCoders.decoder.decode(
         AnthropicUsageResponse.self,
