@@ -8,6 +8,33 @@ import AiTaskbarTesting
 struct CachedFetchEdgeTests {
     init() { StubURLProtocol.reset() }
 
+    @Test("CachedFetch decodes a generic service-status outcome")
+    func decodes_generic_service_status_outcome() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfgeneric-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let fetcher = CachedFetch(cache: DiskCache(vendor: .kimi, baseDir: tmp))
+        let expected = VendorServiceStatus(
+            vendorId: .kimi,
+            level: .operational,
+            coverage: .full,
+            summary: "Operational",
+            sourceURL: URL(string: "https://status.moonshot.cn"),
+            sourceUpdatedAt: nil,
+            incidents: []
+        )
+
+        let outcome: ServiceStatusOutcome = try await fetcher.run(
+            forceRefresh: true,
+            decode: { _ in expected },
+            fetch: { Data("status".utf8) }
+        )
+
+        #expect(outcome.snapshot == expected)
+        #expect(!outcome.isStale)
+    }
+
     @Test("forceRefresh=false with fresh cache skips fetcher")
     func uses_fresh_cache_without_fetcher() async throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())

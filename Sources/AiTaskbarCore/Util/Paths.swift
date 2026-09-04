@@ -39,8 +39,20 @@ public enum Paths {
         return dir
     }
 
-    public static func cacheDir(for vendor: VendorId) throws -> URL {
-        let dir = try caches().appendingPathComponent(vendor.rawValue, isDirectory: true)
+    public static func cacheDir(
+        for vendor: VendorId,
+        scope: CacheScope = .usage
+    ) throws -> URL {
+        let root = try caches()
+        let parent: URL
+        switch scope {
+        case .usage:
+            parent = root
+        case .status:
+            parent = root.appendingPathComponent("status", isDirectory: true)
+            try ensureDir(parent)
+        }
+        let dir = parent.appendingPathComponent(vendor.rawValue, isDirectory: true)
         try ensureDir(dir)
         return dir
     }

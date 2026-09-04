@@ -1,6 +1,18 @@
 import Foundation
 import os
 
+public enum CacheScope: String, Codable, Sendable, Equatable {
+    case usage
+    case status
+
+    fileprivate var defaultMaxStale: TimeInterval {
+        switch self {
+        case .usage: return 7 * 24 * 60 * 60
+        case .status: return ServiceStatusWindow.duration
+        }
+    }
+}
+
 /// Per-vendor on-disk cache. Stores the raw payload (not the parsed snapshot)
 /// so a schema change in our parsers does not invalidate cached bytes.
 ///
@@ -41,9 +53,15 @@ public struct DiskCache: Sendable {
     /// with how often the scheduler actually fires — otherwise popover opens
     /// between scheduled refreshes can burn extra network calls.
     public static func defaultFor(_ vendor: VendorId,
+                                  scope: CacheScope = .usage,
                                   ttl: TimeInterval = 300) throws -> DiskCache {
-        let dir = try Paths.cacheDir(for: vendor)
-        return DiskCache(vendor: vendor, baseDir: dir, ttl: ttl)
+        let dir = try Paths.cacheDir(for: vendor, scope: scope)
+        return DiskCache(
+            vendor: vendor,
+            baseDir: dir,
+            ttl: ttl,
+            maxStale: scope.defaultMaxStale
+        )
     }
 
     private var payloadURL: URL  { baseDir.appendingPathComponent("usage.json") }

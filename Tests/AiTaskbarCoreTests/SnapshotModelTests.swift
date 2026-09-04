@@ -99,4 +99,25 @@ struct FetchOutcomeTests {
         #expect(outcome.cacheAge == 30)
         #expect(outcome.fetchedAt == when)
     }
+
+    @Test("generic cached outcome preserves legacy and service-status aliases")
+    func cached_outcome_aliases() {
+        let usage: FetchOutcome = CachedOutcome(
+            snapshot: VendorSnapshot.kimi(.init())
+        )
+        let service = VendorServiceStatus(
+            vendorId: .kimi,
+            level: .operational,
+            coverage: .full,
+            summary: "Operational",
+            sourceURL: URL(string: "https://status.moonshot.cn"),
+            sourceUpdatedAt: nil,
+            incidents: []
+        )
+        let status: ServiceStatusOutcome = CachedOutcome(snapshot: service)
+
+        #expect(usage.snapshot.vendorId == .kimi)
+        #expect(status.snapshot == service)
+        #expect(!status.isStale)
+    }
 }

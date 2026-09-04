@@ -265,6 +265,63 @@ section("UsageWindow / VendorSnapshot helpers") {
     expect(snap.planLabel == "Claude Max 5x", "planLabel propagates")
 }
 
+section("Service status domain") {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let cutoff = ServiceStatusWindow.cutoff(for: now)
+    let longIncident = ServiceIncident(
+        id: "long",
+        title: "Long incident",
+        level: .degradedPerformance,
+        phase: .monitoring,
+        startedAt: cutoff.addingTimeInterval(-3_600),
+        updatedAt: now.addingTimeInterval(-60),
+        resolvedAt: nil,
+        affectedComponents: ["API"],
+        message: "Monitoring",
+        sourceURL: URL(string: "https://status.claude.com/incidents/long")
+    )
+    let oldIncident = ServiceIncident(
+        id: "old",
+        title: "Old incident",
+        level: .maintenance,
+        phase: .completed,
+        startedAt: cutoff.addingTimeInterval(-7_200),
+        updatedAt: cutoff.addingTimeInterval(-1),
+        resolvedAt: cutoff.addingTimeInterval(-1),
+        affectedComponents: [],
+        message: nil,
+        sourceURL: nil
+    )
+    expect(ServiceStatusWindow.intersects(longIncident, now: now),
+           "long-running incident intersects six-hour window")
+    expect(!ServiceStatusWindow.intersects(oldIncident, now: now),
+           "incident resolved before cutoff is excluded")
+    expect(ServiceStatusWindow.clippedRange(for: longIncident, now: now)?.lowerBound == cutoff,
+           "display range clips at six-hour cutoff")
+    expect(ServiceStatusWindow.recentIncidents([oldIncident, longIncident], now: now).map(\.id) == ["long"],
+           "recent incidents filter and order deterministically")
+    expect(ServiceStatusWindow.worstLevel(in: [.unknown, .maintenance]) == .maintenance,
+           "known non-operational level outranks unknown")
+    expect(ServiceStatusWindow.worstLevel(in: [.operational, .unknown]) == .unknown,
+           "unknown prevents an all-green aggregate")
+
+    let status = VendorServiceStatus(
+        vendorId: .anthropic,
+        level: .degradedPerformance,
+        coverage: .full,
+        summary: "Degraded",
+        sourceURL: VendorId.anthropic.statusPageURL,
+        sourceUpdatedAt: now,
+        incidents: [longIncident]
+    )
+    let data = try SharedCoders.encoder.encode(status)
+    let decoded = try SharedCoders.decoder.decode(VendorServiceStatus.self, from: data)
+    expect(decoded == status, "service status Codable round-trip")
+    let outcome: ServiceStatusOutcome = CachedOutcome(snapshot: status)
+    expect(outcome.snapshot == status && !outcome.isStale,
+           "generic cached outcome preserves service-status alias")
+}
+
 section("Wire types: Anthropic fixture") {
     let parsed = try SharedCoders.decoder.decode(
         AnthropicUsageResponse.self,
