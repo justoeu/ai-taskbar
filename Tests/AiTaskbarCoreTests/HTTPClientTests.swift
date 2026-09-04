@@ -174,4 +174,58 @@ struct HTTPClientTests {
         #expect(resp.statusCode == 200)
         StubURLProtocol.reset()
     }
+
+    @Test("bounded send rejects an oversized response before accepting its body")
+    func bounded_send_rejects_oversized_content_length() async {
+        StubURLProtocol.handler = { _ in
+            .init(data: Data("small".utf8), headers: ["Content-Length": "4096"])
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        do {
+            _ = try await http.sendBounded(
+                URLRequest(url: URL(string: "https://example.com/status")!),
+                maximumResponseBytes: 64
+            )
+            Issue.record("expected bounded response failure")
+        } catch let error as AppError {
+            guard case .transport(let message) = error else {
+                Issue.record("expected transport error, got \(error)")
+                return
+            }
+            #expect(message.contains("64"))
+        } catch {
+            Issue.record("expected AppError")
+        }
+        StubURLProtocol.reset()
+    }
+
+    @Test("bounded send refuses a cross-origin redirect before requesting its target")
+    func bounded_send_blocks_cross_origin_redirect() async {
+        let hostile = URL(string: "https://attacker.example/collect")!
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "attacker.example" {
+                Issue.record("redirect target must never be requested")
+                return .init(data: Data("leaked".utf8))
+            }
+            return .init(status: 302, data: Data(), redirectURL: hostile)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        do {
+            _ = try await http.sendBounded(
+                URLRequest(url: URL(string: "https://example.com/status")!),
+                maximumResponseBytes: 64
+            )
+            Issue.record("expected the rejected redirect to fail the request")
+        } catch let error as AppError {
+            guard case .transport = error else {
+                Issue.record("expected transport error, got \(error)")
+                return
+            }
+        } catch {
+            Issue.record("expected AppError")
+        }
+        #expect(StubURLProtocol.captured.count == 1)
+        #expect(StubURLProtocol.captured[0].url?.host == "example.com")
+        StubURLProtocol.reset()
+    }
 }

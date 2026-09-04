@@ -49,7 +49,7 @@ public struct CachedServiceStatusProvider<Source: ServiceStatusSource>:
                 }
             },
             fetch: {
-                let payload = try await source.fetchPayload(http: http)
+                let payload = try await source.fetchPayload(http: http, now: now)
                 try Task.checkCancellation()
                 do {
                     return try SharedCoders.encoder.encode(payload)

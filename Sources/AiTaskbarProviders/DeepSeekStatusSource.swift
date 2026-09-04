@@ -11,18 +11,15 @@ public struct DeepSeekStatusSource: ServiceStatusSource, Sendable {
     private static let baseURL = URL(string: "https://status.deepseek.com")!
     private static let pageID = "6410630422455"
 
-    public let referenceDate: Date?
     public var vendorId: VendorId { .deepseek }
 
-    /// `referenceDate` exists for deterministic endpoint-window tests. Normal
-    /// providers leave it nil and calculate the closed six-hour window at fetch.
-    public init(referenceDate: Date? = nil) {
-        self.referenceDate = referenceDate
-    }
+    public init() {}
 
-    public func fetchPayload(http: HTTPClient) async throws -> DeepSeekStatusPayload {
+    public func fetchPayload(
+        http: HTTPClient,
+        now: Date
+    ) async throws -> DeepSeekStatusPayload {
         try Task.checkCancellation()
-        let now = referenceDate ?? .now
         let lower = Int64(ServiceStatusWindow.cutoff(for: now).timeIntervalSince1970)
         let upper = Int64(now.timeIntervalSince1970)
 
@@ -96,7 +93,7 @@ public struct DeepSeekStatusSource: ServiceStatusSource, Sendable {
         let sourceUpdatedAt = newestActive.map(updateDate(for:))
         let summary: String
         if currentLevel == .operational {
-            summary = "All systems operational"
+            summary = ""
         } else {
             summary = clean(newestActive?.title, limit: 500) ?? "Service status unavailable"
         }
@@ -120,7 +117,10 @@ public struct DeepSeekStatusSource: ServiceStatusSource, Sendable {
         try Task.checkCancellation()
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        let (data, response) = try await http.send(request)
+        let (data, response) = try await http.sendBounded(
+            request,
+            maximumResponseBytes: Self.maximumResponseBytes
+        )
         try Task.checkCancellation()
         try validateResponse(data: data, response: response, expectedURL: url)
         guard (200..<300).contains(response.statusCode) else {

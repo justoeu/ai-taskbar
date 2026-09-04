@@ -157,17 +157,20 @@ public final class AppEnvironment {
     /// never remove a configured vendor from the panel.
     public func makeStatusProviders(for vendorIds: [VendorId]) -> [any ServiceStatusProvider] {
         let statusTTL = max(15, config.ui.refreshIntervalSeconds - 5)
-        do {
-            return try ServiceStatusProviderFactory.makeProviders(
-                for: vendorIds,
-                http: http,
-                cacheTTL: statusTTL
-            )
-        } catch {
-            AppLog.lifecycle.error(
-                "service status provider init failed: \(String(describing: error), privacy: .public)"
-            )
-            return []
+        var providers: [any ServiceStatusProvider] = []
+        for vendorId in vendorIds {
+            do {
+                providers.append(contentsOf: try ServiceStatusProviderFactory.makeProviders(
+                    for: [vendorId],
+                    http: http,
+                    cacheTTL: statusTTL
+                ))
+            } catch {
+                AppLog.lifecycle.error(
+                    "\(vendorId.rawValue, privacy: .public) status provider init failed: \(String(describing: error), privacy: .public)"
+                )
+            }
         }
+        return providers
     }
 }

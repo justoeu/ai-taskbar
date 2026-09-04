@@ -29,6 +29,7 @@ public enum ServiceStatusPresentation {
         "service_status_ax_hint", "service_status_title", "service_status_last_six_hours",
         "service_status_minus_six_hours", "service_status_now", "service_status_refresh",
         "service_status_close", "service_status_loading", "service_status_never_updated",
+        "service_status_no_automatic_sources",
         "service_status_updated_fmt", "service_status_stale_fmt", "service_status_cold_error",
         "service_status_retry", "service_status_empty_full",
         "service_status_empty_incidents_only", "service_status_empty_link_only",
@@ -148,24 +149,14 @@ public enum ServiceStatusPresentation {
         for status: VendorServiceStatus,
         now: Date
     ) -> [ServiceStatusTimelineSegment] {
-        let baseline: ServiceStatusLevel = status.coverage == .full ? .operational : .unknown
-        var result = [ServiceStatusTimelineSegment(
-            level: baseline,
-            startFraction: 0,
-            endFraction: 1
-        )]
         let cutoff = ServiceStatusWindow.cutoff(for: now)
-        for incident in ServiceStatusWindow.recentIncidents(status.incidents, now: now) {
-            guard let range = ServiceStatusWindow.clippedRange(for: incident, now: now) else {
-                continue
-            }
-            result.append(ServiceStatusTimelineSegment(
-                level: incident.level,
-                startFraction: fraction(range.lowerBound, cutoff: cutoff, now: now),
-                endFraction: fraction(range.upperBound, cutoff: cutoff, now: now)
-            ))
+        return sweptSegments(for: status, now: now).map {
+            ServiceStatusTimelineSegment(
+                level: $0.level,
+                startFraction: fraction($0.start, cutoff: cutoff, now: now),
+                endFraction: fraction($0.end, cutoff: cutoff, now: now)
+            )
         }
-        return result
     }
 
     /// Computes non-overlapping duration totals using the worst active level
@@ -174,29 +165,51 @@ public enum ServiceStatusPresentation {
         for status: VendorServiceStatus,
         now: Date
     ) -> [ServiceStatusLevel: TimeInterval] {
-        let cutoff = ServiceStatusWindow.cutoff(for: now)
-        let incidents = ServiceStatusWindow.recentIncidents(status.incidents, now: now)
-        let ranges = incidents.compactMap { incident -> (ServiceIncident, ClosedRange<Date>)? in
-            guard let range = ServiceStatusWindow.clippedRange(for: incident, now: now) else {
-                return nil
-            }
-            return (incident, range)
-        }
-        let boundaries = Set([cutoff, now] + ranges.flatMap { [$0.1.lowerBound, $0.1.upperBound] })
-            .sorted()
-        let baseline: ServiceStatusLevel = status.coverage == .full ? .operational : .unknown
         var durations: [ServiceStatusLevel: TimeInterval] = [:]
-        for (start, end) in zip(boundaries, boundaries.dropFirst()) where end > start {
-            let midpoint = start.addingTimeInterval(end.timeIntervalSince(start) / 2)
-            let activeLevels = ranges.compactMap { incident, range in
-                range.contains(midpoint) ? incident.level : nil
-            }
-            let level = activeLevels.isEmpty
-                ? baseline
-                : ServiceStatusWindow.worstLevel(in: activeLevels)
-            durations[level, default: 0] += end.timeIntervalSince(start)
+        for segment in sweptSegments(for: status, now: now) {
+            durations[segment.level, default: 0] += segment.end.timeIntervalSince(segment.start)
         }
         return durations
+    }
+
+    private struct DatedSegment {
+        let level: ServiceStatusLevel
+        let start: Date
+        var end: Date
+    }
+
+    private static func sweptSegments(
+        for status: VendorServiceStatus,
+        now: Date
+    ) -> [DatedSegment] {
+        let cutoff = ServiceStatusWindow.cutoff(for: now)
+        let ranges = ServiceStatusWindow.recentIncidents(status.incidents, now: now)
+            .compactMap { incident -> (ServiceStatusLevel, ClosedRange<Date>)? in
+                guard let range = ServiceStatusWindow.clippedRange(for: incident, now: now) else {
+                    return nil
+                }
+                return (incident.level, range)
+            }
+        let boundaries = Set([cutoff, now] + ranges.flatMap {
+            [$0.1.lowerBound, $0.1.upperBound]
+        }).sorted()
+        let baseline: ServiceStatusLevel = status.coverage == .full ? .operational : .unknown
+        var result: [DatedSegment] = []
+        for (start, end) in zip(boundaries, boundaries.dropFirst()) where end > start {
+            let midpoint = start.addingTimeInterval(end.timeIntervalSince(start) / 2)
+            let active = ranges.compactMap { level, range in
+                range.contains(midpoint) ? level : nil
+            }
+            let level = active.isEmpty
+                ? baseline
+                : ServiceStatusWindow.worstLevel(in: active)
+            if result.last?.level == level {
+                result[result.count - 1].end = end
+            } else {
+                result.append(DatedSegment(level: level, start: start, end: end))
+            }
+        }
+        return result
     }
 
     private static func fraction(_ date: Date, cutoff: Date, now: Date) -> Double {

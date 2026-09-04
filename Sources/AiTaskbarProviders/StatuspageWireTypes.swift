@@ -130,6 +130,20 @@ public struct StatuspageSummary: Codable, Sendable, Equatable {
         case scheduledMaintenances = "scheduled_maintenances"
     }
 
+    public init(
+        page: StatuspagePage,
+        status: StatuspageStatus,
+        components: [StatuspageComponent],
+        incidents: [StatuspageIncident],
+        scheduledMaintenances: [StatuspageIncident]
+    ) {
+        self.page = page
+        self.status = status
+        self.components = components
+        self.incidents = incidents
+        self.scheduledMaintenances = scheduledMaintenances
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         page = try container.decode(StatuspagePage.self, forKey: .page)

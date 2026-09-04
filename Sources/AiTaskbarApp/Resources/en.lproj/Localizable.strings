@@ -217,6 +217,7 @@
 "service_status_close" = "Close service status";
 "service_status_loading" = "Refreshing public status…";
 "service_status_never_updated" = "Waiting for first status refresh…";
+"service_status_no_automatic_sources" = "No automatic status sources available";
 "service_status_updated_fmt" = "Updated at %@";
 "service_status_stale_fmt" = "Couldn’t update; showing data from %@";
 "service_status_cold_error" = "Status couldn’t be loaded; state remains unknown.";

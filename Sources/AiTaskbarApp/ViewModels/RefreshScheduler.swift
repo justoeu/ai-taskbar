@@ -5,6 +5,7 @@ import AiTaskbarCore
 @MainActor
 public final class RefreshScheduler: ObservableObject {
     public let interval: TimeInterval
+    public let statusInterval: TimeInterval
     /// Extra delay applied to the next sleep when the previous cycle saw any
     /// HTTP 429. Stacked on top of `interval` so a rate-limited vendor gets a
     /// 6-minute breather (default 300 + 60) before being polled again.
@@ -15,14 +16,24 @@ public final class RefreshScheduler: ObservableObject {
     private var statusRefreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
 
-    public init(store: UsageStore,
-                statusStore: ServiceStatusStore? = nil,
-                interval: TimeInterval = 300) {
+    public convenience init(store: UsageStore,
+                            statusStore: ServiceStatusStore? = nil,
+                            interval: TimeInterval = 300) {
+        self.init(store: store, statusStore: statusStore, interval: interval,
+                  minimumInterval: 15, minimumStatusInterval: 300)
+    }
+
+    init(store: UsageStore,
+         statusStore: ServiceStatusStore?,
+         interval: TimeInterval,
+         minimumInterval: TimeInterval,
+         minimumStatusInterval: TimeInterval) {
         self.store = store
         self.statusStore = statusStore
         // Floor at 15 s. Below this the undocumented vendor endpoints
         // (Anthropic, Codex, Z.AI) start returning 429 aggressively.
-        self.interval = max(15, interval)
+        self.interval = max(minimumInterval, interval)
+        self.statusInterval = max(minimumStatusInterval, self.interval)
     }
 
     /// Idempotent: subsequent calls (e.g. on every popover open) are no-ops so
@@ -41,11 +52,12 @@ public final class RefreshScheduler: ObservableObject {
         statusRefreshLoop = Task { @MainActor [weak self] in
             guard let self else { return }
             self.statusStore?.refreshAll(forceRefresh: false)
+            await self.statusStore?.waitForCurrentRefresh()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(self.interval))
+                try? await Task.sleep(for: .seconds(self.statusInterval))
                 if Task.isCancelled { break }
-                if self.statusStore?.isLoading == true { continue }
                 self.statusStore?.refreshAll(forceRefresh: false)
+                await self.statusStore?.waitForCurrentRefresh()
             }
         }
     }

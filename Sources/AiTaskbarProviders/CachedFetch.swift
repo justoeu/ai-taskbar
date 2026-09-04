@@ -31,10 +31,11 @@ public struct CachedFetch: Sendable {
         do {
             let data = try await fetch()
             try Task.checkCancellation()
+            let snapshot = try decode(data)
+            try Task.checkCancellation()
             try cache.writePayload(data)
-            return try makeOutcome(from: data, decode: decode,
-                                    isStale: false, cacheAge: 0,
-                                    lastError: nil)
+            return makeOutcome(snapshot: snapshot, isStale: false,
+                               cacheAge: 0, lastError: nil)
         } catch is CancellationError {
             throw CancellationError()
         } catch let appErr as AppError {
@@ -70,11 +71,29 @@ public struct CachedFetch: Sendable {
         cacheAge: TimeInterval?,
         lastError: FetchError?
     ) throws -> CachedOutcome<Snapshot> {
-        CachedOutcome(
+        makeOutcome(
             snapshot: try decode(data),
             isStale: isStale,
+            cacheAge: cacheAge,
+            lastError: lastError
+        )
+    }
+
+    private func makeOutcome<Snapshot: Sendable & Equatable>(
+        snapshot: Snapshot,
+        isStale: Bool,
+        cacheAge: TimeInterval?,
+        lastError: FetchError?
+    ) -> CachedOutcome<Snapshot> {
+        let fetchedAt = cacheAge.map {
+            Date.now.addingTimeInterval(-max(0, $0))
+        } ?? .now
+        return CachedOutcome(
+            snapshot: snapshot,
+            isStale: isStale,
             lastError: lastError ?? cache.lastError(),
-            cacheAge: cacheAge
+            cacheAge: cacheAge,
+            fetchedAt: fetchedAt
         )
     }
 

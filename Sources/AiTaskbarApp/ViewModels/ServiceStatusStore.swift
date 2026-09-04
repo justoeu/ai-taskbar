@@ -62,6 +62,7 @@ public final class ServiceStatusStore: ObservableObject {
     @Published public private(set) var lastCompletedRefreshAt: Date?
 
     private let providersById: [VendorId: any ServiceStatusProvider]
+    public var hasAutomaticSources: Bool { !providersById.isEmpty }
     private var epoch = 0
     private var refreshTask: Task<Void, Never>?
 

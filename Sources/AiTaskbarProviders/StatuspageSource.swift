@@ -58,6 +58,7 @@ public struct StatuspageDescriptor: Sendable, Equatable {
 
 public struct StatuspageSource: ServiceStatusSource, Sendable {
     public static let maximumResponseBytes = 2 * 1024 * 1024
+    public static let maximumItems = 200
 
     public let descriptor: StatuspageDescriptor
     public var vendorId: VendorId { descriptor.vendorId }
@@ -66,7 +67,11 @@ public struct StatuspageSource: ServiceStatusSource, Sendable {
         self.descriptor = descriptor
     }
 
-    public func fetchPayload(http: HTTPClient) async throws -> StatuspageCachedPayload {
+    public func fetchPayload(
+        http: HTTPClient,
+        now: Date
+    ) async throws -> StatuspageCachedPayload {
+        _ = now
         try Task.checkCancellation()
         try validateDescriptor()
 
@@ -87,6 +92,7 @@ public struct StatuspageSource: ServiceStatusSource, Sendable {
             incidents: incidents,
             scheduledMaintenances: maintenances
         )
+        try validate(payload)
         try Task.checkCancellation()
         return payload
     }
@@ -95,6 +101,7 @@ public struct StatuspageSource: ServiceStatusSource, Sendable {
         from payload: StatuspageCachedPayload,
         now: Date
     ) throws -> VendorServiceStatus {
+        try validate(payload)
         let summaryLevel = level(for: payload.summary.status.indicator)
         let componentLevels = payload.summary.components.compactMap { component in
             matchesDescriptor(id: component.id, name: component.name)
@@ -158,7 +165,10 @@ public struct StatuspageSource: ServiceStatusSource, Sendable {
         let requestURL = endpoint(path)
         var request = URLRequest(url: requestURL)
         request.httpMethod = "GET"
-        let (data, response) = try await http.send(request)
+        let (data, response) = try await http.sendBounded(
+            request,
+            maximumResponseBytes: Self.maximumResponseBytes
+        )
         try Task.checkCancellation()
         try validateResponse(data: data, response: response, expectedURL: requestURL)
         guard (200..<300).contains(response.statusCode) else {
@@ -177,7 +187,10 @@ public struct StatuspageSource: ServiceStatusSource, Sendable {
         let requestURL = endpoint("scheduled-maintenances.json")
         var request = URLRequest(url: requestURL)
         request.httpMethod = "GET"
-        let (data, response) = try await http.send(request)
+        let (data, response) = try await http.sendBounded(
+            request,
+            maximumResponseBytes: Self.maximumResponseBytes
+        )
         try Task.checkCancellation()
         try validateResponse(data: data, response: response, expectedURL: requestURL)
         if response.statusCode == 404 {
@@ -216,9 +229,34 @@ public struct StatuspageSource: ServiceStatusSource, Sendable {
             throw AppError.schema("statuspage response exceeds 2 MiB")
         }
         guard response.url?.scheme?.lowercased() == "https",
-              response.url?.host?.lowercased() == expectedURL.host?.lowercased()
+              response.url?.host?.lowercased() == expectedURL.host?.lowercased(),
+              response.url?.user == nil,
+              response.url?.password == nil,
+              response.url?.port == nil
         else {
             throw AppError.transport("statuspage redirect left allowed host")
+        }
+    }
+
+    private func validate(_ payload: StatuspageCachedPayload) throws {
+        let incidents = payload.summary.incidents
+            + payload.summary.scheduledMaintenances
+            + payload.incidents.incidents
+            + payload.scheduledMaintenances.scheduledMaintenances
+        guard payload.summary.components.count <= Self.maximumItems,
+              payload.summary.incidents.count <= Self.maximumItems,
+              payload.summary.scheduledMaintenances.count <= Self.maximumItems,
+              payload.incidents.incidents.count <= Self.maximumItems,
+              payload.scheduledMaintenances.scheduledMaintenances.count <= Self.maximumItems,
+              incidents.allSatisfy({ incident in
+                  (incident.components?.count ?? 0) <= Self.maximumItems
+                      && incident.incidentUpdates.count <= Self.maximumItems
+                      && incident.incidentUpdates.allSatisfy {
+                          ($0.affectedComponents?.count ?? 0) <= Self.maximumItems
+                      }
+              })
+        else {
+            throw AppError.schema("statuspage item limit exceeded")
         }
     }
 
@@ -317,7 +355,8 @@ public struct StatuspageSource: ServiceStatusSource, Sendable {
               url.scheme?.lowercased() == "https",
               url.host?.lowercased() == descriptor.baseURL.host?.lowercased(),
               url.user == nil,
-              url.password == nil
+              url.password == nil,
+              url.port == nil
         else { return nil }
         return url
     }

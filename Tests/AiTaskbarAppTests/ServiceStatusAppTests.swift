@@ -9,15 +9,24 @@ private actor StatusFetchProbe {
     private(set) var calls = 0
     private(set) var active = 0
     private(set) var maximumActive = 0
+    private(set) var beganAt: [Date] = []
+    private(set) var endedAt: [Date] = []
 
     func begin() {
         calls += 1
         active += 1
         maximumActive = max(maximumActive, active)
+        beganAt.append(.now)
     }
 
     func end() {
         active -= 1
+        endedAt.append(.now)
+    }
+
+    func firstCompletionToNextStartGap() -> TimeInterval? {
+        guard let firstEnd = endedAt.first, beganAt.count > 1 else { return nil }
+        return beganAt[1].timeIntervalSince(firstEnd)
     }
 }
 
@@ -114,6 +123,7 @@ struct ServiceStatusAppTests {
         #expect(store.rows.map(\.vendorId) == [.gemini, .zai])
         #expect(store.overallLevel == .unknown)
         #expect(!store.isLoading)
+        #expect(!store.hasAutomaticSources)
         let requestCount = await unexpectedProbe.calls
         #expect(requestCount == 0)
         for row in store.rows {
@@ -124,6 +134,37 @@ struct ServiceStatusAppTests {
             #expect(snapshot.coverage == .linkOnly)
             #expect(snapshot.level == .unknown)
         }
+    }
+
+    @Test("status scheduler sleeps after a completed round before polling again")
+    func scheduler_cadence_is_anchored_after_completion() async throws {
+        let probe = StatusFetchProbe()
+        let statusStore = ServiceStatusStore(
+            vendorIds: [.anthropic],
+            providers: [provider(
+                .anthropic,
+                outcome: outcome(.anthropic),
+                delay: .milliseconds(80),
+                probe: probe
+            )]
+        )
+        let usageStore = UsageStore(vendors: [], primary: nil)
+        let scheduler = RefreshScheduler(
+            store: usageStore,
+            statusStore: statusStore,
+            interval: 0.04,
+            minimumInterval: 0,
+            minimumStatusInterval: 0
+        )
+        scheduler.start()
+        for _ in 0..<200 {
+            if await probe.calls >= 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        scheduler.stop()
+
+        let gap = try #require(await probe.firstCompletionToNextStartGap())
+        #expect(gap >= 0.03)
     }
 
     @Test("network sources refresh in parallel while results preserve row order")
@@ -278,6 +319,32 @@ struct ServiceStatusAppTests {
         expectTrue(incidentSegment?.endFraction == 0.5)
         expectTrue(ServiceStatusPresentation.durationByLevel(for: snapshot, now: now)[.partialOutage]
                    == 3 * 60 * 60)
+    }
+
+    @Test("timeline resolves overlapping incidents to non-overlapping worst-level segments")
+    func timeline_overlap_uses_worst_level() {
+        let now = Date(timeIntervalSince1970: 21_600)
+        let outage = ServiceIncident(
+            id: "outage", title: "Outage", level: .majorOutage,
+            phase: .monitoring, startedAt: now.addingTimeInterval(-4.5 * 3_600),
+            updatedAt: now, resolvedAt: now.addingTimeInterval(-1.5 * 3_600),
+            affectedComponents: [], message: nil, sourceURL: nil
+        )
+        let maintenance = ServiceIncident(
+            id: "maintenance", title: "Maintenance", level: .maintenance,
+            phase: .inProgress, startedAt: now.addingTimeInterval(-3 * 3_600),
+            updatedAt: now.addingTimeInterval(-60), resolvedAt: nil,
+            affectedComponents: [], message: nil, sourceURL: nil
+        )
+        let snapshot = status(.openai, incidents: [outage, maintenance])
+
+        let segments = ServiceStatusPresentation.timelineSegments(for: snapshot, now: now)
+
+        #expect(segments == [
+            ServiceStatusTimelineSegment(level: .operational, startFraction: 0, endFraction: 0.25),
+            ServiceStatusTimelineSegment(level: .majorOutage, startFraction: 0.25, endFraction: 0.75),
+            ServiceStatusTimelineSegment(level: .maintenance, startFraction: 0.75, endFraction: 1),
+        ])
     }
 
     @Test("every status localization key exists in English, Brazilian Portuguese and Spanish")

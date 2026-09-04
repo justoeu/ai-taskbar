@@ -52,7 +52,7 @@ struct SecondaryStatusProviderTests {
         http: HTTPClient? = nil
     ) -> CachedServiceStatusProvider<DeepSeekStatusSource> {
         CachedServiceStatusProvider(
-            source: DeepSeekStatusSource(referenceDate: fixtureNow),
+            source: DeepSeekStatusSource(),
             cache: cache,
             http: http ?? HTTPClient.stubbed(protocols: [StubURLProtocol.self])
         )
@@ -144,7 +144,7 @@ struct SecondaryStatusProviderTests {
 
     @Test("DeepSeek maps explicit state, deduplicates, and applies six-hour intersection")
     func deepseek_mapping() throws {
-        let source = DeepSeekStatusSource(referenceDate: fixtureNow)
+        let source = DeepSeekStatusSource()
         let payload = try deepSeekPayload()
 
         let status = try source.makeStatus(from: payload, now: fixtureNow)
@@ -194,6 +194,7 @@ struct SecondaryStatusProviderTests {
         #expect(empty.coverage == .incidentsOnly)
         #expect(empty.level == .unknown)
         #expect(empty.incidents.count == 0)
+        #expect(empty.summary.isEmpty)
     }
 
     @Test("xAI parses explicit resolution timestamps and safe incident links")
@@ -244,11 +245,11 @@ struct SecondaryStatusProviderTests {
                 .fetchStatus(forceRefresh: true, now: fixtureNow)
             Issue.record("expected oversized DeepSeek response")
         } catch let error as AppError {
-            guard case .schema(let message) = error else {
-                Issue.record("expected schema error, got \(error)")
+            guard case .transport(let message) = error else {
+                Issue.record("expected transport error, got \(error)")
                 return
             }
-            expectTrue(message.contains("2 MiB"))
+            expectTrue(message.contains("2097152"))
         }
 
         let rssCache = try temporaryCache(vendor: .openrouter)
@@ -258,13 +259,41 @@ struct SecondaryStatusProviderTests {
                 .fetchStatus(forceRefresh: true, now: fixtureNow)
             Issue.record("expected oversized RSS response")
         } catch let error as AppError {
-            guard case .schema(let message) = error else {
-                Issue.record("expected schema error, got \(error)")
+            guard case .transport(let message) = error else {
+                Issue.record("expected transport error, got \(error)")
                 return
             }
-            expectTrue(message.contains("2 MiB"))
+            expectTrue(message.contains("2097152"))
         }
         StubURLProtocol.reset()
+    }
+
+    @Test("RSS resolves yearless update dates across New Year")
+    func rss_yearless_new_year_rollover() throws {
+        let source = RSSStatusSource(descriptor: .xAI)
+        let feed = RSSStatusFeed(
+            title: "xAI status",
+            link: nil,
+            description: nil,
+            lastBuildDate: "Thu, 01 Jan 2026 01:00:00 GMT",
+            items: [
+                RSSStatusItem(
+                    title: "[API] Outage resolved",
+                    description: "Resolved: Jan 1, 12:30 AM GMT",
+                    pubDate: "Wed, 31 Dec 2025 23:30:00 GMT",
+                    link: "https://status.x.ai/api/rollover",
+                    guid: "rollover",
+                    guidIsPermaLink: false,
+                    categories: []
+                ),
+            ]
+        )
+        let now = ISO8601Parsing.parse("2026-01-01T01:00:00Z")!
+
+        let status = try source.makeStatus(from: feed, now: now)
+
+        #expect(status.incidents.count == 1)
+        expectTrue(status.incidents[0].resolvedAt == ISO8601Parsing.parse("2026-01-01T00:30:00Z"))
     }
 
     @Test("RSS rejects excessive item count and bounds emitted text")

@@ -17,6 +17,7 @@ public struct PopoverContentView: View {
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var overlay: Overlay?
+    @FocusState private var statusButtonFocused: Bool
     public var onQuit: () -> Void
 
     public init(onQuit: @escaping () -> Void = {}) {
@@ -61,17 +62,18 @@ public struct PopoverContentView: View {
             }
 
             .allowsHitTesting(overlay == nil)
+            .disabled(overlay != nil)
             .accessibilityHidden(overlay != nil)
 
             if let overlay {
                 Color.black.opacity(0.45)
                     .ignoresSafeArea()
                     .transition(.opacity)
-                    .onTapGesture { self.overlay = nil }
+                    .onTapGesture { dismissOverlay() }
                     .accessibilityHidden(true)
                 switch overlay {
                 case .status:
-                    StatusPanelView { self.overlay = nil }
+                    StatusPanelView { dismissOverlay(restoreStatusFocus: true) }
                         .environmentObject(statusStore)
                         .transition(overlayTransition)
                 case .about:
@@ -119,6 +121,7 @@ public struct PopoverContentView: View {
                     .foregroundStyle(statusStore.overallLevel.statusColor)
                 }
                 .buttonStyle(.borderless)
+                .focused($statusButtonFocused)
                 .help(L10n.localizedString("service_status_help"))
                 .accessibilityLabel(L10n.localizedString("service_status_ax_label"))
                 .accessibilityValue(statusAccessibilityValue)
@@ -289,6 +292,15 @@ public struct PopoverContentView: View {
 
     private var overlayTransition: AnyTransition {
         reduceMotion ? .opacity : .scale(scale: 0.95).combined(with: .opacity)
+    }
+
+    private func dismissOverlay(restoreStatusFocus: Bool = false) {
+        overlay = nil
+        guard restoreStatusFocus else { return }
+        Task { @MainActor in
+            await Task.yield()
+            statusButtonFocused = true
+        }
     }
 
     private var statusAccessibilityValue: String {

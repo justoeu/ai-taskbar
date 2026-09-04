@@ -42,12 +42,19 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         self.descriptor = descriptor
     }
 
-    public func fetchPayload(http: HTTPClient) async throws -> RSSStatusFeed {
+    public func fetchPayload(
+        http: HTTPClient,
+        now: Date
+    ) async throws -> RSSStatusFeed {
+        _ = now
         try Task.checkCancellation()
         try validateDescriptor()
         var request = URLRequest(url: descriptor.feedURL)
         request.httpMethod = "GET"
-        let (data, response) = try await http.send(request)
+        let (data, response) = try await http.sendBounded(
+            request,
+            maximumResponseBytes: Self.maximumResponseBytes
+        )
         try Task.checkCancellation()
         try validateResponse(data: data, response: response)
         guard (200..<300).contains(response.statusCode) else {
@@ -68,7 +75,10 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
             throw AppError.schema("RSS item limit exceeded")
         }
 
-        let mapped = try payload.items.map(makeIncident)
+        let dateParser = try RSSStatusDateParser()
+        let mapped = try payload.items.map {
+            try makeIncident($0, dateParser: dateParser)
+        }
             .sorted { $0.updatedAt > $1.updatedAt }
         var ids = Set<String>()
         var titleStarts = Set<String>()
@@ -88,18 +98,18 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
             : ServiceStatusWindow.worstLevel(in: active.map(\.level))
         let summary: String
         if active.isEmpty {
-            summary = "No active incidents reported by source"
+            summary = ""
         } else {
             summary = active.max {
                 let left = severity($0.level)
                 let right = severity($1.level)
                 return left == right ? $0.updatedAt < $1.updatedAt : left < right
-            }?.title ?? "Active incident"
+            }?.title ?? ""
         }
 
         let sourceUpdatedAt: Date?
         if let raw = payload.lastBuildDate {
-            guard let parsed = parseRSSDate(raw) else {
+            guard let parsed = dateParser.parseFeedDate(raw) else {
                 throw AppError.schema("RSS invalid lastBuildDate")
             }
             sourceUpdatedAt = parsed
@@ -194,8 +204,11 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         }
     }
 
-    private func makeIncident(_ item: RSSStatusItem) throws -> ServiceIncident {
-        guard let startedAt = parseRSSDate(item.pubDate) else {
+    private func makeIncident(
+        _ item: RSSStatusItem,
+        dateParser: RSSStatusDateParser
+    ) throws -> ServiceIncident {
+        guard let startedAt = dateParser.parseFeedDate(item.pubDate) else {
             throw AppError.schema("RSS invalid pubDate")
         }
         let title = plainText(item.title, limit: 300) ?? "Untitled incident"
@@ -204,14 +217,19 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
             .joined(separator: " ")
             .lowercased()
         let phase = phase(for: searchable)
-        let dates = updateDates(in: item.description ?? "", publicationDate: startedAt)
-        let updatedAt = dates.max() ?? startedAt
+        let dates = dateParser.updateDates(
+            in: item.description ?? "",
+            publicationDate: startedAt,
+            plainText: plainText
+        )
+        let updatedAt = max(dates.max() ?? startedAt, startedAt)
         let resolvedAt: Date?
         switch phase {
         case .resolved, .completed:
-            resolvedAt = resolvedDate(
+            resolvedAt = dateParser.resolvedDate(
                 in: item.description ?? "",
-                publicationDate: startedAt
+                publicationDate: startedAt,
+                plainText: plainText
             ) ?? updatedAt
         default:
             resolvedAt = nil
@@ -304,55 +322,6 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         value.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
-    private func parseRSSDate(_ raw: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-        return formatter.date(from: raw.trimmingCharacters(in: .whitespacesAndNewlines))
-    }
-
-    private func resolvedDate(in raw: String, publicationDate: Date) -> Date? {
-        let plain = plainText(raw, limit: Self.maximumFieldCharacters) ?? ""
-        guard let range = plain.range(of: "Resolved:", options: .caseInsensitive) else {
-            return nil
-        }
-        return updateDates(
-            in: String(plain[range.upperBound...]),
-            publicationDate: publicationDate
-        ).first
-    }
-
-    private func updateDates(in raw: String, publicationDate: Date) -> [Date] {
-        let plain = plainText(raw, limit: Self.maximumFieldCharacters) ?? ""
-        var result: [Date] = []
-        let fullPattern = #"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{1,2}:\d{2}:\d{2} (?:GMT|UTC)"#
-        if let regex = try? NSRegularExpression(pattern: fullPattern) {
-            let source = plain as NSString
-            for match in regex.matches(in: plain, range: NSRange(location: 0, length: source.length)) {
-                if let parsed = parseRSSDate(source.substring(with: match.range)) {
-                    result.append(parsed)
-                }
-            }
-        }
-
-        let calendar = Calendar(identifier: .gregorian)
-        let year = calendar.component(.year, from: publicationDate)
-        let shortPattern = #"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{1,2}:\d{2} [AP]M (?:GMT|UTC)"#
-        if let regex = try? NSRegularExpression(pattern: shortPattern) {
-            let source = plain as NSString
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            formatter.dateFormat = "MMM d, h:mm a zzz yyyy"
-            for match in regex.matches(in: plain, range: NSRange(location: 0, length: source.length)) {
-                let candidate = source.substring(with: match.range) + " \(year)"
-                if let parsed = formatter.date(from: candidate) { result.append(parsed) }
-            }
-        }
-        return result
-    }
-
     private func plainText(_ raw: String, limit: Int) -> String? {
         var output = ""
         output.reserveCapacity(min(raw.count, limit))
@@ -387,6 +356,89 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
             .joined(separator: " ")
         guard !normalized.isEmpty else { return nil }
         return String(normalized.prefix(limit))
+    }
+}
+
+/// One parser per feed conversion: formatter and regex setup is paid once,
+/// while conversion remains synchronous and confined to the caller.
+private final class RSSStatusDateParser {
+    typealias PlainText = (String, Int) -> String?
+
+    private let feedFormatter: DateFormatter
+    private let shortFormatter: DateFormatter
+    private let fullRegex: NSRegularExpression
+    private let shortRegex: NSRegularExpression
+    private let calendar = Calendar(identifier: .gregorian)
+
+    init() throws {
+        feedFormatter = DateFormatter()
+        feedFormatter.locale = Locale(identifier: "en_US_POSIX")
+        feedFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        feedFormatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+
+        shortFormatter = DateFormatter()
+        shortFormatter.locale = Locale(identifier: "en_US_POSIX")
+        shortFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        shortFormatter.dateFormat = "MMM d, h:mm a zzz yyyy"
+
+        fullRegex = try NSRegularExpression(
+            pattern: #"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{1,2}:\d{2}:\d{2} (?:GMT|UTC)"#
+        )
+        shortRegex = try NSRegularExpression(
+            pattern: #"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{1,2}:\d{2} [AP]M (?:GMT|UTC)"#
+        )
+    }
+
+    func parseFeedDate(_ raw: String) -> Date? {
+        feedFormatter.date(from: raw.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    func resolvedDate(
+        in raw: String,
+        publicationDate: Date,
+        plainText: PlainText
+    ) -> Date? {
+        let plain = plainText(raw, RSSStatusSource.maximumFieldCharacters) ?? ""
+        guard let range = plain.range(of: "Resolved:", options: .caseInsensitive) else {
+            return nil
+        }
+        return updateDates(
+            in: String(plain[range.upperBound...]),
+            publicationDate: publicationDate,
+            plainText: plainText
+        )
+        .filter { $0 >= publicationDate }
+        .min()
+    }
+
+    func updateDates(
+        in raw: String,
+        publicationDate: Date,
+        plainText: PlainText
+    ) -> [Date] {
+        let plain = plainText(raw, RSSStatusSource.maximumFieldCharacters) ?? ""
+        let source = plain as NSString
+        var result = fullRegex.matches(
+            in: plain,
+            range: NSRange(location: 0, length: source.length)
+        ).compactMap { parseFeedDate(source.substring(with: $0.range)) }
+
+        let publicationYear = calendar.component(.year, from: publicationDate)
+        for match in shortRegex.matches(
+            in: plain,
+            range: NSRange(location: 0, length: source.length)
+        ) {
+            let rawDate = source.substring(with: match.range)
+            let candidates = [publicationYear - 1, publicationYear, publicationYear + 1]
+                .compactMap { shortFormatter.date(from: rawDate + " \($0)") }
+            if let nearest = candidates.min(by: {
+                abs($0.timeIntervalSince(publicationDate))
+                    < abs($1.timeIntervalSince(publicationDate))
+            }) {
+                result.append(nearest)
+            }
+        }
+        return result
     }
 }
 

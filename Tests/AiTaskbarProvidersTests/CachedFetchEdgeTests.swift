@@ -141,4 +141,54 @@ struct CachedFetchEdgeTests {
         }
         StubURLProtocol.reset()
     }
+
+    @Test("semantic decode failure preserves and serves the last known-good payload")
+    func semantic_failure_preserves_last_good_payload() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfsemantic-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cache = DiskCache(vendor: .anthropic, baseDir: tmp, ttl: 0)
+        let good = Data("good".utf8)
+        try cache.writePayload(good)
+        let fetcher = CachedFetch(cache: cache)
+
+        let outcome: CachedOutcome<String> = try await fetcher.run(
+            forceRefresh: true,
+            decode: { data in
+                guard data == good else { throw AppError.schema("semantic failure") }
+                return "decoded-good"
+            },
+            fetch: { Data("bad".utf8) }
+        )
+
+        #expect(outcome.snapshot == "decoded-good")
+        #expect(outcome.isStale)
+        #expect(cache.anyPayload() == good)
+    }
+
+    @Test("cache outcomes retain the payload modification time as fetchedAt")
+    func cache_outcome_fetched_at_matches_payload_age() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cftime-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cache = DiskCache(vendor: .anthropic, baseDir: tmp, ttl: 0)
+        try cache.writePayload(Data("good".utf8))
+        let payloadURL = tmp.appendingPathComponent("usage.json")
+        let cachedAt = Date.now.addingTimeInterval(-120)
+        try FileManager.default.setAttributes(
+            [.modificationDate: cachedAt],
+            ofItemAtPath: payloadURL.path
+        )
+
+        let outcome: CachedOutcome<String> = try await CachedFetch(cache: cache).run(
+            forceRefresh: true,
+            decode: { String(decoding: $0, as: UTF8.self) },
+            fetch: { throw AppError.transport("offline") }
+        )
+
+        #expect(outcome.isStale)
+        #expect(abs(outcome.fetchedAt.timeIntervalSince(cachedAt)) < 2)
+    }
 }

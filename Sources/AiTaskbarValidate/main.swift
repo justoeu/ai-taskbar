@@ -416,7 +416,7 @@ section("Wire types: DeepSeek FlashDuty service status") {
     expect(changes.data.items.count == 4, "DeepSeek change list parsed")
 
     let now = ISO8601Parsing.parse("2026-09-03T12:00:00Z")!
-    let status = try DeepSeekStatusSource(referenceDate: now)
+    let status = try DeepSeekStatusSource()
         .makeStatus(from: payload, now: now)
     expect(status.vendorId == .deepseek, "DeepSeek status carries vendor ID")
     expect(status.coverage == .full, "DeepSeek status coverage is full")

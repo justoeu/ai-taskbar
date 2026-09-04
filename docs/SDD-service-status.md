@@ -1,6 +1,6 @@
 # SDD — painel de status operacional dos provedores
 
-**Status:** aprovado para implementação  
+**Status:** implementado e validado automaticamente
 **Data:** 2026-09-03  
 **Branch:** `feat/service-status-pages`  
 **Plataforma:** macOS 13+, Swift 6, SwiftUI `MenuBarExtra(.window)`
@@ -29,8 +29,8 @@ representada como `unknown`; nunca é convertida implicitamente em
 1. Adicionar um botão “Status dos serviços” no lado direito do cabeçalho.
 2. Abrir a experiência dentro do próprio `MenuBarExtra`, sem `sheet`, janela
    ou popover aninhado.
-3. Exibir somente os vendors que já foram habilitados e instanciados por
-   `AppEnvironment.makeProviders()`.
+3. Exibir os vendors habilitados no config, mesmo quando a instanciação do
+   provider autenticado de usage falhar.
 4. Mostrar status atual, cobertura da fonte, freshness e incidentes que
    intersectem `[agora - 6h, agora]`.
 5. Distinguir operacional, manutenção, degradação, indisponibilidade parcial,
@@ -59,10 +59,10 @@ representada como `unknown`; nunca é convertida implicitamente em
 
 ### 3.1 Significado de “vendor ativo”
 
-A fonte da verdade é a lista de `UsageProvider`s criada por
-`AppEnvironment.makeProviders()`. O pipeline de status recebe exatamente
-`usageProviders.map(\.vendorId)`. Isso mantém o painel alinhado aos cards
-visíveis e evita uma segunda leitura divergente do config.
+A fonte da verdade são os flags `enabled` do `AppConfig`. O pipeline de status
+recebe `AppEnvironment.enabledVendorIds()`, na ordem canônica do app. Assim, a
+status page pública continua visível quando uma credencial ou a construção do
+provider autenticado de usage falha.
 
 Um vendor habilitado, mas sem feed público utilizável, continua tendo uma
 linha `unknown`. Ele não desaparece.
@@ -265,8 +265,9 @@ Task.checkCancellation
   -> cache fresh
   -> fetch
   -> Task.checkCancellation
-  -> write atômico 0600
   -> decode
+  -> Task.checkCancellation
+  -> write atômico 0600
   -> em erro: scrub + markFailed + stale fallback ou throw
 ```
 
@@ -325,9 +326,11 @@ IDs link-only não ganham provider de rede; o App store cria suas linhas
 sintéticas `unknown`.
 
 Cada source chama `Task.checkCancellation()` na entrada, após requests
-agrupados e antes de devolver o payload. O cache compartilhado já checa antes
-do write. 429 e 5xx respeitam `Retry-After` quando disponível e nunca são
-interpretados como indisponibilidade do vendor.
+agrupados e antes de devolver o payload. O cache compartilhado checa antes do
+write. 429 e 5xx viram erro/fallback stale e nunca são interpretados como
+indisponibilidade do vendor. O polling automático é ancorado no fim da rodada
+e nunca ocorre em intervalo menor que 300 s. Interpretar `Retry-After` fica
+fora desta primeira versão.
 
 ## 8. Estado da aplicação e concorrência
 
@@ -355,16 +358,16 @@ um resultado coerente ao final. Falha de um source não cancela os outros. Um
 permanece visível durante loading; cancelamento não vira erro.
 
 `RefreshScheduler` continua sendo o único dono de timer longo. Ele recebe um
-`ServiceStatusStore?` e dispara status no tick inicial e nos ticks recorrentes,
-sem misturar seus estados de loading/429 com os de quota. Refresh manual de
-status não dispara refresh de uso e vice-versa.
+`ServiceStatusStore?` e mantém um loop independente: dispara a rodada inicial,
+aguarda sua conclusão e só então conta o próximo intervalo (mínimo de 300 s).
+Isso evita sobreposição e polling adiantado sem misturar loading/429 com quota.
+Refresh manual de status não dispara refresh de uso e vice-versa.
 
 Fluxo:
 
 ```text
 AppConfig enabled flags
-  -> AppEnvironment.makeProviders()
-  -> enabled VendorIds
+  -> AppEnvironment.enabledVendorIds()
   -> ServiceStatusProviderFactory
   -> RefreshScheduler (timer existente)
   -> ServiceStatusStore @MainActor
@@ -406,9 +409,11 @@ Estrutura no frame existente de 420×540:
 3. footer fixo: legenda e nota de escopo.
 
 Cada row mostra nome, símbolo + texto atual, coverage/freshness, uma faixa
-temporal de seis horas e controles explícitos para expandir. Rows com condição
-não operacional iniciam expandidas. Detalhes mostram título, fase, duração,
-componentes, última mensagem, link do incidente e status page quando seguros.
+temporal de seis horas e controles explícitos para expandir. Intervalos
+sobrepostos são normalizados em segmentos não sobrepostos, sempre pintados
+com a pior condição naquele instante. Rows com condição não operacional
+iniciam expandidas. Detalhes mostram título, fase, duração, componentes, última
+mensagem, link do incidente e status page quando seguros.
 
 Background da faixa:
 
@@ -427,8 +432,9 @@ Estados vazios/erro são honestos:
 
 O painel fecha por botão, `cancelAction`/Escape e clique no scrim. O scrim é
 escondido da árvore AX; conteúdo de fundo desabilita hit testing e AX enquanto
-o overlay está aberto. Reduce Motion remove a transição de escala. A faixa é
-um único elemento AX com resumo textual de duração por estado.
+o overlay está aberto. O foco de teclado entra no botão fechar e retorna ao
+botão de status ao encerrar. Reduce Motion remove a transição de escala. A
+faixa é um único elemento AX com resumo textual de duração por estado.
 
 ## 10. Localização
 
@@ -529,8 +535,9 @@ GREEN:
 
 - botão, overlay, rows, timeline e incident details;
 - `make validate` verde;
-- smoke launch e inspeção manual documentada em light/dark, Reduce Motion,
-  teclado/Escape, títulos longos, oito vendors e VoiceOver básico.
+- smoke launch automatizado; inspeção manual em light/dark, Reduce Motion,
+  teclado/Escape, títulos longos, oito vendors e VoiceOver básico permanece
+  uma verificação de release, pois não é observável no runner CLI.
 
 ## 12. Critérios de aceite
 

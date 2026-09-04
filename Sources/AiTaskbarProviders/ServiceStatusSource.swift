@@ -8,6 +8,6 @@ public protocol ServiceStatusSource: Sendable {
 
     var vendorId: VendorId { get }
 
-    func fetchPayload(http: HTTPClient) async throws -> Payload
+    func fetchPayload(http: HTTPClient, now: Date) async throws -> Payload
     func makeStatus(from payload: Payload, now: Date) throws -> VendorServiceStatus
 }

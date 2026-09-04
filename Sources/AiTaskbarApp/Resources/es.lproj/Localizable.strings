@@ -216,6 +216,7 @@
 "service_status_close" = "Cerrar estado de los servicios";
 "service_status_loading" = "Actualizando estado público…";
 "service_status_never_updated" = "Esperando la primera actualización de estado…";
+"service_status_no_automatic_sources" = "No hay fuentes automáticas de estado disponibles";
 "service_status_updated_fmt" = "Actualizado a las %@";
 "service_status_stale_fmt" = "No se pudo actualizar; mostrando datos de %@";
 "service_status_cold_error" = "No se pudo cargar; el estado sigue siendo desconocido.";

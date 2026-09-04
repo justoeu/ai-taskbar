@@ -3,6 +3,7 @@ import AiTaskbarCore
 
 public struct StatusPanelView: View {
     @EnvironmentObject private var store: ServiceStatusStore
+    @FocusState private var closeButtonFocused: Bool
     public let onClose: () -> Void
 
     public init(onClose: @escaping () -> Void) {
@@ -25,12 +26,14 @@ public struct StatusPanelView: View {
             Divider()
             footer
         }
-        .frame(width: 420, height: 540)
+        .frame(width: 400, height: 520)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(.regularMaterial)
                 .shadow(radius: 20)
         )
+        .focusSection()
+        .onAppear { closeButtonFocused = true }
         .onExitCommand(perform: onClose)
     }
 
@@ -68,6 +71,7 @@ public struct StatusPanelView: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.borderless)
+            .focused($closeButtonFocused)
             .keyboardShortcut(.cancelAction)
             .help(L10n.localizedString("service_status_close"))
             .accessibilityLabel(L10n.localizedString("service_status_close"))
@@ -77,6 +81,9 @@ public struct StatusPanelView: View {
 
     private var headerFreshness: String {
         if store.isLoading { return L10n.localizedString("service_status_loading") }
+        if !store.hasAutomaticSources {
+            return L10n.localizedString("service_status_no_automatic_sources")
+        }
         guard let completed = store.lastCompletedRefreshAt else {
             return L10n.localizedString("service_status_never_updated")
         }

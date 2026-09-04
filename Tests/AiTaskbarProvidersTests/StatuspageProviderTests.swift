@@ -91,6 +91,36 @@ struct StatuspageProviderTests {
         expectTrue(ServiceStatusProviderFactory.descriptor(for: .kimi) == .kimi)
     }
 
+    @Test("Statuspage rejects excessive outer collections before rendering")
+    func statuspage_collection_bounds() throws {
+        let source = StatuspageSource(descriptor: .anthropic)
+        let valid = try payload(summary: Fixtures.statuspageSummaryOperational200)
+        let component = try #require(valid.summary.components.first)
+        let oversizedSummary = StatuspageSummary(
+            page: valid.summary.page,
+            status: valid.summary.status,
+            components: Array(repeating: component, count: 201),
+            incidents: valid.summary.incidents,
+            scheduledMaintenances: valid.summary.scheduledMaintenances
+        )
+        let oversized = StatuspageCachedPayload(
+            summary: oversizedSummary,
+            incidents: valid.incidents,
+            scheduledMaintenances: valid.scheduledMaintenances
+        )
+
+        do {
+            _ = try source.makeStatus(from: oversized, now: fixtureNow)
+            Issue.record("expected Statuspage item limit")
+        } catch let error as AppError {
+            guard case .schema(let message) = error else {
+                Issue.record("expected schema error, got \(error)")
+                return
+            }
+            #expect(message.contains("item limit"))
+        }
+    }
+
     @Test("requests the three official HTTPS GET endpoints without auth")
     func requests_official_endpoints() async throws {
         installSuccessHandler()
@@ -221,6 +251,27 @@ struct StatuspageProviderTests {
         }
     }
 
+    @Test("invalid live timestamps do not replace a warm Statuspage cache")
+    func invalid_live_timestamp_preserves_warm_cache() async throws {
+        installSuccessHandler()
+        let cache = try temporaryCache(ttl: 0)
+        defer { remove(cache); StubURLProtocol.reset() }
+        let provider = makeProvider(cache: cache)
+        let warm = try await provider.fetchStatus(forceRefresh: true, now: fixtureNow)
+        let cachedBytes = try #require(cache.anyPayload())
+
+        let invalidSummary = Fixtures.statuspageSummaryOperational200.replacingOccurrences(
+            of: "2026-09-03T11:59:00.000Z",
+            with: "not-a-date"
+        )
+        installSuccessHandler(summary: invalidSummary)
+        let stale = try await provider.fetchStatus(forceRefresh: true, now: fixtureNow)
+
+        #expect(stale.snapshot == warm.snapshot)
+        #expect(stale.isStale)
+        #expect(cache.anyPayload() == cachedBytes)
+    }
+
     @Test("invalid schema on a cold cache surfaces AppError.schema")
     func schema_failure() async throws {
         StubURLProtocol.handler = { _ in .init(data: Data("{}".utf8)) }
@@ -260,11 +311,11 @@ struct StatuspageProviderTests {
             _ = try await provider.fetchStatus(forceRefresh: true, now: fixtureNow)
             Issue.record("expected oversized response to fail")
         } catch let error as AppError {
-            guard case .schema(let message) = error else {
-                Issue.record("expected schema error, got \(error)")
+            guard case .transport(let message) = error else {
+                Issue.record("expected transport error, got \(error)")
                 return
             }
-            expectTrue(message.contains("2 MiB"))
+            expectTrue(message.contains("2097152"))
         }
     }
 
