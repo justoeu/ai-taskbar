@@ -898,6 +898,7 @@ public enum Fixtures {
         <title>xAI System Status</title>
         <link>https://status.x.ai</link>
         <description>Current status and incident history</description>
+        <atom:link href="https://status.x.ai/feed.xml" rel="self" type="application/rss+xml" />
         <lastBuildDate>Thu, 03 Sep 2026 11:58:00 GMT</lastBuildDate>
         <item>
           <title>[API] Models outage</title>

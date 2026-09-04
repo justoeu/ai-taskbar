@@ -530,6 +530,13 @@ private final class RSSStatusParserDelegate: NSObject, XMLParserDelegate {
             item = ItemBuilder()
             return
         }
+        let isNamespacedLink = element == "link" && (
+            elementName.contains(":")
+                || qName?.contains(":") == true
+                || namespaceURI?.isEmpty == false
+                || attributeDict["href"] != nil
+        )
+        guard !isNamespacedLink else { return }
         guard ["title", "link", "description", "lastbuilddate", "pubdate", "guid", "category"]
             .contains(element) else { return }
         capturedElement = element
@@ -596,7 +603,7 @@ private final class RSSStatusParserDelegate: NSObject, XMLParserDelegate {
         } else {
             switch element {
             case "title": channelTitle = value
-            case "link": channelLink = value
+            case "link" where !value.isEmpty: channelLink = value
             case "description": channelDescription = value
             case "lastbuilddate": lastBuildDate = value
             default: break

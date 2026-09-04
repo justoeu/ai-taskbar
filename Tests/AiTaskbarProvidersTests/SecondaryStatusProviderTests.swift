@@ -274,6 +274,30 @@ struct SecondaryStatusProviderTests {
         }
     }
 
+    @Test("RSS atom self-link cannot replace channel identity or trigger another request")
+    func rss_atom_link_cannot_replace_channel_link() async throws {
+        let xml = """
+        <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>
+          <title>SpaceXAI System Status</title>
+          <link>https://status.x.ai</link>
+          <atom:link href="https://attacker.example/feed.xml" rel="self" />
+          <lastBuildDate>Thu, 03 Sep 2026 11:58:00 GMT</lastBuildDate>
+        </channel></rss>
+        """
+        let parsed = try RSSStatusSource.parse(Data(xml.utf8))
+        expectTrue(parsed.link == "https://status.x.ai")
+
+        StubURLProtocol.handler = { _ in .init(data: Data(xml.utf8)) }
+        let cache = try temporaryCache(vendor: .xai)
+        defer { remove(cache); StubURLProtocol.reset() }
+
+        _ = try await makeRSSProvider(descriptor: .xAI, cache: cache)
+            .fetchStatus(forceRefresh: true, now: fixtureNow)
+
+        #expect(StubURLProtocol.captured.count == 1)
+        expectTrue(StubURLProtocol.captured[0].url == RSSStatusDescriptor.xAI.feedURL)
+    }
+
     @Test("RSS structured categories outrank stale phase words in description history")
     func rss_categories_define_current_phase() throws {
         let source = RSSStatusSource(descriptor: .xAI)

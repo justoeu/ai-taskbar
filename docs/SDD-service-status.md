@@ -177,8 +177,10 @@ funcionar em uma versão futura, sem alterar o domínio.
 limites de payload e texto. O parser exige uma estrutura RSS/channel e o fetch
 confirma a identidade do canal antes de aceitar o documento. HTML de
 título/descrição é convertido em texto simples; URLs são validadas antes de
-entrar no snapshot. Categorias estruturadas do item têm precedência sobre
-palavras encontradas no texto livre ao determinar a fase atual.
+entrar no snapshot. Links XML namespaced, como o `<atom:link>` autocontido do
+feed xAI, não substituem o `<link>` textual que identifica o canal. Categorias
+estruturadas do item têm precedência sobre palavras encontradas no texto livre
+ao determinar a fase atual.
 
 Os feeds do OpenRouter e da xAI são `incidentsOnly`: uma leitura válida sem
 incidente ativo mantém o domínio em `unknown`, pois ausência de item não prova
