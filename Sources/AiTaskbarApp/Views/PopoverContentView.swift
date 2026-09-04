@@ -3,13 +3,20 @@ import AppKit
 import AiTaskbarCore
 
 public struct PopoverContentView: View {
+    private enum Overlay: Equatable {
+        case status
+        case about
+        case settings
+    }
+
     @EnvironmentObject var store: UsageStore
+    @EnvironmentObject var statusStore: ServiceStatusStore
     @EnvironmentObject var loginItem: LoginItemService
     @EnvironmentObject var cost: CostEstimator
     @EnvironmentObject var configWatcher: ConfigWatcher
     @EnvironmentObject var settingsViewModel: SettingsViewModel
-    @State private var showAbout = false
-    @State private var showSettings = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var overlay: Overlay?
     public var onQuit: () -> Void
 
     public init(onQuit: @escaping () -> Void = {}) {
@@ -53,31 +60,32 @@ public struct PopoverContentView: View {
                 footerBar
             }
 
-            // About overlay — rendered IN-POPOVER (not via .sheet) so the
-            // Done button doesn't bubble up and dismiss the menu bar window.
-            if showAbout {
-                Color.black.opacity(0.45)
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-                    .onTapGesture { showAbout = false }
-                AboutView { showAbout = false }
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
-            }
+            .allowsHitTesting(overlay == nil)
+            .accessibilityHidden(overlay != nil)
 
-            // Settings overlay — same pattern. The view binds to its own
-            // EnvironmentObject so the popover doesn't need to thread it.
-            if showSettings {
+            if let overlay {
                 Color.black.opacity(0.45)
                     .ignoresSafeArea()
                     .transition(.opacity)
-                    .onTapGesture { showSettings = false }
-                SettingsView { showSettings = false }
-                    .environmentObject(settingsViewModel)
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+                    .onTapGesture { self.overlay = nil }
+                    .accessibilityHidden(true)
+                switch overlay {
+                case .status:
+                    StatusPanelView { self.overlay = nil }
+                        .environmentObject(statusStore)
+                        .transition(overlayTransition)
+                case .about:
+                    AboutView { self.overlay = nil }
+                        .transition(overlayTransition)
+                case .settings:
+                    SettingsView { self.overlay = nil }
+                        .environmentObject(settingsViewModel)
+                        .transition(overlayTransition)
+                }
             }
         }
-        .animation(.easeInOut(duration: 0.15), value: showAbout)
-        .animation(.easeInOut(duration: 0.15), value: showSettings)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: overlay)
+        .onExitCommand { overlay = nil }
     }
 
     private var headerBar: some View {
@@ -103,7 +111,20 @@ public struct PopoverContentView: View {
                         .foregroundStyle(.secondary)
                 }
                 Button {
-                    showAbout = true
+                    overlay = .status
+                } label: {
+                    Image(systemName: ServiceStatusPresentation.symbol(
+                        for: statusStore.overallLevel
+                    ))
+                    .foregroundStyle(statusStore.overallLevel.statusColor)
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.localizedString("service_status_help"))
+                .accessibilityLabel(L10n.localizedString("service_status_ax_label"))
+                .accessibilityValue(statusAccessibilityValue)
+                .accessibilityHint(L10n.localizedString("service_status_ax_hint"))
+                Button {
+                    overlay = .about
                 } label: {
                     Image(systemName: "info.circle")
                 }
@@ -136,7 +157,7 @@ public struct PopoverContentView: View {
     private var footerBar: some View {
         HStack(spacing: 12) {
             Button {
-                showSettings = true
+                overlay = .settings
             } label: {
                 Label(L10n.localizedString("settings"), systemImage: "gearshape")
             }
@@ -265,4 +286,25 @@ public struct PopoverContentView: View {
     private static let refreshingNowText = L10n.localizedString("refreshing_now")
     private static let rateLimitWaitingText = L10n.localizedString("rate_limit_waiting")
     private static let nextRefreshInFmt = L10n.localizedString("next_refresh_in_fmt")
+
+    private var overlayTransition: AnyTransition {
+        reduceMotion ? .opacity : .scale(scale: 0.95).combined(with: .opacity)
+    }
+
+    private var statusAccessibilityValue: String {
+        let statuses = statusStore.rows.map { row in
+            row.state.status ?? ServiceStatusPresentation.placeholder(for: row.vendorId)
+        }
+        let affected = statuses.filter {
+            ![ServiceStatusLevel.operational, .unknown].contains($0.level)
+        }.count
+        let unknown = statuses.filter { $0.level == .unknown }.count
+        let automatic = statuses.filter { $0.coverage != .linkOnly }.count
+        return L10n.localizedString(
+            "service_status_ax_value_fmt",
+            affected,
+            unknown,
+            automatic
+        )
+    }
 }

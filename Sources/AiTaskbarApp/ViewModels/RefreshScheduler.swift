@@ -10,11 +10,16 @@ public final class RefreshScheduler: ObservableObject {
     /// 6-minute breather (default 300 + 60) before being polled again.
     public static let rateLimitBackoff: TimeInterval = 60
     private weak var store: UsageStore?
+    private weak var statusStore: ServiceStatusStore?
     private var refreshLoop: Task<Void, Never>?
+    private var statusRefreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
 
-    public init(store: UsageStore, interval: TimeInterval = 300) {
+    public init(store: UsageStore,
+                statusStore: ServiceStatusStore? = nil,
+                interval: TimeInterval = 300) {
         self.store = store
+        self.statusStore = statusStore
         // Floor at 15 s. Below this the undocumented vendor endpoints
         // (Anthropic, Codex, Z.AI) start returning 429 aggressively.
         self.interval = max(15, interval)
@@ -24,7 +29,25 @@ public final class RefreshScheduler: ObservableObject {
     /// we don't reset the recurring cycle.
     public func start() {
         startRefreshLoop()
+        startStatusRefreshLoop()
         startCompactLoop()
+    }
+
+    /// A separate cadence prevents usage 429 back-off or a hung credential
+    /// fetch from delaying public status. The scheduler still owns every
+    /// long-lived timer; status and usage merely have independent loops.
+    private func startStatusRefreshLoop() {
+        guard statusRefreshLoop == nil, statusStore != nil else { return }
+        statusRefreshLoop = Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.statusStore?.refreshAll(forceRefresh: false)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(self.interval))
+                if Task.isCancelled { break }
+                if self.statusStore?.isLoading == true { continue }
+                self.statusStore?.refreshAll(forceRefresh: false)
+            }
+        }
     }
 
     private func startRefreshLoop() {
@@ -98,13 +121,16 @@ public final class RefreshScheduler: ObservableObject {
 
     public func stop() {
         refreshLoop?.cancel()
+        statusRefreshLoop?.cancel()
         compactLoop?.cancel()
         refreshLoop = nil
+        statusRefreshLoop = nil
         compactLoop = nil
     }
 
     deinit {
         refreshLoop?.cancel()
+        statusRefreshLoop?.cancel()
         compactLoop?.cancel()
     }
 }

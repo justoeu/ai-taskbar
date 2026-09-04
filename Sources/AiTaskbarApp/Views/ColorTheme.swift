@@ -14,3 +14,15 @@ public enum SeverityColor {
         return .green
     }
 }
+
+extension ServiceStatusLevel {
+    var statusColor: Color {
+        switch ServiceStatusPresentation.tone(for: self) {
+        case .positive: return .green
+        case .maintenance: return .purple
+        case .warning: return .orange
+        case .danger: return .red
+        case .secondary: return .secondary
+        }
+    }
+}
