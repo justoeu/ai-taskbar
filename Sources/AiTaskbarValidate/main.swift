@@ -384,6 +384,100 @@ section("Wire types: Statuspage v2 fixtures") {
            "Statuspage factory leaves unsupported sources untouched")
 }
 
+section("Wire types: DeepSeek FlashDuty service status") {
+    let active = try SharedCoders.decoder.decode(
+        DeepSeekStatusEnvelope<DeepSeekActiveStatus>.self,
+        from: Fixtures.data(Fixtures.deepseekStatusActive200))
+    let structure = try SharedCoders.decoder.decode(
+        DeepSeekStatusEnvelope<DeepSeekStatusStructure>.self,
+        from: Fixtures.data(Fixtures.deepseekStatusStructure200))
+    let changes = try SharedCoders.decoder.decode(
+        DeepSeekStatusEnvelope<DeepSeekChangeList>.self,
+        from: Fixtures.data(Fixtures.deepseekStatusChanges200))
+    let payload = DeepSeekStatusPayload(
+        active: active,
+        structure: structure,
+        changes: changes)
+    let decoded = try SharedCoders.decoder.decode(
+        DeepSeekStatusPayload.self,
+        from: SharedCoders.encoder.encode(payload))
+
+    expect(decoded == payload, "DeepSeek status cache payload Codable round-trip")
+    expect(active.data.page.pageID == 6_410_630_422_455,
+           "DeepSeek status page identity parsed")
+    expect(active.data.activeChanges.first?.updates.count == 2,
+           "DeepSeek active change updates parsed")
+    expect(structure.data.componentImpacts.first?.status == "partial_outage",
+           "DeepSeek structure impact parsed")
+    expect(structure.data.componentUptimes.first?.uptime == 94.25,
+           "DeepSeek structure uptime parsed")
+    expect(structure.data.linkedChanges.first?.id == 7001,
+           "DeepSeek linked change parsed")
+    expect(changes.data.items.count == 4, "DeepSeek change list parsed")
+
+    let now = ISO8601Parsing.parse("2026-09-03T12:00:00Z")!
+    let status = try DeepSeekStatusSource(referenceDate: now)
+        .makeStatus(from: payload, now: now)
+    expect(status.vendorId == .deepseek, "DeepSeek status carries vendor ID")
+    expect(status.coverage == .full, "DeepSeek status coverage is full")
+    expect(status.level == .partialOutage, "DeepSeek explicit partial outage maps")
+    expect(status.incidents.map(\.id) == ["7001", "7002"],
+           "DeepSeek deduplicates and applies six-hour intersection")
+    expect(status.incidents.first?.affectedComponents == ["API Service"],
+           "DeepSeek affected components map to bounded names")
+    expect(status.incidents.last?.resolvedAt
+           == ISO8601Parsing.parse("2026-09-03T10:00:00Z"),
+           "DeepSeek resolved incident preserves close timestamp")
+}
+
+section("Wire types: RSS service status") {
+    let openRouterFeed = try RSSStatusSource.parse(
+        Fixtures.data(Fixtures.openRouterStatusRSS200))
+    let xaiFeed = try RSSStatusSource.parse(
+        Fixtures.data(Fixtures.xaiStatusRSS200))
+    let decoded = try SharedCoders.decoder.decode(
+        RSSStatusFeed.self,
+        from: SharedCoders.encoder.encode(openRouterFeed))
+
+    expect(decoded == openRouterFeed, "RSS cache payload Codable round-trip")
+    expect(openRouterFeed.title == "OpenRouter Status - Incident History",
+           "RSS channel title parsed")
+    expect(openRouterFeed.items.count == 6, "RSS item count parsed")
+    expect(openRouterFeed.items.first?.guidIsPermaLink == true,
+           "RSS GUID attribute parsed")
+    expect(openRouterFeed.items.first?.categories
+           == ["degraded_performance", "monitoring"],
+           "RSS categories parsed")
+
+    let now = ISO8601Parsing.parse("2026-09-03T12:00:00Z")!
+    let openRouter = try RSSStatusSource(descriptor: .openRouter)
+        .makeStatus(from: openRouterFeed, now: now)
+    expect(openRouter.coverage == .incidentsOnly,
+           "OpenRouter RSS coverage is incidents-only")
+    expect(openRouter.level == .partialOutage,
+           "OpenRouter active incident elevates status")
+    expect(openRouter.incidents.map(\.id)
+           == ["duplicate-guid", "incident-hostile", "incident-long"],
+           "RSS deduplicates and applies six-hour intersection")
+    expect(openRouter.incidents.first?.title == "API & routing degraded",
+           "RSS strips HTML and decodes entities")
+    expect(openRouter.incidents.first(where: { $0.id == "incident-hostile" })?.sourceURL == nil,
+           "RSS rejects incident links outside the exact host")
+
+    let xai = try RSSStatusSource(descriptor: .xAI)
+        .makeStatus(from: xaiFeed, now: now)
+    expect(xai.vendorId == .xai, "xAI RSS carries vendor ID")
+    expect(xai.coverage == .incidentsOnly, "xAI RSS coverage is incidents-only")
+    expect(xai.level == .majorOutage, "xAI major outage category maps")
+    expect(xai.incidents.last?.resolvedAt
+           == ISO8601Parsing.parse("2026-09-03T10:30:00Z"),
+           "xAI RSS explicit resolution timestamp maps")
+    expect(ServiceStatusProviderFactory.rssDescriptor(for: .openrouter) == .openRouter,
+           "RSS factory exposes OpenRouter descriptor")
+    expect(ServiceStatusProviderFactory.rssDescriptor(for: .xai) == .xAI,
+           "RSS factory exposes xAI descriptor")
+}
+
 section("Wire types: Anthropic fixture") {
     let parsed = try SharedCoders.decoder.decode(
         AnthropicUsageResponse.self,
