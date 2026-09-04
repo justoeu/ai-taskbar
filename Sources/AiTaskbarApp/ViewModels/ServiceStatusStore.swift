@@ -197,6 +197,9 @@ public final class ServiceStatusStore: ObservableObject {
     private func recomputeAggregates() {
         let levels = rows.map { row -> ServiceStatusLevel in
             guard let status = row.state.status else { return .unknown }
+            if row.state.isStale && status.level == .operational {
+                return .unknown
+            }
             if status.coverage != .full && status.level == .operational {
                 return .unknown
             }

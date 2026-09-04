@@ -230,6 +230,7 @@
 "service_status_level_partial_outage" = "Interrupção parcial";
 "service_status_level_major_outage" = "Interrupção grave";
 "service_status_level_unknown" = "Desconhecido";
+"service_status_level_no_active_incidents" = "Sem incidentes ativos";
 "service_status_coverage_full" = "Status completo";
 "service_status_coverage_incidents_only" = "Somente incidentes";
 "service_status_coverage_link_only" = "Somente link oficial";

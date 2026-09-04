@@ -28,8 +28,8 @@ public struct RSSStatusDescriptor: Sendable, Equatable {
     )
 }
 
-/// Official RSS incident-feed adapter. RSS has no explicit global status, so
-/// an empty/resolved-only feed remains `.unknown` with incidents-only coverage.
+/// Official RSS incident-feed adapter. The feed proves declared incidents,
+/// not live component health, so an empty/resolved-only result remains unknown.
 public struct RSSStatusSource: ServiceStatusSource, Sendable {
     public static let maximumResponseBytes = 2 * 1024 * 1024
     public static let maximumItems = 200
@@ -145,6 +145,9 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
             throw AppError.schema("RSS parse: \(message.prefix(300))")
         }
         if let failure = delegate.failure { throw failure }
+        guard delegate.hasRSSChannel else {
+            throw AppError.schema("RSS document is missing rss/channel")
+        }
         return delegate.feed
     }
 
@@ -198,10 +201,31 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
 
     private func validateFeed(_ feed: RSSStatusFeed) throws {
         guard feed.items.count <= Self.maximumItems,
-              feed.items.allSatisfy({ !$0.title.isEmpty && !$0.pubDate.isEmpty })
+              feed.items.allSatisfy({ !$0.title.isEmpty && !$0.pubDate.isEmpty }),
+              feed.title.lowercased().contains(identityToken),
+              feedLinkMatchesExpectedHost(feed.link)
         else {
-            throw AppError.schema("RSS required item fields missing or item limit exceeded")
+            throw AppError.schema("RSS source identity, required fields, or item limit invalid")
         }
+    }
+
+    private var identityToken: String {
+        descriptor.vendorId == .xai ? "xai" : "openrouter"
+    }
+
+    private func feedLinkMatchesExpectedHost(_ raw: String?) -> Bool {
+        guard let raw else { return false }
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expectedHost = descriptor.statusPageURL.host?.lowercased()
+        if let url = URL(string: value), url.host != nil {
+            return url.scheme?.lowercased() == "https"
+                && url.host?.lowercased() == expectedHost
+                && url.user == nil
+                && url.password == nil
+                && url.port == nil
+        }
+        return value.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            == expectedHost
     }
 
     private func makeIncident(
@@ -213,10 +237,12 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         }
         let title = plainText(item.title, limit: 300) ?? "Untitled incident"
         let message = plainText(item.description ?? "", limit: 1_000)
+        let categoryText = item.categories.joined(separator: " ").lowercased()
         let searchable = ([title, message ?? ""] + item.categories)
             .joined(separator: " ")
             .lowercased()
-        let phase = phase(for: searchable)
+        let categoryPhase = phase(for: categoryText)
+        let phase = categoryPhase == .unknown ? phase(for: searchable) : categoryPhase
         let dates = dateParser.updateDates(
             in: item.description ?? "",
             publicationDate: startedAt,
@@ -235,7 +261,8 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
             resolvedAt = nil
         }
 
-        var level = level(for: searchable)
+        let categoryLevel = level(for: categoryText)
+        var level = categoryLevel == .unknown ? level(for: searchable) : categoryLevel
         if level == .unknown && resolvedAt == nil {
             level = .degradedPerformance
         }
@@ -464,8 +491,11 @@ private final class RSSStatusParserDelegate: NSObject, XMLParserDelegate {
     private var capturedElement: String?
     private var capturedText = ""
     private var guidIsPermaLink: Bool?
+    private var sawRSSRoot = false
+    private var sawChannel = false
 
     fileprivate private(set) var failure: AppError?
+    fileprivate var hasRSSChannel: Bool { sawRSSRoot && sawChannel }
     fileprivate var feed: RSSStatusFeed {
         RSSStatusFeed(
             title: channelTitle,
@@ -489,6 +519,8 @@ private final class RSSStatusParserDelegate: NSObject, XMLParserDelegate {
         attributes attributeDict: [String: String] = [:]
     ) {
         let element = normalized(elementName)
+        if element == "rss" { sawRSSRoot = true }
+        if element == "channel", sawRSSRoot { sawChannel = true }
         if element == "item" {
             guard items.count < maximumItems else {
                 failure = AppError.schema("RSS item limit exceeded")

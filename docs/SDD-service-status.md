@@ -74,7 +74,7 @@ Cada source declara um nível de cobertura:
 | Cobertura | Contrato | Sem incidentes ativos |
 |---|---|---|
 | `full` | estado atual explícito + histórico/incidentes | pode mostrar `operational` |
-| `incidentsOnly` | feed oficial de incidentes, sem estado global explícito | permanece `unknown` com “nenhum incidente ativo reportado” |
+| `incidentsOnly` | feed oficial de incidentes, sem estado global explícito | permanece `unknown`; após leitura válida, a UI destaca “sem incidentes ativos” |
 | `linkOnly` | página oficial sem feed público estável, ou nenhuma página verificável | `unknown` |
 
 Uma fonte `incidentsOnly` pode elevar o nível para degradação/outage quando há
@@ -117,7 +117,7 @@ majorOutage > partialOutage > degradedPerformance > maintenance > operational
 
 ## 4. Fontes oficiais e adapters
 
-Pesquisa validada em 2026-09-03. Todos os endpoints são constantes compiladas
+Pesquisa validada em 2026-09-04. Todos os endpoints são constantes compiladas
 e HTTPS.
 
 | Vendor | Página oficial | Adapter | Cobertura | Observações |
@@ -127,7 +127,7 @@ e HTTPS.
 | Kimi | `https://status.moonshot.cn` | Statuspage v2 | `full` | componente Open API `8psr5dfdld0s` |
 | DeepSeek | `https://status.deepseek.com` | FlashDuty JSON | `full` experimental | usa os endpoints públicos da própria página; contrato não documentado e isolado em wire types/fixtures |
 | OpenRouter | `https://status.openrouter.ai` | RSS | `incidentsOnly` | `incidents.rss`; `/api/v2/summary.json` retorna 404 |
-| xAI | `https://status.x.ai` | RSS | `incidentsOnly` | `feed.xml`; JSONs regionais são origin-locked/Cloudflare e ficam fora do escopo |
+| xAI | `https://status.x.ai` | RSS | `incidentsOnly` | `feed.xml` contém incidentes declarados e histórico; os estados live dos componentes exibidos na página não têm contrato público estável para consumo pelo app |
 | Gemini | `https://aistudio.google.com/status` | link | `linkOnly` | RPC protobuf interno não é contrato público; Google Cloud/Workspace status não corresponde à Gemini API usada pelo app |
 | Z.AI | — | link | `linkOnly` | nenhuma status page oficial verificável encontrada |
 
@@ -174,12 +174,17 @@ funcionar em uma versão futura, sem alterar o domínio.
 ### 4.3 RSS
 
 `RSSStatusSource` aceita um descriptor fixo por vendor e usa `XMLParser` com
-limites de payload e texto. HTML de título/descrição é convertido em texto
-simples; URLs são validadas antes de entrar no snapshot.
+limites de payload e texto. O parser exige uma estrutura RSS/channel e o fetch
+confirma a identidade do canal antes de aceitar o documento. HTML de
+título/descrição é convertido em texto simples; URLs são validadas antes de
+entrar no snapshot. Categorias estruturadas do item têm precedência sobre
+palavras encontradas no texto livre ao determinar a fase atual.
 
-RSS nunca declara o serviço saudável. Incidentes ativos podem elevar o nível;
-feeds sem incidente ativo continuam `unknown` com a mensagem “Nenhum incidente
-ativo reportado pela fonte”.
+Os feeds do OpenRouter e da xAI são `incidentsOnly`: uma leitura válida sem
+incidente ativo mantém o domínio em `unknown`, pois ausência de item não prova
+operação normal. Para distinguir esse caso de falha/cold start, a apresentação
+exibe “Sem incidentes ativos” como estado observado. Qualquer incidente ativo
+eleva o nível normalmente.
 
 ### 4.4 Link-only
 
@@ -382,7 +387,10 @@ AppConfig enabled flags
 
 ### 9.1 Botão do cabeçalho
 
-Ordem: countdown, status, About, Refresh All. Símbolos:
+Ordem: countdown, status, About, Refresh All. O botão de status usa
+`waveform.path.ecg` como ícone estável de monitoramento e sobrepõe um pequeno
+badge com o símbolo semântico do agregado. Assim, forma, cor, label e value
+acessível comunicam o estado. Dentro do painel, os símbolos semânticos são:
 
 | Estado | SF Symbol | Cor semântica |
 |---|---|---|
@@ -390,7 +398,7 @@ Ordem: countdown, status, About, Refresh All. Símbolos:
 | maintenance | `wrench.and.screwdriver.fill` | azul/roxo |
 | degraded | `exclamationmark.triangle.fill` | laranja |
 | partial/major outage | `xmark.octagon.fill` | vermelho |
-| unknown | `questionmark.circle` | secundária |
+| unknown | `circle.dashed` | secundária |
 
 Cor nunca é a única informação. O botão recebe `accessibilityLabel`,
 `accessibilityValue` com contagens/cobertura e `accessibilityHint`.
@@ -424,8 +432,9 @@ Background da faixa:
 Estados vazios/erro são honestos:
 
 - full sem incidente: “Nenhum incidente reportado nas últimas 6h”;
-- incidents-only sem incidente: “Nenhum incidente ativo reportado; o feed não
-  confirma o estado global”;
+- incidents-only observado sem incidente: estado destacado “Sem incidentes
+  ativos” e detalhe “Nenhum incidente ativo reportado; o feed não confirma o
+  estado global”;
 - link-only: “Status automático indisponível”;
 - stale: “Não foi possível atualizar; mostrando dados de HH:mm”;
 - cold error: unknown + Retry; nunca down.
@@ -563,7 +572,7 @@ GREEN:
 | Risco | Mitigação |
 |---|---|
 | schema público muda | wire adapter isolado, unknown tokens, golden fixtures, stale fallback |
-| feed RSS sugere falso verde | coverage `incidentsOnly` nunca infere operational |
+| feed RSS sugere falso verde | OpenRouter e xAI permanecem `incidentsOnly`; ausência de incidente nunca cria baseline operational |
 | status global não corresponde ao produto | component descriptors e rótulo de cobertura; incidentes globais preservados quando o upstream omite componentes |
 | excesso de requests | timer existente, cache/conditional fetch, paralelo limitado por HTTPClient e refresh manual independente |
 | payload/link malicioso | limite de tamanho, sanitização, HTTPS e allowlist exata |

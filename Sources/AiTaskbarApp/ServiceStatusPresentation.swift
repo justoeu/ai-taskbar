@@ -24,6 +24,8 @@ public struct ServiceStatusTimelineSegment: Sendable, Equatable {
 /// Pure, UI-framework-free mapping for status labels, symbols, safe links,
 /// empty-state semantics, and six-hour timeline geometry.
 public enum ServiceStatusPresentation {
+    public static let headerSymbol = "waveform.path.ecg"
+
     public static let localizationKeys = [
         "service_status_help", "service_status_ax_label", "service_status_ax_value_fmt",
         "service_status_ax_hint", "service_status_title", "service_status_last_six_hours",
@@ -36,6 +38,7 @@ public enum ServiceStatusPresentation {
         "service_status_level_operational", "service_status_level_maintenance",
         "service_status_level_degraded", "service_status_level_partial_outage",
         "service_status_level_major_outage", "service_status_level_unknown",
+        "service_status_level_no_active_incidents",
         "service_status_coverage_full", "service_status_coverage_incidents_only",
         "service_status_coverage_link_only", "service_status_phase_investigating",
         "service_status_phase_identified", "service_status_phase_monitoring",
@@ -54,7 +57,7 @@ public enum ServiceStatusPresentation {
         case .maintenance: return "wrench.and.screwdriver.fill"
         case .degradedPerformance: return "exclamationmark.triangle.fill"
         case .partialOutage, .majorOutage: return "xmark.octagon.fill"
-        case .unknown: return "questionmark.circle"
+        case .unknown: return "circle.dashed"
         }
     }
 
@@ -77,6 +80,18 @@ public enum ServiceStatusPresentation {
         case .majorOutage: return "service_status_level_major_outage"
         case .unknown: return "service_status_level_unknown"
         }
+    }
+
+    public static func displayLevelKey(
+        for status: VendorServiceStatus,
+        hasObservation: Bool
+    ) -> String {
+        if hasObservation,
+           status.coverage == .incidentsOnly,
+           status.level == .unknown {
+            return "service_status_level_no_active_incidents"
+        }
+        return levelKey(for: status.level)
     }
 
     public static func coverageKey(for coverage: ServiceStatusCoverage) -> String {
@@ -193,7 +208,9 @@ public enum ServiceStatusPresentation {
         let boundaries = Set([cutoff, now] + ranges.flatMap {
             [$0.1.lowerBound, $0.1.upperBound]
         }).sorted()
-        let baseline: ServiceStatusLevel = status.coverage == .full ? .operational : .unknown
+        let baseline: ServiceStatusLevel = status.coverage == .full && status.level != .unknown
+            ? .operational
+            : .unknown
         var result: [DatedSegment] = []
         for (start, end) in zip(boundaries, boundaries.dropFirst()) where end > start {
             let midpoint = start.addingTimeInterval(end.timeIntervalSince(start) / 2)

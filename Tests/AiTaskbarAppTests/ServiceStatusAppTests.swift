@@ -230,6 +230,19 @@ struct ServiceStatusAppTests {
         #expect(store.overallLevel == .degradedPerformance)
     }
 
+    @Test("stale operational data stays visible but cannot make the aggregate green")
+    func stale_operational_is_unknown_in_aggregate() async {
+        let stale = outcome(.anthropic, level: .operational, stale: true)
+        let provider = StubStatusProvider(vendorId: .anthropic) { _, _ in stale }
+        let store = ServiceStatusStore(vendorIds: [.anthropic], providers: [provider])
+
+        store.refreshAll()
+        await store.waitForCurrentRefresh()
+
+        expectTrue(store.rows[0].state.outcome?.snapshot.level == .operational)
+        #expect(store.overallLevel == .unknown)
+    }
+
     @Test("a superseded non-cooperative round cannot overwrite the latest epoch")
     func superseded_epoch_is_ignored() async {
         let oldNow = Date(timeIntervalSince1970: 1_000)
@@ -265,13 +278,23 @@ struct ServiceStatusAppTests {
             (.degradedPerformance, "exclamationmark.triangle.fill", .warning, "service_status_level_degraded"),
             (.partialOutage, "xmark.octagon.fill", .danger, "service_status_level_partial_outage"),
             (.majorOutage, "xmark.octagon.fill", .danger, "service_status_level_major_outage"),
-            (.unknown, "questionmark.circle", .secondary, "service_status_level_unknown"),
+            (.unknown, "circle.dashed", .secondary, "service_status_level_unknown"),
         ]
         for (level, symbol, tone, key) in expected {
             #expect(ServiceStatusPresentation.symbol(for: level) == symbol)
             #expect(ServiceStatusPresentation.tone(for: level) == tone)
             #expect(ServiceStatusPresentation.levelKey(for: level) == key)
         }
+        #expect(ServiceStatusPresentation.headerSymbol == "waveform.path.ecg")
+        #expect(ServiceStatusPresentation.expectedCoverage(for: .xai) == .incidentsOnly)
+        #expect(ServiceStatusPresentation.displayLevelKey(
+            for: status(.xai, level: .unknown, coverage: .incidentsOnly),
+            hasObservation: true
+        ) == "service_status_level_no_active_incidents")
+        #expect(ServiceStatusPresentation.displayLevelKey(
+            for: status(.xai, level: .unknown, coverage: .incidentsOnly),
+            hasObservation: false
+        ) == "service_status_level_unknown")
     }
 
     @Test("coverage drives honest empty states")
@@ -344,6 +367,18 @@ struct ServiceStatusAppTests {
             ServiceStatusTimelineSegment(level: .operational, startFraction: 0, endFraction: 0.25),
             ServiceStatusTimelineSegment(level: .majorOutage, startFraction: 0.25, endFraction: 0.75),
             ServiceStatusTimelineSegment(level: .maintenance, startFraction: 0.75, endFraction: 1),
+        ])
+    }
+
+    @Test("full coverage with unknown current state never paints a green timeline")
+    func unknown_full_status_has_unknown_timeline() {
+        let now = Date(timeIntervalSince1970: 21_600)
+        let snapshot = status(.openai, level: .unknown, coverage: .full)
+
+        let segments = ServiceStatusPresentation.timelineSegments(for: snapshot, now: now)
+
+        #expect(segments == [
+            ServiceStatusTimelineSegment(level: .unknown, startFraction: 0, endFraction: 1),
         ])
     }
 

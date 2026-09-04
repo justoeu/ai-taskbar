@@ -132,6 +132,13 @@ private struct StatusVendorRowView: View {
         row.state.status ?? ServiceStatusPresentation.placeholder(for: row.vendorId)
     }
 
+    private var displayLevelKey: String {
+        ServiceStatusPresentation.displayLevelKey(
+            for: status,
+            hasObservation: row.state.outcome != nil
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
@@ -144,9 +151,7 @@ private struct StatusVendorRowView: View {
                         Text(row.vendorId.displayName)
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
-                        Text(L10n.localizedString(
-                            ServiceStatusPresentation.levelKey(for: status.level)
-                        ))
+                        Text(L10n.localizedString(displayLevelKey))
                         .font(.caption)
                         .foregroundStyle(status.level.statusColor)
                     }
@@ -164,9 +169,7 @@ private struct StatusVendorRowView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(row.vendorId.displayName)
-            .accessibilityValue(L10n.localizedString(
-                ServiceStatusPresentation.levelKey(for: status.level)
-            ))
+            .accessibilityValue(L10n.localizedString(displayLevelKey))
             .accessibilityHint(L10n.localizedString(
                 isExpanded ? "service_status_collapse" : "service_status_expand"
             ))

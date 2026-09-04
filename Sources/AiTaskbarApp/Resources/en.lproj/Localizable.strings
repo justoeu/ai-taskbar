@@ -231,6 +231,7 @@
 "service_status_level_partial_outage" = "Partial outage";
 "service_status_level_major_outage" = "Major outage";
 "service_status_level_unknown" = "Unknown";
+"service_status_level_no_active_incidents" = "No active incidents";
 "service_status_coverage_full" = "Full status";
 "service_status_coverage_incidents_only" = "Incidents only";
 "service_status_coverage_link_only" = "Official link only";

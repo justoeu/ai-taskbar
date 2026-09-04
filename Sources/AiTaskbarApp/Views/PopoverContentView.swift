@@ -115,10 +115,22 @@ public struct PopoverContentView: View {
                 Button {
                     overlay = .status
                 } label: {
-                    Image(systemName: ServiceStatusPresentation.symbol(
-                        for: statusStore.overallLevel
-                    ))
-                    .foregroundStyle(statusStore.overallLevel.statusColor)
+                    ZStack(alignment: .bottomTrailing) {
+                        Image(systemName: ServiceStatusPresentation.headerSymbol)
+                            .foregroundStyle(.primary)
+                        Image(systemName: ServiceStatusPresentation.symbol(
+                            for: statusStore.overallLevel
+                        ))
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(statusStore.overallLevel.statusColor)
+                        .background(
+                            Circle()
+                                .fill(Color(NSColor.windowBackgroundColor))
+                                .padding(-1)
+                        )
+                        .offset(x: 3, y: 3)
+                    }
+                    .frame(width: 20, height: 16)
                 }
                 .buttonStyle(.borderless)
                 .focused($statusButtonFocused)

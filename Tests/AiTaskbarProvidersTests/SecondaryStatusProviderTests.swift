@@ -215,6 +215,94 @@ struct SecondaryStatusProviderTests {
         expectTrue(status.sourceUpdatedAt == ISO8601Parsing.parse("2026-09-03T11:58:00Z"))
     }
 
+    @Test("xAI resolved-only feed reports no active incident without claiming operational")
+    func xai_resolved_only_feed_stays_incidents_only() throws {
+        let source = RSSStatusSource(descriptor: .xAI)
+        let parsed = try RSSStatusSource.parse(Fixtures.data(Fixtures.xaiStatusRSS200))
+        let feed = RSSStatusFeed(
+            title: parsed.title,
+            link: parsed.link,
+            description: parsed.description,
+            lastBuildDate: parsed.lastBuildDate,
+            items: parsed.items.filter { $0.categories.contains("resolved") }
+        )
+
+        let status = try source.makeStatus(from: feed, now: fixtureNow)
+
+        #expect(status.vendorId == .xai)
+        #expect(status.coverage == .incidentsOnly)
+        #expect(status.level == .unknown)
+        #expect(status.incidents.count == 1)
+        #expect(status.incidents[0].phase == .resolved)
+    }
+
+    @Test("RSS rejects XML documents that are not RSS channels")
+    func rss_rejects_non_feed_xml() throws {
+        do {
+            _ = try RSSStatusSource.parse(Data("<error>temporarily unavailable</error>".utf8))
+            Issue.record("expected non-feed XML to fail")
+        } catch let error as AppError {
+            guard case .schema = error else {
+                Issue.record("expected schema error, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test("xAI rejects an RSS channel with the wrong source identity")
+    func xai_rejects_wrong_channel_identity() async throws {
+        let impostor = """
+        <rss version="2.0"><channel>
+          <title>Unrelated status</title>
+          <link>https://status.x.ai</link>
+          <lastBuildDate>Thu, 03 Sep 2026 11:58:00 GMT</lastBuildDate>
+        </channel></rss>
+        """
+        StubURLProtocol.handler = { _ in .init(data: Data(impostor.utf8)) }
+        let cache = try temporaryCache(vendor: .xai)
+        defer { remove(cache); StubURLProtocol.reset() }
+
+        do {
+            _ = try await makeRSSProvider(descriptor: .xAI, cache: cache)
+                .fetchStatus(forceRefresh: true, now: fixtureNow)
+            Issue.record("expected wrong RSS channel identity to fail")
+        } catch let error as AppError {
+            guard case .schema = error else {
+                Issue.record("expected schema error, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test("RSS structured categories outrank stale phase words in description history")
+    func rss_categories_define_current_phase() throws {
+        let source = RSSStatusSource(descriptor: .xAI)
+        let feed = RSSStatusFeed(
+            title: "SpaceXAI System Status",
+            link: "https://status.x.ai",
+            description: "Current status and incident history",
+            lastBuildDate: "Thu, 03 Sep 2026 11:58:00 GMT",
+            items: [
+                RSSStatusItem(
+                    title: "[API] Elevated errors",
+                    description: "A previous symptom was resolved; monitoring continues.",
+                    pubDate: "Thu, 03 Sep 2026 11:00:00 GMT",
+                    link: "https://status.x.ai/api-us-east-1/INCmonitoring",
+                    guid: "INCmonitoring",
+                    guidIsPermaLink: false,
+                    categories: ["degraded_performance", "monitoring"]
+                ),
+            ]
+        )
+
+        let status = try source.makeStatus(from: feed, now: fixtureNow)
+
+        #expect(status.incidents.count == 1)
+        #expect(status.incidents[0].phase == .monitoring)
+        #expect(status.incidents[0].resolvedAt == nil)
+        #expect(status.level == .degradedPerformance)
+    }
+
     @Test("RSS performs one exact-host HTTPS GET without credentials")
     func rss_official_endpoint() async throws {
         StubURLProtocol.handler = { _ in
@@ -229,6 +317,24 @@ struct SecondaryStatusProviderTests {
         #expect(StubURLProtocol.captured.count == 1)
         let request = StubURLProtocol.captured[0]
         expectTrue(request.url == URL(string: "https://status.openrouter.ai/incidents.rss"))
+        expectTrue(request.httpMethod == "GET")
+        expectTrue(request.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @Test("xAI RSS performs one exact-host HTTPS GET without credentials")
+    func xai_rss_official_endpoint() async throws {
+        StubURLProtocol.handler = { _ in
+            .init(data: Fixtures.data(Fixtures.xaiStatusRSS200))
+        }
+        let cache = try temporaryCache(vendor: .xai)
+        defer { remove(cache); StubURLProtocol.reset() }
+
+        _ = try await makeRSSProvider(descriptor: .xAI, cache: cache)
+            .fetchStatus(forceRefresh: true, now: fixtureNow)
+
+        #expect(StubURLProtocol.captured.count == 1)
+        let request = StubURLProtocol.captured[0]
+        expectTrue(request.url == URL(string: "https://status.x.ai/feed.xml"))
         expectTrue(request.httpMethod == "GET")
         expectTrue(request.value(forHTTPHeaderField: "Authorization") == nil)
     }
