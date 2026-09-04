@@ -71,7 +71,9 @@ public final class ServiceStatusStore: ObservableObject {
         providers: [any ServiceStatusProvider]
     ) {
         var seen = Set<VendorId>()
-        let orderedIds = vendorIds.filter { seen.insert($0).inserted }
+        let orderedIds = vendorIds.filter { vendorId in
+            vendorId.statusPageURL != nil && seen.insert(vendorId).inserted
+        }
         let eligibleIds = Set(orderedIds.filter {
             ServiceStatusPresentation.expectedCoverage(for: $0) != .linkOnly
         })

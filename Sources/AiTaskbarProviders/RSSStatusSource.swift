@@ -17,7 +17,7 @@ public struct RSSStatusDescriptor: Sendable, Equatable {
 
     public static let openRouter = RSSStatusDescriptor(
         vendorId: .openrouter,
-        statusPageURL: URL(string: "https://status.openrouter.ai")!,
+        statusPageURL: URL(string: "https://status.openrouter.ai/")!,
         feedURL: URL(string: "https://status.openrouter.ai/incidents.rss")!
     )
 

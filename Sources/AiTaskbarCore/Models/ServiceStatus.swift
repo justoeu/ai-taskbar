@@ -172,7 +172,7 @@ public extension VendorId {
         case .anthropic:  return URL(string: "https://status.claude.com")
         case .openai:     return URL(string: "https://status.openai.com")
         case .zai:        return nil
-        case .openrouter: return URL(string: "https://status.openrouter.ai")
+        case .openrouter: return URL(string: "https://status.openrouter.ai/")
         case .kimi:       return URL(string: "https://status.moonshot.cn")
         case .gemini:     return URL(string: "https://aistudio.google.com/status")
         case .deepseek:   return URL(string: "https://status.deepseek.com")

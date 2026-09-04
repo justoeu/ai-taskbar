@@ -17,20 +17,21 @@ de credencial, quota, schema ou rede local não significa que o serviço do
 fornecedor está indisponível. Da mesma forma, uma status page pública não diz
 se a conta específica do usuário está saudável.
 
-Todos os provedores habilitados aparecem no painel, inclusive os que não
-oferecem feed público estável. A ausência de uma integração confiável é
-representada como `unknown`; nunca é convertida implicitamente em
-`operational`.
+Apenas provedores habilitados com uma página oficial verificável aparecem no
+painel. Quando existe uma página oficial, mas não um feed público estável, a
+cobertura é representada como `unknown`; ela nunca é convertida implicitamente
+em `operational`. Provedores sem página oficial, como Z.AI, são omitidos.
 
 ## 2. Objetivos e não objetivos
 
 ### 2.1 Objetivos
 
-1. Adicionar um botão “Status dos serviços” no lado direito do cabeçalho.
+1. Adicionar um botão “Status dos serviços” no lado direito do cabeçalho
+   quando ao menos um vendor habilitado possuir página oficial.
 2. Abrir a experiência dentro do próprio `MenuBarExtra`, sem `sheet`, janela
    ou popover aninhado.
-3. Exibir os vendors habilitados no config, mesmo quando a instanciação do
-   provider autenticado de usage falhar.
+3. Exibir os vendors habilitados no config que possuam página oficial, mesmo
+   quando a instanciação do provider autenticado de usage falhar.
 4. Mostrar status atual, cobertura da fonte, freshness e incidentes que
    intersectem `[agora - 6h, agora]`.
 5. Distinguir operacional, manutenção, degradação, indisponibilidade parcial,
@@ -64,8 +65,10 @@ recebe `AppEnvironment.enabledVendorIds()`, na ordem canônica do app. Assim, a
 status page pública continua visível quando uma credencial ou a construção do
 provider autenticado de usage falha.
 
-Um vendor habilitado, mas sem feed público utilizável, continua tendo uma
-linha `unknown`. Ele não desaparece.
+Um vendor habilitado com página oficial, mas sem feed público utilizável,
+continua tendo uma linha `unknown`. Vendors sem página oficial verificável são
+filtrados pelo `ServiceStatusStore`; isso remove Z.AI do painel sem alterar seu
+provider de usage.
 
 ### 3.2 Cobertura da fonte
 
@@ -75,7 +78,7 @@ Cada source declara um nível de cobertura:
 |---|---|---|
 | `full` | estado atual explícito + histórico/incidentes | pode mostrar `operational` |
 | `incidentsOnly` | feed oficial de incidentes, sem estado global explícito | permanece `unknown`; após leitura válida, a UI destaca “sem incidentes ativos” |
-| `linkOnly` | página oficial sem feed público estável, ou nenhuma página verificável | `unknown` |
+| `linkOnly` | página oficial sem feed público estável | `unknown` |
 
 Uma fonte `incidentsOnly` pode elevar o nível para degradação/outage quando há
 um incidente ativo, mas a ausência de item não prova operação normal.
@@ -109,8 +112,8 @@ majorOutage > partialOutage > degradedPerformance > maintenance > operational
 
 - Uma condição conhecida não operacional vence `unknown`.
 - `unknown` impede verde quando não há nenhuma condição conhecida pior.
-- O agregado só é `operational` quando todos os vendors de cobertura `full`
-  retornaram explicitamente operational e não existe vendor habilitado sem
+- O agregado só é `operational` quando todos os vendors exibidos de cobertura
+  `full` retornaram explicitamente operational e não existe linha sem
   observação útil.
 - Durante refresh, o último agregado permanece visível e recebe freshness
   `loading`; cold start usa `unknown`.
@@ -126,10 +129,13 @@ e HTTPS.
 | OpenAI | `https://status.openai.com` | Statuspage v2 | `full` | componentes Codex Web, Desktop, API, CLI e VS Code; incidentes atuais podem não declarar component IDs, portanto o incidente da página é preservado |
 | Kimi | `https://status.moonshot.cn` | Statuspage v2 | `full` | componente Open API `8psr5dfdld0s` |
 | DeepSeek | `https://status.deepseek.com` | FlashDuty JSON | `full` experimental | usa os endpoints públicos da própria página; contrato não documentado e isolado em wire types/fixtures |
-| OpenRouter | `https://status.openrouter.ai` | RSS | `incidentsOnly` | `incidents.rss`; `/api/v2/summary.json` retorna 404 |
+| OpenRouter | `https://status.openrouter.ai/` | RSS | `incidentsOnly` | `incidents.rss`; `/api/v2/summary.json` retorna 404 |
 | xAI | `https://status.x.ai` | RSS | `incidentsOnly` | `feed.xml` contém incidentes declarados e histórico; os estados live dos componentes exibidos na página não têm contrato público estável para consumo pelo app |
 | Gemini | `https://aistudio.google.com/status` | link | `linkOnly` | RPC protobuf interno não é contrato público; Google Cloud/Workspace status não corresponde à Gemini API usada pelo app |
-| Z.AI | — | link | `linkOnly` | nenhuma status page oficial verificável encontrada |
+
+Z.AI é deliberadamente omitido desta tabela e do painel: nenhuma página de
+status oficial verificável está disponível. O monitoramento autenticado de uso
+do Z.AI permanece inalterado.
 
 ### 4.1 Statuspage v2
 
@@ -191,8 +197,8 @@ eleva o nível normalmente.
 ### 4.4 Link-only
 
 Não há request automático. O snapshot sintético é `unknown`, coverage
-`linkOnly` e contém a página oficial quando disponível. Z.AI não recebe uma
-URL inventada.
+`linkOnly` e contém a página oficial. Vendors sem página oficial são removidos
+antes da criação das linhas e nunca recebem uma URL inventada.
 
 ## 5. Modelo de domínio
 
@@ -329,8 +335,8 @@ Implementações:
 - `RSSStatusSource` atende OpenRouter e xAI;
 - `ServiceStatusProviderFactory` retorna providers apenas para IDs recebidos.
 
-IDs link-only não ganham provider de rede; o App store cria suas linhas
-sintéticas `unknown`.
+IDs link-only com página oficial não ganham provider de rede; o App store cria
+suas linhas sintéticas `unknown`. IDs sem página oficial não criam linha.
 
 Cada source chama `Task.checkCancellation()` na entrada, após requests
 agrupados e antes de devolver o payload. O cache compartilhado checa antes do
@@ -523,7 +529,7 @@ RED:
 
 - factory preserva exatamente o conjunto/ordem de IDs recebidos;
 - link-only não faz request;
-- uma row por vendor habilitado;
+- uma row por vendor habilitado com página oficial;
 - resultados paralelos preservam ordem;
 - sucesso parcial, stale, cancelamento e epoch supersedido;
 - agregado e presentation model.
@@ -547,19 +553,23 @@ GREEN:
 - botão, overlay, rows, timeline e incident details;
 - `make validate` verde;
 - smoke launch automatizado; inspeção manual em light/dark, Reduce Motion,
-  teclado/Escape, títulos longos, oito vendors e VoiceOver básico permanece
+  teclado/Escape, títulos longos, sete vendors e VoiceOver básico permanece
   uma verificação de release, pois não é observável no runner CLI.
 
 ## 12. Critérios de aceite
 
-1. O botão existe no trailing do cabeçalho e abre/fecha sem demitir o popover.
-2. Somente vendors habilitados aparecem; cada um aparece exatamente uma vez.
+1. Quando existe vendor habilitado com página oficial, o botão aparece no
+   trailing do cabeçalho e abre/fecha sem demitir o popover; sem linhas
+   elegíveis, o botão é omitido para não abrir um painel vazio.
+2. Somente vendors habilitados com página oficial aparecem; cada um aparece
+   exatamente uma vez.
 3. Falha de usage/credencial nunca altera o status público.
 4. Todas as condições usam símbolo, texto, cor e descrição acessível.
 5. O período é exatamente seis horas e inclui incidentes longos por
    interseção, não só por data de início.
 6. `unknown` e stale não aparecem como operacional.
-7. Vendors sem feed confiável permanecem visíveis e honestamente unknown.
+7. Vendors com página oficial, mas sem feed confiável, permanecem visíveis e
+   honestamente unknown; vendors sem página oficial, como Z.AI, são omitidos.
 8. Refresh é paralelo, cancelável, single-flight e preserva o último valor.
 9. Nenhum segredo é lido/enviado; redirects e links externos são allowlisted.
 10. Novos wire types têm fixtures + golden tests; novos arquivos Core/Providers

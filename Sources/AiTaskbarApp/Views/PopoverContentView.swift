@@ -112,32 +112,34 @@ public struct PopoverContentView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                Button {
-                    overlay = .status
-                } label: {
-                    ZStack(alignment: .bottomTrailing) {
-                        Image(systemName: ServiceStatusPresentation.headerSymbol)
-                            .foregroundStyle(.primary)
-                        Image(systemName: ServiceStatusPresentation.symbol(
-                            for: statusStore.overallLevel
-                        ))
-                        .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(statusStore.overallLevel.statusColor)
-                        .background(
-                            Circle()
-                                .fill(Color(NSColor.windowBackgroundColor))
-                                .padding(-1)
-                        )
-                        .offset(x: 3, y: 3)
+                if !statusStore.rows.isEmpty {
+                    Button {
+                        overlay = .status
+                    } label: {
+                        ZStack(alignment: .bottomTrailing) {
+                            Image(systemName: ServiceStatusPresentation.headerSymbol)
+                                .foregroundStyle(.primary)
+                            Image(systemName: ServiceStatusPresentation.symbol(
+                                for: statusStore.overallLevel
+                            ))
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(statusStore.overallLevel.statusColor)
+                            .background(
+                                Circle()
+                                    .fill(Color(NSColor.windowBackgroundColor))
+                                    .padding(-1)
+                            )
+                            .offset(x: 3, y: 3)
+                        }
+                        .frame(width: 20, height: 16)
                     }
-                    .frame(width: 20, height: 16)
+                    .buttonStyle(.borderless)
+                    .focused($statusButtonFocused)
+                    .help(L10n.localizedString("service_status_help"))
+                    .accessibilityLabel(L10n.localizedString("service_status_ax_label"))
+                    .accessibilityValue(statusAccessibilityValue)
+                    .accessibilityHint(L10n.localizedString("service_status_ax_hint"))
                 }
-                .buttonStyle(.borderless)
-                .focused($statusButtonFocused)
-                .help(L10n.localizedString("service_status_help"))
-                .accessibilityLabel(L10n.localizedString("service_status_ax_label"))
-                .accessibilityValue(statusAccessibilityValue)
-                .accessibilityHint(L10n.localizedString("service_status_ax_hint"))
                 Button {
                     overlay = .about
                 } label: {

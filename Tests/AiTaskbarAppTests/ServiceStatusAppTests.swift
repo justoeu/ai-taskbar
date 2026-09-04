@@ -108,7 +108,7 @@ struct ServiceStatusAppTests {
         }
     }
 
-    @Test("one ordered row is retained per enabled vendor and link-only never requests")
+    @Test("only enabled vendors with official status pages retain ordered rows")
     func ordered_rows_and_link_only() async {
         let unexpectedProbe = StatusFetchProbe()
         let unexpected = provider(.gemini, outcome: outcome(.gemini), probe: unexpectedProbe)
@@ -120,7 +120,7 @@ struct ServiceStatusAppTests {
         store.refreshAll(forceRefresh: true)
         await store.waitForCurrentRefresh()
 
-        #expect(store.rows.map(\.vendorId) == [.gemini, .zai])
+        #expect(store.rows.map(\.vendorId) == [.gemini])
         #expect(store.overallLevel == .unknown)
         #expect(!store.isLoading)
         #expect(!store.hasAutomaticSources)
@@ -134,6 +134,14 @@ struct ServiceStatusAppTests {
             #expect(snapshot.coverage == .linkOnly)
             #expect(snapshot.level == .unknown)
         }
+    }
+
+    @Test("OpenRouter uses its official public status page")
+    func openrouter_status_page_url() throws {
+        let expected = try #require(URL(string: "https://status.openrouter.ai/"))
+
+        expectTrue(VendorId.openrouter.statusPageURL == expected)
+        expectTrue(RSSStatusDescriptor.openRouter.statusPageURL == expected)
     }
 
     @Test("status scheduler sleeps after a completed round before polling again")
