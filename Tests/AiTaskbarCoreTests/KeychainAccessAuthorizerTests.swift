@@ -255,4 +255,16 @@ struct KeychainAccessAuthorizerTests {
                 probeRead: { _, _ in false })
         }
     }
+
+    @Test("interactive ACL commit classifies a rejected login Keychain password")
+    func commit_password_rejection_is_typed() throws {
+        let failure = try #require(
+            KeychainAccessAuthorizer.authorizationFailure(forCommitStatus: errSecAuthFailed)
+        )
+
+        #expect(failure == .loginKeychainPasswordRejected)
+        expectTrue(
+            KeychainAccessAuthorizer.authorizationFailure(forCommitStatus: errSecSuccess) == nil
+        )
+    }
 }

@@ -72,6 +72,23 @@ public enum KeychainAccessAuthorizer {
         case canceled
     }
 
+    /// Failures that need a recovery path different from a generic Keychain
+    /// error. In particular, `errSecAuthFailed` from the user-initiated ACL
+    /// commit means SecurityAgent rejected the login-Keychain password. That
+    /// password can differ from the current macOS account password after a
+    /// password reset, so callers must not present the misleading raw system
+    /// text as an application bug.
+    public enum AuthorizationFailure: Error, Sendable, Equatable, LocalizedError {
+        case loginKeychainPasswordRejected
+
+        public var errorDescription: String? {
+            switch self {
+            case .loginKeychainPasswordRejected:
+                return "The login Keychain rejected the authorization password. It may still use a previous Mac password."
+            }
+        }
+    }
+
     /// UIFail probe: `true` when this binary can already DECRYPT the item's
     /// data with no SecurityAgent prompt — i.e. the decrypt ACL + partition
     /// list already grant access. `kSecUseAuthenticationUIFail` guarantees we
@@ -165,6 +182,9 @@ public enum KeychainAccessAuthorizer {
             SecKeychainItemSetAccess(target.item, access)
         }
         if commit == errSecUserCanceled { return .canceled }
+        if let failure = authorizationFailure(forCommitStatus: commit) {
+            throw failure
+        }
         try check(commit, "commit access")
 
         // A successful commit is not proof of access. Verify the exact
@@ -174,6 +194,16 @@ public enum KeychainAccessAuthorizer {
                 "Keychain authorization was saved but verification still failed for account '\(target.account ?? "legacy")'.")
         }
         return .authorized
+    }
+
+    /// Pure classification seam for the interactive ACL commit. Keeping this
+    /// separate from `check` prevents scheduled `errSecAuthFailed` results
+    /// (which mean prompt suppression/ACL blocking) from being mislabeled as
+    /// a password rejection.
+    internal static func authorizationFailure(
+        forCommitStatus status: OSStatus
+    ) -> AuthorizationFailure? {
+        status == errSecAuthFailed ? .loginKeychainPasswordRejected : nil
     }
 
     // MARK: - ACL surgery

@@ -298,14 +298,17 @@ public struct VendorSectionView: View {
             VStack(alignment: .leading, spacing: 2) {
                 L10n.text("keychain_auth_title")
                     .font(.subheadline.weight(.semibold))
-                if let message = keychainAuthError {
+                if keychainAuthPending {
+                    L10n.text("keychain_auth_pending")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let message = keychainAuthError {
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 } else {
-                    L10n.text(keychainAuthPending ? "keychain_auth_pending"
-                                                  : "keychain_auth_hint")
+                    L10n.text("keychain_auth_hint")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -338,8 +341,14 @@ public struct VendorSectionView: View {
                 case .success(let authorized):
                     if authorized { vm.refresh(forceRefresh: true) }
                 case .failure(let error):
-                    keychainAuthError = (error as? AppError)?.localizedDescription
-                        ?? String(describing: error)
+                    if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
+                       failure == .loginKeychainPasswordRejected {
+                        keychainAuthError = L10n.localizedString(
+                            "keychain_auth_password_rejected")
+                    } else {
+                        keychainAuthError = (error as? LocalizedError)?.errorDescription
+                            ?? String(describing: error)
+                    }
                 }
             }
         }
