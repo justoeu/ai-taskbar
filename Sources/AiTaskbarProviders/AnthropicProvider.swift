@@ -126,11 +126,13 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         return payload
     }
 
-    /// Invoked only from the explicit Authorize button. The concrete
-    /// Keychain reader permits the native prompt and caches the credential in
-    /// memory; mocks use the protocol's non-interactive default.
-    public func authorizeCredentialsInteractively() throws {
-        _ = try credentialReader.readInteractively()
+    /// Invoked only from the explicit Authorize button. The concrete reader
+    /// grants this stable signing identity durable access to the shared
+    /// Keychain item, then verifies a silent read. A canceled native dialog
+    /// returns false so the UI leaves the existing banner untouched.
+    @discardableResult
+    public func authorizeCredentialsInteractively() throws -> Bool {
+        try credentialReader.authorizePersistently() == .authorized
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {

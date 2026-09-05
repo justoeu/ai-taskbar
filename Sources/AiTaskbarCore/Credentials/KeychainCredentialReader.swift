@@ -53,6 +53,10 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         var hadSuccessfulKeychainRead: Bool = false
     }
     private let state = OSAllocatedUnfairLock(initialState: LockedState())
+    /// Serializes credential invalidation and Keychain persistence. In
+    /// particular, authorization's read → pending-token write must not race a
+    /// concurrent OAuth refresh and overwrite a newer rotated refresh token.
+    private let credentialMutationGate = NSRecursiveLock()
 
     /// How long before `expiresAt` we still treat `lastKnownGood` as
     /// cacheable without re-hitting Keychain. Matches the OAuth refresh
@@ -133,6 +137,40 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         }
     }
 
+    /// Extends the Claude Code item's trusted-app ACL and partition list for
+    /// this signed binary. The only password prompt is the user-initiated
+    /// `SecKeychainItemSetAccess` commit inside `KeychainAccessAuthorizer`;
+    /// the app never receives or stores that password.
+    public func authorizePersistently() throws -> KeychainAccessAuthorizer.Outcome {
+        try authorizePersistently(using: { service, account in
+            try KeychainAccessAuthorizer.authorize(service: service, account: account)
+        })
+    }
+
+    /// Injection seam keeps authorized/canceled reconciliation testable
+    /// without presenting SecurityAgent UI in the test process.
+    internal func authorizePersistently(
+        using authorize: (String, String?) throws -> KeychainAccessAuthorizer.Outcome,
+        beforePendingPersistence: () -> Void = {}
+    ) throws -> KeychainAccessAuthorizer.Outcome {
+        let outcome = try authorize(service, preferredAccount ?? getResolvedAccount())
+        guard outcome == .authorized else { return outcome }
+
+        credentialMutationGate.lock()
+        defer { credentialMutationGate.unlock() }
+
+        // The authorizer already proved the ACL with an exact-account silent
+        // read. Reconcile a fresh disk copy while preserving a rotated token
+        // that could not previously be written because the ACL was blocked.
+        clearLastKnownGood()
+        let reconciled = try read()
+        if getPendingUpdate() != nil {
+            beforePendingPersistence()
+            try writeBack(reconciled)
+        }
+        return .authorized
+    }
+
     private func readInteractivelyLocked() throws -> AnthropicCredentials {
         let items = try fetchAll(interactive: true)
         guard !items.isEmpty else {
@@ -159,6 +197,8 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     /// in-memory credential copy so the provider's reactive retry must read
     /// the current Claude Code Keychain item (or surface its ACL block).
     public func invalidateCachedCredentials() {
+        credentialMutationGate.lock()
+        defer { credentialMutationGate.unlock() }
         state.withLock {
             $0.lastKnownGood = nil
             $0.pendingUpdate = nil
@@ -173,6 +213,14 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     /// Test seam: observe memory cache after invalidate.
     internal var testingLastKnownGood: AnthropicCredentials? {
         getLastKnownGood()
+    }
+
+    internal func seedPendingUpdateForTesting(_ credentials: AnthropicCredentials) {
+        setPendingUpdate(credentials)
+    }
+
+    internal var testingPendingUpdate: AnthropicCredentials? {
+        getPendingUpdate()
     }
 }
 
@@ -245,6 +293,9 @@ extension KeychainCredentialReader {
     }
 
     public func writeBack(_ updated: AnthropicCredentials) throws {
+        credentialMutationGate.lock()
+        defer { credentialMutationGate.unlock() }
+
         let file = AnthropicCredentialsFile(claudeAiOauth: updated)
         let data = try SharedCoders.encoder.encode(file)
         var query: [String: Any] = [
@@ -642,6 +693,9 @@ extension KeychainCredentialReader {
     }
     private func getLastKnownGood() -> AnthropicCredentials? {
         state.withLock { $0.lastKnownGood }
+    }
+    private func clearLastKnownGood() {
+        state.withLock { $0.lastKnownGood = nil }
     }
     private func markSuccessfulKeychainRead() {
         state.withLock { $0.hadSuccessfulKeychainRead = true }

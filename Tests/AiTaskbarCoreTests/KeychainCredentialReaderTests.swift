@@ -1,6 +1,7 @@
 import Testing
 import AiTaskbarTestSupport
 import Foundation
+import os
 @testable import AiTaskbarCore
 
 @Suite("KeychainCredentialReader — non-syscall surface", .serialized)
@@ -193,8 +194,8 @@ struct KeychainCredentialReaderTests {
         #expect(creds.expiresAtMs == 1_764_201_600_000)
     }
 
-    @Test("interactive read seeds process-memory credentials")
-    func interactive_read_seeds_memory() throws {
+    @Test("interactive and persistent authorization seed process-memory credentials")
+    func authorization_seeds_memory() throws {
         let service = "ai-taskbar-test-interactive-\(UUID().uuidString)"
         let account = "interactive@example.com"
         let payload = #"{"claudeAiOauth":{"accessToken":"interactive-access","refreshToken":"interactive-refresh","expiresAt":2000000000000}}"#
@@ -219,12 +220,91 @@ struct KeychainCredentialReaderTests {
         let interactive = try reader.readInteractively()
         #expect(interactive.accessToken == "interactive-access")
 
+        var authorizedAccount: String?
+        let persistent = try reader.authorizePersistently(using: { _, account in
+            authorizedAccount = account
+            return .authorized
+        })
+        #expect(persistent == .authorized)
+        #expect(authorizedAccount == account)
+
         // Remove the backing item: the next scheduled-style read must still
         // succeed from the process-memory value seeded above.
         _ = SecItemDelete(deleteQuery as CFDictionary)
         let cached = try reader.read()
         #expect(cached.accessToken == "interactive-access")
         #expect(cached.refreshToken == "interactive-refresh")
+    }
+
+    @Test("canceling persistent authorization leaves the Keychain untouched")
+    func persistent_authorization_cancel() throws {
+        let reader = KeychainCredentialReader(
+            service: "ai-taskbar-canceled-\(UUID().uuidString)")
+
+        let outcome = try reader.authorizePersistently(using: { _, _ in .canceled })
+
+        #expect(outcome == .canceled)
+    }
+
+    @Test("a concurrent write cannot be lost while pending authorization is persisted")
+    func persistent_authorization_serializes_pending_write() throws {
+        let service = "ai-taskbar-test-pending-auth-\(UUID().uuidString)"
+        let account = "pending@example.com"
+        let oldPayload = #"{"claudeAiOauth":{"accessToken":"old-access","refreshToken":"old-refresh","expiresAt":2000000000000}}"#
+        let addQuery: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String:   Data(oldPayload.utf8),
+        ]
+        let deleteQuery: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        _ = SecItemDelete(deleteQuery as CFDictionary)
+        defer { _ = SecItemDelete(deleteQuery as CFDictionary) }
+        try #require(SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess)
+
+        let reader = KeychainCredentialReader(service: service, preferredAccount: account)
+        _ = try reader.readInteractively()
+        let newer = AnthropicCredentials(
+            accessToken: "new-access",
+            refreshToken: "new-refresh",
+            expiresAtMs: 2_100_000_000_000)
+        reader.seedPendingUpdateForTesting(newer)
+        let newest = AnthropicCredentials(
+            accessToken: "newest-access",
+            refreshToken: "newest-refresh",
+            expiresAtMs: 2_200_000_000_000)
+        let concurrentStarted = DispatchSemaphore(value: 0)
+        let concurrentFinished = DispatchSemaphore(value: 0)
+        let concurrentResult = OSAllocatedUnfairLock<Result<Void, Error>?>(initialState: nil)
+
+        let outcome = try reader.authorizePersistently(
+            using: { _, selectedAccount in
+                #expect(selectedAccount == account)
+                return .authorized
+            },
+            beforePendingPersistence: {
+                DispatchQueue.global().async {
+                    concurrentStarted.signal()
+                    let result = Result { try reader.writeBack(newest) }
+                    concurrentResult.withLock { $0 = result }
+                    concurrentFinished.signal()
+                }
+                #expect(concurrentStarted.wait(timeout: .now() + 1) == .success)
+                #expect(concurrentFinished.wait(timeout: .now() + 0.05) == .timedOut)
+            })
+
+        #expect(outcome == .authorized)
+        #expect(concurrentFinished.wait(timeout: .now() + 1) == .success)
+        let writeResult = try #require(concurrentResult.withLock { $0 })
+        try writeResult.get()
+        reader.invalidateCachedCredentials()
+        let persisted = try reader.read()
+        #expect(persisted.accessToken == "newest-access")
+        #expect(persisted.refreshToken == "newest-refresh")
     }
 
     @Test("writeBack updates a seeded Keychain entry")

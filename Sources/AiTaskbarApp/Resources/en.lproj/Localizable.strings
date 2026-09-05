@@ -37,7 +37,7 @@
 "token_expired_title" = "Access token expired";
 // One-time Keychain authorization banner (errSecInteractionNotAllowed).
 "keychain_auth_title" = "Keychain access needed";
-"keychain_auth_hint" = "Click to allow an interactive read of the Claude Code token. macOS may ask for the Keychain password; the token stays in memory and permission may be requested again after re-login.";
+"keychain_auth_hint" = "Allow this signed app to read the Claude Code credential on future launches. macOS may ask for the Keychain password once; the app never receives or stores it.";
 "keychain_auth_pending" = "Waiting for macOS authorization…";
 "keychain_auth_button" = "Authorize";
 "token_expired_relogin_hint" = "Opens a browser to sign in — we'll re-check automatically.";

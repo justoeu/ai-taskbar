@@ -122,6 +122,7 @@ struct KeychainAccessAuthorizerTests {
         defer { cleanup() }
         let outcome = try KeychainAccessAuthorizer.authorize(
             service: Self.service,
+            teamID: "TESTTEAM",
             probeRead: { _, _ in true })
         #expect(outcome == .authorized)
     }
@@ -140,6 +141,7 @@ struct KeychainAccessAuthorizerTests {
         var probedAccounts: [String?] = []
         let outcome = try KeychainAccessAuthorizer.authorize(
             service: Self.service,
+            teamID: "TESTTEAM",
             probeRead: { _, account in
                 probedAccounts.append(account)
                 return true
@@ -148,6 +150,98 @@ struct KeychainAccessAuthorizerTests {
         #expect(outcome == .authorized)
         #expect(probedAccounts.count == 1)
         #expect(probedAccounts[0] == "tester")
+    }
+
+    @Test("authorize refuses to guess between multiple unresolved accounts")
+    func refuses_ambiguous_accounts() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        let secondDelete: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: "work@example.com",
+        ]
+        _ = SecItemDelete(secondDelete as CFDictionary)
+        defer { _ = SecItemDelete(secondDelete as CFDictionary) }
+        let secondAdd: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: "work@example.com",
+            kSecValueData as String:   Data("work".utf8),
+        ]
+        try #require(SecItemAdd(secondAdd as CFDictionary, nil) == errSecSuccess)
+
+        var probeCalls = 0
+        #expect(throws: AppError.self) {
+            try KeychainAccessAuthorizer.authorize(
+                service: Self.service,
+                teamID: "TESTTEAM",
+                probeRead: { _, _ in
+                    probeCalls += 1
+                    return true
+                })
+        }
+
+        #expect(probeCalls == 0)
+    }
+
+    @Test("authorize limits a multi-account service to the preferred account")
+    func authorizes_only_preferred_account() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        let secondDelete: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: "work@example.com",
+        ]
+        _ = SecItemDelete(secondDelete as CFDictionary)
+        defer { _ = SecItemDelete(secondDelete as CFDictionary) }
+        let secondAdd: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: "work@example.com",
+            kSecValueData as String:   Data("work".utf8),
+        ]
+        try #require(SecItemAdd(secondAdd as CFDictionary, nil) == errSecSuccess)
+
+        var probedAccounts: [String?] = []
+        let outcome = try KeychainAccessAuthorizer.authorize(
+            service: Self.service,
+            account: "work@example.com",
+            teamID: "TESTTEAM",
+            probeRead: { _, account in
+                probedAccounts.append(account)
+                return true
+            })
+
+        #expect(outcome == .authorized)
+        #expect(probedAccounts == ["work@example.com"])
+    }
+
+    @Test("blocked authorization fails closed without a stable Team ID")
+    func unsigned_authorization_fails_closed() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+
+        #expect(throws: AppError.self) {
+            try KeychainAccessAuthorizer.authorize(
+                service: Self.service,
+                teamID: nil,
+                probeRead: { _, _ in false })
+        }
+    }
+
+    @Test("readable item still fails durable authorization without a Team ID")
+    func unsigned_readable_item_fails_closed() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+
+        #expect(throws: AppError.self) {
+            try KeychainAccessAuthorizer.authorize(
+                service: Self.service,
+                teamID: nil,
+                probeRead: { _, _ in true })
+        }
     }
 
     @Test("authorize proceeds past the gate when the probe says access is blocked")

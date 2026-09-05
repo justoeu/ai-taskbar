@@ -101,6 +101,8 @@ public enum KeychainAccessAuthorizer {
     ///   the account-aware silent read so authorization is verified against
     ///   the same item whose ACL was changed.
     public static func authorize(service: String,
+                                 account: String? = nil,
+                                 teamID: String? = CodeSignatureInfo.currentTeamID(),
                                  probeRead: (String, String?) -> Bool = {
                                      KeychainAccessAuthorizer.canReadSilently($0, account: $1)
                                  }) throws -> Outcome {
@@ -120,45 +122,56 @@ public enum KeychainAccessAuthorizer {
             kSecReturnRef as String:           true,
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         ]
-        let findStatus = SecItemCopyMatching(query as CFDictionary, &matchesRef)
+        let findStatus = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecItemCopyMatching(query as CFDictionary, &matchesRef)
+        }
         guard findStatus == errSecSuccess,
               let matches = matchesRef as? [[String: Any]] else {
             throw AppError.credentials(
                 "Keychain item '\(service)' not found (OSStatus \(findStatus)). Run Claude Code at least once.")
         }
-        let targets = authorizationTargets(from: matches)
-        guard !targets.isEmpty else {
-            throw AppError.credentials("Keychain item '\(service)' has no usable item references")
+        let target = try authorizationTarget(from: matches, account: account)
+
+        guard let teamID, !teamID.isEmpty else {
+            throw AppError.credentials(
+                "Persistent Keychain authorization requires a stable Developer ID signature. Install or build a signed AI Taskbar app and try again.")
         }
 
-        let myPartition = CodeSignatureInfo.currentTeamID().map { "teamid:\($0)" } ?? "unsigned:"
-        for target in targets {
-            // Per-item idempotency gate. Never commit an already-readable
-            // item: ChangeACL can prompt and used to accumulate duplicates.
-            if probeRead(service, target.account) { continue }
+        // Idempotency gate. Never commit an already-readable item: ChangeACL
+        // can prompt and used to accumulate duplicates.
+        if probeRead(service, target.account) { return .authorized }
 
-            var accessRef: SecAccess?
-            try check(SecKeychainItemCopyAccess(target.item, &accessRef), "copy access")
-            guard let access = accessRef else {
-                throw AppError.credentials("Keychain item has no access object")
-            }
-            let partitionChanged = try extendPartitionList(of: access, with: myPartition)
-            let trustedAppChanged = try addSelfToDecryptACL(of: access)
-            guard partitionChanged || trustedAppChanged else {
-                throw AppError.credentials(
-                    "Keychain ACL already contains this app and \(myPartition), but the item is still unreadable. Unlock the login keychain and try again.")
-            }
+        let myPartition = "teamid:\(teamID)"
 
-            let commit = SecKeychainItemSetAccess(target.item, access)
-            if commit == errSecUserCanceled { return .canceled }
-            try check(commit, "commit access")
+        var accessRef: SecAccess?
+        let copyStatus = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecKeychainItemCopyAccess(target.item, &accessRef)
+        }
+        try check(copyStatus, "copy access")
+        guard let access = accessRef else {
+            throw AppError.credentials("Keychain item has no access object")
+        }
+        let partitionChanged = try extendPartitionList(of: access, with: myPartition)
+        let trustedAppChanged = try addSelfToDecryptACL(of: access)
+        guard partitionChanged || trustedAppChanged else {
+            throw AppError.credentials(
+                "Keychain ACL already contains this app and \(myPartition), but the item is still unreadable. Unlock the login keychain and try again.")
+        }
 
-            // A successful commit is not proof of access. Verify the exact
-            // account before telling the UI to reload.
-            guard probeRead(service, target.account) else {
-                throw AppError.credentials(
-                    "Keychain authorization was saved but verification still failed for account '\(target.account ?? "legacy")'.")
-            }
+        // Only this commit is interactive. The operation gate prevents any
+        // scheduled prompt-suppressed read from disabling interaction while
+        // SecurityAgent owns the password dialog.
+        let commit = KeychainPromptSuppressor.withPromptsAllowed {
+            SecKeychainItemSetAccess(target.item, access)
+        }
+        if commit == errSecUserCanceled { return .canceled }
+        try check(commit, "commit access")
+
+        // A successful commit is not proof of access. Verify the exact
+        // account silently before telling the UI to reload.
+        guard probeRead(service, target.account) else {
+            throw AppError.credentials(
+                "Keychain authorization was saved but verification still failed for account '\(target.account ?? "legacy")'.")
         }
         return .authorized
     }
@@ -229,15 +242,33 @@ public enum KeychainAccessAuthorizer {
         let item: SecKeychainItem
     }
 
-    private static func authorizationTargets(from matches: [[String: Any]]) -> [AuthorizationTarget] {
+    private static func authorizationTarget(
+        from matches: [[String: Any]],
+        account requestedAccount: String?
+    ) throws -> AuthorizationTarget {
         let all = matches.compactMap { match -> AuthorizationTarget? in
             guard let ref = match[kSecValueRef as String] else { return nil }
             return AuthorizationTarget(
                 account: match[kSecAttrAccount as String] as? String,
                 item: ref as! SecKeychainItem)
         }
+        if let requestedAccount {
+            guard let target = all.first(where: { $0.account == requestedAccount }) else {
+                throw AppError.credentials(
+                    "Keychain item has no entry for the configured account '\(requestedAccount)'")
+            }
+            return target
+        }
         let accountBearing = all.filter { !($0.account ?? "").isEmpty }
-        return accountBearing.isEmpty ? all : accountBearing
+        let candidates = accountBearing.isEmpty ? all : accountBearing
+        guard candidates.count == 1 else {
+            if candidates.isEmpty {
+                throw AppError.credentials("Keychain item has no usable item references")
+            }
+            throw AppError.credentials(
+                "Multiple Claude Code Keychain accounts were found. Set keychain_account in the Anthropic settings before authorizing.")
+        }
+        return candidates[0]
     }
 
     /// Finds the first ACL entry carrying `authorization` (compared as

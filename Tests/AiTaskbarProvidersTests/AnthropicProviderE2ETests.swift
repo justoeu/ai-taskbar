@@ -11,6 +11,8 @@ private final class MockKeychainReader: AnthropicCredentialReading, @unchecked S
     var nextRead: AnthropicCredentials
     var writeBackCalls: [AnthropicCredentials] = []
     var interactiveReadCalls = 0
+    var persistentAuthorizationCalls = 0
+    var persistentAuthorizationOutcome: KeychainAccessAuthorizer.Outcome = .authorized
     var invalidateCalls = 0
     var readErrorAfterInvalidation: AppError?
     var nextReadAfterInvalidation: AnthropicCredentials?
@@ -26,6 +28,10 @@ private final class MockKeychainReader: AnthropicCredentialReading, @unchecked S
     func readInteractively() throws -> AnthropicCredentials {
         interactiveReadCalls += 1
         return nextRead
+    }
+    func authorizePersistently() throws -> KeychainAccessAuthorizer.Outcome {
+        persistentAuthorizationCalls += 1
+        return persistentAuthorizationOutcome
     }
     func invalidateCachedCredentials() {
         invalidateCalls += 1
@@ -50,8 +56,8 @@ struct AnthropicProviderE2ETests {
         try Paths.ensureDir(tmpCache)
     }
 
-    @Test("interactive authorization delegates to the credential reader")
-    func interactive_authorization_delegates() throws {
+    @Test("authorization never falls back to a transient interactive read")
+    func authorization_is_not_transient() throws {
         let creds = AnthropicCredentials(
             accessToken: "fresh", refreshToken: "r",
             expiresAtMs: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000),
@@ -62,9 +68,30 @@ struct AnthropicProviderE2ETests {
             cache: DiskCache(vendor: .anthropic, baseDir: tmpCache),
             http: .stubbed(protocols: [StubURLProtocol.self]))
 
-        try provider.authorizeCredentialsInteractively()
+        let authorized = try provider.authorizeCredentialsInteractively()
 
-        #expect(mock.interactiveReadCalls == 1)
+        #expect(authorized)
+        #expect(mock.persistentAuthorizationCalls == 1)
+        #expect(mock.interactiveReadCalls == 0)
+    }
+
+    @Test("canceling persistent authorization does not report success")
+    func canceled_authorization_is_not_success() throws {
+        let creds = AnthropicCredentials(
+            accessToken: "fresh", refreshToken: "r",
+            expiresAtMs: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000))
+        let mock = MockKeychainReader(initial: creds)
+        mock.persistentAuthorizationOutcome = .canceled
+        let provider = AnthropicProvider(
+            credentialReader: mock,
+            cache: DiskCache(vendor: .anthropic, baseDir: tmpCache),
+            http: .stubbed(protocols: [StubURLProtocol.self]))
+
+        let authorized = try provider.authorizeCredentialsInteractively()
+
+        #expect(!authorized)
+        #expect(mock.persistentAuthorizationCalls == 1)
+        #expect(mock.interactiveReadCalls == 0)
     }
 
     @Test("fresh credentials + 200 → snapshot decoded")

@@ -287,10 +287,9 @@ public struct VendorSectionView: View {
     }
 
     /// Actionable Keychain banner shown after a prompt-suppressed scheduled
-    /// read is blocked. The button performs one explicit interactive read and
-    /// seeds the reader's in-memory credential cache. It deliberately does
-    /// not rewrite Claude Code's ACL. Runs off the main actor because the
-    /// native SecurityAgent dialog blocks until the user responds.
+    /// read is blocked. The button grants this signed app durable access to
+    /// Claude Code's credential ACL. Runs off the main actor because the one
+    /// native SecurityAgent password dialog blocks until the user responds.
     @ViewBuilder
     private var keychainAuthorizeAffordance: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -330,14 +329,14 @@ public struct VendorSectionView: View {
         let vm = self.vm
         let provider = vm.provider
         Task.detached(priority: .userInitiated) {
-            let result: Result<Void, Error> = Result {
+            let result: Result<Bool, Error> = Result {
                 try provider.authorizeCredentialsInteractively()
             }
             await MainActor.run {
                 keychainAuthPending = false
                 switch result {
-                case .success:
-                    vm.refresh(forceRefresh: true)
+                case .success(let authorized):
+                    if authorized { vm.refresh(forceRefresh: true) }
                 case .failure(let error):
                     keychainAuthError = (error as? AppError)?.localizedDescription
                         ?? String(describing: error)

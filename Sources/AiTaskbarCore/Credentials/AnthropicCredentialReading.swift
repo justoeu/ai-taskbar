@@ -16,6 +16,10 @@ public protocol AnthropicCredentialReading: Sendable {
     /// Production uses it only from the explicit Authorize button; scheduled
     /// reads remain prompt-suppressed.
     func readInteractively() throws -> AnthropicCredentials
+    /// User-initiated durable authorization of this signed app against the
+    /// backing Keychain item. Returns `.canceled` when the native macOS
+    /// password dialog is dismissed without changing the ACL.
+    func authorizePersistently() throws -> KeychainAccessAuthorizer.Outcome
     /// Drops process-memory credentials after the usage API rejects them.
     /// The next `read()` must consult the backing credential source again.
     func invalidateCachedCredentials()
@@ -23,7 +27,11 @@ public protocol AnthropicCredentialReading: Sendable {
 }
 
 public extension AnthropicCredentialReading {
-    /// Test/in-memory readers need no distinct interaction path.
+    /// Test/in-memory readers need no distinct persistent-ACL path.
     func readInteractively() throws -> AnthropicCredentials { try read() }
+    func authorizePersistently() throws -> KeychainAccessAuthorizer.Outcome {
+        _ = try readInteractively()
+        return .authorized
+    }
     func invalidateCachedCredentials() {}
 }
