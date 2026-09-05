@@ -4,6 +4,18 @@ import AiTaskbarCore
 
 @Suite("opencode footer formatting")
 struct OpencodeFooterTests {
+    @Test("cost availability distinguishes complete, partial, and wholly unpriced windows")
+    func cost_availability_is_explicit() {
+        #expect(CostFooterView.costAvailability(
+            breakdown: ["priced": 1], unpricedModels: []) == .complete)
+        #expect(CostFooterView.costAvailability(
+            breakdown: ["priced": 1, "future": 0],
+            unpricedModels: ["future"]) == .partial)
+        #expect(CostFooterView.costAvailability(
+            breakdown: ["future": 0],
+            unpricedModels: ["future"]) == .unavailable)
+    }
+
 
     /// The three buckets differ by orders of magnitude on real data — 169M
     /// input against 2.7B cache reads — so a single total would bury the

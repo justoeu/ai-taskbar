@@ -154,19 +154,21 @@ public enum CodexSessionScanner {
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.openai)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.openai)
-        // Every model we tallied but couldn't price contributes $0 to the
+        // Every model we tallied but couldn't price is excluded from the cost
         // totals. Surfacing the ids is what turns "the number looks low" into
         // "OpenAI shipped a model id we don't have a rate for yet".
         let unpriced = Set(totalsLast7.keys)
             .filter { PricingTable.lookup($0, table: PricingTable.openai) == nil }
             .sorted()
+        let unpricedToday = Set(totalsToday.keys)
+            .filter { PricingTable.lookup($0, table: PricingTable.openai) == nil }
         let sawUsage = !totalsLast7.isEmpty || !totalsToday.isEmpty
         let note: String?
         if filesScanned == 0 {
             note = "No recent Codex sessions found."
         } else if !unpriced.isEmpty {
-            note = "Approximate — no price for \(unpriced.joined(separator: ", ")); " +
-                   "those turns count as $0. Subscription users pay flat fee."
+            note = "Approximate — price unavailable for \(unpriced.joined(separator: ", ")); " +
+                   "those turns are excluded from cost totals. Subscription users pay flat fee."
         } else if let lossNote = loss.note {
             note = "Approximate — \(lossNote) Subscription users pay flat fee."
         } else {
@@ -180,7 +182,9 @@ public enum CodexSessionScanner {
             totalsByModel: totalsToday,
             computedAt: now,
             isApproximate: true,
-            note: note
+            note: note,
+            unpricedModelsToday: unpricedToday,
+            unpricedModelsLast7Days: Set(unpriced)
         )
         return (estimate, sawUsage)
     }
@@ -285,6 +289,18 @@ public enum CodexSessionScanner {
         var undated = 0
 
         func record(_ usage: ModelUsage, at ts: Date?, model: String) {
+            var usage = usage
+            if let pricing = PricingTable.lookup(model, table: PricingTable.openai),
+               let threshold = pricing.longContextThresholdTokens,
+               CostAggregator.saturatingAdd(usage.inputTokens, usage.cacheReadTokens) > threshold {
+                // The higher rate applies to the full request. These fields are
+                // surcharge subsets; the ordinary totals remain unchanged.
+                usage.longContextInputTokens = usage.inputTokens
+                usage.longContextOutputTokens = usage.outputTokens
+                usage.longContextCacheReadTokens = usage.cacheReadTokens
+                usage.longContextCacheCreateTokens = usage.cacheCreateTokens
+                usage.longContextCacheCreate1hTokens = usage.cacheCreate1hTokens
+            }
             guard let ts else {
                 // Fail-safe, mirroring ClaudeSessionScanner: a record we can't
                 // place in time counts into both buckets rather than vanishing.

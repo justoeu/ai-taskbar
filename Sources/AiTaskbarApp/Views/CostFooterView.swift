@@ -4,8 +4,8 @@ import AiTaskbarCore
 /// Isolated observer for the shared `CostEstimator`. Lives in its own view so
 /// a `cost.refresh()` (every ≥60 s, flipping `isLoading` / `byVendor` /
 /// `lastComputedAt`) re-renders **only** the per-vendor cost footer, not the
-/// entire `VendorSectionView`. The other 4 sections that don't surface cost
-/// data (Z.AI, OpenRouter, Kimi, Gemini, DeepSeek, xAI) never subscribe.
+/// entire `VendorSectionView`. Vendors without their own local scanner can
+/// still render a separately attributed opencode breakdown.
 public struct CostFooterView: View {
     private let vendorId: VendorId
     @ObservedObject private var cost: CostEstimator
@@ -18,7 +18,7 @@ public struct CostFooterView: View {
     public var body: some View {
         let estimate = cost.byVendor[vendorId]
         let opencodeScan = cost.opencode[vendorId]
-        let hasData = (estimate?.usdToday ?? 0) > 0 || (estimate?.usdLast7Days ?? 0) > 0
+        let hasData = estimate?.hasDisplayData == true
         let supportsLocal = CostEstimator.supportedVendors.contains(vendorId)
         // Render the footer when we already have data, OR while we're loading
         // for a vendor that the local scanners cover. Otherwise (OpenRouter,
@@ -27,11 +27,25 @@ public struct CostFooterView: View {
             Divider()
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 12) {
-                    Label(L10n.localizedString("today_cost_fmt", estimate.usdToday),
+                    Label(Self.costText(
+                        amount: estimate.usdToday,
+                        availability: Self.costAvailability(
+                            breakdown: estimate.modelBreakdownToday,
+                            unpricedModels: estimate.unpricedModelsToday),
+                        completeKey: "today_cost_fmt",
+                        partialKey: "today_cost_partial_fmt",
+                        unavailableKey: "today_cost_unavailable"),
                           systemImage: "calendar")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Label(L10n.localizedString("weekly_cost_fmt", estimate.usdLast7Days),
+                    Label(Self.costText(
+                        amount: estimate.usdLast7Days,
+                        availability: Self.costAvailability(
+                            breakdown: estimate.modelBreakdownLast7Days,
+                            unpricedModels: estimate.unpricedModelsLast7Days),
+                        completeKey: "weekly_cost_fmt",
+                        partialKey: "weekly_cost_partial_fmt",
+                        unavailableKey: "weekly_cost_unavailable"),
                           systemImage: "chart.bar")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -107,7 +121,11 @@ public struct CostFooterView: View {
                 ModelRow(
                     name: model,
                     usdToday: estimate.modelBreakdownToday[model] ?? 0,
-                    usd7d:   estimate.modelBreakdownLast7Days[model] ?? 0
+                    usd7d:   estimate.modelBreakdownLast7Days[model] ?? 0,
+                    todayIsUnpriced: estimate.modelBreakdownToday[model] != nil
+                        && estimate.unpricedModelsToday.contains(model),
+                    weekIsUnpriced: estimate.modelBreakdownLast7Days[model] != nil
+                        && estimate.unpricedModelsLast7Days.contains(model)
                 )
             }
             .sorted { ($0.usd7d, $0.usdToday) > ($1.usd7d, $1.usdToday) }
@@ -244,7 +262,11 @@ public struct CostFooterView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 6)
-            if row.usdToday > 0 {
+            if row.todayIsUnpriced {
+                L10n.text("price_unavailable_short")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            } else if row.usdToday > 0 {
                 Text(String(format: "$%.2f", row.usdToday))
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -259,7 +281,11 @@ public struct CostFooterView: View {
             Text(" / ")
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.tertiary)
-            if row.usd7d > 0 {
+            if row.weekIsUnpriced {
+                L10n.text("price_unavailable_short")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            } else if row.usd7d > 0 {
                 Text(String(format: "$%.2f", row.usd7d))
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -278,7 +304,43 @@ public struct CostFooterView: View {
         let name: String
         let usdToday: Double
         let usd7d: Double
+        let todayIsUnpriced: Bool
+        let weekIsUnpriced: Bool
         var id: String { name }
+    }
+
+    enum CostAvailability: Equatable {
+        case complete
+        case partial
+        case unavailable
+    }
+
+    /// A zero-dollar breakdown can mean either a tiny known cost or no known
+    /// price at all. Preserve that distinction all the way into the UI.
+    static func costAvailability(
+        breakdown: [String: Double],
+        unpricedModels: Set<String>
+    ) -> CostAvailability {
+        guard !breakdown.isEmpty, !unpricedModels.isEmpty else { return .complete }
+        let pricedModels = Set(breakdown.keys).subtracting(unpricedModels)
+        return pricedModels.isEmpty ? .unavailable : .partial
+    }
+
+    private static func costText(
+        amount: Double,
+        availability: CostAvailability,
+        completeKey: String,
+        partialKey: String,
+        unavailableKey: String
+    ) -> String {
+        switch availability {
+        case .complete:
+            return L10n.localizedString(completeKey, amount)
+        case .partial:
+            return L10n.localizedString(partialKey, amount)
+        case .unavailable:
+            return L10n.localizedString(unavailableKey)
+        }
     }
 
     /// Strips noisy model-name prefixes for the inline display

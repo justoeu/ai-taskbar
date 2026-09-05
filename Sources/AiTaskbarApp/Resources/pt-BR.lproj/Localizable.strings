@@ -60,6 +60,11 @@
 // Cost / details
 "today_cost_fmt" = "Hoje: $%.2f";
 "weekly_cost_fmt" = "7d: $%.2f";
+"today_cost_partial_fmt" = "Hoje: $%.2f+";
+"weekly_cost_partial_fmt" = "7d: $%.2f+";
+"today_cost_unavailable" = "Hoje: preço indisponível";
+"weekly_cost_unavailable" = "7d: preço indisponível";
+"price_unavailable_short" = "preço indisponível";
 "extra_usage_fmt" = "Uso extra: $%.2f";
 "credits_fmt" = "Créditos: $%.2f";
 "balance_fmt" = "Saldo: $%.2f";

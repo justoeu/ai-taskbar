@@ -118,6 +118,45 @@ struct CodexLogScannerSQLiteTests {
         #expect(est.usdLast7Days == 0)
     }
 
+    @Test("unknown-only model is retained with unavailable-price metadata")
+    func estimate_retains_unknown_only_model() throws {
+        let now = Date()
+        let nowSec = Int(now.timeIntervalSince1970)
+        let url = try buildSyntheticDB(rows: [
+            (nowSec - 60, "model=gpt-7-unreleased total_usage_tokens=1000"),
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let est = CodexLogScanner.estimate(now: now, dbPath: url.path)
+
+        #expect(est.usdToday == 0)
+        #expect(est.modelBreakdownToday["gpt-7-unreleased"] == 0)
+        #expect(est.unpricedModelsToday == Set(["gpt-7-unreleased"]))
+        #expect(est.unpricedModelsLast7Days == Set(["gpt-7-unreleased"]))
+        #expect(est.hasDisplayData)
+        expectTrue(est.note?.localizedCaseInsensitiveContains("price unavailable") ?? false)
+    }
+
+    @Test("mixed known and unknown models are marked as a partial estimate")
+    func estimate_marks_mixed_models_partial() throws {
+        let now = Date()
+        let nowSec = Int(now.timeIntervalSince1970)
+        let url = try buildSyntheticDB(rows: [
+            (nowSec - 60, "model=gpt-5 total_usage_tokens=1000000"),
+            (nowSec - 30, "model=gpt-7-unreleased total_usage_tokens=1000"),
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let est = CodexLogScanner.estimate(now: now, dbPath: url.path)
+
+        #expect(est.usdToday > 0)
+        #expect(est.modelBreakdownToday["gpt-5"] != nil)
+        #expect(est.modelBreakdownToday["gpt-7-unreleased"] == 0)
+        #expect(est.unpricedModelsToday == Set(["gpt-7-unreleased"]))
+        #expect(est.unpricedModelsLast7Days == Set(["gpt-7-unreleased"]))
+        expectTrue(est.note?.localizedCaseInsensitiveContains("price unavailable") ?? false)
+    }
+
     @Test("estimate gracefully fails when sqlite cannot open")
     func estimate_handles_bad_sqlite_file() throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())

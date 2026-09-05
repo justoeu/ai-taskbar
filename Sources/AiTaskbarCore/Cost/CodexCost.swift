@@ -9,7 +9,7 @@ import Foundation
 ///
 /// The two are deliberately **not** summed. When both have data for the same
 /// window they describe the same turns, so adding them would double-count;
-/// the sqlite path only runs when the session scan found nothing priceable.
+/// the sqlite path only runs when the session scan found no usage.
 /// Losing a stale legacy row is a smaller error than doubling a real bill.
 public enum CodexCost {
     public static func estimate(now: Date = .init(),
@@ -29,7 +29,9 @@ public enum CodexCost {
             return fromSessions
         }
         let fromLogs = CodexLogScanner.estimate(now: now, dbPath: dbPath)
-        if fromLogs.usdToday > 0 || fromLogs.usdLast7Days > 0 {
+        // A zero-dollar row can still represent real usage from a newly
+        // released model whose price is not in the table yet.
+        if fromLogs.hasDisplayData {
             return fromLogs
         }
         // Neither source has anything. Prefer the session scanner's note — it
