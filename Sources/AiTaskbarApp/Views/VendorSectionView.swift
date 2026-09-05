@@ -342,9 +342,9 @@ public struct VendorSectionView: View {
                     if authorized { vm.refresh(forceRefresh: true) }
                 case .failure(let error):
                     if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
-                       failure == .loginKeychainPasswordRejected {
+                       failure == .authorizationDenied {
                         keychainAuthError = L10n.localizedString(
-                            "keychain_auth_password_rejected")
+                            "keychain_auth_denied")
                     } else {
                         keychainAuthError = (error as? LocalizedError)?.errorDescription
                             ?? String(describing: error)

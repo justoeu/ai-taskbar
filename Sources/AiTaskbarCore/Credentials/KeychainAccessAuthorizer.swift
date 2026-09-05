@@ -54,11 +54,12 @@ public enum PartitionListCodec {
 /// Two ACL layers gate silent reads of a foreign generic password:
 /// 1. the trusted-application list on the decrypt ACL ("Always Allow"), and
 /// 2. the partition list — signing identities allowed to USE that ACL.
-/// The SecurityAgent "Always Allow" button only edits layer 1, which is why
-/// users kept being re-prompted forever. This authorizer edits BOTH layers,
-/// then commits via `SecKeychainItemSetAccess` — the commit is what makes the
-/// system show ONE native password dialog; after it, reads are silent for
-/// every future launch and update of this (stable Developer ID) identity.
+/// This authorizer edits the decrypt ACL and commits through the native
+/// SecurityAgent flow. securityd owns partition-list expansion when the user
+/// authorizes access. Directly editing that protected ACL with
+/// `SecKeychainItemSetAccess` fails: its prompt credentials are not the
+/// database passphrase credentials required to replace PARTITION_ID.
+/// Success is reported only after an exact-account silent read succeeds.
 ///
 /// Uses the legacy `SecKeychainItem*`/`SecACL*` APIs deliberately: they are
 /// deprecated but remain the ONLY route to classic file-keychain ACLs (the
@@ -72,19 +73,16 @@ public enum KeychainAccessAuthorizer {
         case canceled
     }
 
-    /// Failures that need a recovery path different from a generic Keychain
-    /// error. In particular, `errSecAuthFailed` from the user-initiated ACL
-    /// commit means SecurityAgent rejected the login-Keychain password. That
-    /// password can differ from the current macOS account password after a
-    /// password reset, so callers must not present the misleading raw system
-    /// text as an application bug.
+    /// An authentication denial is not proof of an incorrect password.
+    /// securityd also returns it for a prohibited ACL edit without showing
+    /// any password dialog. Never diagnose password mismatch from this code.
     public enum AuthorizationFailure: Error, Sendable, Equatable, LocalizedError {
-        case loginKeychainPasswordRejected
+        case authorizationDenied
 
         public var errorDescription: String? {
             switch self {
-            case .loginKeychainPasswordRejected:
-                return "The login Keychain rejected the authorization password. It may still use a previous Mac password."
+            case .authorizationDenied:
+                return "macOS could not authorize this app to access the Claude Code Keychain item (OSStatus -25293)."
             }
         }
     }
@@ -114,14 +112,20 @@ public enum KeychainAccessAuthorizer {
         }
     }
 
-    /// - Parameter probeRead: injection seam for tests. Production callers use
-    ///   the account-aware silent read so authorization is verified against
-    ///   the same item whose ACL was changed.
-    public static func authorize(service: String,
+    /// Production always uses the native commit and exact-account silent probe.
+    public static func authorize(service: String, account: String? = nil) throws -> Outcome {
+        try authorize(service: service, account: account,
+                      probeRead: { canReadSilently($0, account: $1) })
+    }
+
+    /// Internal seams let tests inspect ACLs and simulate commit outcomes
+    /// without allowing callers outside Core to replace native authorization.
+    internal static func authorize(service: String,
                                  account: String? = nil,
                                  teamID: String? = CodeSignatureInfo.currentTeamID(),
-                                 probeRead: (String, String?) -> Bool = {
-                                     KeychainAccessAuthorizer.canReadSilently($0, account: $1)
+                                 probeRead: (String, String?) -> Bool,
+                                 commitAccess: (SecKeychainItem, SecAccess) -> OSStatus = {
+                                     SecKeychainItemSetAccess($0, $1)
                                  }) throws -> Outcome {
         // 1. Enumerate refs + attributes without requesting secret data.
         // Claude Code migrations can leave an expired, account-less legacy
@@ -158,8 +162,6 @@ public enum KeychainAccessAuthorizer {
         // can prompt and used to accumulate duplicates.
         if probeRead(service, target.account) { return .authorized }
 
-        let myPartition = "teamid:\(teamID)"
-
         var accessRef: SecAccess?
         let copyStatus = KeychainPromptSuppressor.withPromptsSuppressed {
             SecKeychainItemCopyAccess(target.item, &accessRef)
@@ -168,18 +170,21 @@ public enum KeychainAccessAuthorizer {
         guard let access = accessRef else {
             throw AppError.credentials("Keychain item has no access object")
         }
-        let partitionChanged = try extendPartitionList(of: access, with: myPartition)
-        let trustedAppChanged = try addSelfToDecryptACL(of: access)
-        guard partitionChanged || trustedAppChanged else {
+        // Preserve PARTITION_ID byte-for-byte. SecurityServerAcl::changeAcl
+        // forbids client edits with prompt credentials, even after the user
+        // approves. Native authorization can extend it in securityd instead.
+        // Re-submit an existing decrypt entry when reads are blocked: merely
+        // finding our trusted-app entry does not prove partition access.
+        guard try addSelfToDecryptACL(of: access, revalidate: true) else {
             throw AppError.credentials(
-                "Keychain ACL already contains this app and \(myPartition), but the item is still unreadable. Unlock the login keychain and try again.")
+                "Keychain item has no supported decrypt ACL. Review its access controls in Keychain Access.")
         }
 
         // Only this commit is interactive. The operation gate prevents any
         // scheduled prompt-suppressed read from disabling interaction while
         // SecurityAgent owns the password dialog.
         let commit = KeychainPromptSuppressor.withPromptsAllowed {
-            SecKeychainItemSetAccess(target.item, access)
+            commitAccess(target.item, access)
         }
         if commit == errSecUserCanceled { return .canceled }
         if let failure = authorizationFailure(forCommitStatus: commit) {
@@ -197,13 +202,12 @@ public enum KeychainAccessAuthorizer {
     }
 
     /// Pure classification seam for the interactive ACL commit. Keeping this
-    /// separate from `check` prevents scheduled `errSecAuthFailed` results
-    /// (which mean prompt suppression/ACL blocking) from being mislabeled as
-    /// a password rejection.
+    /// separate from `check` preserves the existing scheduled-read ACL error
+    /// classification without attributing an unproven cause to the denial.
     internal static func authorizationFailure(
         forCommitStatus status: OSStatus
     ) -> AuthorizationFailure? {
-        status == errSecAuthFailed ? .loginKeychainPasswordRejected : nil
+        status == errSecAuthFailed ? .authorizationDenied : nil
     }
 
     // MARK: - ACL surgery
@@ -235,7 +239,8 @@ public enum KeychainAccessAuthorizer {
     }
 
     @discardableResult
-    internal static func addSelfToDecryptACL(of access: SecAccess) throws -> Bool {
+    internal static func addSelfToDecryptACL(of access: SecAccess,
+                                             revalidate: Bool = false) throws -> Bool {
         guard let acl = findACL(in: access, authorization: "ACLAuthorizationDecrypt") else {
             return false
         }
@@ -248,9 +253,13 @@ public enum KeychainAccessAuthorizer {
         guard let me = selfRef else {
             throw AppError.credentials("cannot build trusted-application ref for this app")
         }
-        // nil app list = "all applications allowed"; adding ourselves to it
-        // would RESTRICT access, so leave it untouched.
-        guard let apps = appsRef as? [SecTrustedApplication] else { return false }
+        // nil app list = "all applications allowed"; never restrict it.
+        guard let apps = appsRef as? [SecTrustedApplication] else {
+            if revalidate {
+                try check(SecACLSetContents(acl, appsRef, descRef ?? ("" as CFString), prompt), "revalidate decrypt ACL")
+            }
+            return revalidate
+        }
         var meDataRef: CFData?
         try check(SecTrustedApplicationCopyData(me, &meDataRef), "read self trusted-app data")
         if let meData = meDataRef as Data?, apps.contains(where: { app in
@@ -258,7 +267,10 @@ public enum KeychainAccessAuthorizer {
             return SecTrustedApplicationCopyData(app, &dataRef) == errSecSuccess
                 && (dataRef as Data?) == meData
         }) {
-            return false
+            if revalidate {
+                try check(SecACLSetContents(acl, appsRef, descRef ?? ("" as CFString), prompt), "revalidate decrypt ACL")
+            }
+            return revalidate
         }
         let updated = apps + [me]
         try check(SecACLSetContents(acl, updated as CFArray,

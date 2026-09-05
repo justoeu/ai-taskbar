@@ -40,7 +40,7 @@
 "keychain_auth_hint" = "Allow this signed app to read the Claude Code credential on future launches. macOS may ask for the Keychain password once; the app never receives or stores it.";
 "keychain_auth_pending" = "Waiting for macOS authorization…";
 "keychain_auth_button" = "Authorize";
-"keychain_auth_password_rejected" = "The login Keychain rejected that password. It may still use your previous Mac password. Try that password or update the login Keychain in Keychain Access, then authorize again.";
+"keychain_auth_denied" = "macOS could not authorize access to the Claude Code credential (error -25293). Check this item's permissions in Keychain Access. This error alone does not indicate an incorrect password.";
 "token_expired_relogin_hint" = "Opens a browser to sign in — we'll re-check automatically.";
 "relogin" = "Re-login";
 "relogin_started" = "Browser opened — complete sign-in.";

@@ -39,7 +39,7 @@
 "keychain_auth_hint" = "Autorize este app assinado a ler a credencial do Claude Code nas próximas execuções. O macOS pode pedir uma vez a senha do Keychain; o app nunca a recebe nem armazena.";
 "keychain_auth_pending" = "Aguardando a autorização do macOS…";
 "keychain_auth_button" = "Autorizar";
-"keychain_auth_password_rejected" = "O Keychain ‘login’ recusou essa senha. Ele pode ainda usar a senha anterior do Mac. Tente essa senha ou atualize o Keychain no Acesso às Chaves e autorize novamente.";
+"keychain_auth_denied" = "O macOS não conseguiu autorizar o acesso à credencial do Claude Code (erro -25293). Confira as permissões desse item no Acesso às Chaves. Esse erro, sozinho, não indica senha incorreta.";
 "token_expired_relogin_hint" = "Abre o navegador para entrar — vamos verificar automaticamente.";
 "relogin" = "Re-login";
 "relogin_started" = "Navegador aberto — complete o login.";

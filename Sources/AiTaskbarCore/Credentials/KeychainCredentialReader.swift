@@ -137,8 +137,9 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         }
     }
 
-    /// Extends the Claude Code item's trusted-app ACL and partition list for
-    /// this signed binary. The only password prompt is the user-initiated
+    /// Updates the Claude Code item's decrypt ACL for this signed binary;
+    /// securityd handles partition expansion through native authorization.
+    /// The only interactive operation is the user-initiated
     /// `SecKeychainItemSetAccess` commit inside `KeychainAccessAuthorizer`;
     /// the app never receives or stores that password.
     public func authorizePersistently() throws -> KeychainAccessAuthorizer.Outcome {

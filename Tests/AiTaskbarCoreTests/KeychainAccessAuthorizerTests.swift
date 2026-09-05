@@ -98,6 +98,119 @@ struct KeychainAccessAuthorizerTests {
         try KeychainAccessAuthorizer.addSelfToDecryptACL(of: access)
     }
 
+    @Test("authorization commits only the decrypt ACL, leaving partition changes to securityd")
+    func native_authorization_preserves_partition_payload() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        var probes = 0
+        var commits = 0
+        let outcome = try KeychainAccessAuthorizer.authorize(
+            service: Self.service, teamID: "MUSTNOTBEWRITTEN",
+            probeRead: { _, _ in
+                probes += 1
+                return probes > 1
+            },
+            commitAccess: { _, access in
+                commits += 1
+                let acl = KeychainAccessAuthorizer.findACL(
+                    in: access, authorization: "ACLAuthorizationPartitionID")
+                if let acl {
+                    var applications: CFArray?
+                    var description: CFString?
+                    var prompt = SecKeychainPromptSelector()
+                    #expect(SecACLCopyContents(acl, &applications, &description, &prompt) == errSecSuccess)
+                    let partitions = PartitionListCodec.decode(
+                        hexDescription: (description as String?) ?? "") ?? []
+                    expectFalse(partitions.contains("teamid:MUSTNOTBEWRITTEN"))
+                } else {
+                    Issue.record("Temporary item should have a partition ACL")
+                }
+                return errSecSuccess
+            })
+        #expect(outcome == .authorized)
+        #expect(commits == 1)
+        #expect(probes == 2)
+    }
+
+    @Test("direct partition edits are rejected even for an unlocked owned item")
+    func partition_edit_requires_password_credentials() throws {
+        let (item, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        var accessRef: SecAccess?
+        try #require(SecKeychainItemCopyAccess(item, &accessRef) == errSecSuccess)
+        let access = try #require(accessRef)
+        try KeychainAccessAuthorizer.extendPartitionList(of: access, with: "teamid:TESTONLY")
+        let status = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecKeychainItemSetAccess(item, access)
+        }
+        #expect(status == errSecAuthFailed)
+    }
+
+    @Test("revalidating an owned decrypt ACL commits without modifying partitions")
+    func decrypt_only_commit_succeeds() throws {
+        let (item, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        var accessRef: SecAccess?
+        try #require(SecKeychainItemCopyAccess(item, &accessRef) == errSecSuccess)
+        let access = try #require(accessRef)
+        let prepared = try KeychainAccessAuthorizer.addSelfToDecryptACL(of: access, revalidate: true)
+        #expect(prepared)
+        let status = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecKeychainItemSetAccess(item, access)
+        }
+        #expect(status == errSecSuccess)
+        #expect(KeychainAccessAuthorizer.canReadSilently(Self.service, account: "tester"))
+    }
+
+    @Test("revalidation preserves an existing unrestricted decrypt ACL")
+    func revalidation_preserves_nil_app_list() throws {
+        let (item, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        var accessRef: SecAccess?
+        try #require(SecKeychainItemCopyAccess(item, &accessRef) == errSecSuccess)
+        let access = try #require(accessRef)
+        let acl = try #require(KeychainAccessAuthorizer.findACL(
+            in: access, authorization: "ACLAuthorizationDecrypt"))
+        var apps: CFArray?
+        var description: CFString?
+        var prompt = SecKeychainPromptSelector()
+        try #require(SecACLCopyContents(acl, &apps, &description, &prompt) == errSecSuccess)
+        let originalPrompt = prompt
+        // In-memory fixture only: never write an unrestricted ACL to Keychain.
+        try #require(SecACLSetContents(acl, nil, "Preserved label" as CFString, prompt) == errSecSuccess)
+        let prepared = try KeychainAccessAuthorizer.addSelfToDecryptACL(of: access, revalidate: true)
+        #expect(prepared)
+        try #require(SecACLCopyContents(acl, &apps, &description, &prompt) == errSecSuccess)
+        expectTrue(apps == nil)
+        expectTrue((description as String?) == "Preserved label")
+        #expect(prompt == originalPrompt)
+    }
+
+    @Test("native authorization cannot report success after cancel, denial or failed verification",
+          arguments: [errSecUserCanceled, errSecAuthFailed, errSecParam, errSecSuccess])
+    func failed_commit_or_probe_never_authorizes(status: OSStatus) throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        var commits = 0
+        do {
+            let outcome = try KeychainAccessAuthorizer.authorize(
+                service: Self.service, teamID: "TESTTEAM",
+                probeRead: { _, _ in false },
+                commitAccess: { _, _ in
+                    commits += 1
+                    return status
+                })
+            #expect(status == errSecUserCanceled)
+            #expect(outcome == .canceled)
+        } catch let error as KeychainAccessAuthorizer.AuthorizationFailure {
+            #expect(status == errSecAuthFailed)
+            #expect(error == .authorizationDenied)
+        } catch is AppError {
+            expectTrue(status == errSecParam || status == errSecSuccess)
+        }
+        #expect(commits == 1)
+    }
+
     @Test("unknown authorization tag finds no ACL")
     func unknown_tag() throws {
         let (item, cleanup) = try makeTempItem()
@@ -256,13 +369,13 @@ struct KeychainAccessAuthorizerTests {
         }
     }
 
-    @Test("interactive ACL commit classifies a rejected login Keychain password")
-    func commit_password_rejection_is_typed() throws {
+    @Test("interactive ACL denial does not diagnose an incorrect password")
+    func commit_denial_is_typed() throws {
         let failure = try #require(
             KeychainAccessAuthorizer.authorizationFailure(forCommitStatus: errSecAuthFailed)
         )
 
-        #expect(failure == .loginKeychainPasswordRejected)
+        #expect(failure == .authorizationDenied)
         expectTrue(
             KeychainAccessAuthorizer.authorizationFailure(forCommitStatus: errSecSuccess) == nil
         )
