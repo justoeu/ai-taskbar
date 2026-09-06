@@ -257,3 +257,5 @@
 "service_status_timeline_ax_fmt" = "Linha do tempo de seis horas: %@";
 "service_status_legend" = "Verde operacional · Roxo manutenção · Laranja degradado · Vermelho interrupção · Cinza desconhecido";
 "service_status_scope_note" = "O status oficial agregado pode variar por conta, produto ou região.";
+
+"keychain_auth_not_persistent" = "O macOS permitiu o acesso, mas a verificação silenciosa falhou. Tente novamente e escolha Sempre Permitir, se oferecido. Políticas de um Keychain gerenciado podem impedir a permissão persistente.";

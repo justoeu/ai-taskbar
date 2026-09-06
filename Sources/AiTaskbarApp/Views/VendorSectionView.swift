@@ -345,6 +345,9 @@ public struct VendorSectionView: View {
                        failure == .authorizationDenied {
                         keychainAuthError = L10n.localizedString(
                             "keychain_auth_denied")
+                    } else if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
+                              failure == .permissionNotPersistent {
+                        keychainAuthError = L10n.localizedString("keychain_auth_not_persistent")
                     } else {
                         keychainAuthError = (error as? LocalizedError)?.errorDescription
                             ?? String(describing: error)

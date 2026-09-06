@@ -6,24 +6,152 @@ import os
 
 @Suite("KeychainCredentialReader — non-syscall surface", .serialized)
 struct KeychainCredentialReaderTests {
+    private let keychain: TemporaryKeychain
+    init() throws { keychain = try TemporaryKeychain() }
+    private func readerForTest(service: String = "Claude Code-credentials",
+                               preferredAccount: String? = nil) -> KeychainCredentialReader {
+        KeychainCredentialReader(service: service, preferredAccount: preferredAccount,
+                                  searchList: [keychain.reference])
+    }
+
     @Test("default service + preferredAccount nil")
     func init_defaults() {
-        let reader = KeychainCredentialReader()
+        let reader = readerForTest()
         #expect(reader.service == "Claude Code-credentials")
         #expect(reader.preferredAccount == nil)
     }
 
+    @Test("binding another item drops pending tokens and scopes writes to that item")
+    func binding_cannot_transfer_pending_tokens() throws {
+        let service = "ai-taskbar-bind-\(UUID().uuidString)"
+        for account in ["A", "B"] {
+            let payload = #"{"claudeAiOauth":{"accessToken":"\#(account)","refreshToken":"r","expiresAt":2000000000000}}"#
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecUseKeychain as String: keychain.reference,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+                kSecValueData as String: Data(payload.utf8),
+            ]
+            #expect(SecItemAdd(query as CFDictionary, nil) == errSecSuccess)
+        }
+        let reader = readerForTest(service: service, preferredAccount: "A")
+        #expect(try reader.read().accessToken == "A")
+        reader.seedPendingUpdateForTesting(.init(accessToken: "pending-A", refreshToken: "r", expiresAtMs: 2_100_000_000_000))
+        let identityB = try KeychainAccessAuthorizer.resolveIdentity(
+            service: service, account: "B", searchList: [keychain.reference])
+        reader.bindTarget(identityB)
+        expectTrue(reader.testingPendingUpdate == nil)
+        #expect(try reader.read().accessToken == "B")
+        try reader.writeBack(.init(accessToken: "updated-B", refreshToken: "r", expiresAtMs: 2_100_000_000_000))
+        #expect(try readerForTest(service: service, preferredAccount: "A").read().accessToken == "A")
+        #expect(try readerForTest(service: service, preferredAccount: "B").read().accessToken == "updated-B")
+    }
+
     @Test("custom service + preferredAccount stick")
     func init_custom() {
-        let reader = KeychainCredentialReader(service: "Other",
+        let reader = readerForTest(service: "Other",
                                               preferredAccount: "work")
         #expect(reader.service == "Other")
         #expect(reader.preferredAccount == "work")
     }
 
+    @Test("normal silent multi-account reads still choose the freshest credential")
+    func multi_account_reader_preserves_freshest_wins() throws {
+        let service = "ai-taskbar-multiple-\(UUID().uuidString)"
+        for (account, expiry) in [("alpha", 2_000_000_000_000 as Int64), ("beta", 2_100_000_000_000)] {
+            let payload = #"{"claudeAiOauth":{"accessToken":"\#(account)","refreshToken":"r","expiresAt":\#(expiry)}}"#
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword, kSecUseKeychain as String: keychain.reference,
+                kSecAttrService as String: service, kSecAttrAccount as String: account,
+                kSecValueData as String: Data(payload.utf8)
+            ]
+            try #require(SecItemAdd(query as CFDictionary, nil) == errSecSuccess)
+        }
+        #expect(try readerForTest(service: service).read().accessToken == "beta")
+    }
+
+    @Test("a failed write to a deleted item invalidates every cached credential")
+    func deleted_item_write_drops_cached_credentials() throws {
+        let service = "ai-taskbar-deleted-\(UUID().uuidString)"
+        let account = "same-account"
+        var add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecUseKeychain as String: keychain.reference,
+            kSecAttrService as String: service, kSecAttrAccount as String: account,
+            kSecValueData as String: Data(#"{"claudeAiOauth":{"accessToken":"old","refreshToken":"r","expiresAt":2000000000000}}"#.utf8)
+        ]
+        try #require(SecItemAdd(add as CFDictionary, nil) == errSecSuccess)
+        let reader = readerForTest(service: service, preferredAccount: account)
+        _ = try reader.read()
+        let pending = AnthropicCredentials(accessToken: "pending", refreshToken: "r", expiresAtMs: 2_100_000_000_000)
+        reader.seedPendingUpdateForTesting(pending)
+        let delete: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecMatchSearchList as String: [keychain.reference],
+            kSecAttrService as String: service, kSecAttrAccount as String: account
+        ]
+        try #require(SecItemDelete(delete as CFDictionary) == errSecSuccess)
+        #expect(throws: AppError.self) { try reader.writeBack(pending) }
+        expectTrue(reader.testingLastKnownGood == nil)
+        expectTrue(reader.testingPendingUpdate == nil)
+        add[kSecValueData as String] = Data(#"{"claudeAiOauth":{"accessToken":"replacement","refreshToken":"r","expiresAt":2000000000000}}"#.utf8)
+        try #require(SecItemAdd(add as CFDictionary, nil) == errSecSuccess)
+        #expect(try reader.read().accessToken == "replacement")
+    }
+
+    @Test("renaming an item cannot transfer a pending token to another account")
+    func renamed_item_rejects_old_write() throws {
+        let service = "ai-taskbar-rename-\(UUID().uuidString)"
+        let add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecUseKeychain as String: keychain.reference,
+            kSecAttrService as String: service, kSecAttrAccount as String: "A",
+            kSecValueData as String: Data(#"{"claudeAiOauth":{"accessToken":"A","refreshToken":"r","expiresAt":2000000000000}}"#.utf8)
+        ]
+        try #require(SecItemAdd(add as CFDictionary, nil) == errSecSuccess)
+        let reader = readerForTest(service: service, preferredAccount: "A")
+        _ = try reader.read()
+        let identity = try KeychainAccessAuthorizer.resolveIdentity(service: service, account: "A", searchList: [keychain.reference])
+        let pending = AnthropicCredentials(accessToken: "pending-A", refreshToken: "r", expiresAtMs: 2_100_000_000_000)
+        reader.seedPendingUpdateForTesting(pending)
+        let exact: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecMatchSearchList as String: [keychain.reference],
+            kSecMatchItemList as String: [identity.persistentRef]
+        ]
+        try #require(SecItemUpdate(exact as CFDictionary, [kSecAttrAccount as String: "B"] as CFDictionary) == errSecSuccess)
+        #expect(throws: AppError.self) { try reader.writeBack(pending) }
+        expectTrue(reader.testingPendingUpdate == nil)
+        expectTrue(reader.testingLastKnownGood == nil)
+        #expect(try readerForTest(service: service, preferredAccount: "B").read().accessToken == "A")
+    }
+
+    @Test("a legacy item with no account supports silent read and exact write")
+    func legacy_without_account() throws {
+        let service = "ai-taskbar-legacy-\(UUID().uuidString)"
+        let add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecUseKeychain as String: keychain.reference,
+            kSecAttrService as String: service,
+            kSecValueData as String: Data(#"{"claudeAiOauth":{"accessToken":"legacy","refreshToken":"r","expiresAt":2000000000000}}"#.utf8)
+        ]
+        try #require(SecItemAdd(add as CFDictionary, nil) == errSecSuccess)
+        let reader = readerForTest(service: service)
+        #expect(try reader.read().accessToken == "legacy")
+        try reader.writeBack(.init(accessToken: "updated", refreshToken: "r", expiresAtMs: 2_100_000_000_000))
+        reader.invalidateCachedCredentials()
+        #expect(try reader.read().accessToken == "updated")
+        let authorized = try KeychainAccessAuthorizer.authorize(service: service, searchList: [keychain.reference],
+            teamID: "test-team", readItem: { query in
+                let values = query as NSDictionary
+                guard values[kSecUseAuthenticationUI] as? String == kSecUseAuthenticationUIFail as String else {
+                    return errSecParam // A failing test must never present real SecurityAgent UI.
+                }
+                var result: CFTypeRef?
+                return SecItemCopyMatching(query, &result)
+            })
+        #expect(authorized == .authorized)
+    }
+
     @Test("select picks the preferredAccount when present")
     func select_picks_preferred() {
-        let reader = KeychainCredentialReader(service: "s",
+        let reader = readerForTest(service: "s",
                                               preferredAccount: "work@x.com")
         let items = [
             KeychainCredentialReader.KeychainItem(account: "personal@x.com", data: Data("p".utf8)),
@@ -36,7 +164,7 @@ struct KeychainCredentialReaderTests {
 
     @Test("select returns the only item when count == 1")
     func select_returns_only_item() {
-        let reader = KeychainCredentialReader(service: "s",
+        let reader = readerForTest(service: "s",
                                               preferredAccount: nil)
         let items = [
             KeychainCredentialReader.KeychainItem(account: "only", data: Data("d".utf8)),
@@ -47,7 +175,7 @@ struct KeychainCredentialReaderTests {
 
     @Test("select falls back to lex-smallest when preferred missing")
     func select_falls_back_to_lex_smallest() {
-        let reader = KeychainCredentialReader(service: "s",
+        let reader = readerForTest(service: "s",
                                               preferredAccount: "nonexistent")
         let items = [
             KeychainCredentialReader.KeychainItem(account: "zeta", data: Data("z".utf8)),
@@ -60,7 +188,7 @@ struct KeychainCredentialReaderTests {
 
     @Test("select prefers the freshest token over a stale orphan")
     func select_prefers_freshest_token() {
-        let reader = KeychainCredentialReader(service: "s", preferredAccount: nil)
+        let reader = readerForTest(service: "s", preferredAccount: nil)
         func blob(_ exp: Int64) -> Data {
             Data(#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","expiresAt":\#(exp)}}"#.utf8)
         }
@@ -76,7 +204,7 @@ struct KeychainCredentialReaderTests {
 
     @Test("select breaks ties lexicographically when expiries match")
     func select_ties_break_lexicographically() {
-        let reader = KeychainCredentialReader(service: "s", preferredAccount: nil)
+        let reader = readerForTest(service: "s", preferredAccount: nil)
         func blob(_ exp: Int64) -> Data {
             Data(#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","expiresAt":\#(exp)}}"#.utf8)
         }
@@ -90,7 +218,7 @@ struct KeychainCredentialReaderTests {
 
     @Test("select still honors preferredAccount over a fresher entry")
     func select_preferred_beats_freshness() {
-        let reader = KeychainCredentialReader(service: "s", preferredAccount: "pinned")
+        let reader = readerForTest(service: "s", preferredAccount: "pinned")
         func blob(_ exp: Int64) -> Data {
             Data(#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","expiresAt":\#(exp)}}"#.utf8)
         }
@@ -110,7 +238,7 @@ struct KeychainCredentialReaderTests {
         #expect(err.isKeychainACLBlocked)
         if case .credentials(let msg) = err {
             #expect(msg.contains("errSecInteractionNotAllowed"))
-            #expect(msg.contains("set-generic-password-partition-list"))
+            #expect(!msg.contains("set-generic-password-partition-list"))
             #expect(msg.contains("Authorize") || msg.contains("partition"))
         } else {
             Issue.record("expected .credentials")
@@ -125,7 +253,7 @@ struct KeychainCredentialReaderTests {
         #expect(err.isKeychainACLBlocked)
         if case .credentials(let msg) = err {
             #expect(msg.contains("errSecAuthFailed"))
-            #expect(msg.contains("set-generic-password-partition-list"))
+            #expect(!msg.contains("set-generic-password-partition-list"))
         } else {
             Issue.record("expected .credentials")
         }
@@ -164,30 +292,27 @@ struct KeychainCredentialReaderTests {
         }
         """#
 
-        // Seed the Keychain. Skip the test if SecItemAdd fails (some CI
-        // environments don't allow GenericPassword writes).
+        // The isolated temporary Keychain must support writes; never silently skip.
         let addQuery: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecUseKeychain as String: keychain.reference,
             kSecValueData as String:   Data(payload.utf8),
         ]
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            // CI runner probably can't write to login keychain. Not a real
-            // failure of the code under test.
-            return
-        }
+        try #require(addStatus == errSecSuccess)
         defer {
             let delQuery: [String: Any] = [
                 kSecClass as String:       kSecClassGenericPassword,
-                kSecAttrService as String: service,
+                kSecMatchSearchList as String: [keychain.reference],
+            kSecAttrService as String: service,
                 kSecAttrAccount as String: account,
             ]
             _ = SecItemDelete(delQuery as CFDictionary)
         }
 
-        let reader = KeychainCredentialReader(service: service)
+        let reader = readerForTest(service: service)
         let creds = try reader.read()
         #expect(creds.accessToken == "seeded-access")
         #expect(creds.refreshToken == "seeded-refresh")
@@ -203,21 +328,21 @@ struct KeychainCredentialReaderTests {
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecUseKeychain as String: keychain.reference,
             kSecValueData as String:   Data(payload.utf8),
         ]
-        guard SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess else {
-            return
-        }
+        try #require(SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess)
         let deleteQuery: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
+            kSecMatchSearchList as String: [keychain.reference],
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
         defer { _ = SecItemDelete(deleteQuery as CFDictionary) }
 
-        let reader = KeychainCredentialReader(service: service,
+        let reader = readerForTest(service: service,
                                               preferredAccount: account)
-        let interactive = try reader.readInteractively()
+        let interactive = try reader.read()
         #expect(interactive.accessToken == "interactive-access")
 
         var authorizedAccount: String?
@@ -238,7 +363,7 @@ struct KeychainCredentialReaderTests {
 
     @Test("canceling persistent authorization leaves the Keychain untouched")
     func persistent_authorization_cancel() throws {
-        let reader = KeychainCredentialReader(
+        let reader = readerForTest(
             service: "ai-taskbar-canceled-\(UUID().uuidString)")
 
         let outcome = try reader.authorizePersistently(using: { _, _ in .canceled })
@@ -255,10 +380,12 @@ struct KeychainCredentialReaderTests {
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecUseKeychain as String: keychain.reference,
             kSecValueData as String:   Data(oldPayload.utf8),
         ]
         let deleteQuery: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
+            kSecMatchSearchList as String: [keychain.reference],
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
@@ -266,8 +393,8 @@ struct KeychainCredentialReaderTests {
         defer { _ = SecItemDelete(deleteQuery as CFDictionary) }
         try #require(SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess)
 
-        let reader = KeychainCredentialReader(service: service, preferredAccount: account)
-        _ = try reader.readInteractively()
+        let reader = readerForTest(service: service, preferredAccount: account)
+        _ = try reader.read()
         let newer = AnthropicCredentials(
             accessToken: "new-access",
             refreshToken: "new-refresh",
@@ -318,23 +445,23 @@ struct KeychainCredentialReaderTests {
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecUseKeychain as String: keychain.reference,
             kSecValueData as String:   Data(initialPayload.utf8),
         ]
-        guard SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess else {
-            return  // skip on CI without keychain perms
-        }
+        try #require(SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess)
         defer {
             let delQuery: [String: Any] = [
                 kSecClass as String:       kSecClassGenericPassword,
-                kSecAttrService as String: service,
+                kSecMatchSearchList as String: [keychain.reference],
+            kSecAttrService as String: service,
                 kSecAttrAccount as String: account,
             ]
             _ = SecItemDelete(delQuery as CFDictionary)
         }
 
-        let reader = KeychainCredentialReader(service: service,
+        let reader = readerForTest(service: service,
                                               preferredAccount: account)
-        _ = try? reader.read()   // primes _resolvedAccount
+        _ = try reader.read()   // binds the exact persistent reference
         let updated = AnthropicCredentials(
             accessToken: "new", refreshToken: "new-r",
             expiresAtMs: 2_000_000_000_000)
@@ -347,7 +474,7 @@ struct KeychainCredentialReaderTests {
     @Test("read on empty Keychain throws AppError.credentials")
     func read_throws_when_keychain_empty() {
         // Service that surely doesn't exist on any test machine.
-        let reader = KeychainCredentialReader(
+        let reader = readerForTest(
             service: "ai-taskbar-unit-test-no-such-service-\(UUID().uuidString)")
         do {
             _ = try reader.read()

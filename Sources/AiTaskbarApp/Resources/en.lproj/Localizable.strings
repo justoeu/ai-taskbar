@@ -258,3 +258,5 @@
 "service_status_timeline_ax_fmt" = "Six-hour timeline: %@";
 "service_status_legend" = "Green operational · Purple maintenance · Orange degraded · Red outage · Gray unknown";
 "service_status_scope_note" = "Official aggregate status may differ by account, product, or region.";
+
+"keychain_auth_not_persistent" = "macOS allowed access, but silent verification failed. Try again and choose Always Allow if offered. Managed Keychain policies may prevent persistent access.";

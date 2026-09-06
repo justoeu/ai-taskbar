@@ -257,3 +257,5 @@
 "service_status_timeline_ax_fmt" = "Cronología de seis horas: %@";
 "service_status_legend" = "Verde operativo · Morado mantenimiento · Naranja degradado · Rojo interrupción · Gris desconocido";
 "service_status_scope_note" = "El estado oficial agregado puede variar por cuenta, producto o región.";
+
+"keychain_auth_not_persistent" = "macOS permitió el acceso, pero falló la verificación silenciosa. Inténtalo de nuevo y elige Permitir siempre, si aparece. Las políticas de un llavero administrado pueden impedir el permiso persistente.";

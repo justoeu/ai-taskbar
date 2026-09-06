@@ -10,7 +10,7 @@ struct KeychainAuthorizationLocalizationTests {
         for _ in 0..<3 { repositoryRoot.deleteLastPathComponent() }
         let resources = repositoryRoot
             .appendingPathComponent("Sources/AiTaskbarApp/Resources")
-        let keys = ["keychain_auth_denied"]
+        let keys = ["keychain_auth_denied", "keychain_auth_not_persistent"]
 
         for language in ["en", "pt-BR", "es"] {
             let file = resources

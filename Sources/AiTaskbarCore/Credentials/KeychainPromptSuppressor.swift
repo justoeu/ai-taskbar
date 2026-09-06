@@ -19,7 +19,7 @@ import os
 /// write-backs) runs inside `withPromptsSuppressed`. The flag is per-process
 /// global, hence the reference count: overlapping suppressed sections keep
 /// it off until the outermost one exits. The only interactive Keychain call
-/// in the app — `KeychainAccessAuthorizer.authorize`'s commit — deliberately
+/// in the app — `KeychainAccessAuthorizer.authorize`'s exact-item read — deliberately
 /// runs OUTSIDE this guard because its single password dialog is the
 /// user-initiated point of the flow.
 ///
@@ -29,7 +29,7 @@ import os
 /// classic file-keychain prompts.
 public enum KeychainPromptSuppressor {
     /// Serializes silent Keychain operations against the one user-initiated
-    /// interactive commit. Without this gate, a scheduled read could disable
+    /// interactive read. Without this gate, a scheduled read could disable
     /// the process-global interaction flag while SecurityAgent is presenting
     /// the authorization dialog.
     // Recursive because the legacy explicit-read path performs a silent
