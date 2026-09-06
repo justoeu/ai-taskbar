@@ -94,8 +94,17 @@ enum OpenAIResetProtocol {
     }
 
     static func accountID(_ auth: CodexAuth) throws -> String {
-        let account = auth.accountId
-            ?? JWT.claim(auth.tokens.idToken, key: "https://api.openai.com/auth.chatgpt_account_id", as: String.self)
+        var account = auth.accountId
+        if account == nil, case .object(let payload) = JWT.decodePayload(auth.tokens.idToken) {
+            // The namespace is a literal key containing a nested claims object,
+            // not a dotted path. Require strings rather than JWT.claim's scalar coercion.
+            if case .object(let claims) = payload["https://api.openai.com/auth"] {
+                account = claims["chatgpt_account_id"]?.stringValue
+            }
+            if account == nil {
+                account = payload["https://api.openai.com/auth.chatgpt_account_id"]?.stringValue
+            }
+        }
         guard let account, !account.isEmpty, !auth.tokens.accessToken.isEmpty else {
             throw OpenAIResetError.authorization
         }

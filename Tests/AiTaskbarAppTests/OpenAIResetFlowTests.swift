@@ -43,6 +43,75 @@ struct OpenAIResetFlowTests {
         expectTrue(login["idToken"] == nil)
     }
 
+    @Test("native CLI auth file reaches read-only reset preparation without a new login")
+    func native_file_prepare() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Paths.ensureDir(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("auth.json")
+        let data = Data(#"{"tokens":{"access_token":"access-only","refresh_token":"NEVER-SEND","id_token":"id","account_id":"account-A"}}"#.utf8)
+        try AtomicFileWrite.write(data, to: file, permissions: 0o600)
+        let rpc = ResetRPCStub([[:], [:], limits])
+        let offer = try OpenAIResetProtocol.prepare(auth: FileCredentialReader(path: file).read(), rpc: rpc)
+        #expect(offer.accountID == "account-A")
+        #expect(offer.availableCount == 2)
+        #expect(rpc.calls.map(\.0) == ["initialize", "initialized", "account/login/start", "account/rateLimits/read"])
+        expectTrue(rpc.calls[2].1 == ["type": .string("chatgptAuthTokens"),
+                                    "accessToken": .string("access-only"),
+                                    "chatgptAccountId": .string("account-A")])
+        #expect(try Data(contentsOf: file) == data)
+    }
+
+    private func tokenAuth(_ payload: String, account: String? = nil) -> CodexAuth {
+        let encoded = Data(payload.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return CodexAuth(tokens: .init(accessToken: "access-only", refreshToken: "NEVER-SEND",
+                                      idToken: "e30.\(encoded).signature"), accountId: account)
+    }
+
+    @Test("nested JWT account claim and legacy literal claim both support preparation")
+    func jwt_account_fallback() throws {
+        for payload in [
+            #"{"https://api.openai.com/auth":{"chatgpt_account_id":"account-A"}}"#,
+            #"{"https://api.openai.com/auth.chatgpt_account_id":"account-A"}"#
+        ] {
+            let rpc = ResetRPCStub([[:], [:], limits])
+            #expect(try OpenAIResetProtocol.prepare(auth: tokenAuth(payload), rpc: rpc).accountID == "account-A")
+        }
+    }
+
+    @Test("explicit account beats JWT fallback and nested JWT beats legacy literal")
+    func account_source_precedence() throws {
+        let payload = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"account-A"},"https://api.openai.com/auth.chatgpt_account_id":"old-account"}"#
+        #expect(try OpenAIResetProtocol.accountID(tokenAuth(payload)) == "account-A")
+        #expect(try OpenAIResetProtocol.accountID(tokenAuth(payload, account: "selected-account")) == "selected-account")
+    }
+
+    @Test("missing or malformed JWT account fails before any RPC")
+    func invalid_account_claims() {
+        for payload in ["{}", #"{"https://api.openai.com/auth":{"chatgpt_account_id":42}}"#,
+                        #"{"https://api.openai.com/auth":{"chatgpt_account_id":""}}"#,
+                        #"{"https://api.openai.com/auth.chatgpt_account_id":42}"#] {
+            let rpc = ResetRPCStub([])
+            #expect(throws: OpenAIResetError.authorization) {
+                try OpenAIResetProtocol.prepare(auth: tokenAuth(payload), rpc: rpc)
+            }
+            #expect(rpc.calls.count == 0)
+        }
+    }
+
+    @Test("explicitly empty selected account cannot fall back to a different identity")
+    func empty_selected_account_fails_closed() {
+        let rpc = ResetRPCStub([])
+        let payload = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"account-A"}}"#
+        #expect(throws: OpenAIResetError.authorization) {
+            try OpenAIResetProtocol.prepare(auth: tokenAuth(payload, account: ""), rpc: rpc)
+        }
+        #expect(rpc.calls.count == 0)
+    }
+
     @Test("consumption reuses the supplied attempt key and refreshes limits")
     func consume_and_refresh() throws {
         let offer = OpenAIResetOffer(accountID: "account-A", accountLabel: "A", availableCount: 2)

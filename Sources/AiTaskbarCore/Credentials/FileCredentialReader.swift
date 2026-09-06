@@ -56,14 +56,18 @@ public final class FileCredentialReader: @unchecked Sendable {
     public func writeBack(_ updated: CodexAuth) throws {
         do {
             var blob = updated.unknownTopLevel
-            blob["tokens"] = .object([
+            var tokens: [String: JSONValue] = [
                 "access_token":  .string(updated.tokens.accessToken),
                 "refresh_token": .string(updated.tokens.refreshToken),
                 "id_token":      .string(updated.tokens.idToken),
-            ])
+            ]
             if let acc = updated.accountId {
+                // Codex stores the selected account alongside the tokens.
+                // Retain the top-level alias for older AI Taskbar files too.
+                tokens["account_id"] = .string(acc)
                 blob["account_id"] = .string(acc)
             }
+            blob["tokens"] = .object(tokens)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(blob)
@@ -102,7 +106,9 @@ public final class FileCredentialReader: @unchecked Sendable {
         }
         let tokens = try decodeTokens(from: tokensObj)
         var accountId: String?
-        if case let .string(s) = blob["account_id"] ?? .null { accountId = s }
+        // The native CLI field wins over potentially stale legacy aliases.
+        if case let .string(s) = tokensObj["account_id"] ?? .null { accountId = s }
+        else if case let .string(s) = blob["account_id"] ?? .null { accountId = s }
         else if case let .string(s) = blob["account-id"] ?? .null { accountId = s }
 
         var unknown = blob
