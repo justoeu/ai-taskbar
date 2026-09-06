@@ -205,6 +205,39 @@ struct ServiceStatusAppTests {
         #expect(maximumActive == 2)
     }
 
+    @Test("unverified operational status stays unknown through repeated refreshes", arguments: [0, 1, 2])
+    func unverified_operational_does_not_turn_green(mode: Int) async {
+        let first = ServiceStatusOutcome(
+            snapshot: status(.anthropic),
+            isStale: mode == 0,
+            lastError: mode == 2 ? FetchError(status: 503, body: "offline") : nil
+        )
+        let sequence = StatusOutcomeSequence(first: first)
+        let source = StubStatusProvider(vendorId: .anthropic) { _, _ in
+            try await sequence.next()
+        }
+        let store = ServiceStatusStore(vendorIds: [.anthropic], providers: [source])
+        store.refreshAll()
+        await store.waitForCurrentRefresh()
+        if mode == 1 {
+            store.refreshAll(forceRefresh: true)
+            await store.waitForCurrentRefresh()
+        }
+        #expect(store.overallLevel == .unknown)
+        #expect(store.rows[0].state.isStale)
+
+        // Assert synchronously before either new task can complete, including
+        // superseding an already-loading round with the same old snapshot.
+        for _ in 0..<2 {
+            store.refreshAll(forceRefresh: true)
+            #expect(store.isLoading)
+            #expect(store.rows[0].state.isStale)
+            #expect(store.overallLevel == .unknown)
+        }
+        await store.waitForCurrentRefresh()
+        #expect(store.overallLevel == .unknown)
+    }
+
     @Test("stale success remains visible and a later error preserves the previous result")
     func stale_and_error_preservation() async {
         let stale = outcome(.anthropic, level: .degradedPerformance, stale: true)

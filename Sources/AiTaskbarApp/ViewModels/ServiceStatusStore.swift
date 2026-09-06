@@ -34,7 +34,10 @@ public final class ServiceStatusStore: ObservableObject {
 
             public var isStale: Bool {
                 switch self {
-                case .ok(let outcome): return outcome.isStale
+                case .ok(let outcome): return outcome.isStale || outcome.lastError != nil
+                case .loading(let previous):
+                    guard let previous else { return false }
+                    return previous.isStale || previous.lastError != nil
                 case .failed(_, let fallback): return fallback != nil
                 default: return false
                 }
@@ -115,8 +118,19 @@ public final class ServiceStatusStore: ObservableObject {
         let roundEpoch = epoch
         refreshTask?.cancel()
 
-        let previous = Dictionary(uniqueKeysWithValues: rows.map {
-            ($0.vendorId, $0.state.outcome)
+        let previous = Dictionary(uniqueKeysWithValues: rows.map { row in
+            // A failed refresh can retain an originally fresh outcome. Carry
+            // the state's stale marker into loading and superseding rounds.
+            let retained = row.state.outcome.map { outcome in
+                ServiceStatusOutcome(
+                    snapshot: outcome.snapshot,
+                    isStale: row.state.isStale,
+                    lastError: outcome.lastError,
+                    cacheAge: outcome.cacheAge,
+                    fetchedAt: outcome.fetchedAt
+                )
+            }
+            return (row.vendorId, retained)
         })
         let requests = rows.compactMap { row -> (VendorId, any ServiceStatusProvider)? in
             guard let provider = providersById[row.vendorId] else { return nil }
