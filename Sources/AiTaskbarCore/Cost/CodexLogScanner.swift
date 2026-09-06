@@ -66,6 +66,23 @@ public enum CodexLogScanner {
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.openai)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.openai)
+        let unpricedToday = Set(totalsToday.keys.filter {
+            PricingTable.lookup($0, table: PricingTable.openai) == nil
+        })
+        let unpricedLast7 = Set(totalsLast7.keys.filter {
+            PricingTable.lookup($0, table: PricingTable.openai) == nil
+        })
+        let note: String
+        if !unpricedLast7.isEmpty {
+            let models = unpricedLast7.sorted().joined(separator: ", ")
+            note = "Approximate — price unavailable for \(models); " +
+                   "those turns are excluded from cost totals. " +
+                   "Treats total_usage_tokens as input-priced."
+        } else if totalsToday.isEmpty {
+            note = "No Codex activity today (or token-usage log fields not populated)."
+        } else {
+            note = "Approximate — treats total_usage_tokens as input-priced."
+        }
         return CostEstimate(
             usdToday: usdToday,
             usdLast7Days: usdWeek,
@@ -74,9 +91,9 @@ public enum CodexLogScanner {
             totalsByModel: totalsToday,
             computedAt: now,
             isApproximate: true,
-            note: totalsToday.isEmpty
-                ? "No Codex activity today (or token-usage log fields not populated)."
-                : "Approximate — treats total_usage_tokens as input-priced."
+            note: note,
+            unpricedModelsToday: unpricedToday,
+            unpricedModelsLast7Days: unpricedLast7
         )
     }
 

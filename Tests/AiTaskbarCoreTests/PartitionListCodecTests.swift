@@ -62,7 +62,7 @@ struct KeychainACLBlockedTests {
     }
 }
 
-@Suite("KeychainPromptSuppressor")
+@Suite("KeychainPromptSuppressor", .serialized)
 struct KeychainPromptSuppressorTests {
     /// The reference counting must disable interaction exactly once on the
     /// outermost enter and re-enable exactly once on the outermost exit —
@@ -82,5 +82,53 @@ struct KeychainPromptSuppressorTests {
         #expect(transitions.withLock { $0 } == [false])
         KeychainPromptSuppressor.exit(apply: record)
         #expect(transitions.withLock { $0 } == [false, true])
+    }
+
+    @Test("interactive operation explicitly enables prompts for its bounded body")
+    func interactive_hold_transitions() {
+        let transitions = OSAllocatedUnfairLock(initialState: [Bool]())
+        let record: @Sendable (Bool) -> Void = { flag in
+            transitions.withLock { $0.append(flag) }
+        }
+
+        KeychainPromptSuppressor.withPromptsAllowed(apply: record) {
+            #expect(KeychainPromptSuppressor.testingInteractiveHold)
+            #expect(transitions.withLock { $0 } == [true])
+        }
+
+        #expect(!KeychainPromptSuppressor.testingInteractiveHold)
+        #expect(transitions.withLock { $0 } == [true, true])
+    }
+
+    @Test("silent operations wait until the interactive operation finishes")
+    func interactive_operation_excludes_silent_operations() throws {
+        let interactiveEntered = DispatchSemaphore(value: 0)
+        let releaseInteractive = DispatchSemaphore(value: 0)
+        let silentAttempted = DispatchSemaphore(value: 0)
+        let silentEntered = DispatchSemaphore(value: 0)
+        let silentFinished = DispatchSemaphore(value: 0)
+        defer { releaseInteractive.signal() }
+
+        DispatchQueue.global().async {
+            KeychainPromptSuppressor.withPromptsAllowed(apply: { _ in }) {
+                interactiveEntered.signal()
+                _ = releaseInteractive.wait(timeout: .now() + 2)
+            }
+        }
+        try #require(interactiveEntered.wait(timeout: .now() + 1) == .success)
+
+        DispatchQueue.global().async {
+            silentAttempted.signal()
+            KeychainPromptSuppressor.withPromptsSuppressed(apply: { _ in }) {
+                silentEntered.signal()
+            }
+            silentFinished.signal()
+        }
+
+        try #require(silentAttempted.wait(timeout: .now() + 1) == .success)
+        #expect(silentEntered.wait(timeout: .now() + 0.05) == .timedOut)
+        releaseInteractive.signal()
+        #expect(silentEntered.wait(timeout: .now() + 1) == .success)
+        #expect(silentFinished.wait(timeout: .now() + 1) == .success)
     }
 }

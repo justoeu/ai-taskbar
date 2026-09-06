@@ -11,11 +11,13 @@ struct CostTests {
         #expect(m?.outputPer1M == 25)
     }
 
-    @Test("Fable 5 has explicit pricing (not silently dropped)")
-    func lookup_fable() {
-        let m = PricingTable.lookup("claude-fable-5", table: PricingTable.anthropic)
+    @Test("Fable 5.1 has its current lower cache-read price")
+    func lookup_fable51() {
+        let m = PricingTable.lookup("claude-fable-5-1", table: PricingTable.anthropic)
         #expect(m?.inputPer1M == 10)
         #expect(m?.outputPer1M == 50)
+        #expect(m?.cacheReadPer1M == 0.25)
+        #expect(m?.cacheCreatePer1M == 12.5)
     }
 
     @Test("Opus 5 has explicit pricing at the $5/$25 tier")
@@ -38,13 +40,23 @@ struct CostTests {
     }
 
     /// Codex writes deployment-suffixed ids to its rollout logs. "gpt-5.6-sol"
-    /// must resolve to gpt-5.6 ($5) — a first-match scan could pick gpt-5
-    /// ($1.25) and under-report by 4×.
+    /// must resolve to gpt-5.6 ($4) — a first-match scan could pick gpt-5
+    /// ($1.25) and under-report by more than 3×.
     @Test("Codex's gpt-5.6-sol resolves to the gpt-5.6 tier")
     func lookup_gpt56_sol() {
         let m = PricingTable.lookup("gpt-5.6-sol", table: PricingTable.openai)
-        #expect(m?.inputPer1M == 5)
-        #expect(m?.outputPer1M == 30)
+        #expect(m?.inputPer1M == 4)
+        #expect(m?.outputPer1M == 20)
+        #expect(m?.cacheReadPer1M == 0.4)
+    }
+
+    @Test("GPT-6 Astra has explicit current pricing")
+    func lookup_gpt6_astra() {
+        let m = PricingTable.lookup("gpt-6-astra", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 10)
+        #expect(m?.outputPer1M == 50)
+        #expect(m?.cacheReadPer1M == 1)
+        #expect(m?.cacheCreatePer1M == 12.5)
     }
 
     /// Codex's auto-review alias has no published rate; an explicit estimate
@@ -63,28 +75,42 @@ struct CostTests {
         #expect(m?.outputPer1M == 75)
     }
 
-    @Test("Sonnet 5 has explicit intro pricing")
+    @Test("Sonnet 5 has explicit current pricing")
     func lookup_sonnet5() {
         let m = PricingTable.lookup("claude-sonnet-5", table: PricingTable.anthropic)
         #expect(m?.inputPer1M == 2)
         #expect(m?.outputPer1M == 10)
     }
 
-    /// The three GPT-5.6 variants that actually exist, each at its own tier.
-    /// A single bare `gpt-5.6` key used to catch all three by prefix, which
+    /// The general-purpose GPT-5.6 variants each have their own tier. Cyber is
+    /// pinned separately below because its restricted model page carries a
+    /// materially higher base rate.
+    /// A single bare `gpt-5.6` key used to catch these by prefix, which
     /// over-reported terra by 2x and luna by 5x — invisible on a machine that
     /// only runs sol.
     @Test("each real GPT-5.6 variant prices at its own tier")
     func lookup_gpt56_variants() {
         let sol = PricingTable.lookup("gpt-5.6-sol", table: PricingTable.openai)
-        #expect(sol?.inputPer1M == 5)
-        #expect(sol?.outputPer1M == 30)
+        #expect(sol?.inputPer1M == 4)
+        #expect(sol?.outputPer1M == 20)
         let terra = PricingTable.lookup("gpt-5.6-terra", table: PricingTable.openai)
-        #expect(terra?.inputPer1M == 2.5)
-        #expect(terra?.outputPer1M == 15)
+        #expect(terra?.inputPer1M == 2)
+        #expect(terra?.outputPer1M == 12)
         let luna = PricingTable.lookup("gpt-5.6-luna", table: PricingTable.openai)
-        #expect(luna?.inputPer1M == 1)
-        #expect(luna?.outputPer1M == 6)
+        #expect(luna?.inputPer1M == 0.2)
+        #expect(luna?.outputPer1M == 1.2)
+    }
+
+    @Test("GPT-5.6 Cyber has its exact restricted-model pricing")
+    func lookup_gpt56_cyber() {
+        let cyber = PricingTable.lookup("gpt-5.6-cyber", table: PricingTable.openai)
+        #expect(cyber?.inputPer1M == 12.5)
+        #expect(cyber?.outputPer1M == 75)
+        #expect(cyber?.cacheReadPer1M == 1.25)
+        #expect(cyber?.cacheCreatePer1M == 15.625)
+        #expect(cyber?.longContextThresholdTokens == 272_000)
+        #expect(cyber?.longContextInputMultiplier == 2)
+        #expect(cyber?.longContextOutputMultiplier == 1.5)
     }
 
     /// An unlisted 5.6 variant must land on the 5.6 catch-all, NOT fall
@@ -93,7 +119,7 @@ struct CostTests {
     @Test("unknown GPT-5.6 variant hits the 5.6 catch-all, not gpt-5")
     func lookup_gpt56_unknown_variant() {
         let m = PricingTable.lookup("gpt-5.6-nova", table: PricingTable.openai)
-        #expect(m?.inputPer1M == 5)
+        #expect(m?.inputPer1M == 4)
     }
 
     /// `gpt-5.6-pro` and `gpt-5.6-mini` do not exist. Asserting their absence
@@ -171,6 +197,14 @@ struct CostTests {
         #expect(!PricingTable.anthropic.isEmpty)
         #expect(!PricingTable.openai.isEmpty)
     }
+
+    @Test("unpriced models remain in the breakdown at zero dollars")
+    func unpriced_models_remain_visible() {
+        let totals = ["future-model": ModelUsage(inputTokens: 1_000)]
+        let (total, breakdown) = CostAggregator.price(totals: totals, table: [:])
+        #expect(total == 0)
+        #expect(breakdown["future-model"] == 0)
+    }
 }
 
 @Suite("CostEstimate / ModelUsage")
@@ -191,6 +225,16 @@ struct CostEstimateTests {
                                isApproximate: false, note: "exact")
         #expect(!est.isApproximate)
         #expect(est.note == "exact")
+    }
+
+    @Test("an unpriced model breakdown still counts as displayable data")
+    func unpriced_breakdown_is_displayable() {
+        let est = CostEstimate(
+            usdToday: 0,
+            usdLast7Days: 0,
+            modelBreakdownLast7Days: ["future-model": 0]
+        )
+        #expect(est.hasDisplayData)
     }
 
     @Test("ModelUsage Equatable")

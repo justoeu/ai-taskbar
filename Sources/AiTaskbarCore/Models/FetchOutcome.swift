@@ -9,15 +9,15 @@ public struct FetchError: Sendable, Equatable, Codable {
     }
 }
 
-public struct FetchOutcome: Sendable, Equatable {
-    public let snapshot: VendorSnapshot
+public struct CachedOutcome<Snapshot: Sendable & Equatable>: Sendable, Equatable {
+    public let snapshot: Snapshot
     /// True when the snapshot came from cache because a live fetch failed.
     public let isStale: Bool
     public let lastError: FetchError?
     public let cacheAge: TimeInterval?
     public let fetchedAt: Date
 
-    public init(snapshot: VendorSnapshot,
+    public init(snapshot: Snapshot,
                 isStale: Bool = false,
                 lastError: FetchError? = nil,
                 cacheAge: TimeInterval? = nil,
@@ -29,3 +29,6 @@ public struct FetchOutcome: Sendable, Equatable {
         self.fetchedAt = fetchedAt
     }
 }
+
+public typealias FetchOutcome = CachedOutcome<VendorSnapshot>
+public typealias ServiceStatusOutcome = CachedOutcome<VendorServiceStatus>

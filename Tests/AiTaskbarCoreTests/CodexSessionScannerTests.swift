@@ -80,8 +80,8 @@ struct CodexSessionScannerTests {
         #expect(result.today["gpt-5.6"]?.outputTokens == 500)
     }
 
-    /// End-to-end money check against the gpt-5.6 tier ($5 in / $30 out /
-    /// $0.5 cache read): 0.6M fresh + 0.1M out + 0.4M cached = $6.20.
+    /// End-to-end money check against the gpt-5.6 long-context tier ($8 in /
+    /// $30 out / $0.8 cache read): 0.6M fresh + 0.1M out + 0.4M cached = $8.12.
     @Test("priced total matches the gpt-5.6 tier exactly")
     func prices_to_expected_usd() {
         let now = Date(timeIntervalSince1970: 1_784_000_000)
@@ -95,8 +95,52 @@ struct CodexSessionScannerTests {
                           now: now)
         let (usd, byModel) = CostAggregator.price(totals: result.today,
                                                   table: PricingTable.openai)
-        #expect(abs(usd - 6.2) < 0.000_001)
+        #expect(abs(usd - 8.12) < 0.000_001)
         #expect(byModel["gpt-5.6-sol"] != nil)
+    }
+
+    @Test("long-context pricing starts only above 272K input tokens")
+    func long_context_pricing_boundary() {
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let timestamp = iso.string(from: now)
+
+        let atThreshold = scan(rollout(
+            model: "gpt-5.6-sol", timestamp: timestamp,
+            input: 272_000, cached: 0, output: 1_000_000), now: now)
+        let aboveThreshold = scan(rollout(
+            model: "gpt-5.6-sol", timestamp: timestamp,
+            input: 272_001, cached: 0, output: 1_000_000), now: now)
+        let (standardUSD, _) = CostAggregator.price(
+            totals: atThreshold.today, table: PricingTable.openai)
+        let (longUSD, _) = CostAggregator.price(
+            totals: aboveThreshold.today, table: PricingTable.openai)
+
+        #expect(abs(standardUSD - 21.088) < 0.000_001)
+        #expect(abs(longUSD - 32.176_008) < 0.000_001)
+    }
+
+    @Test("GPT-5.6 Cyber long-context pricing starts only above 272K input tokens")
+    func cyber_long_context_pricing_boundary() {
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let timestamp = iso.string(from: now)
+
+        let atThreshold = scan(rollout(
+            model: "gpt-5.6-cyber", timestamp: timestamp,
+            input: 272_000, cached: 0, output: 100_000), now: now)
+        let aboveThreshold = scan(rollout(
+            model: "gpt-5.6-cyber", timestamp: timestamp,
+            input: 272_001, cached: 0, output: 100_000), now: now)
+        let (standardUSD, _) = CostAggregator.price(
+            totals: atThreshold.today, table: PricingTable.openai)
+        let (longUSD, _) = CostAggregator.price(
+            totals: aboveThreshold.today, table: PricingTable.openai)
+
+        #expect(abs(standardUSD - 10.9) < 0.000_001)
+        #expect(abs(longUSD - 18.050_025) < 0.000_001)
     }
 
     /// Each event carries the delta for its own turn, and summing the deltas
@@ -361,7 +405,7 @@ struct CodexSessionScannerEstimateTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let est = CodexSessionScanner.estimate(now: now, sessionsDir: root)
-        #expect(abs(est.usdToday - 6.2) < 0.000_001)
+        #expect(abs(est.usdToday - 8.12) < 0.000_001)
         #expect(est.usdLast7Days >= est.usdToday)
         #expect(est.modelBreakdownToday["gpt-5.6-sol"] != nil)
         #expect(est.isApproximate)
@@ -418,6 +462,8 @@ struct CodexSessionScannerEstimateTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let est = CodexSessionScanner.estimate(now: now, sessionsDir: root)
         #expect(est.usdToday == 0)
+        #expect(est.unpricedModelsToday == Set(["gpt-7-unreleased"]))
+        #expect(est.unpricedModelsLast7Days == Set(["gpt-7-unreleased"]))
         expectTrue(est.note?.contains("gpt-7-unreleased") ?? false)
     }
 
@@ -464,7 +510,7 @@ struct CodexCostTests {
         let est = CodexCost.estimate(now: now,
                                      sessionsDir: root,
                                      dbPath: "/tmp/definitely-missing-\(UUID().uuidString).sqlite")
-        #expect(abs(est.usdToday - 6.2) < 0.000_001)
+        #expect(abs(est.usdToday - 8.12) < 0.000_001)
     }
 
     /// The test above cannot actually detect summing, because its sqlite side
@@ -495,8 +541,8 @@ struct CodexCostTests {
         #expect(legacyOnly.usdToday > 0, "sqlite side must really have data")
 
         let est = CodexCost.estimate(now: now, sessionsDir: root, dbPath: db.path)
-        #expect(abs(est.usdToday - 6.2) < 0.000_001)
-        #expect(abs(est.usdToday - (6.2 + legacyOnly.usdToday)) > 0.1, "must not be the sum")
+        #expect(abs(est.usdToday - 8.12) < 0.000_001)
+        #expect(abs(est.usdToday - (8.12 + legacyOnly.usdToday)) > 0.1, "must not be the sum")
     }
 
     /// Regression: choosing the source by DOLLARS meant a model missing from
@@ -536,6 +582,26 @@ struct CodexCostTests {
             dbPath: "/tmp/ai-taskbar-none-\(UUID().uuidString).sqlite")
         #expect(est.usdToday == 0)
         expectTrue(est.note?.contains("~/.codex/sessions") ?? false)
+    }
+
+    @Test("unknown-only legacy usage remains visible when sessions are empty")
+    func unpriced_legacy_fallback_remains_visible() throws {
+        let now = Date()
+        let db = try makeLegacyDB(
+            nowSeconds: Int(now.timeIntervalSince1970),
+            body: "model=gpt-7-unreleased total_usage_tokens=1000")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let est = CodexCost.estimate(
+            now: now,
+            sessionsDir: URL(fileURLWithPath: "/tmp/ai-taskbar-none-\(UUID().uuidString)"),
+            dbPath: db.path)
+
+        #expect(est.modelBreakdownToday["gpt-7-unreleased"] == 0)
+        #expect(est.unpricedModelsToday == Set(["gpt-7-unreleased"]))
+        #expect(est.unpricedModelsLast7Days == Set(["gpt-7-unreleased"]))
+        #expect(est.hasDisplayData)
+        expectTrue(est.note?.localizedCaseInsensitiveContains("price unavailable") ?? false)
     }
 
     private func makeLegacyDB(nowSeconds: Int, body: String) throws -> URL {

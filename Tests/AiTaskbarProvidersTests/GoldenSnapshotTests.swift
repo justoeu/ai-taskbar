@@ -68,6 +68,7 @@ struct GoldenSnapshotTests {
         #expect(Int((snap.secondary?.utilizationPercent ?? 0).rounded()) == 5)
         #expect(snap.creditsUSD == 4.20)
         #expect(snap.messageCountRange == "≈ 5–10 local msgs left")
+        expectTrue(snap.availableResetCount == nil)
     }
 
     // MARK: - OpenRouter

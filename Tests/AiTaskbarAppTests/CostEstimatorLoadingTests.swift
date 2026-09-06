@@ -1,18 +1,36 @@
 import Testing
 import Foundation
 @testable import AiTaskbarApp
+import AiTaskbarCore
 import AiTaskbarTestSupport
 
 /// `isLoading` is not just a spinner flag — `refresh()` starts with
 /// `if isLoading { return }`, so it is also the gate on every future scan. A
 /// path that leaves it true wedges the Models section on "Loading…" forever,
 /// and no later refresh can recover because they all bail at that first line.
-/// `.serialized` is load-bearing: each test drives a real `CostEstimator`,
-/// which scans ~/.claude and a 19 GB SQLite file. Four of those racing each
-/// other starve the scans past any sane timeout — the suite failed exactly
-/// that way before, and in isolation every test passed.
+/// The scanner closures are stubbed here so this state-machine contract does
+/// not depend on the size of the developer's real Claude/Codex history.
 @Suite("CostEstimator loading state", .serialized)
 struct CostEstimatorLoadingTests {
+
+    @MainActor
+    private func makeEstimator() -> CostEstimator {
+        CostEstimator(
+            claudeEstimate: {
+                CostEstimate(usdToday: 1, usdLast7Days: 2)
+            },
+            codexEstimate: {
+                CostEstimate(usdToday: 3, usdLast7Days: 4)
+            },
+            opencodeScan: { _ in [:] }
+        )
+    }
+
+    @Test("opencode aliases route current Z.AI and xAI models to their vendor cards")
+    func opencode_aliases_route_to_vendor_cards() {
+        expectTrue(CostEstimator.opencodeProviders[.zai] == ["zai", "zai-coding-plan"])
+        expectTrue(CostEstimator.opencodeProviders[.xai] == ["xai"])
+    }
 
     @MainActor
     private func settle(_ e: CostEstimator, timeout: TimeInterval = 60) async throws {
@@ -25,7 +43,7 @@ struct CostEstimatorLoadingTests {
     @MainActor
     @Test("a completed refresh clears isLoading and publishes both vendors")
     func refresh_clears_loading() async throws {
-        let e = CostEstimator()
+        let e = makeEstimator()
         e.refresh()
         expectTrue(e.isLoading)
         try await settle(e)
@@ -42,7 +60,7 @@ struct CostEstimatorLoadingTests {
     @MainActor
     @Test("cancel leaves the estimator able to refresh again")
     func cancel_does_not_wedge() async throws {
-        let e = CostEstimator()
+        let e = makeEstimator()
         e.refresh()
         e.cancel()
         expectTrue(!e.isLoading)

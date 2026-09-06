@@ -16,12 +16,12 @@ public struct CachedFetch: Sendable {
     /// `fetch` performs the network work and returns the raw payload bytes
     /// that will be cached. It should throw `AppError.http(...)` on non-2xx
     /// responses (the helper will then mark the cache stale automatically).
-    /// `decode` turns the cached bytes into a `VendorSnapshot`.
-    public func run(
+    /// `decode` turns the cached bytes into the caller's snapshot type.
+    public func run<Snapshot: Sendable & Equatable>(
         forceRefresh: Bool,
-        decode: (Data) throws -> VendorSnapshot,
+        decode: (Data) throws -> Snapshot,
         fetch: () async throws -> Data
-    ) async throws -> FetchOutcome {
+    ) async throws -> CachedOutcome<Snapshot> {
         try Task.checkCancellation()
         if !forceRefresh, let hit = cache.freshPayloadWithAge() {
             return try makeOutcome(from: hit.0, decode: decode,
@@ -31,10 +31,11 @@ public struct CachedFetch: Sendable {
         do {
             let data = try await fetch()
             try Task.checkCancellation()
+            let snapshot = try decode(data)
+            try Task.checkCancellation()
             try cache.writePayload(data)
-            return try makeOutcome(from: data, decode: decode,
-                                    isStale: false, cacheAge: 0,
-                                    lastError: nil)
+            return makeOutcome(snapshot: snapshot, isStale: false,
+                               cacheAge: 0, lastError: nil)
         } catch is CancellationError {
             throw CancellationError()
         } catch let appErr as AppError {
@@ -63,22 +64,44 @@ public struct CachedFetch: Sendable {
         }
     }
 
-    private func makeOutcome(from data: Data,
-                             decode: (Data) throws -> VendorSnapshot,
-                             isStale: Bool,
-                             cacheAge: TimeInterval?,
-                             lastError: FetchError?) throws -> FetchOutcome {
-        FetchOutcome(
+    private func makeOutcome<Snapshot: Sendable & Equatable>(
+        from data: Data,
+        decode: (Data) throws -> Snapshot,
+        isStale: Bool,
+        cacheAge: TimeInterval?,
+        lastError: FetchError?
+    ) throws -> CachedOutcome<Snapshot> {
+        makeOutcome(
             snapshot: try decode(data),
             isStale: isStale,
-            lastError: lastError ?? cache.lastError(),
-            cacheAge: cacheAge
+            cacheAge: cacheAge,
+            lastError: lastError
         )
     }
 
-    private func fallback(error: Error,
-                          decode: (Data) throws -> VendorSnapshot,
-                          lastError: FetchError) throws -> FetchOutcome {
+    private func makeOutcome<Snapshot: Sendable & Equatable>(
+        snapshot: Snapshot,
+        isStale: Bool,
+        cacheAge: TimeInterval?,
+        lastError: FetchError?
+    ) -> CachedOutcome<Snapshot> {
+        let fetchedAt = cacheAge.map {
+            Date.now.addingTimeInterval(-max(0, $0))
+        } ?? .now
+        return CachedOutcome(
+            snapshot: snapshot,
+            isStale: isStale,
+            lastError: lastError ?? cache.lastError(),
+            cacheAge: cacheAge,
+            fetchedAt: fetchedAt
+        )
+    }
+
+    private func fallback<Snapshot: Sendable & Equatable>(
+        error: Error,
+        decode: (Data) throws -> Snapshot,
+        lastError: FetchError
+    ) throws -> CachedOutcome<Snapshot> {
         if let hit = cache.anyPayloadWithAge() {
             return try makeOutcome(from: hit.0, decode: decode,
                                     isStale: true, cacheAge: hit.1,

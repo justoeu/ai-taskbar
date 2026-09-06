@@ -265,6 +265,219 @@ section("UsageWindow / VendorSnapshot helpers") {
     expect(snap.planLabel == "Claude Max 5x", "planLabel propagates")
 }
 
+section("Service status domain") {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let cutoff = ServiceStatusWindow.cutoff(for: now)
+    let longIncident = ServiceIncident(
+        id: "long",
+        title: "Long incident",
+        level: .degradedPerformance,
+        phase: .monitoring,
+        startedAt: cutoff.addingTimeInterval(-3_600),
+        updatedAt: now.addingTimeInterval(-60),
+        resolvedAt: nil,
+        affectedComponents: ["API"],
+        message: "Monitoring",
+        sourceURL: URL(string: "https://status.claude.com/incidents/long")
+    )
+    let oldIncident = ServiceIncident(
+        id: "old",
+        title: "Old incident",
+        level: .maintenance,
+        phase: .completed,
+        startedAt: cutoff.addingTimeInterval(-7_200),
+        updatedAt: cutoff.addingTimeInterval(-1),
+        resolvedAt: cutoff.addingTimeInterval(-1),
+        affectedComponents: [],
+        message: nil,
+        sourceURL: nil
+    )
+    expect(ServiceStatusWindow.intersects(longIncident, now: now),
+           "long-running incident intersects six-hour window")
+    expect(!ServiceStatusWindow.intersects(oldIncident, now: now),
+           "incident resolved before cutoff is excluded")
+    expect(ServiceStatusWindow.clippedRange(for: longIncident, now: now)?.lowerBound == cutoff,
+           "display range clips at six-hour cutoff")
+    expect(ServiceStatusWindow.recentIncidents([oldIncident, longIncident], now: now).map(\.id) == ["long"],
+           "recent incidents filter and order deterministically")
+    expect(ServiceStatusWindow.worstLevel(in: [.unknown, .maintenance]) == .maintenance,
+           "known non-operational level outranks unknown")
+    expect(ServiceStatusWindow.worstLevel(in: [.operational, .unknown]) == .unknown,
+           "unknown prevents an all-green aggregate")
+
+    let status = VendorServiceStatus(
+        vendorId: .anthropic,
+        level: .degradedPerformance,
+        coverage: .full,
+        summary: "Degraded",
+        sourceURL: VendorId.anthropic.statusPageURL,
+        sourceUpdatedAt: now,
+        incidents: [longIncident]
+    )
+    let data = try SharedCoders.encoder.encode(status)
+    let decoded = try SharedCoders.decoder.decode(VendorServiceStatus.self, from: data)
+    expect(decoded == status, "service status Codable round-trip")
+    let outcome: ServiceStatusOutcome = CachedOutcome(snapshot: status)
+    expect(outcome.snapshot == status && !outcome.isStale,
+           "generic cached outcome preserves service-status alias")
+}
+
+section("Wire types: Statuspage v2 fixtures") {
+    let summary = try SharedCoders.decoder.decode(
+        StatuspageSummary.self,
+        from: Fixtures.data(Fixtures.statuspageSummaryDegraded200))
+    let incidents = try SharedCoders.decoder.decode(
+        StatuspageIncidentList.self,
+        from: Fixtures.data(Fixtures.statuspageIncidentsWindow200))
+    let maintenances = try SharedCoders.decoder.decode(
+        StatuspageMaintenanceList.self,
+        from: Fixtures.data(Fixtures.statuspageMaintenancesWindow200))
+    let payload = StatuspageCachedPayload(
+        summary: summary,
+        incidents: incidents,
+        scheduledMaintenances: maintenances)
+    let encoded = try SharedCoders.encoder.encode(payload)
+    let decoded = try SharedCoders.decoder.decode(StatuspageCachedPayload.self, from: encoded)
+
+    expect(decoded == payload, "Statuspage combined cache payload Codable round-trip")
+    expect(summary.status.indicator == "minor", "Statuspage summary indicator parsed")
+    expect(incidents.incidents.count == 6, "Statuspage incident list parsed")
+    expect(maintenances.scheduledMaintenances.count == 1,
+           "Statuspage maintenance list parsed")
+    expect(incidents.incidents.first?.incidentUpdates.first?.affectedComponents?.count == 2,
+           "Statuspage affected-component metadata parsed")
+
+    let now = ISO8601Parsing.parse("2026-09-03T12:00:00Z")!
+    let source = StatuspageSource(descriptor: .anthropic)
+    let status = try source.makeStatus(from: payload, now: now)
+    expect(status.vendorId == .anthropic, "Statuspage descriptor carries vendor ID")
+    expect(status.level == .degradedPerformance, "Statuspage minor maps to degraded")
+    expect(status.coverage == .full, "Statuspage coverage is full")
+    expect(status.incidents.map(\.id) == ["inc-active", "maint-active", "inc-global", "inc-long"],
+           "Statuspage uses component scope plus six-hour intersection")
+    expect(status.incidents.first?.affectedComponents == ["Claude API", "Claude Code"],
+           "Statuspage component IDs map to stable labels")
+    expect(status.incidents.first?.message == "A fix is deployed and recovery is being monitored.",
+           "Statuspage latest update becomes the incident message")
+    expect(status.incidents.first(where: { $0.id == "maint-active" })?.sourceURL == nil,
+           "Statuspage rejects incident links outside the exact host")
+
+    let unknownSummary = try SharedCoders.decoder.decode(
+        StatuspageSummary.self,
+        from: Fixtures.data(Fixtures.statuspageSummaryUnknown200))
+    let unknownIncidentList = try SharedCoders.decoder.decode(
+        StatuspageIncidentList.self,
+        from: Fixtures.data(Fixtures.statuspageIncidentUnknownTokens200))
+    let unknownPayload = StatuspageCachedPayload(
+        summary: unknownSummary,
+        incidents: unknownIncidentList,
+        scheduledMaintenances: StatuspageMaintenanceList(scheduledMaintenances: []))
+    let unknown = try source.makeStatus(from: unknownPayload, now: now)
+    expect(unknown.level == .unknown, "Statuspage unknown indicator stays unknown")
+    expect(unknown.incidents.first?.level == .unknown,
+           "Statuspage unknown impact stays unknown")
+    expect(unknown.incidents.first?.phase == .unknown,
+           "Statuspage unknown phase stays unknown")
+    expect(ServiceStatusProviderFactory.descriptor(for: .kimi) == .kimi,
+           "Statuspage factory exposes Kimi descriptor")
+    expect(ServiceStatusProviderFactory.descriptor(for: .openrouter) == nil,
+           "Statuspage factory leaves unsupported sources untouched")
+}
+
+section("Wire types: DeepSeek FlashDuty service status") {
+    let active = try SharedCoders.decoder.decode(
+        DeepSeekStatusEnvelope<DeepSeekActiveStatus>.self,
+        from: Fixtures.data(Fixtures.deepseekStatusActive200))
+    let structure = try SharedCoders.decoder.decode(
+        DeepSeekStatusEnvelope<DeepSeekStatusStructure>.self,
+        from: Fixtures.data(Fixtures.deepseekStatusStructure200))
+    let changes = try SharedCoders.decoder.decode(
+        DeepSeekStatusEnvelope<DeepSeekChangeList>.self,
+        from: Fixtures.data(Fixtures.deepseekStatusChanges200))
+    let payload = DeepSeekStatusPayload(
+        active: active,
+        structure: structure,
+        changes: changes)
+    let decoded = try SharedCoders.decoder.decode(
+        DeepSeekStatusPayload.self,
+        from: SharedCoders.encoder.encode(payload))
+
+    expect(decoded == payload, "DeepSeek status cache payload Codable round-trip")
+    expect(active.data.page.pageID == 6_410_630_422_455,
+           "DeepSeek status page identity parsed")
+    expect(active.data.activeChanges.first?.updates.count == 2,
+           "DeepSeek active change updates parsed")
+    expect(structure.data.componentImpacts.first?.status == "partial_outage",
+           "DeepSeek structure impact parsed")
+    expect(structure.data.componentUptimes.first?.uptime == 94.25,
+           "DeepSeek structure uptime parsed")
+    expect(structure.data.linkedChanges.first?.id == 7001,
+           "DeepSeek linked change parsed")
+    expect(changes.data.items.count == 4, "DeepSeek change list parsed")
+
+    let now = ISO8601Parsing.parse("2026-09-03T12:00:00Z")!
+    let status = try DeepSeekStatusSource()
+        .makeStatus(from: payload, now: now)
+    expect(status.vendorId == .deepseek, "DeepSeek status carries vendor ID")
+    expect(status.coverage == .full, "DeepSeek status coverage is full")
+    expect(status.level == .partialOutage, "DeepSeek explicit partial outage maps")
+    expect(status.incidents.map(\.id) == ["7001", "7002"],
+           "DeepSeek deduplicates and applies six-hour intersection")
+    expect(status.incidents.first?.affectedComponents == ["API Service"],
+           "DeepSeek affected components map to bounded names")
+    expect(status.incidents.last?.resolvedAt
+           == ISO8601Parsing.parse("2026-09-03T10:00:00Z"),
+           "DeepSeek resolved incident preserves close timestamp")
+}
+
+section("Wire types: RSS service status") {
+    let openRouterFeed = try RSSStatusSource.parse(
+        Fixtures.data(Fixtures.openRouterStatusRSS200))
+    let xaiFeed = try RSSStatusSource.parse(
+        Fixtures.data(Fixtures.xaiStatusRSS200))
+    let decoded = try SharedCoders.decoder.decode(
+        RSSStatusFeed.self,
+        from: SharedCoders.encoder.encode(openRouterFeed))
+
+    expect(decoded == openRouterFeed, "RSS cache payload Codable round-trip")
+    expect(openRouterFeed.title == "OpenRouter Status - Incident History",
+           "RSS channel title parsed")
+    expect(openRouterFeed.items.count == 6, "RSS item count parsed")
+    expect(openRouterFeed.items.first?.guidIsPermaLink == true,
+           "RSS GUID attribute parsed")
+    expect(openRouterFeed.items.first?.categories
+           == ["degraded_performance", "monitoring"],
+           "RSS categories parsed")
+
+    let now = ISO8601Parsing.parse("2026-09-03T12:00:00Z")!
+    let openRouter = try RSSStatusSource(descriptor: .openRouter)
+        .makeStatus(from: openRouterFeed, now: now)
+    expect(openRouter.coverage == .incidentsOnly,
+           "OpenRouter RSS coverage is incidents-only")
+    expect(openRouter.level == .partialOutage,
+           "OpenRouter active incident elevates status")
+    expect(openRouter.incidents.map(\.id)
+           == ["duplicate-guid", "incident-hostile", "incident-long"],
+           "RSS deduplicates and applies six-hour intersection")
+    expect(openRouter.incidents.first?.title == "API & routing degraded",
+           "RSS strips HTML and decodes entities")
+    expect(openRouter.incidents.first(where: { $0.id == "incident-hostile" })?.sourceURL == nil,
+           "RSS rejects incident links outside the exact host")
+
+    let xai = try RSSStatusSource(descriptor: .xAI)
+        .makeStatus(from: xaiFeed, now: now)
+    expect(xai.vendorId == .xai, "xAI RSS carries vendor ID")
+    expect(xai.coverage == .incidentsOnly, "xAI RSS coverage is incidents-only")
+    expect(xai.level == .majorOutage, "xAI major outage category maps")
+    expect(xai.incidents.last?.resolvedAt
+           == ISO8601Parsing.parse("2026-09-03T10:30:00Z"),
+           "xAI RSS explicit resolution timestamp maps")
+    expect(ServiceStatusProviderFactory.rssDescriptor(for: .openrouter) == .openRouter,
+           "RSS factory exposes OpenRouter descriptor")
+    expect(ServiceStatusProviderFactory.rssDescriptor(for: .xai) == .xAI,
+           "RSS factory exposes xAI descriptor")
+}
+
 section("Wire types: Anthropic fixture") {
     let parsed = try SharedCoders.decoder.decode(
         AnthropicUsageResponse.self,
@@ -283,6 +496,16 @@ section("Wire types: Anthropic fixture") {
     // Usage credits: percent from utilization, money in detail (USD fixture).
     expect(Int((s.credits?.utilizationPercent ?? 0).rounded()) == 12, "Anthropic credits utilization 12%")
     expect(s.credits?.detail == "$2.45 / $20.00", "Anthropic credits money detail")
+}
+
+section("Wire types: OpenAI earned reset summary") {
+    let wire = try SharedCoders.decoder.decode(OpenAIUsageResponse.self,
+        from: Fixtures.data(Fixtures.openaiUsageWithReset200))
+    let snapshot = wire.toSnapshot(planLabel: nil)
+    expect(snapshot.availableResetCount == 2, "two earned resets, independent of paid credits")
+    expect(snapshot.canOfferRateLimitReset, "91 percent plus positive availability offers reset")
+    expect(!OpenAISnapshot(primary: UsageWindow(label: "Session", utilizationPercent: 90),
+                           availableResetCount: 1).canOfferRateLimitReset, "90 percent exactly does not offer reset")
 }
 
 section("Wire types: OpenAI fixture") {
@@ -537,29 +760,38 @@ section("UsageHistoryStore: append + load + compact") {
 section("PricingTable lookup") {
     let opus = PricingTable.lookup("claude-opus-4-7", table: PricingTable.anthropic)
     expect(opus?.inputPer1M == 5, "exact match (Opus 4.7 repriced to $5/MTok)")
-    let fable = PricingTable.lookup("claude-fable-5", table: PricingTable.anthropic)
-    expect(fable?.inputPer1M == 10, "Fable 5 explicit pricing (not prefix-dropped)")
+    let fable = PricingTable.lookup("claude-fable-5-1", table: PricingTable.anthropic)
+    expect(fable?.inputPer1M == 10, "Fable 5.1 input price ($10/MTok)")
+    expect(fable?.cacheReadPer1M == 0.25, "Fable 5.1 cache-read price ($0.25/MTok)")
     let opus5 = PricingTable.lookup("claude-opus-5", table: PricingTable.anthropic)
     expect(opus5?.inputPer1M == 5, "Opus 5 input price ($5/MTok)")
     expect(opus5?.outputPer1M == 25, "Opus 5 output price ($25/MTok)")
     let opus5Thinking = PricingTable.lookup("claude-opus-5-thinking", table: PricingTable.anthropic)
     expect(opus5Thinking?.inputPer1M == 5, "Opus 5 suffixed variant resolves via prefix")
     let unknown56 = PricingTable.lookup("gpt-5.6-nova", table: PricingTable.openai)
-    expect(unknown56?.inputPer1M == 5, "unlisted 5.6 variant hits the 5.6 catch-all, not gpt-5")
+    expect(unknown56?.inputPer1M == 4, "unlisted 5.6 variant hits the 5.6 catch-all, not gpt-5")
     let autoReview = PricingTable.lookup("codex-auto-review", table: PricingTable.openai)
     expect(autoReview?.inputPer1M == 1.75, "codex-auto-review is priced, not silently $0")
     let sonnet5 = PricingTable.lookup("claude-sonnet-5", table: PricingTable.anthropic)
-    expect(sonnet5?.inputPer1M == 2, "Sonnet 5 intro pricing ($2/MTok through 2026-08-31)")
+    expect(sonnet5?.inputPer1M == 2, "Sonnet 5 current input pricing ($2/MTok)")
     let legacyOpus = PricingTable.lookup("claude-opus-4-1", table: PricingTable.anthropic)
     expect(legacyOpus?.inputPer1M == 15, "legacy Opus 4.0/4.1 prefix fallback ($15/MTok)")
     let gpt55 = PricingTable.lookup("gpt-5.5", table: PricingTable.openai)
     expect(gpt55?.inputPer1M == 5, "GPT-5.5 input price ($5/MTok, verified 2026-06-14)")
     let gpt56Sol = PricingTable.lookup("gpt-5.6-sol", table: PricingTable.openai)
-    expect(gpt56Sol?.inputPer1M == 5, "GPT-5.6 Sol input price ($5/MTok)")
+    expect(gpt56Sol?.inputPer1M == 4, "GPT-5.6 Sol input price ($4/MTok)")
     let gpt56Terra = PricingTable.lookup("gpt-5.6-terra", table: PricingTable.openai)
-    expect(gpt56Terra?.inputPer1M == 2.5, "GPT-5.6 Terra has its own tier (not sol's)")
+    expect(gpt56Terra?.inputPer1M == 2, "GPT-5.6 Terra has its own tier (not sol's)")
     let gpt56Luna = PricingTable.lookup("gpt-5.6-luna", table: PricingTable.openai)
-    expect(gpt56Luna?.inputPer1M == 1, "GPT-5.6 Luna has its own tier (not sol's)")
+    expect(gpt56Luna?.inputPer1M == 0.2, "GPT-5.6 Luna has its own tier (not sol's)")
+    let gpt56Cyber = PricingTable.lookup("gpt-5.6-cyber", table: PricingTable.openai)
+    expect(gpt56Cyber?.inputPer1M == 12.5, "GPT-5.6 Cyber input price ($12.50/MTok)")
+    expect(gpt56Cyber?.outputPer1M == 75, "GPT-5.6 Cyber output price ($75/MTok)")
+    expect(gpt56Cyber?.longContextThresholdTokens == 272_000,
+           "GPT-5.6 Cyber long-context tier starts above 272K input tokens")
+    let astra = PricingTable.lookup("gpt-6-astra", table: PricingTable.openai)
+    expect(astra?.inputPer1M == 10, "GPT-6 Astra input price ($10/MTok)")
+    expect(astra?.outputPer1M == 50, "GPT-6 Astra output price ($50/MTok)")
     expect(PricingTable.openai["gpt-5.6-pro"] == nil, "gpt-5.6-pro does not exist upstream")
     expect(PricingTable.openai["gpt-5.6-mini"] == nil, "gpt-5.6-mini does not exist upstream")
     let prefix = PricingTable.lookup("gpt-5-codex-2026-02", table: PricingTable.openai)

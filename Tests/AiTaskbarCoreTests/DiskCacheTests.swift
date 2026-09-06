@@ -95,4 +95,39 @@ struct DiskCacheTests {
         #expect(cache.anyPayload() == nil, "past maxStale should drop payload")
         try? FileManager.default.removeItem(at: tmp)
     }
+
+    @Test("usage and status cache scopes use distinct paths and preserve defaults")
+    func usage_and_status_scopes_do_not_collide() throws {
+        let usage = try DiskCache.defaultFor(.anthropic)
+        let status = try DiskCache.defaultFor(.anthropic, scope: .status)
+
+        #expect(usage.baseDir.lastPathComponent == "anthropic")
+        #expect(usage.baseDir.deletingLastPathComponent().lastPathComponent == Paths.appName)
+        #expect(status.baseDir.lastPathComponent == "anthropic")
+        #expect(status.baseDir.deletingLastPathComponent().lastPathComponent == "status")
+        #expect(usage.baseDir != status.baseDir)
+        #expect(usage.ttl == 300)
+        #expect(usage.maxStale == 7 * 24 * 60 * 60)
+        #expect(status.ttl == 300)
+        #expect(status.maxStale == ServiceStatusWindow.duration)
+    }
+
+    @Test("six-hour status stale window expires old payload")
+    func six_hour_status_stale_window_expires() throws {
+        let cache = DiskCache(
+            vendor: .anthropic,
+            baseDir: tmp,
+            ttl: 60,
+            maxStale: ServiceStatusWindow.duration
+        )
+        try cache.writePayload(Data("old-status".utf8))
+        let payload = tmp.appendingPathComponent("usage.json")
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date.now.addingTimeInterval(-ServiceStatusWindow.duration - 1)],
+            ofItemAtPath: payload.path
+        )
+
+        #expect(cache.anyPayload() == nil)
+        try? FileManager.default.removeItem(at: tmp)
+    }
 }

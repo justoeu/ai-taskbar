@@ -6,6 +6,7 @@ import AiTaskbarProviders
 @main
 struct AiTaskbarApp: App {
     @StateObject private var store: UsageStore
+    @StateObject private var statusStore: ServiceStatusStore
     @StateObject private var scheduler: RefreshScheduler
     @StateObject private var loginItem = LoginItemService()
     @StateObject private var cost = CostEstimator()
@@ -50,7 +51,16 @@ struct AiTaskbarApp: App {
             thresholds: env.config.thresholds,
             refreshIntervalSeconds: env.config.ui.refreshIntervalSeconds
         )
+        let enabledStatusIds = VendorOrder.ordered(
+            entries: env.enabledVendorIds().map { ($0, false) },
+            preferred: VendorOrder.load()
+        )
+        let statusStore = ServiceStatusStore(
+            vendorIds: enabledStatusIds,
+            providers: env.makeStatusProviders(for: enabledStatusIds)
+        )
         let scheduler = RefreshScheduler(store: store,
+                                         statusStore: statusStore,
                                          interval: env.config.ui.refreshIntervalSeconds)
         // Kick off the refresh + compact loops from launch so usage starts
         // accumulating without requiring the user to open the popover first.
@@ -59,6 +69,7 @@ struct AiTaskbarApp: App {
             config: env.config, configLoader: env.configLoader))
         self.env = env
         _store = StateObject(wrappedValue: store)
+        _statusStore = StateObject(wrappedValue: statusStore)
         _scheduler = StateObject(wrappedValue: scheduler)
     }
 
@@ -68,6 +79,7 @@ struct AiTaskbarApp: App {
                 onQuit: { NSApplication.shared.terminate(nil) }
             )
             .environmentObject(store)
+            .environmentObject(statusStore)
             .environmentObject(loginItem)
             .environmentObject(cost)
             .environmentObject(updates)

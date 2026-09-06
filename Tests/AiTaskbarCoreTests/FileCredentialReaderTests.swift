@@ -17,6 +17,43 @@ struct FileCredentialReaderTests {
         try json.write(to: file, atomically: true, encoding: .utf8)
     }
 
+    @Test("native tokens.account_id is read without modifying the credential file")
+    func reads_native_account() throws {
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let file = tmp.appendingPathComponent("auth.json")
+        let data = Data(#"{"tokens":{"access_token":"a","refresh_token":"r","id_token":"i","account_id":"native-account"}}"#.utf8)
+        try AtomicFileWrite.write(data, to: file, permissions: 0o600)
+        let auth = try FileCredentialReader(path: file).read()
+        expectTrue(auth.accountId == "native-account")
+        #expect(try Data(contentsOf: file) == data)
+    }
+
+    @Test("native account takes precedence over legacy top-level aliases")
+    func native_account_precedence() throws {
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let file = tmp.appendingPathComponent("auth.json")
+        let data = Data(#"{"tokens":{"access_token":"a","refresh_token":"r","id_token":"i","account_id":"native-account"},"account_id":"old-account","account-id":"older-account"}"#.utf8)
+        try AtomicFileWrite.write(data, to: file, permissions: 0o600)
+        expectTrue(try FileCredentialReader(path: file).read().accountId == "native-account")
+    }
+
+    @Test("opt-in writeBack keeps account identity in the native tokens object")
+    func writeback_native_account() throws {
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let file = tmp.appendingPathComponent("auth.json")
+        let reader = FileCredentialReader(path: file)
+        let auth = CodexAuth(tokens: .init(accessToken: "a", refreshToken: "r", idToken: "i"),
+                             accountId: "native-account")
+        try reader.writeBack(auth)
+        let blob = try JSONDecoder().decode([String: JSONValue].self, from: Data(contentsOf: file))
+        guard case .object(let tokens) = blob["tokens"] else {
+            Issue.record("missing tokens object")
+            return
+        }
+        expectTrue(tokens["account_id"] == .string("native-account"))
+        expectTrue(try reader.read().accountId == "native-account")
+    }
+
     @Test("reads full auth.json with account_id + extra fields")
     func reads_full_auth_json() throws {
         let file = tmp.appendingPathComponent("auth.json")

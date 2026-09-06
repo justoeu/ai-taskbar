@@ -8,9 +8,34 @@ import AiTaskbarTestSupport
 /// owned by the test runner. Creating/deleting our own item is silent (the
 /// creator is trusted), and none of these helpers call
 /// `SecKeychainItemSetAccess`, so no SecurityAgent dialog can appear. The
-/// interactive commit path of `authorize(service:)` stays manual-test-only.
-@Suite("KeychainAccessAuthorizer ACL surgery", .serialized)
+/// interactive read path of `authorize(service:)` stays manual-test-only.
+@Suite("KeychainAccessAuthorizer exact-item authorization", .serialized)
 struct KeychainAccessAuthorizerTests {
+    private let keychain: TemporaryKeychain
+    init() throws { keychain = try TemporaryKeychain() }
+    @Test("authorization reads exactly one selected item and verifies silently")
+    func exact_item_native_read() throws {
+        let (item, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        var calls = 0
+        let outcome = try KeychainAccessAuthorizer.authorize(
+            service: Self.service, searchList: [keychain.reference], teamID: "TESTTEAM",
+            readItem: { query in
+                calls += 1
+                let q = query as NSDictionary
+                let refs = q[kSecMatchItemList] as? [SecKeychainItem] ?? []
+                #expect(refs.count == 1)
+                if let selected = refs.first { expectTrue(CFEqual(selected, item)) }
+                expectTrue(q[kSecReturnData] as? Bool == true)
+                let expected = calls == 2 ? kSecUseAuthenticationUIAllow : kSecUseAuthenticationUIFail
+                expectTrue(q[kSecUseAuthenticationUI] as? String == expected as String)
+                expectTrue(KeychainPromptSuppressor.testingInteractiveHold == (calls == 2))
+                return calls == 1 ? errSecAuthFailed : errSecSuccess
+            })
+        #expect(outcome == .authorized)
+        #expect(calls == 3)
+    }
+
     /// Unique per-run service name so parallel/aborted runs never collide.
     private static let service = "ai-taskbar-test-\(UUID().uuidString)"
 
@@ -19,6 +44,7 @@ struct KeychainAccessAuthorizerTests {
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
             kSecAttrAccount as String: "tester",
+            kSecUseKeychain as String: keychain.reference,
             kSecValueData as String:   Data("x".utf8),
         ]
         let addStatus = SecItemAdd(add as CFDictionary, nil)
@@ -28,6 +54,7 @@ struct KeychainAccessAuthorizerTests {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
+            kSecMatchSearchList as String: [keychain.reference],
             kSecMatchLimit as String:  kSecMatchLimitOne,
             kSecReturnRef as String:   true,
         ]
@@ -36,6 +63,7 @@ struct KeychainAccessAuthorizerTests {
         let cleanup = {
             let del: [String: Any] = [
                 kSecClass as String:       kSecClassGenericPassword,
+                kSecMatchSearchList as String: [keychain.reference],
                 kSecAttrService as String: Self.service,
             ]
             SecItemDelete(del as CFDictionary)
@@ -43,70 +71,33 @@ struct KeychainAccessAuthorizerTests {
         return (item, cleanup)
     }
 
-    @Test("finds the partition ACL and extends it in memory")
-    func extends_partition_list() throws {
-        let (item, cleanup) = try makeTempItem()
+    @Test("native authorization cannot report success after cancel, denial or failed verification",
+          arguments: [errSecUserCanceled, errSecAuthFailed, errSecParam, errSecSuccess])
+    func failed_commit_or_probe_never_authorizes(status: OSStatus) throws {
+        let (_, cleanup) = try makeTempItem()
         defer { cleanup() }
-
-        var accessRef: SecAccess?
-        try #require(SecKeychainItemCopyAccess(item, &accessRef) == errSecSuccess)
-        let access = try #require(accessRef)
-
-        // Our own fresh item carries a partition ACL on modern macOS.
-        let acl = KeychainAccessAuthorizer.findACL(in: access,
-                                                   authorization: "ACLAuthorizationPartitionID")
-        try #require(acl != nil)
-
-        try KeychainAccessAuthorizer.extendPartitionList(of: access,
-                                                         with: "teamid:TESTTEAM01")
-
-        // Re-read the (in-memory) ACL and confirm the partition landed.
-        var appsRef: CFArray?
-        var descRef: CFString?
-        var prompt = SecKeychainPromptSelector()
-        try #require(SecACLCopyContents(acl!, &appsRef, &descRef, &prompt) == errSecSuccess)
-        let partitions = PartitionListCodec.decode(hexDescription: (descRef as String?) ?? "")
-        expectTrue(partitions?.contains("teamid:TESTTEAM01") ?? false)
-    }
-
-    @Test("extending twice is idempotent (second call is a no-op)")
-    func extend_idempotent() throws {
-        let (item, cleanup) = try makeTempItem()
-        defer { cleanup() }
-        var accessRef: SecAccess?
-        try #require(SecKeychainItemCopyAccess(item, &accessRef) == errSecSuccess)
-        let access = try #require(accessRef)
-        try KeychainAccessAuthorizer.extendPartitionList(of: access, with: "teamid:TESTTEAM01")
-        try KeychainAccessAuthorizer.extendPartitionList(of: access, with: "teamid:TESTTEAM01")
-        let acl = try #require(KeychainAccessAuthorizer.findACL(
-            in: access, authorization: "ACLAuthorizationPartitionID"))
-        var appsRef: CFArray?
-        var descRef: CFString?
-        var prompt = SecKeychainPromptSelector()
-        try #require(SecACLCopyContents(acl, &appsRef, &descRef, &prompt) == errSecSuccess)
-        let partitions = PartitionListCodec.decode(hexDescription: (descRef as String?) ?? "") ?? []
-        #expect(partitions.filter { $0 == "teamid:TESTTEAM01" }.count == 1)
-    }
-
-    @Test("adds self to the decrypt ACL without throwing")
-    func adds_self_to_decrypt_acl() throws {
-        let (item, cleanup) = try makeTempItem()
-        defer { cleanup() }
-        var accessRef: SecAccess?
-        try #require(SecKeychainItemCopyAccess(item, &accessRef) == errSecSuccess)
-        let access = try #require(accessRef)
-        try KeychainAccessAuthorizer.addSelfToDecryptACL(of: access)
-    }
-
-    @Test("unknown authorization tag finds no ACL")
-    func unknown_tag() throws {
-        let (item, cleanup) = try makeTempItem()
-        defer { cleanup() }
-        var accessRef: SecAccess?
-        try #require(SecKeychainItemCopyAccess(item, &accessRef) == errSecSuccess)
-        let access = try #require(accessRef)
-        #expect(KeychainAccessAuthorizer.findACL(in: access,
-                                                 authorization: "NoSuchAuthorization") == nil)
+        var commits = 0
+        do {
+            let outcome = try KeychainAccessAuthorizer.authorize(
+                service: Self.service, searchList: [keychain.reference], teamID: "TESTTEAM",
+                probeRead: { _, _ in false },
+                readItem: { _ in
+                    commits += 1
+                    return status
+                })
+            #expect(status == errSecUserCanceled)
+            #expect(outcome == .canceled)
+        } catch let error as KeychainAccessAuthorizer.AuthorizationFailure {
+            if status == errSecSuccess {
+                #expect(error == .permissionNotPersistent)
+            } else {
+                #expect(status == errSecAuthFailed)
+                #expect(error == .authorizationDenied)
+            }
+        } catch is AppError {
+            #expect(status == errSecParam)
+        }
+        #expect(commits == 1)
     }
 
     @Test("authorize on a missing service throws credentials error")
@@ -121,7 +112,8 @@ struct KeychainAccessAuthorizerTests {
         let (_, cleanup) = try makeTempItem()
         defer { cleanup() }
         let outcome = try KeychainAccessAuthorizer.authorize(
-            service: Self.service,
+            service: Self.service, searchList: [keychain.reference],
+            teamID: "TESTTEAM",
             probeRead: { _, _ in true })
         #expect(outcome == .authorized)
     }
@@ -133,13 +125,15 @@ struct KeychainAccessAuthorizerTests {
         let legacyAdd: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
+            kSecUseKeychain as String: keychain.reference,
             kSecValueData as String:   Data("legacy".utf8),
         ]
         try #require(SecItemAdd(legacyAdd as CFDictionary, nil) == errSecSuccess)
 
         var probedAccounts: [String?] = []
         let outcome = try KeychainAccessAuthorizer.authorize(
-            service: Self.service,
+            service: Self.service, searchList: [keychain.reference],
+            teamID: "TESTTEAM",
             probeRead: { _, account in
                 probedAccounts.append(account)
                 return true
@@ -148,6 +142,100 @@ struct KeychainAccessAuthorizerTests {
         #expect(outcome == .authorized)
         #expect(probedAccounts.count == 1)
         #expect(probedAccounts[0] == "tester")
+    }
+
+    @Test("authorize refuses to guess between multiple unresolved accounts")
+    func refuses_ambiguous_accounts() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        let secondDelete: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: "work@example.com",
+        ]
+        _ = SecItemDelete(secondDelete as CFDictionary)
+        defer { _ = SecItemDelete(secondDelete as CFDictionary) }
+        let secondAdd: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: "work@example.com",
+            kSecUseKeychain as String: keychain.reference,
+            kSecValueData as String:   Data("work".utf8),
+        ]
+        try #require(SecItemAdd(secondAdd as CFDictionary, nil) == errSecSuccess)
+
+        var probeCalls = 0
+        #expect(throws: AppError.self) {
+            try KeychainAccessAuthorizer.authorize(
+                service: Self.service, searchList: [keychain.reference],
+                teamID: "TESTTEAM",
+                probeRead: { _, _ in
+                    probeCalls += 1
+                    return true
+                })
+        }
+
+        #expect(probeCalls == 0)
+    }
+
+    @Test("authorize limits a multi-account service to the preferred account")
+    func authorizes_only_preferred_account() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+        let secondDelete: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: "work@example.com",
+        ]
+        _ = SecItemDelete(secondDelete as CFDictionary)
+        defer { _ = SecItemDelete(secondDelete as CFDictionary) }
+        let secondAdd: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: "work@example.com",
+            kSecUseKeychain as String: keychain.reference,
+            kSecValueData as String:   Data("work".utf8),
+        ]
+        try #require(SecItemAdd(secondAdd as CFDictionary, nil) == errSecSuccess)
+
+        var probedAccounts: [String?] = []
+        let outcome = try KeychainAccessAuthorizer.authorize(
+            service: Self.service, searchList: [keychain.reference],
+            account: "work@example.com",
+            teamID: "TESTTEAM",
+            probeRead: { _, account in
+                probedAccounts.append(account)
+                return true
+            })
+
+        #expect(outcome == .authorized)
+        #expect(probedAccounts == ["work@example.com"])
+    }
+
+    @Test("blocked authorization fails closed without a stable Team ID")
+    func unsigned_authorization_fails_closed() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+
+        #expect(throws: AppError.self) {
+            try KeychainAccessAuthorizer.authorize(
+                service: Self.service, searchList: [keychain.reference],
+                teamID: nil,
+                probeRead: { _, _ in false })
+        }
+    }
+
+    @Test("readable item still fails durable authorization without a Team ID")
+    func unsigned_readable_item_fails_closed() throws {
+        let (_, cleanup) = try makeTempItem()
+        defer { cleanup() }
+
+        #expect(throws: AppError.self) {
+            try KeychainAccessAuthorizer.authorize(
+                service: Self.service, searchList: [keychain.reference],
+                teamID: nil,
+                probeRead: { _, _ in true })
+        }
     }
 
     @Test("authorize proceeds past the gate when the probe says access is blocked")
@@ -160,5 +248,17 @@ struct KeychainAccessAuthorizerTests {
                 service: "ai-taskbar-definitely-missing-\(UUID())",
                 probeRead: { _, _ in false })
         }
+    }
+
+    @Test("interactive ACL denial does not diagnose an incorrect password")
+    func commit_denial_is_typed() throws {
+        let failure = try #require(
+            KeychainAccessAuthorizer.authorizationFailure(forCommitStatus: errSecAuthFailed)
+        )
+
+        #expect(failure == .authorizationDenied)
+        expectTrue(
+            KeychainAccessAuthorizer.authorizationFailure(forCommitStatus: errSecSuccess) == nil
+        )
     }
 }

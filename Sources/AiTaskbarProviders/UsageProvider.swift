@@ -10,8 +10,9 @@ public protocol UsageProvider: Sendable {
     func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome
     /// Optional user-initiated credential authorization. Providers without a
     /// foreign interactive credential surface use the default unsupported
-    /// implementation.
-    func authorizeCredentialsInteractively() throws
+    /// implementation. Returns false when the native dialog is canceled.
+    @discardableResult
+    func authorizeCredentialsInteractively() throws -> Bool
     /// Filesystem path of the file-backed credential backing this provider,
     /// if any. Watched by the UI so a re-login performed externally (e.g.
     /// `codex login` run by the user) triggers an immediate refresh instead
@@ -23,7 +24,8 @@ public protocol UsageProvider: Sendable {
 public extension UsageProvider {
     var displayName: String { vendorId.displayName }
     var credentialFileURL: URL? { nil }
-    func authorizeCredentialsInteractively() throws {
+    @discardableResult
+    func authorizeCredentialsInteractively() throws -> Bool {
         throw AppError.credentials("Interactive credential authorization is not supported for \(displayName)")
     }
 }

@@ -287,10 +287,9 @@ public struct VendorSectionView: View {
     }
 
     /// Actionable Keychain banner shown after a prompt-suppressed scheduled
-    /// read is blocked. The button performs one explicit interactive read and
-    /// seeds the reader's in-memory credential cache. It deliberately does
-    /// not rewrite Claude Code's ACL. Runs off the main actor because the
-    /// native SecurityAgent dialog blocks until the user responds.
+    /// read is blocked. The button grants this signed app durable access to
+    /// Claude Code's credential ACL. Runs off the main actor because the one
+    /// native SecurityAgent password dialog blocks until the user responds.
     @ViewBuilder
     private var keychainAuthorizeAffordance: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -299,14 +298,17 @@ public struct VendorSectionView: View {
             VStack(alignment: .leading, spacing: 2) {
                 L10n.text("keychain_auth_title")
                     .font(.subheadline.weight(.semibold))
-                if let message = keychainAuthError {
+                if keychainAuthPending {
+                    L10n.text("keychain_auth_pending")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let message = keychainAuthError {
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 } else {
-                    L10n.text(keychainAuthPending ? "keychain_auth_pending"
-                                                  : "keychain_auth_hint")
+                    L10n.text("keychain_auth_hint")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -330,17 +332,26 @@ public struct VendorSectionView: View {
         let vm = self.vm
         let provider = vm.provider
         Task.detached(priority: .userInitiated) {
-            let result: Result<Void, Error> = Result {
+            let result: Result<Bool, Error> = Result {
                 try provider.authorizeCredentialsInteractively()
             }
             await MainActor.run {
                 keychainAuthPending = false
                 switch result {
-                case .success:
-                    vm.refresh(forceRefresh: true)
+                case .success(let authorized):
+                    if authorized { vm.refresh(forceRefresh: true) }
                 case .failure(let error):
-                    keychainAuthError = (error as? AppError)?.localizedDescription
-                        ?? String(describing: error)
+                    if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
+                       failure == .authorizationDenied {
+                        keychainAuthError = L10n.localizedString(
+                            "keychain_auth_denied")
+                    } else if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
+                              failure == .permissionNotPersistent {
+                        keychainAuthError = L10n.localizedString("keychain_auth_not_persistent")
+                    } else {
+                        keychainAuthError = (error as? LocalizedError)?.errorDescription
+                            ?? String(describing: error)
+                    }
                 }
             }
         }
@@ -466,6 +477,7 @@ public struct VendorSectionView: View {
             // regular rows via `VendorSnapshot.windows`; no extra label needed.
             EmptyView()
         case .openai(let s):
+            OpenAIResetControls(vm: vm, reset: vm.openAIReset)
             if let credits = s.creditsUSD {
                 Label(L10n.localizedString("credits_fmt", credits),
                       systemImage: "dollarsign.circle")

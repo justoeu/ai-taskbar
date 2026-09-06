@@ -65,6 +65,39 @@ public enum OpencodeScanner {
     public static func scan(now: Date = .init(),
                             provider: String,
                             dbPath: String? = nil) -> OpencodeScan? {
+        scan(now: now, providers: [provider], dbPath: dbPath)
+    }
+
+    /// Scans several opencode provider aliases in one database pass. Some
+    /// vendors have more than one stable billing identity — Z.AI currently
+    /// writes both `zai` and `zai-coding-plan` — and treating the latter as a
+    /// different vendor made current GLM models disappear from the Z.AI card.
+    public static func scan(now: Date = .init(),
+                            providers: [String],
+                            dbPath: String? = nil) -> OpencodeScan? {
+        scan(now: now,
+             providerGroups: ["combined": providers],
+             dbPath: dbPath)?["combined"]
+    }
+
+    /// Scans every requested vendor group in one SQLite pass. The dictionary
+    /// key is caller-owned (the app uses `VendorId.rawValue`); each value lists
+    /// the opencode provider aliases billed to that vendor.
+    public static func scan(now: Date = .init(),
+                            providerGroups: [String: [String]],
+                            dbPath: String? = nil) -> [String: OpencodeScan]? {
+        guard !Task.isCancelled else { return nil }
+        var groupByProvider: [String: String] = [:]
+        for group in providerGroups.keys.sorted() {
+            for provider in Set(providerGroups[group, default: []]).sorted()
+            where !provider.isEmpty {
+                // An alias cannot be attributed to two billing vendors.
+                guard groupByProvider[provider] == nil else { return nil }
+                groupByProvider[provider] = group
+            }
+        }
+        let providerIDs = groupByProvider.keys.sorted()
+        guard !providerIDs.isEmpty else { return nil }
         let path = dbPath ?? defaultDatabasePath()
         guard FileManager.default.fileExists(atPath: path) else { return nil }
 
@@ -77,7 +110,16 @@ public enum OpencodeScanner {
             sqlite3_close(db)
             return nil
         }
-        defer { sqlite3_close(db) }
+        // Abort `sqlite3_step` itself when a refresh is superseded. Polling
+        // only after rows arrive cannot interrupt the full-table scan that
+        // SQLite performs before returning the first aggregate row.
+        sqlite3_progress_handler(db, 1_000, { _ in
+            Task.isCancelled ? 1 : 0
+        }, nil)
+        defer {
+            sqlite3_progress_handler(db, 0, nil, nil)
+            sqlite3_close(db)
+        }
 
         // opencode stores epoch MILLISECONDS in `time_created`, while the rest
         // of this module works in seconds.
@@ -89,8 +131,11 @@ public enum OpencodeScanner {
         // `time_created` column is used for the range rather than the JSON's
         // own `$.time.created` so the filter can be evaluated without parsing
         // every row's document.
+        let placeholders = Array(repeating: "?", count: providerIDs.count)
+            .joined(separator: ", ")
         let sql = """
-            SELECT json_extract(data, '$.modelID'),
+            SELECT json_extract(data, '$.providerID'),
+                   json_extract(data, '$.modelID'),
                    CASE WHEN time_created >= ? THEN 1 ELSE 0 END,
                    sum(coalesce(json_extract(data, '$.tokens.input'), 0)),
                    sum(coalesce(json_extract(data, '$.tokens.output'), 0)),
@@ -101,9 +146,9 @@ public enum OpencodeScanner {
                    count(*)
             FROM message
             WHERE time_created >= ?
-              AND json_extract(data, '$.providerID') = ?
+              AND json_extract(data, '$.providerID') IN (\(placeholders))
               AND json_extract(data, '$.role') = 'assistant'
-            GROUP BY 1, 2
+            GROUP BY 1, 2, 3
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
@@ -112,30 +157,37 @@ public enum OpencodeScanner {
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_int64(stmt, 1, startOfTodayMs)
         sqlite3_bind_int64(stmt, 2, sevenDaysAgoMs)
-        sqlite3_bind_text(stmt, 3, provider, -1, SQLITE_TRANSIENT)
+        for (offset, providerID) in providerIDs.enumerated() {
+            sqlite3_bind_text(stmt, Int32(offset + 3), providerID, -1, SQLITE_TRANSIENT)
+        }
 
-        var scan = OpencodeScan()
-        var stepped = 0
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            // Cooperate with cancellation on multi-GB DBs (BP-HYD-002).
-            stepped += 1
-            if stepped % 64 == 0, Task.isCancelled { return nil }
-            let rows = Int(sqlite3_column_int64(stmt, 8))
+        var scans = Dictionary(uniqueKeysWithValues:
+            providerGroups.keys.map { ($0, OpencodeScan()) })
+        var stepResult = sqlite3_step(stmt)
+        while stepResult == SQLITE_ROW {
+            defer { stepResult = sqlite3_step(stmt) }
+            guard !Task.isCancelled else { return nil }
+            guard let providerC = sqlite3_column_text(stmt, 0) else { continue }
+            let provider = String(cString: providerC)
+            guard let group = groupByProvider[provider] else { continue }
+            var scan = scans[group] ?? OpencodeScan()
+            let rows = Int(sqlite3_column_int64(stmt, 9))
             // A turn with no `modelID` cannot be attributed to anything. Count
             // it rather than folding it into an arbitrary bucket.
-            guard let modelC = sqlite3_column_text(stmt, 0) else {
+            guard let modelC = sqlite3_column_text(stmt, 1) else {
                 scan.skippedRows += rows
+                scans[group] = scan
                 continue
             }
             let model = String(cString: modelC)
-            let isToday = sqlite3_column_int64(stmt, 1) == 1
+            let isToday = sqlite3_column_int64(stmt, 2) == 1
 
-            let input     = Int(sqlite3_column_int64(stmt, 2))
-            let output    = Int(sqlite3_column_int64(stmt, 3))
-            let reasoning = Int(sqlite3_column_int64(stmt, 4))
-            let cacheRead = Int(sqlite3_column_int64(stmt, 5))
-            let cacheWrite = Int(sqlite3_column_int64(stmt, 6))
-            let cost      = sqlite3_column_double(stmt, 7)
+            let input      = Int(sqlite3_column_int64(stmt, 3))
+            let output     = Int(sqlite3_column_int64(stmt, 4))
+            let reasoning  = Int(sqlite3_column_int64(stmt, 5))
+            let cacheRead  = Int(sqlite3_column_int64(stmt, 6))
+            let cacheWrite = Int(sqlite3_column_int64(stmt, 7))
+            let cost       = sqlite3_column_double(stmt, 8)
 
             // Invariant 2: reasoning is billed as output and is not already
             // inside it. Invariant 1: input is already cache-exclusive, so it
@@ -152,8 +204,12 @@ public enum OpencodeScanner {
                 CostAggregator.add(usage, into: &scan.todayByModel, model: model)
                 scan.costTodayByModel[model, default: 0] += cost
             }
+            scans[group] = scan
         }
-        return scan
+        // SQLITE_INTERRUPT is the expected cancellation path. Any other SQL
+        // failure must also discard the partial aggregates.
+        guard stepResult == SQLITE_DONE, !Task.isCancelled else { return nil }
+        return scans
     }
 }
 

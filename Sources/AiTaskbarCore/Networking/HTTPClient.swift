@@ -126,6 +126,67 @@ public final class HTTPClient: @unchecked Sendable {
         }
     }
 
+    /// Streams a bounded response while allowing redirects only inside the
+    /// request's original HTTPS origin. The redirect decision happens before
+    /// URLSession follows the Location header.
+    public func sendBounded(
+        _ request: URLRequest,
+        maximumResponseBytes: Int
+    ) async throws -> (Data, HTTPURLResponse) {
+        try Task.checkCancellation()
+        guard maximumResponseBytes >= 0, let origin = request.url else {
+            throw AppError.transport("invalid bounded HTTP request")
+        }
+        var req = request
+        if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
+            req.timeoutInterval = defaultTimeout
+        }
+        let redirectDelegate = SameOriginRedirectDelegate(origin: origin)
+        do {
+            let (bytes, response) = try await session.bytes(
+                for: req,
+                delegate: redirectDelegate
+            )
+            try Task.checkCancellation()
+            guard let http = response as? HTTPURLResponse else {
+                throw AppError.transport("non-HTTP response")
+            }
+            if http.expectedContentLength > Int64(maximumResponseBytes) {
+                throw AppError.transport(
+                    "HTTP response exceeds \(maximumResponseBytes) bytes"
+                )
+            }
+            var data = Data()
+            if http.expectedContentLength > 0 {
+                data.reserveCapacity(min(
+                    maximumResponseBytes,
+                    Int(http.expectedContentLength)
+                ))
+            }
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                guard data.count < maximumResponseBytes else {
+                    throw AppError.transport(
+                        "HTTP response exceeds \(maximumResponseBytes) bytes"
+                    )
+                }
+                data.append(byte)
+            }
+            return (data, http)
+        } catch let appErr as AppError {
+            throw appErr
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let urlErr as URLError {
+            if urlErr.code == .cancelled { throw CancellationError() }
+            throw AppError.transport(
+                "URLError \(urlErr.code.rawValue): \(urlErr.localizedDescription)"
+            )
+        } catch {
+            throw AppError.transport(error.localizedDescription)
+        }
+    }
+
     /// Convenience: send + decode JSON, throwing `.http` on non-2xx and
     /// `.schema` on decode failure. Uses the shared decoder unless caller
     /// supplies one — avoids per-call decoder allocations on hot paths.
@@ -145,5 +206,40 @@ public final class HTTPClient: @unchecked Sendable {
             let preview = String(data: data.prefix(300), encoding: .utf8) ?? ""
             throw AppError.schema("decode \(T.self): \(error). body=\(preview)")
         }
+    }
+}
+
+private final class SameOriginRedirectDelegate:
+    NSObject, URLSessionTaskDelegate, @unchecked Sendable
+{
+    private let scheme: String?
+    private let host: String?
+    private let port: Int?
+
+    init(origin: URL) {
+        scheme = origin.scheme?.lowercased()
+        host = origin.host?.lowercased()
+        port = origin.port
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        guard let url = request.url,
+              scheme == "https",
+              url.scheme?.lowercased() == scheme,
+              url.host?.lowercased() == host,
+              url.port == port,
+              url.user == nil,
+              url.password == nil
+        else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 }

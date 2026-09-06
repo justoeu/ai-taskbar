@@ -16,6 +16,12 @@ enum CostAggregator {
         existing.outputTokens = saturatingAdd(existing.outputTokens, u.outputTokens)
         existing.cacheReadTokens = saturatingAdd(existing.cacheReadTokens, u.cacheReadTokens)
         existing.cacheCreateTokens = saturatingAdd(existing.cacheCreateTokens, u.cacheCreateTokens)
+        existing.cacheCreate1hTokens = saturatingAdd(existing.cacheCreate1hTokens, u.cacheCreate1hTokens)
+        existing.longContextInputTokens = saturatingAdd(existing.longContextInputTokens, u.longContextInputTokens)
+        existing.longContextOutputTokens = saturatingAdd(existing.longContextOutputTokens, u.longContextOutputTokens)
+        existing.longContextCacheReadTokens = saturatingAdd(existing.longContextCacheReadTokens, u.longContextCacheReadTokens)
+        existing.longContextCacheCreateTokens = saturatingAdd(existing.longContextCacheCreateTokens, u.longContextCacheCreateTokens)
+        existing.longContextCacheCreate1hTokens = saturatingAdd(existing.longContextCacheCreate1hTokens, u.longContextCacheCreate1hTokens)
         bucket[model] = existing
     }
 
@@ -41,6 +47,11 @@ enum CostAggregator {
         var total = 0.0
         var byModel: [String: Double] = [:]
         for (model, usage) in totals {
+            // Discovery must not depend on pricing-table freshness. Keeping a
+            // zero-dollar row means a newly released model remains visible in
+            // the UI while the scanner's note explains that its turns are not
+            // priced yet. Previously `continue` erased the model entirely.
+            byModel[model] = 0
             guard let pricing = PricingTable.lookup(model, table: table) else { continue }
             let usd = CostMath.cost(usage: usage, pricing: pricing)
             total += usd

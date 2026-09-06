@@ -125,17 +125,28 @@ public struct OpenAISnapshot: Sendable, Equatable, Codable {
     public let secondary: UsageWindow?
     public let creditsUSD: Double?
     public let messageCountRange: String?  // e.g. "5–10 messages" — Codex reports a range
+    /// Earned resets, not paid usage credits. nil means availability is unknown.
+    public let availableResetCount: Int?
+
+    public var canOfferRateLimitReset: Bool {
+        guard let count = availableResetCount, count > 0 else { return false }
+        return [primary, secondary].compactMap { $0 }.contains {
+            $0.utilizationPercent.isFinite && $0.utilizationPercent > 90
+        }
+    }
 
     public init(planLabel: String? = nil,
                 primary: UsageWindow? = nil,
                 secondary: UsageWindow? = nil,
                 creditsUSD: Double? = nil,
-                messageCountRange: String? = nil) {
+                messageCountRange: String? = nil,
+                availableResetCount: Int? = nil) {
         self.planLabel = planLabel
         self.primary = primary
         self.secondary = secondary
         self.creditsUSD = creditsUSD
         self.messageCountRange = messageCountRange
+        self.availableResetCount = availableResetCount
     }
 }
 

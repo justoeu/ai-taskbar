@@ -14,6 +14,12 @@ public final class CostEstimator: ObservableObject {
     /// Kimi balances).
     public static let supportedVendors: Set<VendorId> = [.anthropic, .openai]
 
+    /// Scanner seams keep the refresh state machine independently testable
+    /// from the size and contents of the current user's on-disk histories.
+    private let claudeEstimate: @Sendable () -> CostEstimate
+    private let codexEstimate: @Sendable () -> CostEstimate
+    private let opencodeScan: @Sendable ([String: [String]]) -> [String: OpencodeScan]
+
     /// Usage that reached a vendor through opencode rather than that vendor's
     /// own CLI, keyed by the vendor it was billed to.
     ///
@@ -30,14 +36,15 @@ public final class CostEstimator: ObservableObject {
     ///   breakdown answers "where did that go", it does not restate the total.
     @Published public private(set) var opencode: [VendorId: OpencodeScan] = [:]
 
-    /// Vendors whose card shows an opencode breakdown, mapped to opencode's
-    /// own `providerID` for that vendor.
+    /// Vendors whose card shows an opencode breakdown, mapped to every
+    /// `providerID` alias opencode uses for that billing vendor.
     /// `nonisolated` because the scan runs on a detached task: the class is
     /// `@MainActor`, so an isolated static would be unreadable from there.
     /// Safe as a `let` of Sendable contents — there is nothing to mutate.
-    public nonisolated static let opencodeProviders: [VendorId: String] = [
-        .openai: "openai",
-        .xai: "xai",
+    public nonisolated static let opencodeProviders: [VendorId: [String]] = [
+        .openai: ["openai"],
+        .zai: ["zai", "zai-coding-plan"],
+        .xai: ["xai"],
     ]
     /// Skip recomputation if the last result is younger than this.
     private let minRecomputeInterval: TimeInterval = 60
@@ -59,7 +66,21 @@ public final class CostEstimator: ObservableObject {
     /// failure it prevents is silent.
     private var generation: UInt64 = 0
 
-    public init() {}
+    public init() {
+        self.claudeEstimate = { ClaudeSessionScanner.estimate() }
+        self.codexEstimate = { CodexCost.estimate() }
+        self.opencodeScan = { OpencodeScanner.scan(providerGroups: $0) ?? [:] }
+    }
+
+    internal init(
+        claudeEstimate: @escaping @Sendable () -> CostEstimate,
+        codexEstimate: @escaping @Sendable () -> CostEstimate,
+        opencodeScan: @escaping @Sendable ([String: [String]]) -> [String: OpencodeScan]
+    ) {
+        self.claudeEstimate = claudeEstimate
+        self.codexEstimate = codexEstimate
+        self.opencodeScan = opencodeScan
+    }
 
     /// Recomputes scanners if either no result exists or the previous one is
     /// older than `minRecomputeInterval`. `force == true` bypasses the gate.
@@ -72,6 +93,9 @@ public final class CostEstimator: ObservableObject {
         generation &+= 1
         let gen = generation
         isLoading = true
+        let claudeEstimate = self.claudeEstimate
+        let codexEstimate = self.codexEstimate
+        let opencodeScan = self.opencodeScan
         // Held so a teardown (or a superseding refresh) can cancel the scan.
         // Both scanners poll `Task.isCancelled` between files; without a
         // handle to cancel, that cooperation had nothing to cooperate with.
@@ -80,8 +104,8 @@ public final class CostEstimator: ObservableObject {
         // unstructured Task {}) so cancel() cooperates with Task.isCancelled
         // inside Claude/Codex scanners (BP-HYD-001 / N1-NEX-001).
         inFlight = Task.detached(priority: .utility) {
-            async let claude = ClaudeSessionScanner.estimate()
-            async let codex = CodexCost.estimate()
+            async let claude = claudeEstimate()
+            async let codex = codexEstimate()
             let started = Date()
             let claudeEstimate = await claude
             let codexEstimate = await codex
@@ -120,9 +144,9 @@ public final class CostEstimator: ObservableObject {
 
         // opencode is scanned on its OWN task rather than inside the one above.
         //
-        // It reads a 19 GB SQLite file with no index on time alone, so a window
-        // query scans: measured 1.51s for the openai provider and 0.23s for
-        // xai. Awaiting that before publishing made the whole Models section
+        // It reads a multi-GB SQLite file with no index on time alone, so the
+        // grouped window query needs a full scan. Awaiting that before publishing
+        // made the whole Models section
         // wait on it — a cold first open went from ~5s (the Claude scan, which
         // dominates and always has) to ~6.5s, which reads as "it never loads".
         //
@@ -134,9 +158,14 @@ public final class CostEstimator: ObservableObject {
         // only to the scanners the spinner is actually describing.
         opencodeTask?.cancel()
         opencodeTask = Task.detached(priority: .utility) {
-            let scans = Self.opencodeProviders.compactMapValues {
-                OpencodeScanner.scan(provider: $0)
-            }
+            let groups = Dictionary(uniqueKeysWithValues:
+                Self.opencodeProviders.map { ($0.key.rawValue, $0.value) })
+            let rawScans = opencodeScan(groups)
+            let scans: [VendorId: OpencodeScan] = Dictionary(
+                uniqueKeysWithValues: rawScans.compactMap { key, scan in
+                guard let vendor = VendorId(rawValue: key), !scan.isEmpty else { return nil }
+                return (vendor, scan)
+            })
             guard !Task.isCancelled else { return }
             await MainActor.run { [self] in
                 guard self.generation == gen else { return }

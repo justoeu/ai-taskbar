@@ -117,14 +117,26 @@ public enum ClaudeSessionScanner {
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.anthropic)
+        let unpricedToday = Set(totalsToday.keys.filter {
+            PricingTable.lookup($0, table: PricingTable.anthropic) == nil
+        })
+        let unpricedLast7 = Set(totalsLast7.keys.filter {
+            PricingTable.lookup($0, table: PricingTable.anthropic) == nil
+        })
         let note: String?
         if filesScanned == 0 {
             note = "No recent Claude sessions found."
-        } else if unparseableTimestamps > 0 {
-            note = "Approximate — \(unparseableTimestamps) records had unparseable timestamps " +
-                   "(counted into today). Subscription users pay flat fee."
         } else {
-            note = "Approximate — based on pricing table; subscription users pay flat fee."
+            var details: [String] = []
+            if !unpricedLast7.isEmpty {
+                details.append("price unavailable for \(unpricedLast7.sorted().joined(separator: ", ")); those turns are excluded from cost totals")
+            }
+            if unparseableTimestamps > 0 {
+                details.append("\(unparseableTimestamps) records had unparseable timestamps (counted into today)")
+            }
+            if details.isEmpty { details.append("based on pricing table") }
+            note = "Approximate — \(details.joined(separator: "; ")). " +
+                   "Subscription users pay flat fee."
         }
         return CostEstimate(
             usdToday: usdToday,
@@ -134,7 +146,9 @@ public enum ClaudeSessionScanner {
             totalsByModel: totalsToday,
             computedAt: now,
             isApproximate: true,
-            note: note
+            note: note,
+            unpricedModelsToday: unpricedToday,
+            unpricedModelsLast7Days: unpricedLast7
         )
     }
 
@@ -158,6 +172,12 @@ public enum ClaudeSessionScanner {
                 let output_tokens: Int?
                 let cache_creation_input_tokens: Int?
                 let cache_read_input_tokens: Int?
+                let cache_creation: CacheCreation?
+
+                struct CacheCreation: Decodable {
+                    let ephemeral_5m_input_tokens: Int?
+                    let ephemeral_1h_input_tokens: Int?
+                }
             }
         }
     }
@@ -201,11 +221,22 @@ public enum ClaudeSessionScanner {
                   let usage = msg.usage
             else { continue }
 
+            let statedCacheCreate = max(0, usage.cache_creation_input_tokens ?? 0)
+            let detailed5m = max(0, usage.cache_creation?.ephemeral_5m_input_tokens ?? 0)
+            let detailed1h = max(0, usage.cache_creation?.ephemeral_1h_input_tokens ?? 0)
+            let detailedTotal = CostAggregator.saturatingAdd(detailed5m, detailed1h)
+            let cacheCreateTotal = usage.cache_creation_input_tokens == nil
+                ? detailedTotal : statedCacheCreate
+            let cacheCreate1h = min(detailed1h, cacheCreateTotal)
+            // Any unclassified remainder uses the five-minute rate. Older
+            // transcript lines have only `cache_creation_input_tokens`.
+            let cacheCreate5m = cacheCreateTotal - cacheCreate1h
             let modelUsage = ModelUsage(
                 inputTokens: usage.input_tokens ?? 0,
                 outputTokens: usage.output_tokens ?? 0,
                 cacheReadTokens: usage.cache_read_input_tokens ?? 0,
-                cacheCreateTokens: usage.cache_creation_input_tokens ?? 0
+                cacheCreateTokens: cacheCreate5m,
+                cacheCreate1hTokens: cacheCreate1h
             )
 
             let ts = parsed.timestamp.flatMap(ISO8601Parsing.parse)

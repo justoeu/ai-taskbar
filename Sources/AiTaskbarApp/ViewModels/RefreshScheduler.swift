@@ -5,26 +5,61 @@ import AiTaskbarCore
 @MainActor
 public final class RefreshScheduler: ObservableObject {
     public let interval: TimeInterval
+    public let statusInterval: TimeInterval
     /// Extra delay applied to the next sleep when the previous cycle saw any
     /// HTTP 429. Stacked on top of `interval` so a rate-limited vendor gets a
     /// 6-minute breather (default 300 + 60) before being polled again.
     public static let rateLimitBackoff: TimeInterval = 60
     private weak var store: UsageStore?
+    private weak var statusStore: ServiceStatusStore?
     private var refreshLoop: Task<Void, Never>?
+    private var statusRefreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
 
-    public init(store: UsageStore, interval: TimeInterval = 300) {
+    public convenience init(store: UsageStore,
+                            statusStore: ServiceStatusStore? = nil,
+                            interval: TimeInterval = 300) {
+        self.init(store: store, statusStore: statusStore, interval: interval,
+                  minimumInterval: 15, minimumStatusInterval: 300)
+    }
+
+    init(store: UsageStore,
+         statusStore: ServiceStatusStore?,
+         interval: TimeInterval,
+         minimumInterval: TimeInterval,
+         minimumStatusInterval: TimeInterval) {
         self.store = store
+        self.statusStore = statusStore
         // Floor at 15 s. Below this the undocumented vendor endpoints
         // (Anthropic, Codex, Z.AI) start returning 429 aggressively.
-        self.interval = max(15, interval)
+        self.interval = max(minimumInterval, interval)
+        self.statusInterval = max(minimumStatusInterval, self.interval)
     }
 
     /// Idempotent: subsequent calls (e.g. on every popover open) are no-ops so
     /// we don't reset the recurring cycle.
     public func start() {
         startRefreshLoop()
+        startStatusRefreshLoop()
         startCompactLoop()
+    }
+
+    /// A separate cadence prevents usage 429 back-off or a hung credential
+    /// fetch from delaying public status. The scheduler still owns every
+    /// long-lived timer; status and usage merely have independent loops.
+    private func startStatusRefreshLoop() {
+        guard statusRefreshLoop == nil, statusStore != nil else { return }
+        statusRefreshLoop = Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.statusStore?.refreshAll(forceRefresh: false)
+            await self.statusStore?.waitForCurrentRefresh()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(self.statusInterval))
+                if Task.isCancelled { break }
+                self.statusStore?.refreshAll(forceRefresh: false)
+                await self.statusStore?.waitForCurrentRefresh()
+            }
+        }
     }
 
     private func startRefreshLoop() {
@@ -98,13 +133,16 @@ public final class RefreshScheduler: ObservableObject {
 
     public func stop() {
         refreshLoop?.cancel()
+        statusRefreshLoop?.cancel()
         compactLoop?.cancel()
         refreshLoop = nil
+        statusRefreshLoop = nil
         compactLoop = nil
     }
 
     deinit {
         refreshLoop?.cancel()
+        statusRefreshLoop?.cancel()
         compactLoop?.cancel()
     }
 }

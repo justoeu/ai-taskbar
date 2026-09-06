@@ -135,4 +135,42 @@ public final class AppEnvironment {
         }
         return out
     }
+
+    /// Enabled status rows come from config flags rather than successful
+    /// credential/provider initialization. Public status must remain visible
+    /// even when authenticated usage setup is invalid or temporarily broken.
+    public func enabledVendorIds() -> [VendorId] {
+        var ids: [VendorId] = []
+        if config.anthropic.enabled { ids.append(.anthropic) }
+        if config.openai.enabled { ids.append(.openai) }
+        if config.openrouter.enabled { ids.append(.openrouter) }
+        if config.zai.enabled { ids.append(.zai) }
+        if config.kimi.enabled { ids.append(.kimi) }
+        if config.gemini.enabled { ids.append(.gemini) }
+        if config.deepseek.enabled { ids.append(.deepseek) }
+        if config.xai.enabled { ids.append(.xai) }
+        return ids
+    }
+
+    /// Builds the separate public-status provider registry and cache TTL.
+    /// Factory failures are surfaced as cold/unknown rows by the store; they
+    /// never remove a configured vendor from the panel.
+    public func makeStatusProviders(for vendorIds: [VendorId]) -> [any ServiceStatusProvider] {
+        let statusTTL = max(15, config.ui.refreshIntervalSeconds - 5)
+        var providers: [any ServiceStatusProvider] = []
+        for vendorId in vendorIds {
+            do {
+                providers.append(contentsOf: try ServiceStatusProviderFactory.makeProviders(
+                    for: [vendorId],
+                    http: http,
+                    cacheTTL: statusTTL
+                ))
+            } catch {
+                AppLog.lifecycle.error(
+                    "\(vendorId.rawValue, privacy: .public) status provider init failed: \(String(describing: error), privacy: .public)"
+                )
+            }
+        }
+        return providers
+    }
 }

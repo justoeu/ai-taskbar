@@ -19,7 +19,7 @@ import os
 /// write-backs) runs inside `withPromptsSuppressed`. The flag is per-process
 /// global, hence the reference count: overlapping suppressed sections keep
 /// it off until the outermost one exits. The only interactive Keychain call
-/// in the app — `KeychainAccessAuthorizer.authorize`'s commit — deliberately
+/// in the app — `KeychainAccessAuthorizer.authorize`'s exact-item read — deliberately
 /// runs OUTSIDE this guard because its single password dialog is the
 /// user-initiated point of the flow.
 ///
@@ -28,6 +28,15 @@ import os
 /// `KeychainAccessAuthorizer` it remains the only mechanism that governs
 /// classic file-keychain prompts.
 public enum KeychainPromptSuppressor {
+    /// Serializes silent Keychain operations against the one user-initiated
+    /// interactive read. Without this gate, a scheduled read could disable
+    /// the process-global interaction flag while SecurityAgent is presenting
+    /// the authorization dialog.
+    // Recursive because the legacy explicit-read path performs a silent
+    // account-metadata query inside its interactive operation on the same
+    // thread. Other threads still wait until the interactive body finishes.
+    private static let operationGate = NSRecursiveLock()
+
     private struct State {
         var depth: Int = 0
         /// User-initiated interactive window (Authorize). While true, `enter`
@@ -41,8 +50,17 @@ public enum KeychainPromptSuppressor {
     /// process, restoring interaction when the outermost suppressed section
     /// exits.
     public static func withPromptsSuppressed<T>(_ body: () throws -> T) rethrows -> T {
-        enter()
-        defer { exit() }
+        try withPromptsSuppressed(apply: setInteractionAllowed, body)
+    }
+
+    internal static func withPromptsSuppressed<T>(
+        apply: @Sendable (Bool) -> Void,
+        _ body: () throws -> T
+    ) rethrows -> T {
+        operationGate.lock()
+        defer { operationGate.unlock() }
+        enter(apply: apply)
+        defer { exit(apply: apply) }
         return try body()
     }
 
@@ -53,19 +71,32 @@ public enum KeychainPromptSuppressor {
     /// (`depth > 0`). Sets `interactiveHold` so concurrent `enter()` cannot
     /// flip prompts off mid-Authorize (RACE-HER-005).
     public static func withPromptsAllowed<T>(_ body: () throws -> T) rethrows -> T {
+        try withPromptsAllowed(apply: setInteractionAllowed, body)
+    }
+
+    internal static func withPromptsAllowed<T>(
+        apply: @Sendable (Bool) -> Void,
+        _ body: () throws -> T
+    ) rethrows -> T {
+        operationGate.lock()
+        defer { operationGate.unlock() }
         state.withLock { s in
             s.interactiveHold = true
             if s.depth == 0 {
-                setInteractionAllowed(true)
+                apply(true)
             }
         }
         defer {
             state.withLock { s in
                 s.interactiveHold = false
-                setInteractionAllowed(s.depth == 0)
+                apply(s.depth == 0)
             }
         }
         return try body()
+    }
+
+    internal static var testingInteractiveHold: Bool {
+        state.withLock { $0.interactiveHold }
     }
 
     /// Internal-visibility seam so tests can drive the reference counting

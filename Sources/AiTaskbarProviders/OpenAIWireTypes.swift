@@ -13,10 +13,29 @@ public struct OpenAIUsageResponse: Decodable {
     public let rate_limit: OpenAIRateLimit?
     public let code_review_rate_limit: OpenAIRateLimit?
     public let credits: OpenAICredits?
+    public let rate_limit_reset_credits: OpenAIResetCreditsSummary?
 
     enum CodingKeys: String, CodingKey {
         case user_id, account_id, email, plan_type, rate_limit,
-             code_review_rate_limit, credits
+             code_review_rate_limit, credits, rate_limit_reset_credits
+    }
+}
+
+/// Same snake_case summary exposed by the installed Codex backend wire model.
+/// Optional metadata: invalid/missing counts fail closed without hiding usage.
+public struct OpenAIResetCreditsSummary: Decodable {
+    public let available_count: Int?
+
+    enum CodingKeys: String, CodingKey { case available_count }
+
+    public init(from decoder: Decoder) throws {
+        // This optional summary must not invalidate otherwise valid usage if
+        // the experimental metadata changes shape. Unknown means no action.
+        guard let c = try? decoder.container(keyedBy: CodingKeys.self) else {
+            available_count = nil
+            return
+        }
+        available_count = try? c.decodeIfPresent(Int.self, forKey: .available_count)
     }
 }
 
@@ -112,7 +131,8 @@ extension OpenAIUsageResponse {
             primary: window(rate_limit?.primary_window, kind: .primary),
             secondary: window(rate_limit?.secondary_window, kind: .secondary),
             creditsUSD: credits?.balance_number,
-            messageCountRange: msgRange
+            messageCountRange: msgRange,
+            availableResetCount: rate_limit_reset_credits?.available_count
         )
     }
 

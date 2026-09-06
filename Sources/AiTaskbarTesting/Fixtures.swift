@@ -48,6 +48,18 @@ public enum Fixtures {
     }
     """#
 
+    /// Earned reset summary is separate from the paid-credit balance.
+    public static let openaiUsageWithReset200 = #"""
+    {
+      "plan_type": "pro",
+      "rate_limit": {
+        "primary_window": { "used_percent": 91, "limit_window_seconds": 18000 },
+        "secondary_window": { "used_percent": 25, "limit_window_seconds": 604800 }
+      },
+      "rate_limit_reset_credits": { "available_count": 2 }
+    }
+    """#
+
     public static let openrouterCredits200 = #"""
     { "data": { "total_credits": 10.00, "total_usage": 2.50 } }
     """#
@@ -263,6 +275,673 @@ public enum Fixtures {
     /// Synthetic OAuth refresh response.
     public static let oauthRefresh200 = #"""
     { "access_token": "new.acc.tk", "refresh_token": "new.ref.tk", "expires_in": 28800 }
+    """#
+
+    // MARK: - Statuspage v2 service status
+
+    /// Canonical Statuspage summary. The unrelated component is deliberately
+    /// down while the page indicator is green so descriptor scoping is pinned.
+    public static let statuspageSummaryOperational200 = #"""
+    {
+      "page": {
+        "id": "page-claude",
+        "name": "Claude",
+        "url": "https://status.claude.com",
+        "time_zone": "Etc/UTC",
+        "updated_at": "2026-09-03T11:59:00.000Z"
+      },
+      "status": { "indicator": "none", "description": "All Systems Operational" },
+      "components": [
+        {
+          "id": "k8w3r06qmzrp",
+          "name": "Claude API (api.anthropic.com)",
+          "status": "operational",
+          "created_at": "2023-07-11T17:53:10.880Z",
+          "updated_at": "2026-09-03T11:58:00.000Z",
+          "position": 3,
+          "description": null,
+          "group_id": null
+        },
+        {
+          "id": "yyzkbfz2thpt",
+          "name": "Claude Code",
+          "status": "operational",
+          "created_at": "2025-05-22T21:35:29.822Z",
+          "updated_at": "2026-09-03T11:57:00.000Z",
+          "position": 4,
+          "description": "Command-line and IDE clients",
+          "group_id": null
+        },
+        {
+          "id": "unrelated-component",
+          "name": "Unrelated product",
+          "status": "major_outage",
+          "created_at": "2025-01-01T00:00:00Z",
+          "updated_at": "2026-09-03T11:56:00Z",
+          "position": 99,
+          "description": null,
+          "group_id": null
+        }
+      ],
+      "incidents": [],
+      "scheduled_maintenances": []
+    }
+    """#
+
+    public static let statuspageSummaryDegraded200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "minor", "description": "Minor Service Outage" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "degraded_performance",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    public static let statuspageSummaryPartialOutage200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "major", "description": "Partial System Outage" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "partial_outage",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    public static let statuspageSummaryMajorOutage200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "critical", "description": "Major System Outage" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "major_outage",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    public static let statuspageSummaryMaintenance200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "maintenance", "description": "Service Under Maintenance" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "under_maintenance",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    /// Unknown indicator and component tokens must decode successfully and
+    /// map to the honest domain-level `unknown` state.
+    public static let statuspageSummaryUnknown200 = #"""
+    {
+      "page": { "id": "page-claude", "name": "Claude", "url": "https://status.claude.com",
+                "updated_at": "2026-09-03T11:59:00Z" },
+      "status": { "indicator": "new_upstream_state", "description": "New state" },
+      "components": [
+        { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "brand_new_state",
+          "updated_at": "2026-09-03T11:58:00Z" }
+      ]
+    }
+    """#
+
+    /// At `2026-09-03T12:00:00Z`: active/global/long incidents intersect the
+    /// six-hour window; `inc-old` ends one minute before it and `inc-future`
+    /// starts one hour after now. `inc-other` is explicitly scoped away.
+    public static let statuspageIncidentsWindow200 = #"""
+    {
+      "page": {
+        "id": "page-claude",
+        "name": "Claude",
+        "url": "https://status.claude.com",
+        "time_zone": "Etc/UTC",
+        "updated_at": "2026-09-03T11:59:30Z"
+      },
+      "incidents": [
+        {
+          "id": "inc-active",
+          "name": "Elevated API errors",
+          "status": "monitoring",
+          "impact": "minor",
+          "created_at": "2026-09-03T10:00:00Z",
+          "updated_at": "2026-09-03T11:50:00Z",
+          "started_at": "2026-09-03T10:00:00Z",
+          "resolved_at": null,
+          "shortlink": "https://status.claude.com/incidents/inc-active",
+          "components": [
+            { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "degraded_performance",
+              "updated_at": "2026-09-03T11:50:00Z" },
+            { "id": "yyzkbfz2thpt", "name": "Claude Code", "status": "degraded_performance",
+              "updated_at": "2026-09-03T11:50:00Z" }
+          ],
+          "incident_updates": [
+            {
+              "id": "update-active",
+              "status": "monitoring",
+              "body": "A fix is deployed and recovery is being monitored.",
+              "incident_id": "inc-active",
+              "created_at": "2026-09-03T11:50:00Z",
+              "updated_at": "2026-09-03T11:50:00Z",
+              "display_at": "2026-09-03T11:50:00Z",
+              "affected_components": [
+                { "code": "k8w3r06qmzrp", "name": "Claude API",
+                  "old_status": "partial_outage", "new_status": "degraded_performance" },
+                { "code": "yyzkbfz2thpt", "name": "Claude Code",
+                  "old_status": "partial_outage", "new_status": "degraded_performance" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "inc-long",
+          "name": "Long-running issue",
+          "status": "resolved",
+          "impact": "major",
+          "created_at": "2026-09-03T02:00:00Z",
+          "updated_at": "2026-09-03T10:05:00Z",
+          "started_at": "2026-09-03T02:00:00Z",
+          "resolved_at": "2026-09-03T10:00:00Z",
+          "shortlink": "https://status.claude.com/incidents/inc-long",
+          "components": [
+            { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "operational",
+              "updated_at": "2026-09-03T10:00:00Z" }
+          ],
+          "incident_updates": []
+        },
+        {
+          "id": "inc-global",
+          "name": "Page-wide incident without component IDs",
+          "status": "resolved",
+          "impact": "critical",
+          "created_at": "2026-09-03T10:30:00Z",
+          "updated_at": "2026-09-03T11:20:00Z",
+          "started_at": "2026-09-03T10:30:00Z",
+          "resolved_at": "2026-09-03T11:00:00Z",
+          "shortlink": "https://status.claude.com/incidents/inc-global",
+          "incident_updates": []
+        },
+        {
+          "id": "inc-old",
+          "name": "Old incident",
+          "status": "resolved",
+          "impact": "minor",
+          "created_at": "2026-09-02T23:00:00Z",
+          "updated_at": "2026-09-03T05:59:00Z",
+          "started_at": "2026-09-02T23:00:00Z",
+          "resolved_at": "2026-09-03T05:59:00Z",
+          "incident_updates": []
+        },
+        {
+          "id": "inc-future",
+          "name": "Future incident",
+          "status": "scheduled",
+          "impact": "maintenance",
+          "created_at": "2026-09-03T11:00:00Z",
+          "updated_at": "2026-09-03T11:10:00Z",
+          "started_at": "2026-09-03T13:00:00Z",
+          "resolved_at": null,
+          "incident_updates": []
+        },
+        {
+          "id": "inc-other",
+          "name": "Unrelated component incident",
+          "status": "investigating",
+          "impact": "critical",
+          "created_at": "2026-09-03T11:00:00Z",
+          "updated_at": "2026-09-03T11:55:00Z",
+          "started_at": "2026-09-03T11:00:00Z",
+          "resolved_at": null,
+          "components": [
+            { "id": "unrelated-component", "name": "Unrelated product", "status": "major_outage",
+              "updated_at": "2026-09-03T11:55:00Z" }
+          ],
+          "incident_updates": []
+        }
+      ]
+    }
+    """#
+
+    public static let statuspageMaintenancesWindow200 = #"""
+    {
+      "page": {
+        "id": "page-claude",
+        "name": "Claude",
+        "url": "https://status.claude.com",
+        "updated_at": "2026-09-03T11:59:40Z"
+      },
+      "scheduled_maintenances": [
+        {
+          "id": "maint-active",
+          "name": "API database maintenance",
+          "status": "in_progress",
+          "impact": "maintenance",
+          "created_at": "2026-09-03T08:30:00Z",
+          "updated_at": "2026-09-03T11:40:00Z",
+          "started_at": "2026-09-03T09:00:00Z",
+          "resolved_at": null,
+          "shortlink": "https://attacker.example/redirect",
+          "scheduled_for": "2026-09-03T09:00:00Z",
+          "scheduled_until": "2026-09-03T13:00:00Z",
+          "components": [
+            { "id": "k8w3r06qmzrp", "name": "Claude API", "status": "under_maintenance",
+              "updated_at": "2026-09-03T11:40:00Z" }
+          ],
+          "incident_updates": [
+            {
+              "id": "update-maint",
+              "status": "in_progress",
+              "body": "Maintenance is in progress.",
+              "incident_id": "maint-active",
+              "created_at": "2026-09-03T11:40:00Z",
+              "updated_at": "2026-09-03T11:40:00Z",
+              "display_at": "2026-09-03T11:40:00Z",
+              "affected_components": [
+                { "code": "k8w3r06qmzrp", "name": "Claude API",
+                  "old_status": "operational", "new_status": "under_maintenance" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    """#
+
+    public static let statuspageIncidentUnknownTokens200 = #"""
+    {
+      "incidents": [
+        {
+          "id": "inc-unknown",
+          "name": "New upstream states",
+          "status": "new_phase",
+          "impact": "novel_impact",
+          "created_at": "2026-09-03T11:00:00Z",
+          "updated_at": "2026-09-03T11:30:00Z",
+          "started_at": "2026-09-03T11:00:00Z",
+          "resolved_at": null,
+          "incident_updates": []
+        }
+      ]
+    }
+    """#
+
+    // MARK: - DeepSeek FlashDuty service status
+
+    /// Canonical active-summary payload from DeepSeek's official FlashDuty
+    /// status page. The active change pins explicit partial-outage state.
+    public static let deepseekStatusActive200 = #"""
+    {
+      "request_id": "request-active",
+      "data": {
+        "page": {
+          "page_id": 6410630422455,
+          "name": "DeepSeek",
+          "url_name": "deepseek",
+          "type": "public",
+          "custom_domain": "status.deepseek.com",
+          "logo": "https://static.flashcat.cloud/deepseek-logo.png",
+          "logo_url": "https://www.deepseek.com/",
+          "date_view": "calendar",
+          "display_uptime_mode": "chart_and_percentage",
+          "components": [
+            {
+              "component_id": "api-service",
+              "name": "API Service",
+              "description": "DeepSeek API availability",
+              "available_since_seconds": 1706745600,
+              "order_id": 1
+            },
+            {
+              "component_id": "chat-service",
+              "section_id": "chat-section",
+              "name": "Chat Service",
+              "available_since_seconds": 1706745600,
+              "order_id": 2
+            }
+          ],
+          "sections": [
+            {
+              "section_id": "chat-section",
+              "name": "Chat",
+              "description": "DeepSeek chat availability",
+              "order_id": 1,
+              "hide_uptime": false,
+              "hide_all": false
+            }
+          ]
+        },
+        "active_changes": [
+          {
+            "change_id": 7001,
+            "page_id": 6410630422455,
+            "type": "incident",
+            "title": "API partially unavailable",
+            "description": "We are monitoring recovery.",
+            "status": "monitoring",
+            "affected_components": [
+              {
+                "component_id": "api-service",
+                "name": "API Service",
+                "description": "DeepSeek API availability",
+                "available_since_seconds": 1706745600,
+                "order_id": 1,
+                "status": "partial_outage"
+              }
+            ],
+            "start_at_seconds": 1788433200,
+            "updates": [
+              {
+                "update_id": "update-identified",
+                "at_seconds": 1788433200,
+                "status": "identified",
+                "description": "The cause has been identified.",
+                "component_changes": [
+                  {
+                    "component_id": "api-service",
+                    "component_name": "API Service",
+                    "status": "partial_outage"
+                  }
+                ]
+              },
+              {
+                "update_id": "update-monitoring",
+                "at_seconds": 1788436200,
+                "status": "monitoring",
+                "description": "A fix is deployed; monitoring recovery.",
+                "component_changes": [
+                  {
+                    "component_id": "api-service",
+                    "component_name": "API Service",
+                    "status": "partial_outage"
+                  }
+                ]
+              }
+            ],
+            "notify_subscribers": true
+          }
+        ]
+      }
+    }
+    """#
+
+    /// Canonical six-hour structure response, including impact, uptime, and
+    /// linked-change records from every new structure wire type.
+    public static let deepseekStatusStructure200 = #"""
+    {
+      "request_id": "request-structure",
+      "data": {
+        "section_impacts": [
+          {
+            "section_id": "chat-section",
+            "change_id": 7001,
+            "start_at_seconds": 1788433200,
+            "end_at_seconds": 1788436800,
+            "status": "partial_outage"
+          }
+        ],
+        "section_uptimes": [
+          {
+            "section_id": "chat-section",
+            "uptime": 95.5,
+            "available_since_seconds": 1788415200
+          }
+        ],
+        "component_impacts": [
+          {
+            "component_id": "api-service",
+            "section_id": "",
+            "change_id": 7001,
+            "start_at_seconds": 1788433200,
+            "end_at_seconds": 1788436800,
+            "status": "partial_outage"
+          }
+        ],
+        "component_uptimes": [
+          {
+            "component_id": "api-service",
+            "section_id": "",
+            "uptime": 94.25,
+            "available_since_seconds": 1706745600
+          }
+        ],
+        "linked_changes": [
+          { "id": 7001, "type": "incident", "title": "API partially unavailable" }
+        ]
+      }
+    }
+    """#
+
+    /// Canonical change-list response. At 2026-09-03T12:00:00Z the active
+    /// and long-running incidents intersect the window; old/future do not.
+    public static let deepseekStatusChanges200 = #"""
+    {
+      "request_id": "request-changes",
+      "data": {
+        "items": [
+          {
+            "change_id": 7001,
+            "page_id": 6410630422455,
+            "type": "incident",
+            "title": "API partially unavailable",
+            "description": "We are monitoring recovery.",
+            "status": "monitoring",
+            "affected_components": [
+              {
+                "component_id": "api-service",
+                "name": "API Service",
+                "available_since_seconds": 1706745600,
+                "order_id": 1,
+                "status": "partial_outage"
+              }
+            ],
+            "start_at_seconds": 1788433200,
+            "updates": [
+              {
+                "update_id": "update-monitoring-newer",
+                "at_seconds": 1788435900,
+                "status": "monitoring",
+                "description": "Recovery continues.",
+                "component_changes": [
+                  {
+                    "component_id": "api-service",
+                    "component_name": "API Service",
+                    "status": "partial_outage"
+                  }
+                ]
+              }
+            ],
+            "notify_subscribers": true
+          },
+          {
+            "change_id": 7002,
+            "page_id": 6410630422455,
+            "type": "incident",
+            "title": "Long-running API outage",
+            "description": "Service restored.",
+            "status": "resolved",
+            "affected_components": [
+              {
+                "component_id": "api-service",
+                "name": "API Service",
+                "available_since_seconds": 1706745600,
+                "order_id": 1,
+                "status": "operational"
+              }
+            ],
+            "start_at_seconds": 1788400800,
+            "close_at_seconds": 1788429600,
+            "updates": [
+              {
+                "update_id": "update-outage",
+                "at_seconds": 1788400800,
+                "status": "investigating",
+                "description": "API requests are failing.",
+                "component_changes": [
+                  {
+                    "component_id": "api-service",
+                    "component_name": "API Service",
+                    "status": "full_outage"
+                  }
+                ]
+              },
+              {
+                "update_id": "update-resolved",
+                "at_seconds": 1788429600,
+                "status": "resolved",
+                "description": "Service restored.",
+                "component_changes": [
+                  {
+                    "component_id": "api-service",
+                    "component_name": "API Service",
+                    "status": "operational"
+                  }
+                ]
+              }
+            ],
+            "notify_subscribers": true
+          },
+          {
+            "change_id": 7003,
+            "page_id": 6410630422455,
+            "type": "maintenance",
+            "title": "Old maintenance",
+            "description": "Completed before the window.",
+            "status": "completed",
+            "affected_components": [],
+            "start_at_seconds": 1788400800,
+            "close_at_seconds": 1788415140,
+            "updates": [],
+            "notify_subscribers": false
+          },
+          {
+            "change_id": 7004,
+            "page_id": 6410630422455,
+            "type": "incident",
+            "title": "Future incident",
+            "description": "Not started.",
+            "status": "scheduled",
+            "affected_components": [],
+            "start_at_seconds": 1788440400,
+            "updates": [],
+            "notify_subscribers": false
+          }
+        ]
+      }
+    }
+    """#
+
+    // MARK: - RSS service status
+
+    /// Canonical OpenRouter incident feed with HTML, a duplicate title/start
+    /// pair, long/old/future incidents, and a hostile incident URL.
+    public static let openRouterStatusRSS200 = #"""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0">
+      <channel>
+        <title>OpenRouter Status - Incident History</title>
+        <link>status.openrouter.ai</link>
+        <description>Statuspage</description>
+        <lastBuildDate>Thu, 03 Sep 2026 11:55:00 GMT</lastBuildDate>
+        <item>
+          <title>API &amp; routing degraded</title>
+          <description><![CDATA[<p><small>Sep 3, 11:30 AM UTC</small><br/><strong>MONITORING</strong> - <p>A fix &amp;amp; recovery are being monitored.</p></p>]]></description>
+          <pubDate>Thu, 03 Sep 2026 11:00:00 GMT</pubDate>
+          <link>status.openrouter.ai/incidents/incident-active</link>
+          <guid isPermaLink="true">status.openrouter.ai/incidents/incident-active</guid>
+          <category>degraded_performance</category>
+          <category>monitoring</category>
+        </item>
+        <item>
+          <title>API &amp; routing degraded</title>
+          <description><![CDATA[<p><small>Sep 3, 11:45 AM UTC</small><br/><strong>MONITORING</strong> - <p>Newer duplicate update.</p></p>]]></description>
+          <pubDate>Thu, 03 Sep 2026 11:00:00 GMT</pubDate>
+          <link>https://status.openrouter.ai/incidents/incident-active-duplicate</link>
+          <guid isPermaLink="true">duplicate-guid</guid>
+          <category>degraded_performance</category>
+          <category>monitoring</category>
+        </item>
+        <item>
+          <title>Long outage</title>
+          <description><![CDATA[<p><small>Sep 3, 10:00 AM UTC</small><br/><strong>RESOLVED</strong> - Service restored.</p>]]></description>
+          <pubDate>Thu, 03 Sep 2026 02:00:00 GMT</pubDate>
+          <link>https://status.openrouter.ai/incidents/incident-long</link>
+          <guid isPermaLink="true">incident-long</guid>
+          <category>major_outage</category>
+          <category>resolved</category>
+        </item>
+        <item>
+          <title>Old incident</title>
+          <description><![CDATA[<p><small>Sep 3, 5:59 AM UTC</small><br/><strong>RESOLVED</strong> - Old.</p>]]></description>
+          <pubDate>Thu, 03 Sep 2026 00:00:00 GMT</pubDate>
+          <guid isPermaLink="false">incident-old</guid>
+          <category>minor</category>
+          <category>resolved</category>
+        </item>
+        <item>
+          <title>Future incident</title>
+          <description><![CDATA[<strong>INVESTIGATING</strong> - Future.]]></description>
+          <pubDate>Thu, 03 Sep 2026 13:00:00 GMT</pubDate>
+          <guid isPermaLink="false">incident-future</guid>
+          <category>minor</category>
+          <category>investigating</category>
+        </item>
+        <item>
+          <title>Hostile link outage</title>
+          <description><![CDATA[<strong>IDENTIFIED</strong> - Link must be removed.]]></description>
+          <pubDate>Thu, 03 Sep 2026 11:20:00 GMT</pubDate>
+          <link>https://attacker.example/steal</link>
+          <guid isPermaLink="false">incident-hostile</guid>
+          <category>partial_outage</category>
+          <category>identified</category>
+        </item>
+      </channel>
+    </rss>
+    """#
+
+    /// Canonical xAI RSS feed pins explicit resolved timestamps and categories.
+    public static let xaiStatusRSS200 = #"""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+      <channel>
+        <title>xAI System Status</title>
+        <link>https://status.x.ai</link>
+        <description>Current status and incident history</description>
+        <atom:link href="https://status.x.ai/feed.xml" rel="self" type="application/rss+xml" />
+        <lastBuildDate>Thu, 03 Sep 2026 11:58:00 GMT</lastBuildDate>
+        <item>
+          <title>[API] Models outage</title>
+          <link>https://status.x.ai/api-us-east-1/INCactive</link>
+          <guid isPermaLink="false">INCactive</guid>
+          <description><![CDATA[
+            <h3>Status: INVESTIGATING</h3>
+            <p>Severity: major_outage</p>
+            <p><strong>Thu, 03 Sep 2026 11:40:00 GMT</strong></p>
+            <p>We are investigating elevated errors.</p>
+          ]]></description>
+          <pubDate>Thu, 03 Sep 2026 11:00:00 GMT</pubDate>
+          <category>major_outage</category>
+          <category>investigating</category>
+        </item>
+        <item>
+          <title>[API] Elevated latency</title>
+          <link>https://status.x.ai/api-us-west-2/INCresolved</link>
+          <guid isPermaLink="false">INCresolved</guid>
+          <description><![CDATA[
+            <h3>Status: RESOLVED</h3>
+            <p>Severity: available</p>
+            <p>Resolved: Thu, 03 Sep 2026 10:30:00 GMT</p>
+            <p>Traffic is healthy again.</p>
+          ]]></description>
+          <pubDate>Thu, 03 Sep 2026 09:30:00 GMT</pubDate>
+          <category>available</category>
+          <category>resolved</category>
+        </item>
+      </channel>
+    </rss>
     """#
 
     public static func data(_ s: String) -> Data { Data(s.utf8) }

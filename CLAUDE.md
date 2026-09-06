@@ -399,8 +399,12 @@ the Management API, so adding opencode's dollars there would double-count.
   `SecItemAdd` in `KeychainCredentialReader.writeBack` — log and return (the
   renewed token still works in memory; the next OAuth cycle retries
   persistence). Every other OSStatus must throw. The single intentional
-  prompt in the app — `KeychainAccessAuthorizer.authorize`'s commit — must
-  stay OUTSIDE the suppressor (user-initiated by design).
+  prompt in the app — `KeychainAccessAuthorizer.authorize`'s exact-item read —
+  must run inside `withPromptsAllowed` ONLY after the user clicks Authorize,
+  with `kSecUseAuthenticationUIAllow`. This user-approved exception never
+  applies to scheduled reads or writes. Require a silent read of the same
+  item afterward; do not report persistent authorization from an interactive
+  success alone. Do not capture the Keychain password or execute shell ACL commands.
 - **The shared-credential OAuth providers (Anthropic + OpenAI/Codex) must
   default to read-only credentials.** Both `AnthropicConfig.manageOAuthRefresh`
   and `OpenAIConfig.manageOAuthRefresh` default to `false`, and the providers'

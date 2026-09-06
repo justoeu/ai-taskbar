@@ -87,12 +87,82 @@ struct OpencodeScannerTests {
     @Test("reasoning is disjoint from output and adds to it")
     func reasoning_adds_to_output() {
         let db = FixtureDB(rows: [
-            (model: "grok-4.5", provider: "xai", role: "assistant",
+            (model: "grok-4.6", provider: "xai", role: "assistant",
              createdMs: msAgo(3600), input: 10, output: 300, reasoning: 900,
              cacheRead: 0, cacheWrite: 0, cost: 1.5),
         ])
         let scan = OpencodeScanner.scan(now: now, provider: "xai", dbPath: db.path)
-        #expect(scan?.last7DaysByModel["grok-4.5"]?.outputTokens == 1200)
+        #expect(scan?.last7DaysByModel["grok-4.6"]?.outputTokens == 1200)
+    }
+
+    @Test("multiple provider aliases merge Z.AI coding-plan usage in one scan")
+    func multiple_provider_aliases_merge() {
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai-coding-plan", role: "assistant",
+             createdMs: msAgo(60), input: 100, output: 20, reasoning: 5,
+             cacheRead: 10, cacheWrite: 0, cost: 0),
+            (model: "glm-5", provider: "zai", role: "assistant",
+             createdMs: msAgo(120), input: 50, output: 10, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+            (model: "grok-4.6", provider: "xai", role: "assistant",
+             createdMs: msAgo(180), input: 999, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 1),
+        ])
+        let scan = OpencodeScanner.scan(
+            now: now,
+            providers: ["zai", "zai-coding-plan"],
+            dbPath: db.path
+        )
+        #expect(scan?.last7DaysByModel["glm-5.3"]?.inputTokens == 100)
+        #expect(scan?.last7DaysByModel["glm-5"]?.inputTokens == 50)
+        #expect(scan?.last7DaysByModel["grok-4.6"] == nil)
+    }
+
+    @Test("several vendor groups are attributed from one database pass")
+    func vendor_groups_are_split() {
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai-coding-plan", role: "assistant",
+             createdMs: msAgo(60), input: 100, output: 20, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+            (model: "grok-4.6", provider: "xai", role: "assistant",
+             createdMs: msAgo(60), input: 50, output: 10, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 1),
+        ])
+
+        let scans = OpencodeScanner.scan(
+            now: now,
+            providerGroups: [
+                "zai": ["zai", "zai-coding-plan"],
+                "xai": ["xai"],
+            ],
+            dbPath: db.path)
+
+        #expect(scans?["zai"]?.last7DaysByModel["glm-5.3"]?.inputTokens == 100)
+        #expect(scans?["zai"]?.last7DaysByModel["grok-4.6"] == nil)
+        #expect(scans?["xai"]?.last7DaysByModel["grok-4.6"]?.inputTokens == 50)
+        #expect(scans?["xai"]?.last7DaysByModel["glm-5.3"] == nil)
+    }
+
+    @Test("a pre-cancelled task skips the SQLite scan")
+    func pre_cancelled_task_skips_scan() async {
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai-coding-plan", role: "assistant",
+             createdMs: msAgo(60), input: 100, output: 20, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+        ])
+        let task = Task.detached {
+            // Give the caller a deterministic point at which to cancel before
+            // entering the synchronous SQLite scanner.
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            return OpencodeScanner.scan(
+                now: now,
+                providers: ["zai-coding-plan"],
+                dbPath: db.path
+            )
+        }
+        task.cancel()
+        let scan = await task.value
+        expectTrue(scan == nil)
     }
 
     /// Attribution is per message. Two models inside one session must land in

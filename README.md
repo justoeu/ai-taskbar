@@ -106,7 +106,7 @@ These buttons solve different failures and are intentionally kept separate:
 
 | Failure | What the card shows | What the button does |
 |---|---|---|
-| macOS blocks AI Taskbar from silently reading Claude Code's Keychain item (`errSecInteractionNotAllowed` / `errSecAuthFailed`) | **Authorize** | Performs one user-initiated Keychain read through the native macOS dialog and keeps the credential only in process memory. It does not log in to Anthropic or rewrite Claude Code's ACL. |
+| macOS blocks AI Taskbar from silently reading Claude Code's Keychain item (`errSecInteractionNotAllowed` / `errSecAuthFailed`) | **Authorize** | Requests a native read of the exact selected item; macOS owns the authorization dialog and ACL updates. Success requires a verified silent read. The password never enters the app. |
 | Claude or ChatGPT rejects an existing OAuth access token with HTTP 401 | **Re-login** | Delegates login to the CLI that owns the shared credential: `claude auth login` for Claude or `codex login` for Codex/ChatGPT. The CLI opens the browser and writes the renewed credential. |
 
 The 401 banner appears inside the expanded provider card. AI Taskbar does not
@@ -127,40 +127,30 @@ Claude Code stores its OAuth token in the macOS Keychain, not in a user-readable
 file like Codex's `~/.codex/auth.json`. The item is created for Claude Code's
 own signing identity. Scheduled refreshes never display a surprise password
 dialog: when macOS blocks a silent read, click **Authorize** in the Claude card.
-That user-initiated action permits the native Keychain dialog and keeps the
-credential only in process memory; it does not rewrite Claude Code's ACL or
-copy the token to disk. Permission can be requested again after the app or
-Claude Code restarts/re-authenticates.
+That user-initiated action requests a read of the exact selected item, letting
+macOS authorize the stable signed AI Taskbar identity through its native dialog; choose **Always Allow** if offered. The app never receives or
+stores the Keychain password and reports success only after verifying a
+silent read. Subsequent launches can reuse that authorization while Claude
+Code preserves the item and its access controls. AI Taskbar never copies the
+token to disk.
 
-For users who explicitly prefer a durable ACL grant, the following advanced
-command adds the official signed AI Taskbar build (`teamid:5HHL78743R`) to the
-current macOS user's live Claude credential:
+An `errSecAuthFailed` (-25293) during authorization does **not** establish that
+the password is wrong. Earlier builds attempted to edit the protected partition
+list directly with `SecKeychainItemSetAccess`, whose prompt credentials cannot
+authorize that operation. An ACL-only commit can also succeed without making a foreign item readable.
+The app now requests native read authorization and lets securityd manage that
+list, without a Terminal command or manual ACL replacement. See Apple's implementation of
+[ACL editing](https://github.com/apple-oss-distributions/Security/blob/main/securityd/src/acls.cpp)
+and [native authorization](https://github.com/apple-oss-distributions/Security/blob/main/securityd/src/acl_keychain.cpp).
 
-```bash
-security set-generic-password-partition-list \
-  -a "$USER" \
-  -s "Claude Code-credentials" \
-  -S "apple-tool:,apple:,teamid:5HHL78743R" \
-  "$HOME/Library/Keychains/login.keychain-db"
-```
+If several account-bearing Claude entries exist and none has previously been
+resolved, authorization stops without changing any ACL instead of guessing
+which credential is active. Set `keychain_account` in Anthropic settings and
+click **Authorize** again.
 
-The command prompts for the **login Keychain password** (normally the password
-used to log in to the Mac). Do not add `-k`; that would expose the password in
-the process arguments/shell history. The command changes only the ACL and does
-not print or copy the OAuth token.
-
-If it reports that the item was not found, open **Keychain Access**, search for
-`Claude Code-credentials`, select the most recently modified account-bearing
-entry, and replace `$USER` with its **Account** value. Old Claude Code versions
-can leave an account-less legacy entry beside the live one. A fork signed by a
-different Apple Developer Team must likewise replace `5HHL78743R` with the
-`TeamIdentifier` reported by `codesign -dvv /path/to/AiTaskbar.app`.
-
-Claude Code owns this Keychain item. A later `/login`, token migration, or CLI
-update may recreate it and restore Claude Code's original ACL; if the Keychain
-warning returns, use the in-app interactive read again (or repeat the advanced
-command for the new live entry). This integration is therefore best-effort
-until Anthropic provides a public third-party OAuth/quota API.
+If native authorization cannot persist, the card reports verification failure.
+Managed Keychain policies may require help from the device administrator.
+No Terminal command or Keychain password collection is part of onboarding.
 
 ### Claude `429 rate_limit_error`
 
@@ -175,6 +165,24 @@ can still increase `[ui] refresh_interval_seconds` from `300` to `900` or
 `1800`. The subscription usage endpoint is undocumented and Anthropic publishes
 no polling quota for it, so the app cannot calculate an exact retry time unless
 the response supplies one.
+
+### OpenAI / Codex — earned rate-limit resets
+
+When a current, healthy usage snapshot reports an active window **above 90%**
+and a positive earned-reset count, the OpenAI card offers **Use reset**. Clicking
+checks availability again; a separate confirmation identifies the account and
+explains that one earned reset will be consumed. Nothing runs automatically.
+
+This requires a compatible official, OpenAI-signed Codex CLI (integration reference:
+0.153.4). Older schemas, missing account identity or unavailable resets fail closed.
+The external-token app-server API is experimental. AI Taskbar does not buy credits,
+rotate the shared refresh token, or change the CLI's authentication file.
+
+If a response is lost, **Retry same attempt** keeps the original idempotency key,
+including across app restarts. A private `openai-reset-attempt.json` journal and
+cross-process lock prevent separate local app instances from replacing a pending
+attempt. See the [implementation SDD](docs/SDD-native-authorization-and-openai-reset.md)
+for the protocol, security boundaries, tests and manual acceptance checks.
 
 ### xAI (Grok) — API team billing, not SuperGrok consumer usage
 
@@ -209,7 +217,7 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 - **Rate-limit back-off.** When any vendor's most recent refresh ended in HTTP 429, `RefreshScheduler` adds `rateLimitBackoff` (60 s) to the next sleep. Stays applied while at least one vendor keeps 429-ing; clears automatically when responses go green. `UsageStore.hasRateLimitedVendor` detects both `.failed(429, _)` AND stale-`.ok` outcomes whose cached `lastError.status == 429` (CachedFetch hides single 429s as `.ok(stale)` whenever any payload is cached).
 - **Per-provider exponential cooldown.** A vendor that keeps returning 429 is skipped for 5, 10, 20, 40, then at most 60 minutes. Manual refresh respects the same deadline, so repeated clicks cannot turn a temporary throttle into a longer one; providers that are not rate-limited continue refreshing.
 - **Cache TTL automatically derived from the cadence** — `max(15, refresh_interval_seconds − 5)`. Popover opens between scheduled refreshes still serve from cache, but the scheduled tick at T=interval always finds an expired entry (`age ≈ interval > ttl`) and goes straight to the network without needing `forceRefresh: true`. The 5-second margin absorbs Task.sleep jitter.
-- **Keychain write no longer triggers the macOS password prompt.** `KeychainCredentialReader.writeBack` passes `kSecUseAuthenticationUIFail` (the deprecated key — the modern `LAContext.interactionNotAllowed` doesn't work for plain generic-password items without a `SecAccessControl`) and treats `errSecInteractionNotAllowed` as best-effort: logs to Console.app with the exact `security set-generic-password-partition-list` fix and returns. The renewed credentials are mirrored to an in-memory `_pendingUpdate`; the next `read()` reconciles against the on-disk copy by `expiresAtMs` (so an external rotation via Claude Code CLI wins automatically when it lands). Menu-bar app (LSUIElement) no longer freezes behind an invisible SecurityAgent dialog after every `make app` rebuild.
+- **Keychain write no longer triggers the macOS password prompt.** `KeychainCredentialReader.writeBack` passes `kSecUseAuthenticationUIFail` (the deprecated key — the modern `LAContext.interactionNotAllowed` doesn't work for plain generic-password items without a `SecAccessControl`) and treats `errSecInteractionNotAllowed` as best-effort: logs a prompt to use the in-app Authorize button and returns. The renewed credentials are mirrored to an in-memory `_pendingUpdate`; the next `read()` reconciles against the on-disk copy by `expiresAtMs` (so an external rotation via Claude Code CLI wins automatically when it lands). Menu-bar app (LSUIElement) no longer freezes behind an invisible SecurityAgent dialog after every `make app` rebuild.
 
 ### v0.1.0 — initial release
 
@@ -228,7 +236,7 @@ Gemini ships as a provider but it can only do an **API-key heartbeat**: with a G
 **i18n** — 3 languages out of the box (`en`, `pt-BR`, `es`) with `[ui] language = ...` config override
 
 **Security**
-- macOS Keychain reader with single-pass query (1 ACL prompt for single-account, 2 for multi-account); auto-discovers the live entry via freshest-token-wins, so a stale orphan left by an older Claude Code version never shadows the one the CLI keeps refreshed
+- macOS Keychain reader with single-pass query for the common single-account case; auto-discovers the live entry via freshest-token-wins whenever entries are readable, and requires `keychain_account` before changing an ambiguous all-blocked multi-account ACL
 - `~/.codex/auth.json` write-back with atomic `0o600` chmod **before** rename
 - All cache/config files chmod `0o600`, support dir `0o700`
 - OpenAI cache strips PII (`user_id`/`account_id`/`email`)
@@ -392,15 +400,20 @@ api_key_env = "XAI_MANAGEMENT_KEY"
 | `~/Library/Application Support/ai-taskbar/pins/<host>.txt` | TLS pin hashes (only if pinning enabled) | `0600` |
 | `~/Library/Caches/ai-taskbar/<vendor>/usage.json` | Last cached API response (OpenAI has PII stripped) | `0600` |
 
-The app **never writes outside these locations**. No telemetry, no remote logging.
+The app never writes credential payloads outside these locations. The explicit
+Claude **Authorize** action normally updates only access-control metadata on the
+existing `Claude Code-credentials` Login Keychain item. When the opt-in
+`manage_oauth_refresh = true` mode already holds a newer rotated token whose
+write was ACL-blocked, authorization also reconciles that pending value back to
+the same item. No telemetry, no remote logging.
 
 ## Privacy & security
 
 - Anthropic OAuth tokens stay in the **Keychain** — the app reads them, never copies them to disk.
 - **The OAuth providers are read-only by default** (`[anthropic] manage_oauth_refresh = false` and `[openai] manage_oauth_refresh = false`). A usage monitor shares the `Claude Code-credentials` Keychain item with the Claude Code CLI and `~/.codex/auth.json` with the Codex CLI, and both vendors rotate the refresh token on every exchange — so refreshing it here would invalidate the token other running CLI sessions hold (forcing "please re-login"), and the Anthropic write-back also trips a Keychain ACL prompt on ad-hoc builds. In read-only mode the app uses whatever token the CLI maintains and lets the CLI own renewal; if the token is briefly expired the last cached snapshot is shown until the CLI refreshes (on a cold cache with no prior snapshot the vendor tile shows the error until renewal). Set `manage_oauth_refresh = true` for a vendor only if you run AI Taskbar standalone without that CLI.
-- Keychain reads **and** writes run under `KeychainPromptSuppressor` (`SecKeychainSetUserInteractionAllowed(false)` around every SecItem call) **in addition to** `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail`. The UIFail hint alone only silences the trusted-app Allow/Deny confirmation — the partition-list **password** dialog ignores it and used to pop on every scheduled refresh from a binary the ACL didn't recognize. With both in place, a blocked binary fast-fails (`errSecInteractionNotAllowed` / `errSecAuthFailed`) instead of prompting; the renewed access_token is kept in memory and persistence retries on the next OAuth cycle. The fix is logged to Console.app with the exact `security set-generic-password-partition-list` command to silence it for good.
-- When a scheduled read is blocked (`errSecInteractionNotAllowed` / `errSecAuthFailed`), the Anthropic tile shows **Authorize**. That explicit click performs an interactive read using the native macOS dialog and seeds only the process-memory credential cache; it never mutates Claude Code's ACL and never asks for, stores, or passes the login Keychain password itself. The account-specific `security set-generic-password-partition-list` procedure under **Setup per provider** remains an opt-in advanced path for users who want a durable ACL grant.
-- `make app` signs local builds with your **Developer ID Application** identity when the login keychain has one (falling back to ad-hoc otherwise), so dev builds keep a stable signing identity and one Authorize covers every rebuild — an ad-hoc cdhash changes on every build and can never stay authorized.
+- Keychain reads **and** writes run under `KeychainPromptSuppressor` (`SecKeychainSetUserInteractionAllowed(false)` around every SecItem call) **in addition to** `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail`. The UIFail hint alone only silences the trusted-app Allow/Deny confirmation — the partition-list **password** dialog ignores it and used to pop on every scheduled refresh from a binary the ACL didn't recognize. With both in place, a blocked binary fast-fails (`errSecInteractionNotAllowed` / `errSecAuthFailed`) instead of prompting; the renewed access_token is kept in memory and persistence retries on the next OAuth cycle. The log directs the user to the in-app Authorize button.
+- When a scheduled read is blocked, the Claude card shows **Authorize**. Its sole interactive read targets one exact item. macOS owns consent; a silent same-item probe is mandatory. The reader binds subsequent reads and opt-in writes to that persistent reference, and never carries pending tokens onto a different or recreated credential.
+- `make app` signs local builds with your **Developer ID Application** identity when the login keychain has one, so one Authorize covers subsequent signed rebuilds. The bundle assembly can fall back to ad-hoc signing, but durable authorization fails closed there because an ad-hoc identity cannot safely remain trusted across builds.
 - Codex `~/.codex/auth.json` writes go through atomic tempfile with `0o600` set **before** the rename — no race window where fresh refresh tokens are world-readable.
 - Configuration files (`config.toml`) and cache files are `chmod 0600`, support dir `chmod 0700`.
 - OpenAI cache strips `user_id`/`account_id`/`email` fields before persisting — only utilization data survives.

@@ -10,9 +10,11 @@ struct ClaudeSessionScannerTests {
                                       input: Int = 0,
                                       output: Int = 0,
                                       cacheCreate: Int = 0,
+                                      cacheCreate5m: Int = 0,
+                                      cacheCreate1h: Int = 0,
                                       cacheRead: Int = 0) -> String {
         #"""
-        {"timestamp":"\#(timestamp)","message":{"role":"assistant","model":"\#(model)","usage":{"input_tokens":\#(input),"output_tokens":\#(output),"cache_creation_input_tokens":\#(cacheCreate),"cache_read_input_tokens":\#(cacheRead)}}}
+        {"timestamp":"\#(timestamp)","message":{"role":"assistant","model":"\#(model)","usage":{"input_tokens":\#(input),"output_tokens":\#(output),"cache_creation_input_tokens":\#(cacheCreate),"cache_creation":{"ephemeral_5m_input_tokens":\#(cacheCreate5m),"ephemeral_1h_input_tokens":\#(cacheCreate1h)},"cache_read_input_tokens":\#(cacheRead)}}}
         """#
     }
 
@@ -162,5 +164,55 @@ struct ClaudeSessionScannerTests {
                                   unparseableTimestamps: &unparseable)
         #expect(today["claude-opus-4-7"]?.inputTokens == 300)
         #expect(today["claude-opus-4-7"]?.outputTokens == 150)
+    }
+
+    @Test("Claude 1-hour cache writes use their distinct published rate")
+    func one_hour_cache_writes_are_priced_separately() {
+        let now = Date(timeIntervalSince1970: 1_764_000_000)
+        let startOfToday = Calendar(identifier: .gregorian).startOfDay(for: now)
+        let timestamp = ISO8601DateFormatter().string(
+            from: startOfToday.addingTimeInterval(3_600))
+        let line = Self.assistantLine(
+            timestamp: timestamp,
+            model: "claude-fable-5-1",
+            cacheCreate: 2_000_000,
+            cacheCreate5m: 1_000_000,
+            cacheCreate1h: 1_000_000)
+        var today: [String: ModelUsage] = [:]
+        var week: [String: ModelUsage] = [:]
+        var unparseable = 0
+
+        ClaudeSessionScanner.scan(
+            data: Data((line + "\n").utf8),
+            startOfToday: startOfToday,
+            sevenDaysAgo: startOfToday.addingTimeInterval(-7 * 86_400),
+            totalsToday: &today,
+            totalsLast7: &week,
+            unparseableTimestamps: &unparseable)
+        let (usd, _) = CostAggregator.price(
+            totals: today, table: PricingTable.anthropic)
+
+        // 1M × $12.50 (5m) + 1M × $20.00 (1h).
+        #expect(abs(usd - 32.5) < 0.000_001)
+    }
+
+    @Test("Claude discloses an observed model whose price is unavailable")
+    func unpriced_model_is_disclosed() throws {
+        let now = Date()
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-claude-unpriced-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let timestamp = ISO8601DateFormatter().string(from: now)
+        let line = Self.assistantLine(
+            timestamp: timestamp, model: "claude-future-9", input: 1_000)
+        try Data((line + "\n").utf8).write(to: root.appendingPathComponent("session.jsonl"))
+
+        let estimate = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
+
+        #expect(estimate.modelBreakdownLast7Days["claude-future-9"] == 0)
+        #expect(estimate.unpricedModelsToday == Set(["claude-future-9"]))
+        #expect(estimate.unpricedModelsLast7Days == Set(["claude-future-9"]))
+        expectTrue(estimate.note?.localizedCaseInsensitiveContains("price unavailable") ?? false)
     }
 }
