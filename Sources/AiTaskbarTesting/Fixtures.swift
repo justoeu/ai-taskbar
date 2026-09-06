@@ -48,6 +48,18 @@ public enum Fixtures {
     }
     """#
 
+    /// Earned reset summary is separate from the paid-credit balance.
+    public static let openaiUsageWithReset200 = #"""
+    {
+      "plan_type": "pro",
+      "rate_limit": {
+        "primary_window": { "used_percent": 91, "limit_window_seconds": 18000 },
+        "secondary_window": { "used_percent": 25, "limit_window_seconds": 604800 }
+      },
+      "rate_limit_reset_credits": { "available_count": 2 }
+    }
+    """#
+
     public static let openrouterCredits200 = #"""
     { "data": { "total_credits": 10.00, "total_usage": 2.50 } }
     """#

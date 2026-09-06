@@ -51,6 +51,7 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     public nonisolated var id: VendorId { vendorId }
     public nonisolated let vendorId: VendorId
     public let provider: any UsageProvider
+    let openAIReset = OpenAIResetController()
 
     @Published public private(set) var state: State = .idle
     @Published public private(set) var history: [UsageHistoryStore.Sample] = []

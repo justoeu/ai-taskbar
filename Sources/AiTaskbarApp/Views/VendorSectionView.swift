@@ -477,6 +477,7 @@ public struct VendorSectionView: View {
             // regular rows via `VendorSnapshot.windows`; no extra label needed.
             EmptyView()
         case .openai(let s):
+            OpenAIResetControls(vm: vm, reset: vm.openAIReset)
             if let credits = s.creditsUSD {
                 Label(L10n.localizedString("credits_fmt", credits),
                       systemImage: "dollarsign.circle")

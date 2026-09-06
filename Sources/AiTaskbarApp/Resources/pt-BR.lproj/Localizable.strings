@@ -259,3 +259,21 @@
 "service_status_scope_note" = "O status oficial agregado pode variar por conta, produto ou região.";
 
 "keychain_auth_not_persistent" = "O macOS permitiu o acesso, mas a verificação silenciosa falhou. Tente novamente e escolha Sempre Permitir, se oferecido. Políticas de um Keychain gerenciado podem impedir a permissão persistente.";
+"reset_button" = "Usar um reset";
+"reset_retry" = "Repetir esta tentativa";
+"reset_busy" = "Consultando reset…";
+"reset_confirm_title" = "Usar um reset de limite?";
+"reset_confirm_button" = "Confirmar reset";
+"reset_cancel" = "Cancelar";
+"reset_confirm_message" = "Conta: %@\nResets disponíveis: %d\nEsta ação consome um reset ganho. Repetir a tentativa usa a mesma chave e não consome um segundo crédito para ela.";
+"reset_done" = "Reset confirmado. Atualizando uso…";
+"reset_done_refresh_pending" = "Reset confirmado, mas ainda não foi possível atualizar o uso.";
+"reset_nothing" = "A OpenAI informou que não há limite elegível para reset.";
+"reset_no_credit" = "Não há créditos de reset disponíveis.";
+"reset_cli_unavailable" = "Instale ou atualize o Codex CLI para usar resets aqui.";
+"reset_unavailable" = "Não há reset disponível para uso acima de 90% neste momento.";
+"reset_account_changed" = "A conta do Codex mudou. Volte à conta exibida na confirmação antes de repetir esta tentativa.";
+"reset_auth_required" = "Entre novamente pelo Codex. O AI Taskbar não renovará a credencial compartilhada.";
+"reset_failed" = "Não foi possível iniciar o reset. Verifique a conexão do Codex e tente novamente.";
+"reset_submission_uncertain" = "Não foi possível confirmar o resultado. Repita esta mesma tentativa; a chave é preservada mesmo ao reiniciar o app.";
+"reset_attempt_in_progress" = "Outra tentativa de reset está pendente ou em andamento. Tente novamente para recuperá-la.";

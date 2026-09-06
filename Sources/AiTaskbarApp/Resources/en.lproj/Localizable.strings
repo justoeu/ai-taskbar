@@ -260,3 +260,21 @@
 "service_status_scope_note" = "Official aggregate status may differ by account, product, or region.";
 
 "keychain_auth_not_persistent" = "macOS allowed access, but silent verification failed. Try again and choose Always Allow if offered. Managed Keychain policies may prevent persistent access.";
+"reset_button" = "Use a reset";
+"reset_retry" = "Retry this attempt";
+"reset_busy" = "Checking reset…";
+"reset_confirm_title" = "Use one rate-limit reset?";
+"reset_confirm_button" = "Confirm reset";
+"reset_cancel" = "Cancel";
+"reset_confirm_message" = "Account: %@\nAvailable resets: %d\nThis consumes one earned reset. Retries reuse the same attempt and cannot consume a second credit for it.";
+"reset_done" = "Reset confirmed. Updating usage…";
+"reset_done_refresh_pending" = "Reset confirmed, but usage could not be refreshed yet.";
+"reset_nothing" = "OpenAI reports no eligible limit to reset.";
+"reset_no_credit" = "No earned reset credits remain.";
+"reset_cli_unavailable" = "Install or update the Codex CLI to use resets here.";
+"reset_unavailable" = "No reset is available for usage above 90% right now.";
+"reset_account_changed" = "The Codex account changed. Switch back to the account shown in the confirmation before retrying this attempt.";
+"reset_auth_required" = "Sign in again using Codex. AI Taskbar will not renew its shared credential.";
+"reset_failed" = "Could not start the reset. Check the Codex connection and try again.";
+"reset_submission_uncertain" = "Could not confirm the result. Retry this same attempt; its key is preserved across app restarts.";
+"reset_attempt_in_progress" = "Another reset attempt is pending or running. Try again to recover that attempt.";

@@ -166,6 +166,24 @@ can still increase `[ui] refresh_interval_seconds` from `300` to `900` or
 no polling quota for it, so the app cannot calculate an exact retry time unless
 the response supplies one.
 
+### OpenAI / Codex — earned rate-limit resets
+
+When a current, healthy usage snapshot reports an active window **above 90%**
+and a positive earned-reset count, the OpenAI card offers **Use reset**. Clicking
+checks availability again; a separate confirmation identifies the account and
+explains that one earned reset will be consumed. Nothing runs automatically.
+
+This requires a compatible official, OpenAI-signed Codex CLI (integration reference:
+0.153.4). Older schemas, missing account identity or unavailable resets fail closed.
+The external-token app-server API is experimental. AI Taskbar does not buy credits,
+rotate the shared refresh token, or change the CLI's authentication file.
+
+If a response is lost, **Retry same attempt** keeps the original idempotency key,
+including across app restarts. A private `openai-reset-attempt.json` journal and
+cross-process lock prevent separate local app instances from replacing a pending
+attempt. See the [implementation SDD](docs/SDD-native-authorization-and-openai-reset.md)
+for the protocol, security boundaries, tests and manual acceptance checks.
+
 ### xAI (Grok) — API team billing, not SuperGrok consumer usage
 
 The xAI card reads the **Management API** (`management-api.x.ai`): prepaid credit balance and current-cycle postpaid spend vs soft spending limit. That is **developer/team API billing**, not the weekly SuperGrok / grok.com consumer quota UI. Inference keys on `api.x.ai` cannot read billing; a separate management key + `team_id` are required. SuperGrok subscription limits have no public usage API today.

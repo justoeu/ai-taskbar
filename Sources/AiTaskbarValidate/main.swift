@@ -498,6 +498,16 @@ section("Wire types: Anthropic fixture") {
     expect(s.credits?.detail == "$2.45 / $20.00", "Anthropic credits money detail")
 }
 
+section("Wire types: OpenAI earned reset summary") {
+    let wire = try SharedCoders.decoder.decode(OpenAIUsageResponse.self,
+        from: Fixtures.data(Fixtures.openaiUsageWithReset200))
+    let snapshot = wire.toSnapshot(planLabel: nil)
+    expect(snapshot.availableResetCount == 2, "two earned resets, independent of paid credits")
+    expect(snapshot.canOfferRateLimitReset, "91 percent plus positive availability offers reset")
+    expect(!OpenAISnapshot(primary: UsageWindow(label: "Session", utilizationPercent: 90),
+                           availableResetCount: 1).canOfferRateLimitReset, "90 percent exactly does not offer reset")
+}
+
 section("Wire types: OpenAI fixture") {
     let parsed = try SharedCoders.decoder.decode(
         OpenAIUsageResponse.self,
