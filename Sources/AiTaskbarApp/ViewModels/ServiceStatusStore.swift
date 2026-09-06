@@ -43,6 +43,17 @@ public final class ServiceStatusStore: ObservableObject {
                 }
             }
 
+            /// Keep the provider snapshot intact while denying a green claim
+            /// from an observation whose refresh failed.
+            public var displayStatus: VendorServiceStatus? {
+                guard let status, isStale, status.level == .operational else { return status }
+                return VendorServiceStatus(
+                    vendorId: status.vendorId, level: .unknown, coverage: status.coverage,
+                    summary: "", sourceURL: status.sourceURL,
+                    sourceUpdatedAt: status.sourceUpdatedAt, incidents: status.incidents
+                )
+            }
+
             public var error: AppError? {
                 if case .failed(let error, _) = self { return error }
                 return nil
@@ -121,8 +132,10 @@ public final class ServiceStatusStore: ObservableObject {
         let previous = Dictionary(uniqueKeysWithValues: rows.map { row in
             // A failed refresh can retain an originally fresh outcome. Carry
             // the state's stale marker into loading and superseding rounds.
-            let retained = row.state.outcome.map { outcome in
-                ServiceStatusOutcome(
+            let retained = row.state.outcome.flatMap { outcome -> ServiceStatusOutcome? in
+                let age = now.timeIntervalSince(outcome.fetchedAt)
+                guard age >= -5, age <= ServiceStatusWindow.duration else { return nil }
+                return ServiceStatusOutcome(
                     snapshot: outcome.snapshot,
                     isStale: row.state.isStale,
                     lastError: outcome.lastError,
@@ -212,10 +225,7 @@ public final class ServiceStatusStore: ObservableObject {
 
     private func recomputeAggregates() {
         let levels = rows.map { row -> ServiceStatusLevel in
-            guard let status = row.state.status else { return .unknown }
-            if row.state.isStale && status.level == .operational {
-                return .unknown
-            }
+            guard let status = row.state.displayStatus else { return .unknown }
             if status.coverage != .full && status.level == .operational {
                 return .unknown
             }

@@ -319,7 +319,7 @@ public struct PopoverContentView: View {
 
     private var statusAccessibilityValue: String {
         let statuses = statusStore.rows.map { row in
-            row.state.status ?? ServiceStatusPresentation.placeholder(for: row.vendorId)
+            row.state.displayStatus ?? ServiceStatusPresentation.placeholder(for: row.vendorId)
         }
         let affected = statuses.filter {
             ![ServiceStatusLevel.operational, .unknown].contains($0.level)

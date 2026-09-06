@@ -124,18 +124,18 @@ private struct StatusVendorRowView: View {
 
     init(row: ServiceStatusStore.Row) {
         self.row = row
-        let level = row.state.status?.level ?? .unknown
+        let level = row.state.displayStatus?.level ?? .unknown
         _isExpanded = State(initialValue: level != .operational)
     }
 
     private var status: VendorServiceStatus {
-        row.state.status ?? ServiceStatusPresentation.placeholder(for: row.vendorId)
+        row.state.displayStatus ?? ServiceStatusPresentation.placeholder(for: row.vendorId)
     }
 
     private var displayLevelKey: String {
         ServiceStatusPresentation.displayLevelKey(
             for: status,
-            hasObservation: row.state.outcome != nil
+            hasObservation: row.state.outcome != nil && !row.state.isStale
         )
     }
 
@@ -195,7 +195,7 @@ private struct StatusVendorRowView: View {
             Label(L10n.localizedString("service_status_loading"), systemImage: "arrow.clockwise")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-        case .ok(let outcome) where outcome.isStale:
+        case .ok(let outcome) where row.state.isStale:
             staleNotice(outcome: outcome)
         case .failed(_, let fallback):
             if let fallback {
@@ -244,7 +244,8 @@ private struct StatusVendorRowView: View {
             }
             if status.incidents.isEmpty {
                 Text(L10n.localizedString(
-                    ServiceStatusPresentation.emptyStateKey(for: status.coverage)
+                    row.state.isStale ? "service_status_level_unknown"
+                        : ServiceStatusPresentation.emptyStateKey(for: status.coverage)
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)

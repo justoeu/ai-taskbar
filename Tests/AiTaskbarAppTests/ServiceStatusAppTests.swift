@@ -78,7 +78,7 @@ struct ServiceStatusAppTests {
         level: ServiceStatusLevel = .operational,
         coverage: ServiceStatusCoverage = .full,
         stale: Bool = false,
-        fetchedAt: Date = Date(timeIntervalSince1970: 1_700_000_000)
+        fetchedAt: Date = .now
     ) -> ServiceStatusOutcome {
         ServiceStatusOutcome(
             snapshot: status(vendor, level: level, coverage: coverage),
@@ -236,6 +236,47 @@ struct ServiceStatusAppTests {
         }
         await store.waitForCurrentRefresh()
         #expect(store.overallLevel == .unknown)
+    }
+
+    @Test("in-memory status fallback respects the six-hour retention limit", arguments: [-6.0, 0, 21_600, 21_601])
+    func in_memory_fallback_expires(age: TimeInterval) async {
+        let fetchedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let sequence = StatusOutcomeSequence(first: outcome(
+            .anthropic, level: .majorOutage, stale: true, fetchedAt: fetchedAt
+        ))
+        let source = StubStatusProvider(vendorId: .anthropic) { _, _ in
+            try await sequence.next()
+        }
+        let store = ServiceStatusStore(vendorIds: [.anthropic], providers: [source])
+        store.refreshAll(now: fetchedAt)
+        await store.waitForCurrentRefresh()
+        let retainsFallback = age >= -5 && age <= ServiceStatusWindow.duration
+
+        store.refreshAll(now: fetchedAt.addingTimeInterval(age))
+        expectTrue((store.rows[0].state.outcome != nil) == retainsFallback)
+        #expect(store.overallLevel == (retainsFallback ? .majorOutage : .unknown))
+        await store.waitForCurrentRefresh()
+        expectTrue((store.rows[0].state.outcome != nil) == retainsFallback)
+        #expect(store.overallLevel == (retainsFallback ? .majorOutage : .unknown))
+    }
+
+    @Test("stale status presentation never claims operational health", arguments: [false, true])
+    func stale_display_status(hasErrorMarker: Bool) throws {
+        let raw = ServiceStatusOutcome(
+            snapshot: status(.anthropic),
+            isStale: !hasErrorMarker,
+            lastError: hasErrorMarker ? FetchError(status: 503, body: "offline") : nil
+        )
+        let state = ServiceStatusStore.Row.State.ok(raw)
+        let display = try #require(state.displayStatus)
+        #expect(display.level == .unknown)
+        #expect(ServiceStatusPresentation.symbol(for: display.level) == "circle.dashed")
+        #expect(ServiceStatusPresentation.displayLevelKey(for: display, hasObservation: true)
+                == "service_status_level_unknown")
+        #expect(ServiceStatusPresentation.timelineSegments(for: display, now: .now).map(\.level)
+                == [.unknown])
+        // Presentation must not rewrite the original provider snapshot.
+        expectTrue(state.status?.level == .operational)
     }
 
     @Test("stale success remains visible and a later error preserves the previous result")
