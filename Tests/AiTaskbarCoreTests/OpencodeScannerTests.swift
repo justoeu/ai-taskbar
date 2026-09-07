@@ -2,7 +2,6 @@ import Testing
 import Foundation
 import SQLite3
 @testable import AiTaskbarCore
-import AiTaskbarTestSupport
 
 /// Builds a throwaway database shaped like opencode's `message` table.
 ///

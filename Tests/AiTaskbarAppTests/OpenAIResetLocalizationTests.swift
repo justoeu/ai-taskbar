@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-import AiTaskbarTestSupport
 
 @Suite("OpenAI reset localization")
 struct OpenAIResetLocalizationTests {

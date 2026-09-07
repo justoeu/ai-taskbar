@@ -17,7 +17,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-KEYCHAIN_LEGACY='Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor)\.swift'
 PLANT="Sources/AiTaskbarCore/__WarnRatchetSelfTest.swift"
 
 cleanup() { rm -f "$PLANT"; }
@@ -27,10 +26,13 @@ count_other() {
     local scratch log
     scratch=$(mktemp -d)
     # 2>&1 — the whole point. See the comment block in validate.sh.
-    swift build --build-tests --scratch-path "$scratch" >"$scratch/w.log" 2>&1 || true
+    if ! swift build --build-tests --scratch-path "$scratch" >"$scratch/w.log" 2>&1; then
+        tail -40 "$scratch/w.log" >&2
+        rm -rf "$scratch"
+        return 1
+    fi
     log="$scratch/w.log"
-    grep -oE "Sources/[^ ]+\.swift:[0-9]+:[0-9]+: warning:" "$log" 2>/dev/null \
-        | sort -u | grep -vcE "$KEYCHAIN_LEGACY" || true
+    scripts/check-swift-warnings.sh "$log" --count
     rm -rf "$scratch"
 }
 

@@ -2,9 +2,9 @@ import Testing
 
 /// Boolean assertions that actually fail when they should.
 ///
-/// `#expect` mis-evaluates `Bool`-typed sub-expressions on Apple Swift 6.3.2 /
-/// Testing 0.99.0. This is not a style preference — the following all PASS
-/// with values that make them false, verified by running them:
+/// The former Apple Swift 6.3.2 / Testing 0.99.0 stack mis-evaluated
+/// `Bool`-typed sub-expressions. The following all PASSED with values that
+/// made them false, verified by running them:
 ///
 /// ```swift
 /// #expect(false == true)                          // passes (!)
@@ -27,6 +27,8 @@ import Testing
 ///
 /// Use these for any condition that involves an optional. A bare non-optional
 /// `Bool` — `#expect(flag)` or `#expect(!flag)` — is safe as-is.
+/// The bundled-Testing migration retains this convention; negative controls in
+/// TestingInfrastructureTests verify that helper failures reach the runner.
 public func expectTrue(_ value: Bool,
                        _ comment: Comment? = nil,
                        sourceLocation: SourceLocation = #_sourceLocation) {

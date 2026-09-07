@@ -2,7 +2,6 @@ import Testing
 import Foundation
 @testable import AiTaskbarApp
 import AiTaskbarCore
-import AiTaskbarTestSupport
 
 /// `isLoading` is not just a spinner flag — `refresh()` starts with
 /// `if isLoading { return }`, so it is also the gate on every future scan. A

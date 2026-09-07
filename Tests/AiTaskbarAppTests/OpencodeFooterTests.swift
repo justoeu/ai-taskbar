@@ -3,6 +3,7 @@ import AiTaskbarCore
 @testable import AiTaskbarApp
 
 @Suite("opencode footer formatting")
+@MainActor
 struct OpencodeFooterTests {
     @Test("cost availability distinguishes complete, partial, and wholly unpriced windows")
     func cost_availability_is_explicit() {

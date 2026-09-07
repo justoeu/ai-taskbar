@@ -46,22 +46,14 @@ jobs:
         # not fail. `scripts/warn-ratchet-selftest.sh` is the positive control —
         # run it if you change this.
         #
-        # Everything outside the three legacy-keychain files must be clean;
-        # those carry ~18 unavoidable SecKeychain/SecACL deprecations (the only
-        # route to classic file-keychain ACLs, no per-call suppression exists).
+        # Includes test/macro/linker warnings. Only classic-Keychain
+        # deprecations in its implementation and fixtures are allowlisted.
         run: |
-          KEYCHAIN_LEGACY='Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor)\.swift'
-          swift build --build-tests --scratch-path "$RUNNER_TEMP/warnscratch" >"$RUNNER_TEMP/w.log" 2>&1 || true
-          distinct=$(grep -oE "Sources/[^ ]+\.swift:[0-9]+:[0-9]+: warning:" "$RUNNER_TEMP/w.log" | sort -u || true)
-          other=$(printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | grep -c . || true)
-          legacy=$(printf '%s\n' "$distinct" | grep -cE "$KEYCHAIN_LEGACY" || true)
-          echo "allowlisted legacy-keychain warnings: ${legacy:-0}"
-          if [ "${other:-0}" -gt 0 ]; then
-            printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | head -20
-            echo "::error::${other} compiler warning(s) outside the legacy-keychain allowlist"
+          if ! swift build --build-tests --scratch-path "$RUNNER_TEMP/warnscratch" >"$RUNNER_TEMP/w.log" 2>&1; then
+            tail -40 "$RUNNER_TEMP/w.log"
             exit 1
           fi
-          echo "OK — no warnings outside the allowlist"
+          scripts/check-swift-warnings.sh "$RUNNER_TEMP/w.log"
 
       - name: Compile (debug)
         run: swift build -c debug

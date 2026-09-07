@@ -2,7 +2,6 @@ import Foundation
 import Testing
 import AiTaskbarCore
 import AiTaskbarProviders
-import AiTaskbarTestSupport
 @testable import AiTaskbarApp
 
 private actor StatusFetchProbe {

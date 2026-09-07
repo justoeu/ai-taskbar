@@ -95,8 +95,8 @@ if ! cmp -s CLAUDE.md AGENTS.md; then
 fi
 ok "CLAUDE.md ≡ AGENTS.md"
 
-# `#expect` mis-evaluates Bool-typed sub-expressions on Swift 6.3.2 /
-# Testing 0.99.0. These forms all PASS with values that make them false —
+# The former mixed Swift 6.3.2 / standalone Testing 0.99.0 stack
+# mis-evaluated Bool sub-expressions. These forms all PASSED when false —
 # verified by running them, not by reading the macro:
 #
 #   #expect(false == true)                    #expect(opt ?? false)
@@ -137,19 +137,18 @@ ok "no vacuous #expect forms"
 # Marking the enclosing functions `@available(deprecated:)` was tried and
 # REVERTED: it silences the call *into* the C API but makes every caller of
 # the annotated function warn instead, turning one warning into four.
-KEYCHAIN_LEGACY='Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor)\.swift'
 warn_scratch=$(mktemp -d)
-swift build --build-tests --scratch-path "$warn_scratch" >"$warn_scratch/w.log" 2>&1 || true
-distinct=$(grep -oE "Sources/[^ ]+\.swift:[0-9]+:[0-9]+: warning:" "$warn_scratch/w.log" 2>/dev/null | sort -u || true)
-other=$(printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | grep -c . || true)
-legacy=$(printf '%s\n' "$distinct" | grep -cE "$KEYCHAIN_LEGACY" || true)
-if [ "${other:-0}" -gt 0 ]; then
-    printf '%s\n' "$distinct" | grep -vE "$KEYCHAIN_LEGACY" | head -10 || true
+if ! swift build --build-tests --scratch-path "$warn_scratch" >"$warn_scratch/w.log" 2>&1; then
+    tail -40 "$warn_scratch/w.log"
     rm -rf "$warn_scratch"
-    fail "$other compiler warning(s) outside the legacy-keychain allowlist"
+    fail "clean warning-check build failed"
+fi
+if ! scripts/check-swift-warnings.sh "$warn_scratch/w.log"; then
+    rm -rf "$warn_scratch"
+    fail "compiler warnings outside the legacy-Keychain deprecation allowlist"
 fi
 rm -rf "$warn_scratch"
-ok "0 warnings outside legacy keychain (${legacy:-0} allowlisted)"
+ok "0 warnings outside legacy Keychain (including tests and macros)"
 
 echo
 bold "✓ All validations passed."

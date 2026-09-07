@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-import AiTaskbarTestSupport
 
 @Suite("Keychain authorization localization")
 struct KeychainAuthorizationLocalizationTests {
