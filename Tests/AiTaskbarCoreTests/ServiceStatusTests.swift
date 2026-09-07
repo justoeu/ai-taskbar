@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 @testable import AiTaskbarCore
-import AiTaskbarTestSupport
 
 @Suite("Service status domain")
 struct ServiceStatusTests {

@@ -14,7 +14,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-blue?style=flat-square" alt="macOS 13+">
   <img src="https://img.shields.io/badge/arch-universal-purple?style=flat-square" alt="Universal binary">
-  <img src="https://img.shields.io/badge/swift-5.10-orange?style=flat-square" alt="Swift 5.10">
+  <img src="https://img.shields.io/badge/swift-6.2%2B-orange?style=flat-square" alt="Swift 6.2+">
 </p>
 
 ---
@@ -74,7 +74,7 @@ make app-universal    # arm64 + x86_64 fat binary
 open build/AiTaskbar.app
 ```
 
-Requirements: macOS 13+ (Ventura), Swift 5.10+ (Xcode Command Line Tools is enough — `xcode-select --install`).
+The app runs on macOS 13+ (Ventura). Building the app requires Swift 6.2+; Command Line Tools is enough. Running the tests requires **full Xcode** and the macOS version supported by its bundled Testing framework (validated with Xcode's Swift 6.3.3). CLT 6.3.2 cannot reliably locate its bundled Testing framework/runtime.
 
 ### Option 3 — Check for updates from inside the app
 
@@ -433,7 +433,7 @@ make app-universal      # arm64 + x86_64 fat binary
 make icon               # regenerate Resources/AppIcon.icns from Swift drawing script
 make dmg                # host-arch DMG
 make dmg-universal      # universal DMG
-make validate           # 160+ assertion suite + 245-test swift-test + coverage ≥90% + smoke launch + perms audit
+make validate           # runtime assertions + Swift Testing + coverage ≥90% + smoke launch + perms audit
 make universal-check    # asserts the built app really is x86_64 + arm64
 make sign-developer     # DEVELOPER_ID auto-detected when the keychain has exactly one
 make notarize           # requires NOTARY_PROFILE (keychain) or APPLE_ID/APPLE_TEAM_ID/APPLE_PASSWORD
@@ -442,6 +442,14 @@ make publish            # make release + upload both DMGs & checksums to the Git
 make ship               # full ritual: push → wait CI tag → pull bump → make publish
 make clean
 ```
+
+### Dependencies and testing
+
+TOMLKit **0.6.0** is the only SwiftPM dependency; its embedded toml++ is **3.4.0**. Both remain at their latest published stable releases as checked on 2026-09-06. Tests use **Testing bundled with the selected Swift toolchain**, not a separately versioned `swift-testing` or `swift-syntax` package. This avoids mixing incompatible Testing runtimes and macros. See the [upstream distribution guidance](https://github.com/swiftlang/swift-testing/blob/main/Documentation/Distributions.md).
+
+The Boolean assertion helpers have one canonical source at `Sources/AiTaskbarTestSupport/ExpectBool.swift`, compiled directly in each test target through relative symlinks. Keep those symlinks intact. Negative-control tests verify that deliberately false helper assertions are observed by the runner. After migrating an existing checkout, run `swift package clean` once before `make validate` to discard modules built against the former standalone package.
+
+`make test`, `make coverage` and `make validate` preserve an explicit `DEVELOPER_DIR` or the selected full Xcode. When only CLT is selected, they use `/Applications/Xcode.app` if installed. This does not change the machine's global `xcode-select` setting or release commands. For another Xcode location, use `DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer make validate`. For direct `swift test` commands, select the full Xcode with the same environment variable.
 
 ### Customize bundle identifier
 
@@ -584,9 +592,10 @@ AiTaskbarCore/
                           (legacy sqlite fallback), PricingTable
   History/                UsageHistoryStore (persistent JSONL + NSLock)
   Util/                   Paths, JWT, Semver, SharedCoders
-AiTaskbarValidate/        160+ runtime asserts (replaces XCTest on CLT-only setups)
+AiTaskbarValidate/        Standalone runtime assertions (works with CLT-only setups)
 AiTaskbarTesting/         Fixtures + StubURLProtocol (shared by tests + validate)
-Tests/                    XCTest tests (require full Xcode)
+AiTaskbarTestSupport/     Canonical Boolean helpers, symlinked into tests (not an app target)
+Tests/                    Swift Testing suites (toolchain-bundled framework)
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the architectural deep dive, hard rules, and the checklist for adding a new vendor.

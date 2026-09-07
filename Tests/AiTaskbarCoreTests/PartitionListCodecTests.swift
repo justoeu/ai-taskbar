@@ -120,7 +120,7 @@ struct KeychainPromptSuppressorTests {
         DispatchQueue.global().async {
             silentAttempted.signal()
             KeychainPromptSuppressor.withPromptsSuppressed(apply: { _ in }) {
-                silentEntered.signal()
+                _ = silentEntered.signal()
             }
             silentFinished.signal()
         }

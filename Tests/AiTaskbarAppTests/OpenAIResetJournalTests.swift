@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 import AiTaskbarCore
-import AiTaskbarTestSupport
 @testable import AiTaskbarApp
 
 @Suite("OpenAI reset durable attempt")

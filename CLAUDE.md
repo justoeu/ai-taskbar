@@ -108,9 +108,10 @@ contract, not an implementation detail.
 - Keep assertions atomic. One `#expect` per fact. Tests that fail with
   "expected 5, got 3" are useful; tests that fail with "got non-nil"
   send you to the debugger.
-- **`#expect` cannot be trusted with `Bool`-typed sub-expressions on this
-  toolchain (Apple Swift 6.3.2 / Testing 0.99.0).** Every one of these PASSES
-  with a value that makes it false — verified by running them, not inferred:
+- **Keep the Boolean assertion guards introduced for the former mixed
+  Apple Swift 6.3.2 / standalone Testing 0.99.0 stack.** Every one of these
+  PASSED with a value that made it false on that stack — verified by running
+  them, not inferred:
 
   ```swift
   #expect(false == true)                                 // passes (!)
@@ -119,14 +120,15 @@ contract, not an implementation detail.
   let x: Bool? = true;  #expect(x.map { !$0 } ?? false)   // passes (!)
   ```
 
-  and one is inverted outright: `#expect(!(x ?? true))` **fails** for
+  and one was inverted outright: `#expect(!(x ?? true))` **failed** for
   `x == .some(false)`, where plain Swift evaluates the same expression to
   `true`. This was found because 43 asserts across 16 files were written the
   `== true` way and none of them could ever fail; fixing them surfaced a real
   dead-code bug in `ClaudeSessionScanner` that had been invisible for months.
 
   **Rule:** for any condition involving an optional, use `expectTrue` /
-  `expectFalse` from `AiTaskbarTestSupport`. They take a plain `Bool`
+  `expectFalse` from the shared `Sources/AiTaskbarTestSupport/ExpectBool.swift`
+  file. They take a plain `Bool`
   *parameter*, so the condition is evaluated as ordinary Swift at the call
   site and the macro only ever sees a bare identifier. A non-optional
   `#expect(flag)` / `#expect(!flag)` is safe, and so are non-`Bool`
@@ -146,10 +148,16 @@ contract, not an implementation detail.
 - **UI-only changes** that can't be asserted headlessly → exercise via the
   smoke launch and document what was visually verified in the PR.
 
-### 5. Zero warnings OUTSIDE the legacy-keychain files
+### 5. Zero warnings outside classic-Keychain deprecations
 
-`scripts/validate.sh` and CI both fail on any compiler warning that is not in
-`Credentials/Keychain{AccessAuthorizer,CredentialReader,PromptSuppressor}.swift`.
+`scripts/validate.sh` and CI share `scripts/check-swift-warnings.sh`, covering
+source, test, macro-expansion and linker diagnostics. Only deprecations in
+`Sources/AiTaskbarCore/Credentials/Keychain{AccessAuthorizer,CredentialReader,PromptSuppressor}.swift`
+and their isolated-keychain test fixtures (`KeychainAccessAuthorizerTests.swift`,
+`KeychainCredentialReaderTests.swift`, `TemporaryKeychain.swift` in
+`Tests/AiTaskbarCoreTests/`) are allowlisted. Other warnings in those files fail
+too. The fixtures exercise the same unavoidable classic API; previously all
+test warnings were accidentally excluded by a Sources-only matcher.
 Both measure with a **clean** build (`--scratch-path` to a temp dir): an
 incremental build recompiles nothing and reports zero no matter how bad things
 are.
@@ -180,11 +188,25 @@ capture in `NotificationService` sat in plain sight.
 
 Two conventions came out of that cleanup:
 
-- **`swift-testing` is NOT a dependency of the testTargets.** Swift 6 toolchains
-  ship Testing; declaring the package too is what produced the deprecations. It
-  remains a dependency of `AiTaskbarTestSupport` only, because regular (non-test)
-  targets do not get the bundled module — removing it there fails with
-  `missing required module '_TestingInternals'`.
+- **Use only toolchain-bundled Testing.** Neither `swift-testing` nor its
+  transitive `swift-syntax` belongs in the package dependency graph. Mixing
+  the package with toolchain macros caused ignored assertions, warnings and,
+  with standalone 6.3.2, linker failures. The former regular
+  `AiTaskbarTestSupport` target could not import bundled Testing on CLT.
+  Its canonical `Sources/AiTaskbarTestSupport/ExpectBool.swift` is now compiled
+  directly by each test target through a relative `ExpectBool.swift` symlink;
+  preserve those three links and do not add a production dependency on Testing.
+  `TestingInfrastructureTests` pins the remaining dependency and verifies that
+  false helper assertions reach the runner. After removing old package modules,
+  run `swift package clean` before validation. The app still targets macOS 13;
+  tests require full Xcode and the minimum macOS supported by its Testing
+  framework. CLT 6.3.2 has broken framework/runtime discovery for bundled
+  Testing. `make test`, `make coverage` and `make validate` use
+  `scripts/with-test-toolchain.sh`: preserve explicit `DEVELOPER_DIR` or the
+  selected full Xcode; otherwise use `/Applications/Xcode.app` if installed.
+  Invalid explicit selections fail without fallback. No global `xcode-select`
+  change or SDK/linker-path workaround is allowed. Direct `swift test` and
+  warning self-tests must run with a full-Xcode `DEVELOPER_DIR` too.
 - **Don't reach for `@available(deprecated:)` to hide a warning you could fix.**
   See above for why it usually doesn't even hide it.
 

@@ -1,5 +1,4 @@
 import Testing
-import AiTaskbarTestSupport
 import Foundation
 import SQLite3
 @testable import AiTaskbarCore
@@ -78,7 +77,7 @@ struct CodexLogScannerSQLiteTests {
             var stmt: OpaquePointer?
             sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil)
             sqlite3_bind_int64(stmt, 1, Int64(row.ts))
-            row.body.withCString { sqlite3_bind_text(stmt, 2, $0, -1, nil) }
+            _ = row.body.withCString { sqlite3_bind_text(stmt, 2, $0, -1, nil) }
             sqlite3_step(stmt)
             sqlite3_finalize(stmt)
         }

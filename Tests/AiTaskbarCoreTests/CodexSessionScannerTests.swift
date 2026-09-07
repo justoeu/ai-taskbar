@@ -1,5 +1,4 @@
 import Testing
-import AiTaskbarTestSupport
 import Foundation
 import SQLite3
 @testable import AiTaskbarCore
@@ -614,7 +613,7 @@ struct CodexCostTests {
         var stmt: OpaquePointer?
         sqlite3_prepare_v2(db, "INSERT INTO logs (ts, feedback_log_body) VALUES (?, ?)", -1, &stmt, nil)
         sqlite3_bind_int64(stmt, 1, Int64(nowSeconds - 60))
-        body.withCString { sqlite3_bind_text(stmt, 2, $0, -1, nil) }
+        _ = body.withCString { sqlite3_bind_text(stmt, 2, $0, -1, nil) }
         sqlite3_step(stmt)
         sqlite3_finalize(stmt)
         return tmp

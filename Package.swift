@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
@@ -6,8 +6,8 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS(.v13)],
     // Swift 6 tools + Swift 6 language mode on all targets (see per-target
-    // swiftSettings). Testing comes from the toolchain for testTargets;
-    // swift-testing is only linked into AiTaskbarTestSupport.
+    // swiftSettings). All test code uses the toolchain's bundled Testing;
+    // do not mix it with a standalone swift-testing package.
     products: [
         .executable(name: "ai-taskbar", targets: ["AiTaskbarApp"]),
         .executable(name: "ai-taskbar-validate", targets: ["AiTaskbarValidate"]),
@@ -16,16 +16,6 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0"),
-        // swift-testing is declared ONLY for AiTaskbarTestSupport, which is a
-        // regular target — those do not get the toolchain's bundled Testing
-        // (removing the dependency outright fails it with "missing required
-        // module '_TestingInternals'"). The three testTargets deliberately do
-        // NOT list it: they resolve Testing from the Swift 6 toolchain, and
-        // linking the standalone package there emitted a deprecation on every
-        // single @Test/@Suite — hundreds of warnings that buried the real ones.
-        // Exact pin — Package.resolved already locks this; avoid 0.x drift on
-        // fresh resolves without the lockfile (DEP-PRI-003).
-        .package(url: "https://github.com/apple/swift-testing.git", exact: "0.99.0"),
     ],
     targets: [
         .executableTarget(
@@ -51,16 +41,6 @@ let package = Package(
             dependencies: ["AiTaskbarCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
-        // Assertion helpers for the test targets only. Kept OUT of
-        // AiTaskbarTesting because that one is linked by the
-        // AiTaskbarValidate executable, which must not pull in swift-testing.
-        .target(
-            name: "AiTaskbarTestSupport",
-            dependencies: [
-                .product(name: "Testing", package: "swift-testing"),
-            ],
-            swiftSettings: [.swiftLanguageMode(.v6)]
-        ),
         .executableTarget(
             name: "AiTaskbarValidate",
             dependencies: ["AiTaskbarCore", "AiTaskbarProviders", "AiTaskbarTesting"],
@@ -69,13 +49,13 @@ let package = Package(
         .testTarget(
             name: "AiTaskbarCoreTests",
             dependencies: [
-                "AiTaskbarCore", "AiTaskbarTesting", "AiTaskbarTestSupport",
+                "AiTaskbarCore", "AiTaskbarTesting",
             ]
         ),
         .testTarget(
             name: "AiTaskbarProvidersTests",
             dependencies: [
-                "AiTaskbarProviders", "AiTaskbarTesting", "AiTaskbarTestSupport",
+                "AiTaskbarProviders", "AiTaskbarTesting",
             ]
         ),
         .testTarget(
@@ -84,7 +64,6 @@ let package = Package(
                 "AiTaskbarApp",
                 "AiTaskbarCore",
                 "AiTaskbarProviders",
-                "AiTaskbarTestSupport",
             ]
         ),
     ]

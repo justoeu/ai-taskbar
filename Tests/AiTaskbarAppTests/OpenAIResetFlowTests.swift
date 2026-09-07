@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 import AiTaskbarCore
-import AiTaskbarTestSupport
 @testable import AiTaskbarApp
 
 private final class ResetRPCStub: CodexResetRPC {

@@ -2,7 +2,6 @@ import Foundation
 import Testing
 import AiTaskbarCore
 import AiTaskbarTesting
-import AiTaskbarTestSupport
 @testable import AiTaskbarProviders
 
 @Suite("OpenAI earned resets")
