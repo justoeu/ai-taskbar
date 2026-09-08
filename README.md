@@ -169,7 +169,10 @@ list; the read succeeds silently regardless of how AI Taskbar itself is signed,
 and the card shows usage instead of the Authorize banner. The child runs under a
 5 s budget (a hung tool means securityd raised a dialog on its behalf; the
 child is killed, which dismisses it, and the fallback pauses for an hour — five
-minutes after an ordinary failure), and is never used for writes. Authorize still works and restores the direct path.
+minutes after an ordinary failure), is skipped while the keychain is locked
+(that would be the unlock dialog), and is never used for writes; while a
+credential comes from the fallback the app also never rotates the OAuth token,
+even with `manage_oauth_refresh = true`. Authorize still works and restores the direct path.
 
 ### Claude `429 rate_limit_error`
 

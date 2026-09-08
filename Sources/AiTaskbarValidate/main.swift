@@ -81,9 +81,9 @@ section("SecurityToolCredentialReader codec") {
                                                   keychainPaths: ["/k"])
            == ["find-generic-password", "-s", "Claude Code-credentials", "-a", "u", "-w", "/k"],
            "arguments: service, account, -w, keychain path")
-    expect(SecurityToolCredentialReader.arguments(service: "S", account: "", keychainPaths: [])
-           == ["find-generic-password", "-s", "S", "-w"],
-           "arguments: empty account omits -a")
+    expect(SecurityToolCredentialReader.arguments(service: "S", account: nil, keychainPaths: [])
+           == ["find-generic-password", "-s", "S", "-a", "", "-w"],
+           "arguments: nil account becomes -a \"\" (legacy account-less item, still exact)")
     expect(SecurityToolCredentialReader.decodeOutput(Data("{\"a\":1}\n".utf8)) == Data("{\"a\":1}".utf8),
            "decodeOutput: JSON keeps bytes, drops newline")
     expect(SecurityToolCredentialReader.decodeOutput(Data("7b7d\n".utf8)) == Data("{}".utf8),

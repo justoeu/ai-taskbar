@@ -32,7 +32,9 @@ public enum PartitionListCodec {
         partitions.contains(partition) ? partitions : partitions + [partition]
     }
 
-    private static func dataFromHex(_ hex: String) -> Data? {
+    /// Shared with `SecurityToolCredentialReader.decodeOutput`; one hex decoder
+    /// for the Credentials directory.
+    internal static func dataFromHex(_ hex: String) -> Data? {
         let chars = Array(hex)
         guard chars.count % 2 == 0 else { return nil }
         var data = Data(capacity: chars.count / 2)

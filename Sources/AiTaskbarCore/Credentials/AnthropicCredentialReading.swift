@@ -20,6 +20,10 @@ public protocol AnthropicCredentialReading: Sendable {
     /// The next `read()` must consult the backing credential source again.
     func invalidateCachedCredentials()
     func writeBack(_ updated: AnthropicCredentials) throws
+    /// False when the last `read()` was served by a path that cannot also
+    /// persist (`/usr/bin/security` fallback). Callers must not rotate a
+    /// shared refresh token they have no way to write back.
+    var canPersistCredentials: Bool { get }
 }
 
 public extension AnthropicCredentialReading {
@@ -41,4 +45,5 @@ public extension AnthropicCredentialReading {
         return .authorized
     }
     func invalidateCachedCredentials() {}
+    var canPersistCredentials: Bool { true }
 }

@@ -34,12 +34,12 @@ struct SecurityToolCodecTests {
         #expect(args == ["find-generic-password", "-s", "Claude Code-credentials", "-a", "justoeu", "-w", "/tmp/k.keychain"])
     }
 
-    @Test("nil or empty account omits -a (legacy account-less item)")
+    @Test("nil account is passed as -a \"\" so the legacy account-less item stays an exact match")
     func arguments_no_account() {
         #expect(SecurityToolCredentialReader.arguments(service: "S", account: nil, keychainPaths: [])
-                == ["find-generic-password", "-s", "S", "-w"])
+                == ["find-generic-password", "-s", "S", "-a", "", "-w"])
         #expect(SecurityToolCredentialReader.arguments(service: "S", account: "", keychainPaths: [])
-                == ["find-generic-password", "-s", "S", "-w"])
+                == ["find-generic-password", "-s", "S", "-a", "", "-w"])
     }
 
     @Test("JSON output loses only its trailing newline")
@@ -208,6 +208,49 @@ struct KeychainCredentialReaderFallbackTests {
             service: service, searchList: [keychain.reference], fallback: fallback,
             secItemRead: { _, _ in errSecAuthFailed })
         #expect(try reader.read().accessToken == "tool")
+        #expect(!reader.canPersistCredentials)
+    }
+
+    @Test("a locked keychain never consults the tool (it would raise the unlock dialog)")
+    func locked_keychain_skips_fallback() throws {
+        let fake = try FakeSecurityTool(); defer { fake.cleanup() }
+        let service = "ai-taskbar-fb-\(UUID().uuidString)"
+        addItem(service: service, account: "justoeu", token: "direct")
+        let exe = try fake.script("printf '%s\\n' '\(claudeJSON(token: "tool"))'")
+        let reader = KeychainCredentialReader(
+            service: service, searchList: [keychain.reference],
+            fallback: SecurityToolCredentialReader(executable: exe, timeout: 5),
+            secItemRead: { _, _ in errSecInteractionNotAllowed })
+        #expect(SecKeychainLock(keychain.reference) == errSecSuccess)
+        #expect(!KeychainCredentialReader.isUnlocked(keychain.reference))
+        let error = #expect(throws: AppError.self) { try reader.read() }
+        expectTrue(error?.isKeychainACLBlocked ?? false)
+        try keychain.unlock()
+        #expect(KeychainCredentialReader.isUnlocked(keychain.reference))
+        #expect(try reader.read().accessToken == "tool")
+    }
+
+    @Test("the fallback is handed the keychain file the item lives in")
+    func fallback_receives_item_keychain_path() throws {
+        let fake = try FakeSecurityTool(); defer { fake.cleanup() }
+        let service = "ai-taskbar-fb-\(UUID().uuidString)"
+        addItem(service: service, account: "justoeu", token: "direct")
+        // $7 is the first keychain path argument; the fake records it.
+        let argFile = fake.directory.appendingPathComponent("arg7")
+        let exe = try fake.script("""
+        printf '%s' "$7" > '\(argFile.path)'
+        printf '%s\\n' '\(claudeJSON(token: "tool"))'
+        """)
+        let reader = KeychainCredentialReader(
+            service: service, searchList: [keychain.reference],
+            fallback: SecurityToolCredentialReader(executable: exe, timeout: 5),
+            secItemRead: { _, _ in errSecAuthFailed })
+        #expect(try reader.read().accessToken == "tool")
+        // /var/folders vs /private/var/folders: compare resolved paths.
+        func resolved(_ path: String) -> String { URL(fileURLWithPath: path).resolvingSymlinksInPath().path }
+        let handed = try String(contentsOf: argFile, encoding: .utf8)
+        #expect(resolved(handed) == resolved(keychain.path))
+        #expect(resolved(KeychainCredentialReader.path(of: keychain.reference) ?? "") == resolved(keychain.path))
     }
 
     @Test("when the tool also fails, the original ACL error still drives the Authorize banner")
@@ -245,6 +288,7 @@ struct KeychainCredentialReaderFallbackTests {
             service: service, searchList: [keychain.reference],
             fallback: SecurityToolCredentialReader(executable: exe, timeout: 5))
         #expect(try reader.read().accessToken == "direct")
+        #expect(reader.canPersistCredentials)
     }
 
     /// End to end against the real `/usr/bin/security`: an item the *tool*
@@ -258,10 +302,11 @@ struct KeychainCredentialReaderFallbackTests {
         try runSecurity(["unlock-keychain", "-p", keychain.password, keychain.path])
         try runSecurity(["add-generic-password", "-s", service, "-a", "justoeu", "-w", payload, keychain.path])
 
-        let fallback = SecurityToolCredentialReader(keychainPaths: [keychain.path], timeout: 10)
-        let data = try fallback.read(service: service, account: "justoeu")
+        let fallback = SecurityToolCredentialReader(timeout: 10)
+        let data = try fallback.read(service: service, account: "justoeu", keychainPaths: [keychain.path])
         #expect(String(decoding: data, as: UTF8.self) == payload)
 
+        // No paths on the instance: the reader must hand over the item's keychain.
         let reader = KeychainCredentialReader(service: service, searchList: [keychain.reference],
                                               fallback: fallback)
         #expect(try reader.read().accessToken == "real-tool")

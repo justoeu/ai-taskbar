@@ -434,7 +434,11 @@ the Management API, so adding opencode's dollars there would double-count.
   tool, so the tool is on its trusted-app list and `apple-tool:` partition no
   matter how this binary is signed — which is what made ad-hoc dev builds
   re-prompt after every rebuild (36 dead `cdhash` grants on one machine).
-  Rules: exact-match arguments only (`-s` is exact, verified), stdin
+  Rules: exact-match arguments only (`-s` is exact, verified; `-a ""` for the
+  legacy account-less item), the item's own keychain file is passed and must
+  be **unlocked** (a locked keychain fast-fails with the same code and the
+  tool would raise the unlock dialog), `canPersistCredentials` turns false so
+  `manage_oauth_refresh` never rotates a token it cannot write back, stdin
   `/dev/null`, stderr discarded, payload never logged, 5 s budget that kills
   the child (dismissing any dialog securityd raised for it) then a 1 h
   cooldown (5 min after an ordinary failure), the blocking read hops off the

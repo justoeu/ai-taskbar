@@ -93,15 +93,11 @@ public final class SecurityToolCredentialReader: Sendable {
     /// True while a previous failure keeps the fallback disabled.
     public var isCoolingDown: Bool { coolingDownUntil() != nil }
 
-    /// Exact-match `find-generic-password` invocation. A nil/empty account
-    /// omits `-a`, which lets the tool pick the first item of that service —
-    /// only ever used for the legacy account-less Claude item.
+    /// Exact-match `find-generic-password` invocation. `-a` is always passed:
+    /// `-a ""` matches only the legacy account-less item, whereas omitting
+    /// `-a` would let the tool return the first item of that service.
     public static func arguments(service: String, account: String?, keychainPaths: [String]) -> [String] {
-        var args = ["find-generic-password", "-s", service]
-        if let account, !account.isEmpty { args += ["-a", account] }
-        args.append("-w")
-        args += keychainPaths
-        return args
+        ["find-generic-password", "-s", service, "-a", account ?? "", "-w"] + keychainPaths
     }
 
     /// `security … -w` prints the secret followed by a newline. Secrets that
@@ -115,14 +111,17 @@ public final class SecurityToolCredentialReader: Sendable {
         while let last = bytes.last, last == 0x0A || last == 0x0D { bytes.removeLast() }
         guard !bytes.isEmpty, let text = String(data: bytes, encoding: .utf8) else { return nil }
         if looksLikeJSON(bytes) { return bytes }
-        if let hex = dataFromHex(text), looksLikeJSON(hex) { return hex }
+        if let hex = PartitionListCodec.dataFromHex(text), looksLikeJSON(hex) { return hex }
         return bytes
     }
 
-    public func read(service: String, account: String?) throws -> Data {
+    /// - Parameter keychainPaths: overrides the instance default so the caller
+    ///   can pin the very keychain the item's persistent reference came from.
+    public func read(service: String, account: String?, keychainPaths: [String]? = nil) throws -> Data {
         if let until = coolingDownUntil() { throw Failure.coolingDown(until: until) }
         do {
-            return try runTool(service: service, account: account)
+            return try runTool(service: service, account: account,
+                               keychainPaths: keychainPaths ?? self.keychainPaths)
         } catch Failure.timedOut {
             beginCooldown(timeoutCooldown)
             throw Failure.timedOut
@@ -132,7 +131,7 @@ public final class SecurityToolCredentialReader: Sendable {
         }
     }
 
-    private func runTool(service: String, account: String?) throws -> Data {
+    private func runTool(service: String, account: String?, keychainPaths: [String]) throws -> Data {
         let process = Process()
         process.executableURL = executable
         process.arguments = Self.arguments(service: service, account: account, keychainPaths: keychainPaths)
@@ -168,7 +167,15 @@ public final class SecurityToolCredentialReader: Sendable {
                 kill(process.processIdentifier, SIGKILL)
                 _ = exited.wait(timeout: .now() + 1)
             }
-            _ = drained.wait(timeout: .now() + 1)
+            let drainedInTime = drained.wait(timeout: .now() + 1) == .success
+            // Race window: the child may have finished cleanly right as the
+            // budget lapsed. A complete, decodable answer is a success, not an
+            // hour-long outage.
+            if drainedInTime, !process.isRunning, process.terminationReason == .exit,
+               process.terminationStatus == 0,
+               let secret = Self.decodeOutput(output.withLock { $0 }) {
+                return secret
+            }
             throw Failure.timedOut
         }
         guard drained.wait(timeout: deadline) == .success else { throw Failure.timedOut }
@@ -194,27 +201,5 @@ public final class SecurityToolCredentialReader: Sendable {
     private static func looksLikeJSON(_ bytes: Data) -> Bool {
         guard let first = bytes.first(where: { $0 != 0x20 && $0 != 0x09 }) else { return false }
         return first == UInt8(ascii: "{") || first == UInt8(ascii: "[")
-    }
-
-    private static func dataFromHex(_ hex: String) -> Data? {
-        let chars = Array(hex.utf8)
-        guard !chars.isEmpty, chars.count % 2 == 0 else { return nil }
-        var data = Data(capacity: chars.count / 2)
-        var index = 0
-        while index < chars.count {
-            guard let hi = nibble(chars[index]), let lo = nibble(chars[index + 1]) else { return nil }
-            data.append(hi << 4 | lo)
-            index += 2
-        }
-        return data
-    }
-
-    private static func nibble(_ c: UInt8) -> UInt8? {
-        switch c {
-        case UInt8(ascii: "0")...UInt8(ascii: "9"): return c - UInt8(ascii: "0")
-        case UInt8(ascii: "a")...UInt8(ascii: "f"): return c - UInt8(ascii: "a") + 10
-        case UInt8(ascii: "A")...UInt8(ascii: "F"): return c - UInt8(ascii: "A") + 10
-        default: return nil
-        }
     }
 }

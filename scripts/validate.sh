@@ -84,6 +84,14 @@ if [ -f "$codex_auth" ]; then
     [ "$perm" = "600" ] && ok "~/.codex/auth.json 0600" || fail "codex auth $perm (expected 600)"
 fi
 
+# The Anthropic reader may exec /usr/bin/security as a read-only fallback for
+# an ACL-blocked Keychain item. Pin the binary we exec: Apple-signed and
+# root-owned, so the credential never flows through a substitutable tool.
+sec_tool=/usr/bin/security
+[ "$(stat -f '%Su' "$sec_tool")" = "root" ] || fail "$sec_tool is not root-owned"
+codesign --verify -R='anchor apple' "$sec_tool" 2>/dev/null || fail "$sec_tool is not Apple-signed"
+ok "/usr/bin/security root-owned + Apple-signed"
+
 bold "[7/7] doc mirror + assert sanity"
 # CLAUDE.md and AGENTS.md are the same document for two different agents.
 # They were byte-identical for the project's whole history until an edit

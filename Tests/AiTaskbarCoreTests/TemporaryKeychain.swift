@@ -28,6 +28,13 @@ final class TemporaryKeychain {
         reference = try #require(created)
     }
 
+    func unlock() throws {
+        let status = password.withCString { bytes in
+            SecKeychainUnlock(reference, UInt32(password.utf8.count), bytes, true)
+        }
+        try #require(status == errSecSuccess)
+    }
+
     deinit {
         // Best-effort teardown of this fixture's exact temporary keychain.
         SecKeychainDelete(reference)
