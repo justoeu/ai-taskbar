@@ -5,6 +5,10 @@ import Testing
 /// Owns only dummy test credentials; never depends on an unlocked login keychain.
 final class TemporaryKeychain {
     let reference: SecKeychain
+    /// On-disk path, for handing the keychain to `/usr/bin/security`.
+    let path: String
+    /// Creation password, so tests can `security unlock-keychain -p` without a prompt.
+    let password: String
     private let directory: URL
 
     init() throws {
@@ -15,6 +19,8 @@ final class TemporaryKeychain {
         let path = directory.appendingPathComponent("test.keychain").path
         var created: SecKeychain?
         let password = UUID().uuidString
+        self.path = path
+        self.password = password
         let status = password.withCString { bytes in
             SecKeychainCreate(path, UInt32(password.utf8.count), bytes, false, nil, &created)
         }

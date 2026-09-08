@@ -75,6 +75,23 @@ section("Keychain ACL fast-fail mapping") {
            "non-credentials error is not ACL-blocked")
 }
 
+section("SecurityToolCredentialReader codec") {
+    // Exact-match arguments: the tool must never be handed a fuzzy query.
+    expect(SecurityToolCredentialReader.arguments(service: "Claude Code-credentials", account: "u",
+                                                  keychainPaths: ["/k"])
+           == ["find-generic-password", "-s", "Claude Code-credentials", "-a", "u", "-w", "/k"],
+           "arguments: service, account, -w, keychain path")
+    expect(SecurityToolCredentialReader.arguments(service: "S", account: "", keychainPaths: [])
+           == ["find-generic-password", "-s", "S", "-w"],
+           "arguments: empty account omits -a")
+    expect(SecurityToolCredentialReader.decodeOutput(Data("{\"a\":1}\n".utf8)) == Data("{\"a\":1}".utf8),
+           "decodeOutput: JSON keeps bytes, drops newline")
+    expect(SecurityToolCredentialReader.decodeOutput(Data("7b7d\n".utf8)) == Data("{}".utf8),
+           "decodeOutput: hex is decoded")
+    expect(SecurityToolCredentialReader.decodeOutput(Data("\n".utf8)) == nil,
+           "decodeOutput: empty answer is nil")
+}
+
 section("JSONValue round-trip") {
     let payload: JSONValue = .object([
         "tokens": .object([

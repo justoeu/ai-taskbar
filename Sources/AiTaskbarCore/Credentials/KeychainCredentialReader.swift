@@ -14,19 +14,31 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     private var pending: (identity: KeychainAccessAuthorizer.TargetIdentity?,
                           credentials: AnthropicCredentials)?
     private var lastKnownGood: AnthropicCredentials?
+    /// Read-only escape hatch for an ACL-blocked direct read: the same
+    /// `/usr/bin/security` path the Claude Code CLI uses. nil disables it.
+    private let fallback: SecurityToolCredentialReader?
+    private let secItemRead: @Sendable (CFDictionary, UnsafeMutablePointer<CFTypeRef?>) -> OSStatus
+    private var didLogFallback = false
     public static let memoryCacheBuffer: TimeInterval = 300
 
     public convenience init(service: String = "Claude Code-credentials",
                             preferredAccount: String? = nil) {
-        self.init(service: service, preferredAccount: preferredAccount, searchList: nil)
+        self.init(service: service, preferredAccount: preferredAccount, searchList: nil,
+                  fallback: SecurityToolCredentialReader())
     }
 
     /// Explicit search list isolates integration tests from the user's login Keychain.
+    /// `secItemRead` is a test seam for forcing ACL fast-fail statuses.
     internal init(service: String, preferredAccount: String? = nil,
-                  searchList: [SecKeychain]?) {
+                  searchList: [SecKeychain]?,
+                  fallback: SecurityToolCredentialReader? = nil,
+                  secItemRead: @escaping @Sendable (CFDictionary, UnsafeMutablePointer<CFTypeRef?>) -> OSStatus
+                      = { SecItemCopyMatching($0, $1) }) {
         self.service = service
         self.preferredAccount = preferredAccount
         self.searchList = searchList
+        self.fallback = fallback
+        self.secItemRead = secItemRead
     }
 
     public func read() throws -> AnthropicCredentials {
@@ -131,8 +143,9 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         var query = exactQuery(identity)
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         query[kSecReturnData as String] = true
+        let read = secItemRead
         let status = KeychainPromptSuppressor.withPromptsSuppressed {
-            SecItemCopyMatching(query as CFDictionary, &result)
+            read(query as CFDictionary, &result)
         }
         // Never carry a pending token onto a replacement with the same account.
         // Let the next scheduled read resolve the replacement from scratch.
@@ -141,10 +154,32 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             pending = nil
             lastKnownGood = nil
         }
+        if Self.isACLBlockedStatus(status), let data = readViaSecurityTool(identity, directStatus: status) {
+            return data
+        }
         guard status == errSecSuccess, let data = result as? Data else {
             throw Self.errorFor(status: status, op: "read selected credential")
         }
         return data
+    }
+
+    /// Same item, read by `/usr/bin/security` instead of this binary. Returns
+    /// nil when the fallback is disabled or fails, so the caller surfaces the
+    /// original ACL error and the Authorize banner stays reachable.
+    private func readViaSecurityTool(_ identity: KeychainAccessAuthorizer.TargetIdentity,
+                                     directStatus: OSStatus) -> Data? {
+        guard let fallback else { return nil }
+        do {
+            let data = try fallback.read(service: service, account: identity.account)
+            if !didLogFallback {
+                didLogFallback = true
+                AppLog.keychain.notice("Direct Keychain read fast-failed (OSStatus \(directStatus, privacy: .public)); credential read through /usr/bin/security, the path the Claude Code CLI itself uses. Authorize in the Claude card restores direct access.")
+            }
+            return data
+        } catch {
+            AppLog.keychain.error("security tool fallback unavailable: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     private func decode(_ data: Data) throws -> AnthropicCredentials {

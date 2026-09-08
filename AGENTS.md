@@ -427,6 +427,19 @@ the Management API, so adding opencode's dollars there would double-count.
   applies to scheduled reads or writes. Require a silent read of the same
   item afterward; do not report persistent authorization from an interactive
   success alone. Do not capture the Keychain password or execute shell ACL commands.
+  **One read-only exception:** when the direct read fast-fails with either
+  ACL code, `KeychainCredentialReader` retries the *same item* through
+  `SecurityToolCredentialReader` (`/usr/bin/security find-generic-password -s
+  <service> -a <account> -w`). The Claude Code CLI writes the item with that
+  tool, so the tool is on its trusted-app list and `apple-tool:` partition no
+  matter how this binary is signed — which is what made ad-hoc dev builds
+  re-prompt after every rebuild (36 dead `cdhash` grants on one machine).
+  Rules: exact-match arguments only (`-s` is exact, verified), stdin
+  `/dev/null`, stderr discarded, payload never logged, 10 s timeout that kills
+  the child (dismissing any dialog securityd raised for it) and then a 1 h
+  cooldown, and **never for writes** — `writeBack` stays `SecItemUpdate`. When
+  the fallback fails the original ACL error is rethrown so the Authorize
+  banner still appears.
 - **The shared-credential OAuth providers (Anthropic + OpenAI/Codex) must
   default to read-only credentials.** Both `AnthropicConfig.manageOAuthRefresh`
   and `OpenAIConfig.manageOAuthRefresh` default to `false`, and the providers'
