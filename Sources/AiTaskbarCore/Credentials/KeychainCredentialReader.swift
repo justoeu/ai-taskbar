@@ -233,7 +233,8 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         var length = UInt32(PATH_MAX)
         var buffer = [CChar](repeating: 0, count: Int(PATH_MAX) + 1)
         guard SecKeychainGetPath(keychain, &length, &buffer) == errSecSuccess else { return nil }
-        return String(cString: buffer)
+        let bytes = buffer.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     private func decode(_ data: Data) throws -> AnthropicCredentials {

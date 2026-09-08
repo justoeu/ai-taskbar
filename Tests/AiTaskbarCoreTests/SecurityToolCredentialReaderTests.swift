@@ -221,7 +221,7 @@ struct KeychainCredentialReaderFallbackTests {
             service: service, searchList: [keychain.reference],
             fallback: SecurityToolCredentialReader(executable: exe, timeout: 5),
             secItemRead: { _, _ in errSecInteractionNotAllowed })
-        #expect(SecKeychainLock(keychain.reference) == errSecSuccess)
+        try keychain.lock()
         #expect(!KeychainCredentialReader.isUnlocked(keychain.reference))
         let error = #expect(throws: AppError.self) { try reader.read() }
         expectTrue(error?.isKeychainACLBlocked ?? false)

@@ -28,6 +28,13 @@ final class TemporaryKeychain {
         reference = try #require(created)
     }
 
+    func lock() throws {
+        // Keep the deprecated call outside the macro: a warning attributed to
+        // "macro expansion" has no file path for the allowlist to match.
+        let status = SecKeychainLock(reference)
+        try #require(status == errSecSuccess)
+    }
+
     func unlock() throws {
         let status = password.withCString { bytes in
             SecKeychainUnlock(reference, UInt32(password.utf8.count), bytes, true)
