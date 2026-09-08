@@ -176,8 +176,11 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
                 AppLog.keychain.notice("Direct Keychain read fast-failed (OSStatus \(directStatus, privacy: .public)); credential read through /usr/bin/security, the path the Claude Code CLI itself uses. Authorize in the Claude card restores direct access.")
             }
             return data
+        } catch SecurityToolCredentialReader.Failure.coolingDown {
+            // The failure that started the cooldown was already logged.
+            return nil
         } catch {
-            AppLog.keychain.error("security tool fallback unavailable: \(String(describing: error), privacy: .public)")
+            AppLog.keychain.error("security tool fallback unavailable: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }

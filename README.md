@@ -166,10 +166,10 @@ fast-fails on the ACL, AI Taskbar now asks Apple's `security` tool for the
 exact item (`find-generic-password -s <service> -a <account> -w`). Claude Code
 writes the item with that same tool, so it is always on the item's trusted-app
 list; the read succeeds silently regardless of how AI Taskbar itself is signed,
-and the card shows usage instead of the Authorize banner. The child runs with a
-10 s timeout (a hung tool means securityd raised a dialog on its behalf; the
-child is killed, which dismisses it, and the fallback pauses for an hour), and
-is never used for writes. Authorize still works and restores the direct path.
+and the card shows usage instead of the Authorize banner. The child runs under a
+5 s budget (a hung tool means securityd raised a dialog on its behalf; the
+child is killed, which dismisses it, and the fallback pauses for an hour — five
+minutes after an ordinary failure), and is never used for writes. Authorize still works and restores the direct path.
 
 ### Claude `429 rate_limit_error`
 

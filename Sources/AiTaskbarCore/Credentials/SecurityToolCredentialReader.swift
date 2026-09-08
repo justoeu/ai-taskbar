@@ -16,17 +16,28 @@ import os
 /// Guardrails:
 /// - Exact-match arguments only (`-s service -a account`); the tool matches
 ///   attributes exactly — verified against the substring probe
-///   `-s "Claude Code-cred"` → not found.
-/// - A hard timeout kills the child. If the tool were ever *not* trusted on an
-///   item, securityd would raise a dialog on the tool's behalf; killing the
-///   child dismisses it, and a cooldown stops the next scheduled refresh from
-///   flashing it again.
+///   `-s "Claude Code-cred"` → not found — and getopt consumes a leading-dash
+///   value as the option's argument, never as a new option.
+/// - One wall-clock budget (`timeout`) covers the child's lifetime *and* the
+///   stdout drain; a hung child is terminated, then killed. If the tool were
+///   ever *not* trusted on an item, securityd would raise a dialog on the
+///   tool's behalf; killing the child dismisses it, and a long cooldown stops
+///   the next scheduled refresh from flashing it again. Ordinary failures
+///   (non-zero exit, no output) get a shorter cooldown so a broken fallback
+///   is retried once per refresh interval instead of once per read.
 /// - stdin is `/dev/null`, stderr is discarded, stdout is decoded and handed
 ///   back as opaque bytes. Nothing is logged from the payload.
-public final class SecurityToolCredentialReader: @unchecked Sendable {
+///
+/// The read is synchronous and blocks its calling thread for up to `timeout`;
+/// call it from a plain thread (see `AnthropicCredentialReading.readOffPool`),
+/// never from the main actor or a cooperative-pool task.
+public final class SecurityToolCredentialReader: Sendable {
     public static let defaultExecutable = URL(fileURLWithPath: "/usr/bin/security")
-    public static let defaultTimeout: TimeInterval = 10
-    public static let defaultCooldown: TimeInterval = 3600
+    /// The tool normally answers in tens of milliseconds; anything slower
+    /// means securityd is waiting on a human.
+    public static let defaultTimeout: TimeInterval = 5
+    public static let defaultTimeoutCooldown: TimeInterval = 3600
+    public static let defaultFailureCooldown: TimeInterval = 300
 
     public enum Failure: Error, Equatable, Sendable, LocalizedError {
         case coolingDown(until: Date)
@@ -38,7 +49,7 @@ public final class SecurityToolCredentialReader: @unchecked Sendable {
         public var errorDescription: String? {
             switch self {
             case .coolingDown(let until):
-                return "security tool fallback paused until \(until) after a hung invocation"
+                return "security tool fallback paused until \(until) after a previous failure"
             case .launchFailed(let reason):
                 return "could not launch /usr/bin/security: \(reason)"
             case .timedOut:
@@ -54,34 +65,33 @@ public final class SecurityToolCredentialReader: @unchecked Sendable {
     private let executable: URL
     private let keychainPaths: [String]
     private let timeout: TimeInterval
-    private let cooldown: TimeInterval
+    private let timeoutCooldown: TimeInterval
+    private let failureCooldown: TimeInterval
     private let now: @Sendable () -> Date
-    private let lock = NSLock()
-    private var disabledUntil: Date?
+    private let disabledUntil = OSAllocatedUnfairLock<Date?>(initialState: nil)
 
     /// - Parameters:
     ///   - keychainPaths: explicit keychain files appended to the command
     ///     (tests point this at a temporary keychain); empty = login search list.
-    ///   - timeout: seconds before the child is terminated.
-    ///   - cooldown: seconds the fallback stays disabled after a timeout.
+    ///   - timeout: total seconds the read may block, child and drain included.
+    ///   - timeoutCooldown: seconds the fallback stays disabled after a hang.
+    ///   - failureCooldown: seconds it stays disabled after any other failure.
     public init(executable: URL = SecurityToolCredentialReader.defaultExecutable,
                 keychainPaths: [String] = [],
                 timeout: TimeInterval = SecurityToolCredentialReader.defaultTimeout,
-                cooldown: TimeInterval = SecurityToolCredentialReader.defaultCooldown,
+                timeoutCooldown: TimeInterval = SecurityToolCredentialReader.defaultTimeoutCooldown,
+                failureCooldown: TimeInterval = SecurityToolCredentialReader.defaultFailureCooldown,
                 now: @escaping @Sendable () -> Date = { Date() }) {
         self.executable = executable
         self.keychainPaths = keychainPaths
         self.timeout = timeout
-        self.cooldown = cooldown
+        self.timeoutCooldown = timeoutCooldown
+        self.failureCooldown = failureCooldown
         self.now = now
     }
 
-    /// True while a previous hung invocation keeps the fallback disabled.
-    public var isCoolingDown: Bool {
-        lock.lock(); defer { lock.unlock() }
-        guard let disabledUntil else { return false }
-        return now() < disabledUntil
-    }
+    /// True while a previous failure keeps the fallback disabled.
+    public var isCoolingDown: Bool { coolingDownUntil() != nil }
 
     /// Exact-match `find-generic-password` invocation. A nil/empty account
     /// omits `-a`, which lets the tool pick the first item of that service —
@@ -94,22 +104,35 @@ public final class SecurityToolCredentialReader: @unchecked Sendable {
         return args
     }
 
-    /// `security … -w` prints the secret followed by a newline. Secrets that are
-    /// not printable UTF-8 come out hex-encoded instead; both forms are handled.
-    /// Returns nil for an empty answer.
+    /// `security … -w` prints the secret followed by a newline. Secrets that
+    /// are not printable UTF-8 come out hex-encoded instead. Hex is only
+    /// undone when the decoded bytes are themselves a JSON document, so an
+    /// all-hex printable secret can never be mangled. Returns nil for an
+    /// empty or non-UTF-8 answer.
     public static func decodeOutput(_ raw: Data) -> Data? {
         // Trim at the byte level: Swift folds "\r\n" into one Character.
         var bytes = raw
         while let last = bytes.last, last == 0x0A || last == 0x0D { bytes.removeLast() }
         guard !bytes.isEmpty, let text = String(data: bytes, encoding: .utf8) else { return nil }
-        if let first = text.first, first == "{" || first == "[" { return Data(text.utf8) }
-        if let hex = dataFromHex(text) { return hex }
-        return Data(text.utf8)
+        if looksLikeJSON(bytes) { return bytes }
+        if let hex = dataFromHex(text), looksLikeJSON(hex) { return hex }
+        return bytes
     }
 
     public func read(service: String, account: String?) throws -> Data {
         if let until = coolingDownUntil() { throw Failure.coolingDown(until: until) }
+        do {
+            return try runTool(service: service, account: account)
+        } catch Failure.timedOut {
+            beginCooldown(timeoutCooldown)
+            throw Failure.timedOut
+        } catch {
+            beginCooldown(failureCooldown)
+            throw error
+        }
+    }
 
+    private func runTool(service: String, account: String?) throws -> Data {
         let process = Process()
         process.executableURL = executable
         process.arguments = Self.arguments(service: service, account: account, keychainPaths: keychainPaths)
@@ -128,40 +151,49 @@ public final class SecurityToolCredentialReader: @unchecked Sendable {
 
         // Drain stdout concurrently so a child that writes more than the pipe
         // buffer can never deadlock against our wait below.
-        let output = OutputBox()
+        let output = OSAllocatedUnfairLock(initialState: Data())
         let drained = DispatchSemaphore(value: 0)
         let reader = stdout.fileHandleForReading
         DispatchQueue.global(qos: .userInitiated).async {
-            output.set(reader.readDataToEndOfFile())
+            let data = reader.readDataToEndOfFile()
+            output.withLock { $0 = data }
             drained.signal()
         }
 
-        if exited.wait(timeout: .now() + timeout) == .timedOut {
+        // One deadline for everything: child exit, then drain.
+        let deadline = DispatchTime.now() + timeout
+        if exited.wait(timeout: deadline) == .timedOut {
             process.terminate()
-            if exited.wait(timeout: .now() + 2) == .timedOut {
+            if exited.wait(timeout: .now() + 1) == .timedOut {
                 kill(process.processIdentifier, SIGKILL)
-                _ = exited.wait(timeout: .now() + 2)
+                _ = exited.wait(timeout: .now() + 1)
             }
-            _ = drained.wait(timeout: .now() + 2)
-            beginCooldown()
+            _ = drained.wait(timeout: .now() + 1)
             throw Failure.timedOut
         }
-        _ = drained.wait(timeout: .now() + 2)
+        guard drained.wait(timeout: deadline) == .success else { throw Failure.timedOut }
 
         guard process.terminationStatus == 0 else { throw Failure.exited(status: process.terminationStatus) }
-        guard let secret = Self.decodeOutput(output.get()) else { throw Failure.undecodableOutput }
+        guard let secret = Self.decodeOutput(output.withLock { $0 }) else { throw Failure.undecodableOutput }
         return secret
     }
 
     private func coolingDownUntil() -> Date? {
-        lock.lock(); defer { lock.unlock() }
-        guard let disabledUntil, now() < disabledUntil else { return nil }
-        return disabledUntil
+        let current = now()
+        return disabledUntil.withLock { until in
+            guard let until, current < until else { return nil }
+            return until
+        }
     }
 
-    private func beginCooldown() {
-        lock.lock(); defer { lock.unlock() }
-        disabledUntil = now().addingTimeInterval(cooldown)
+    private func beginCooldown(_ seconds: TimeInterval) {
+        let until = now().addingTimeInterval(seconds)
+        disabledUntil.withLock { $0 = until }
+    }
+
+    private static func looksLikeJSON(_ bytes: Data) -> Bool {
+        guard let first = bytes.first(where: { $0 != 0x20 && $0 != 0x09 }) else { return false }
+        return first == UInt8(ascii: "{") || first == UInt8(ascii: "[")
     }
 
     private static func dataFromHex(_ hex: String) -> Data? {
@@ -184,13 +216,5 @@ public final class SecurityToolCredentialReader: @unchecked Sendable {
         case UInt8(ascii: "A")...UInt8(ascii: "F"): return c - UInt8(ascii: "A") + 10
         default: return nil
         }
-    }
-
-    /// Lock-guarded byte box shared between the drain thread and the caller.
-    private final class OutputBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var data = Data()
-        func set(_ value: Data) { lock.lock(); data = value; lock.unlock() }
-        func get() -> Data { lock.lock(); defer { lock.unlock() }; return data }
     }
 }

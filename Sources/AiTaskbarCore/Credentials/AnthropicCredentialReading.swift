@@ -23,6 +23,18 @@ public protocol AnthropicCredentialReading: Sendable {
 }
 
 public extension AnthropicCredentialReading {
+    /// `read()` may block for up to `SecurityToolCredentialReader.defaultTimeout`
+    /// while the `/usr/bin/security` fallback runs. Async callers hop onto a
+    /// plain GCD thread so a hung tool parks neither the main actor nor one
+    /// of the cooperative pool's few worker threads.
+    func readOffPool() async throws -> AnthropicCredentials {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(with: Result { try self.read() })
+            }
+        }
+    }
+
     /// Test/in-memory readers need no distinct persistent-ACL path.
     func authorizePersistently() throws -> KeychainAccessAuthorizer.Outcome {
         _ = try read()

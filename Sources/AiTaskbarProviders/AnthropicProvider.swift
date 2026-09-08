@@ -79,7 +79,7 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         initialState: Optional<Task<AnthropicCredentials, Error>>.none)
 
     private func loadCredentials() async throws -> AnthropicCredentials {
-        var credentials = try credentialReader.read()
+        var credentials = try await credentialReader.readOffPool()
         // Only rotate + persist the shared OAuth token when explicitly opted
         // in. Read-only mode merely reloads whatever Claude Code owns.
         if manageOAuthRefresh, credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {

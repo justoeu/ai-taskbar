@@ -54,6 +54,12 @@ struct SecurityToolCodecTests {
         #expect(out == Data("{\"a\":1}".utf8))
     }
 
+    @Test("hex that does not decode to JSON is left alone (all-hex API keys survive)")
+    func decode_hex_non_json_passthrough() {
+        let out = SecurityToolCredentialReader.decodeOutput(Data("deadbeef\n".utf8))
+        #expect(out == Data("deadbeef".utf8))
+    }
+
     @Test("empty output is nil")
     func decode_empty() {
         expectTrue(SecurityToolCredentialReader.decodeOutput(Data()) == nil)
@@ -97,10 +103,10 @@ struct SecurityToolProcessTests {
     @Test("a hung tool is killed, reported, and puts the fallback in cooldown")
     func read_timeout_cooldown() throws {
         let fake = try FakeSecurityTool(); defer { fake.cleanup() }
-        let exe = try fake.script("sleep 30")
+        let exe = try fake.script("exec sleep 30")
         let clock = ClockBox(Date(timeIntervalSince1970: 1_000))
-        let reader = SecurityToolCredentialReader(executable: exe, timeout: 0.3, cooldown: 60,
-                                                  now: { clock.now })
+        let reader = SecurityToolCredentialReader(executable: exe, timeout: 0.3, timeoutCooldown: 60,
+                                                  failureCooldown: 5, now: { clock.now })
         #expect(throws: SecurityToolCredentialReader.Failure.timedOut) {
             try reader.read(service: "S", account: "A")
         }
@@ -109,6 +115,23 @@ struct SecurityToolProcessTests {
             try reader.read(service: "S", account: "A")
         }
         clock.now = Date(timeIntervalSince1970: 1_061)
+        #expect(!reader.isCoolingDown)
+    }
+
+    @Test("an ordinary failure gets the short cooldown, not the hang cooldown")
+    func read_failure_short_cooldown() throws {
+        let fake = try FakeSecurityTool(); defer { fake.cleanup() }
+        let exe = try fake.script("exit 44")
+        let clock = ClockBox(Date(timeIntervalSince1970: 1_000))
+        let reader = SecurityToolCredentialReader(executable: exe, timeout: 5, timeoutCooldown: 3600,
+                                                  failureCooldown: 30, now: { clock.now })
+        #expect(throws: SecurityToolCredentialReader.Failure.exited(status: 44)) {
+            try reader.read(service: "S", account: "A")
+        }
+        #expect(throws: SecurityToolCredentialReader.Failure.coolingDown(until: Date(timeIntervalSince1970: 1_030))) {
+            try reader.read(service: "S", account: "A")
+        }
+        clock.now = Date(timeIntervalSince1970: 1_031)
         #expect(!reader.isCoolingDown)
     }
 
@@ -139,7 +162,7 @@ struct SecurityToolProcessTests {
             .timedOut, .exited(status: 44), .undecodableOutput,
         ]
         for failure in cases {
-            expectTrue((failure.errorDescription ?? "").isEmpty == false)
+            expectFalse((failure.errorDescription ?? "").isEmpty)
         }
     }
 

@@ -435,9 +435,10 @@ the Management API, so adding opencode's dollars there would double-count.
   matter how this binary is signed — which is what made ad-hoc dev builds
   re-prompt after every rebuild (36 dead `cdhash` grants on one machine).
   Rules: exact-match arguments only (`-s` is exact, verified), stdin
-  `/dev/null`, stderr discarded, payload never logged, 10 s timeout that kills
-  the child (dismissing any dialog securityd raised for it) and then a 1 h
-  cooldown, and **never for writes** — `writeBack` stays `SecItemUpdate`. When
+  `/dev/null`, stderr discarded, payload never logged, 5 s budget that kills
+  the child (dismissing any dialog securityd raised for it) then a 1 h
+  cooldown (5 min after an ordinary failure), the blocking read hops off the
+  cooperative pool via `readOffPool()`, and **never for writes** — `writeBack` stays `SecItemUpdate`. When
   the fallback fails the original ACL error is rethrown so the Authorize
   banner still appears.
 - **The shared-credential OAuth providers (Anthropic + OpenAI/Codex) must
