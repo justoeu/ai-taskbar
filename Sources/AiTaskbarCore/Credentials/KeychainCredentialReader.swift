@@ -14,19 +14,40 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
     private var pending: (identity: KeychainAccessAuthorizer.TargetIdentity?,
                           credentials: AnthropicCredentials)?
     private var lastKnownGood: AnthropicCredentials?
+    /// Read-only escape hatch for an ACL-blocked direct read: the same
+    /// `/usr/bin/security` path the Claude Code CLI uses. nil disables it.
+    private let fallback: SecurityToolCredentialReader?
+    private let secItemRead: @Sendable (CFDictionary, UnsafeMutablePointer<CFTypeRef?>) -> OSStatus
+    private var didLogFallback = false
+    private var lastReadViaFallback = false
     public static let memoryCacheBuffer: TimeInterval = 300
+
+    /// False after a read the `/usr/bin/security` fallback served: `writeBack`
+    /// would ACL-fail on the same item, so callers must not rotate tokens.
+    public var canPersistCredentials: Bool {
+        credentialMutationGate.lock()
+        defer { credentialMutationGate.unlock() }
+        return !lastReadViaFallback
+    }
 
     public convenience init(service: String = "Claude Code-credentials",
                             preferredAccount: String? = nil) {
-        self.init(service: service, preferredAccount: preferredAccount, searchList: nil)
+        self.init(service: service, preferredAccount: preferredAccount, searchList: nil,
+                  fallback: SecurityToolCredentialReader())
     }
 
     /// Explicit search list isolates integration tests from the user's login Keychain.
+    /// `secItemRead` is a test seam for forcing ACL fast-fail statuses.
     internal init(service: String, preferredAccount: String? = nil,
-                  searchList: [SecKeychain]?) {
+                  searchList: [SecKeychain]?,
+                  fallback: SecurityToolCredentialReader? = nil,
+                  secItemRead: @escaping @Sendable (CFDictionary, UnsafeMutablePointer<CFTypeRef?>) -> OSStatus
+                      = { SecItemCopyMatching($0, $1) }) {
         self.service = service
         self.preferredAccount = preferredAccount
         self.searchList = searchList
+        self.fallback = fallback
+        self.secItemRead = secItemRead
     }
 
     public func read() throws -> AnthropicCredentials {
@@ -131,8 +152,9 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         var query = exactQuery(identity)
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         query[kSecReturnData as String] = true
+        let read = secItemRead
         let status = KeychainPromptSuppressor.withPromptsSuppressed {
-            SecItemCopyMatching(query as CFDictionary, &result)
+            read(query as CFDictionary, &result)
         }
         // Never carry a pending token onto a replacement with the same account.
         // Let the next scheduled read resolve the replacement from scratch.
@@ -141,10 +163,78 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
             pending = nil
             lastKnownGood = nil
         }
+        if Self.isACLBlockedStatus(status), let data = readViaSecurityTool(identity, directStatus: status) {
+            lastReadViaFallback = true
+            return data
+        }
         guard status == errSecSuccess, let data = result as? Data else {
             throw Self.errorFor(status: status, op: "read selected credential")
         }
+        lastReadViaFallback = false
         return data
+    }
+
+    /// Same item, read by `/usr/bin/security` instead of this binary. Returns
+    /// nil when the fallback is disabled or fails, so the caller surfaces the
+    /// original ACL error and the Authorize banner stays reachable.
+    ///
+    /// Skipped when the item's keychain is locked: the same fast-fail code
+    /// means "locked" there, and the tool would raise the unlock dialog that
+    /// `KeychainPromptSuppressor` exists to prevent.
+    private func readViaSecurityTool(_ identity: KeychainAccessAuthorizer.TargetIdentity,
+                                     directStatus: OSStatus) -> Data? {
+        guard let fallback else { return nil }
+        guard let keychain = itemKeychain(identity), Self.isUnlocked(keychain) else {
+            AppLog.keychain.notice("Keychain read blocked and the item's keychain is locked or unresolved; not consulting /usr/bin/security.")
+            return nil
+        }
+        do {
+            let data = try fallback.read(service: service, account: identity.account,
+                                         keychainPaths: [Self.path(of: keychain)].compactMap { $0 })
+            if !didLogFallback {
+                didLogFallback = true
+                AppLog.keychain.notice("Direct Keychain read fast-failed (OSStatus \(directStatus, privacy: .public)); credential read through /usr/bin/security, the path the Claude Code CLI itself uses. A Developer ID-signed build authorized once through the Claude card reads directly.")
+            }
+            return data
+        } catch SecurityToolCredentialReader.Failure.coolingDown {
+            // The failure that started the cooldown was already logged.
+            return nil
+        } catch {
+            AppLog.keychain.error("security tool fallback unavailable: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// The keychain file holding the selected item (attribute query, no decrypt).
+    private func itemKeychain(_ identity: KeychainAccessAuthorizer.TargetIdentity) -> SecKeychain? {
+        var result: CFTypeRef?
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecMatchItemList as String: [identity.persistentRef] as CFArray,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnRef as String: true,
+        ]
+        if let searchList { query[kSecMatchSearchList as String] = searchList }
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let ref = result else {
+            return nil
+        }
+        var keychain: SecKeychain?
+        guard SecKeychainItemCopyKeychain(ref as! SecKeychainItem, &keychain) == errSecSuccess else { return nil }
+        return keychain
+    }
+
+    internal static func isUnlocked(_ keychain: SecKeychain) -> Bool {
+        var status = SecKeychainStatus()
+        guard SecKeychainGetStatus(keychain, &status) == errSecSuccess else { return false }
+        return status & UInt32(kSecUnlockStateStatus) != 0
+    }
+
+    internal static func path(of keychain: SecKeychain) -> String? {
+        var length = UInt32(PATH_MAX)
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX) + 1)
+        guard SecKeychainGetPath(keychain, &length, &buffer) == errSecSuccess else { return nil }
+        let bytes = buffer.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     private func decode(_ data: Data) throws -> AnthropicCredentials {

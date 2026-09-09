@@ -152,6 +152,28 @@ If native authorization cannot persist, the card reports verification failure.
 Managed Keychain policies may require help from the device administrator.
 No Terminal command or Keychain password collection is part of onboarding.
 
+**Why the prompt used to come back after every rebuild.** macOS records the
+*code signature* of the app you authorized, not its name. An ad-hoc-signed
+build (`make dmg`, or `make app` on a machine without a Developer ID
+certificate) has a per-build `cdhash` identity, so every rebuild or update is a
+"new app" to the Keychain and the banner reappears. A Developer ID build has a
+stable identity (`identifier "dev.aitaskbar.app"` + team ID) and is authorized
+once for all future versions. Run the notarized `/Applications/AiTaskbar.app`
+for day-to-day use.
+
+**Read-only fallback through `/usr/bin/security`.** When the direct read
+fast-fails on the ACL, AI Taskbar now asks Apple's `security` tool for the
+exact item (`find-generic-password -s <service> -a <account> -w`). Claude Code
+writes the item with that same tool, so it is always on the item's trusted-app
+list; the read succeeds silently regardless of how AI Taskbar itself is signed,
+and the card shows usage instead of the Authorize banner. The child runs under a
+5 s budget (a hung tool means securityd raised a dialog on its behalf; the
+child is killed, which dismisses it, and the fallback pauses for an hour — five
+minutes after an ordinary failure), is skipped while the keychain is locked
+(that would be the unlock dialog), and is never used for writes; while a
+credential comes from the fallback the app also never rotates the OAuth token,
+even with `manage_oauth_refresh = true`. Authorize still works and restores the direct path.
+
 ### Claude `429 rate_limit_error`
 
 When the warning tooltip contains Anthropic's JSON with

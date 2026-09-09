@@ -79,10 +79,14 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         initialState: Optional<Task<AnthropicCredentials, Error>>.none)
 
     private func loadCredentials() async throws -> AnthropicCredentials {
-        var credentials = try credentialReader.read()
+        var credentials = try await credentialReader.readOffPool()
         // Only rotate + persist the shared OAuth token when explicitly opted
         // in. Read-only mode merely reloads whatever Claude Code owns.
-        if manageOAuthRefresh, credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
+        // A credential served by the /usr/bin/security fallback cannot be
+        // written back; rotating it would strand the new refresh token in
+        // memory and invalidate the one the Claude Code CLI still holds.
+        if manageOAuthRefresh, credentialReader.canPersistCredentials,
+           credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
             credentials = try await refreshAndWriteBack(credentials)
         }
         return credentials

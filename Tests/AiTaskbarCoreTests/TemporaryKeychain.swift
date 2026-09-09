@@ -5,6 +5,10 @@ import Testing
 /// Owns only dummy test credentials; never depends on an unlocked login keychain.
 final class TemporaryKeychain {
     let reference: SecKeychain
+    /// On-disk path, for handing the keychain to `/usr/bin/security`.
+    let path: String
+    /// Creation password, so tests can `security unlock-keychain -p` without a prompt.
+    let password: String
     private let directory: URL
 
     init() throws {
@@ -15,11 +19,27 @@ final class TemporaryKeychain {
         let path = directory.appendingPathComponent("test.keychain").path
         var created: SecKeychain?
         let password = UUID().uuidString
+        self.path = path
+        self.password = password
         let status = password.withCString { bytes in
             SecKeychainCreate(path, UInt32(password.utf8.count), bytes, false, nil, &created)
         }
         try #require(status == errSecSuccess)
         reference = try #require(created)
+    }
+
+    func lock() throws {
+        // Keep the deprecated call outside the macro: a warning attributed to
+        // "macro expansion" has no file path for the allowlist to match.
+        let status = SecKeychainLock(reference)
+        try #require(status == errSecSuccess)
+    }
+
+    func unlock() throws {
+        let status = password.withCString { bytes in
+            SecKeychainUnlock(reference, UInt32(password.utf8.count), bytes, true)
+        }
+        try #require(status == errSecSuccess)
     }
 
     deinit {
