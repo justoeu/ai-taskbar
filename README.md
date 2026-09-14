@@ -188,6 +188,62 @@ can still increase `[ui] refresh_interval_seconds` from `300` to `900` or
 no polling quota for it, so the app cannot calculate an exact retry time unless
 the response supplies one.
 
+### OpenAI / Codex — credits are a quantity, not money
+
+Codex reports paid usage credits as a bare decimal with **no currency symbol**:
+the wire literally carries `"balance": "4890.3162520000"`. Earlier builds parsed
+it with a `parseDollar` helper, stored it as `creditsUSD` and rendered
+`Credits: $4890.32`, inventing a `$` the API never sent. Nothing in the app
+formats credits as currency any more; the card shows a locale-formatted
+quantity.
+
+**Progress bar.** The payload reports only the *remaining* balance — there is
+no granted total anywhere in it (`spend_control.individual_limit` and `promo`
+are null on real accounts), so a percentage needs a denominator the app derives
+itself: the highest balance it has ever observed, persisted per vendor in
+`~/Library/Application Support/ai-taskbar/credits/<vendor>.json`. A balance
+*above* that high-water mark can only be a top-up, which re-baselines the bar to
+0%. **No bar is drawn until the baseline says something the balance does not**:
+on the first sighting the peak *is* the balance, and a green 0% there would
+tell someone who had already burned 90% of their credits that they had spent
+nothing. The bar appears as soon as real consumption is observed, and is exact
+after the next top-up. Unmetered accounts (`unlimited: true`) get no bar at
+all, and a missing or garbled balance shows the plain number.
+
+**Telling an expiry from ordinary spending.** A balance that falls is normally
+consumption, but it is a grant change when a promotional block expires — and
+from the number alone the two are identical. Rather than guess from the size of
+the drop (a heuristic that would mistake a heavy day for an expiry and vice
+versa), the app reads the two epoch signals the payload actually carries:
+`has_credits` going false then true means credits came back after running out,
+and a `promo` object that was present and is now absent means a promotional
+grant ended. Either one re-seeds the denominator from the current balance. Only
+the *presence* of `promo` is used; its inner shape has never been seen
+populated on a real account, so nothing reads inside it.
+
+One case remains that no signal can catch: a promotional block shrinking while
+other credits remain, which looks exactly like spending. For that, right-click
+the credits row and choose **Recalibrate credits bar** — it forgets the
+baseline and re-seeds from the current balance on the next refresh.
+
+The credits bar is deliberately **not** folded into the menu-bar percentage.
+That number tracks plan windows which reset on a clock; credits drain on a
+different axis against a locally-derived denominator, and mixing them would make
+the menu bar read 80% because of credits while the plan sits at 10%.
+
+**Credit-funded messages.** `approx_local_messages` and `approx_cloud_messages`
+live *inside* the `credits` object, so both are estimates of what the remaining
+credits still buy. They mean different things — the local Codex CLI versus cloud
+tasks — and both are now shown, labeled as credit-funded. The old code collapsed
+them into one English sentence built inside the provider (which is why a
+Portuguese card showed `local msgs left`) and silently preferred whichever came
+first. When the plan window is spent (`allowed: false`) and credits are covering
+requests, the card says so instead of showing a bare red 100% bar that reads like
+a block. "Requests are blocked" is claimed only when the plan window is spent
+*and* the overage ceiling is hit — an overage ceiling on its own stops nothing
+while the plan still has room. A drained balance says "credits used up" rather
+than leaving a red bar unexplained.
+
 ### OpenAI / Codex — earned rate-limit resets
 
 When a current, healthy usage snapshot reports an active window **above 90%**

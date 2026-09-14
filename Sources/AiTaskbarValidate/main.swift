@@ -536,9 +536,101 @@ section("Wire types: OpenAI fixture") {
     expect(Int((s.primary?.utilizationPercent ?? 0).rounded()) == 33,
            "OpenAI primary 33%")
     expect(s.secondary?.label == "Weekly (7d)", "OpenAI secondary labeled")
-    expect(s.creditsUSD == 4.20, "OpenAI credits balance parsed from \"$4.20\" string")
-    expect(s.messageCountRange == "≈ 5–10 local msgs left",
-           "OpenAI message-count range")
+    // A stray "$" is tolerated on input and NEVER re-emitted: credits are a
+    // quantity, so nothing downstream may format them as currency.
+    expect(s.credits?.balance == 4.20, "OpenAI credits balance parsed from \"$4.20\" string")
+    expect(s.credits?.localMessages == CreditMessageRange(low: 5, high: 10),
+           "OpenAI local message range kept structured, not pre-rendered")
+    expect(s.credits?.cloudMessages == nil, "absent cloud range stays nil, never borrows local")
+}
+
+section("Wire types: OpenAI credits are a quantity, not money") {
+    let parsed = try SharedCoders.decoder.decode(
+        OpenAIUsageResponse.self,
+        from: Fixtures.data(Fixtures.openaiCreditsFunding200))
+    let s = parsed.toSnapshot(planLabel: nil)
+    let credits = s.credits
+    // The real wire: bare decimal string, ten places, no currency symbol.
+    expect(parsed.credits?.balance_raw == "4890.3162520000", "raw balance preserved verbatim")
+    expect(credits?.balance == 4890.316252, "balance parsed with full precision")
+    expect(!(parsed.credits?.balance_raw?.contains("$") ?? true),
+           "the wire carries no currency symbol")
+    // Both ranges survive; neither substitutes for the other.
+    expect(credits?.localMessages == CreditMessageRange(low: 1223, high: 6357),
+           "local (Codex CLI) message range")
+    expect(credits?.cloudMessages == CreditMessageRange(low: 196, high: 1223),
+           "cloud task message range kept separately")
+    // Plan spent + credits available => credits are funding every request.
+    expect(credits?.isFundingRequests == true,
+           "allowed:false plus has_credits means requests run on credits")
+    expect(credits?.overageLimitReached == false, "overage ceiling not reached")
+    expect(s.primary?.utilizationPercent == 100, "plan window reported as spent")
+    // No baseline yet => no bar, rather than a fabricated 0%.
+    expect(credits?.consumedPercent == nil, "no denominator yet means no bar")
+    // A baseline equal to the balance is the FIRST sighting: still no bar,
+    // because a green 0% would tell someone who already burned 90% of their
+    // credits that they had spent nothing.
+    expect(s.withCreditsPeak(4890.316252).credits?.consumedPercent == nil,
+           "a peak equal to the balance carries no information, so no bar")
+    expect(s.withCreditsPeak(5000).credits?.consumedPercent.map { Int($0.rounded()) } == 2,
+           "with a 5000 baseline, 4890.32 remaining reads as 2% consumed")
+    expect(credits?.requestsBlocked == false, "a spent plan without an overage ceiling is not blocked")
+}
+
+section("Wire types: OpenAI unlimited credits draw no bar") {
+    let parsed = try SharedCoders.decoder.decode(
+        OpenAIUsageResponse.self,
+        from: Fixtures.data(Fixtures.openaiCreditsUnlimited200))
+    let credits = parsed.toSnapshot(planLabel: nil).credits
+    expect(credits?.isUnlimited == true, "unlimited flag parsed")
+    expect(credits?.isFundingRequests == false, "an allowed plan is not credit-funded")
+    expect(credits?.consumedPercent == nil, "unlimited credits have no consumption bar")
+    expect(credits?.isExhausted == false, "an unmetered account is never exhausted")
+}
+
+section("CreditBaselineMath.decide — expiry vs spending") {
+    func stored(_ peak: Double, credits: Bool = true, promo: Bool = false) -> CreditBaseline {
+        CreditBaseline(peak: peak, updatedAt: 0, hadCredits: credits, hadPromo: promo)
+    }
+    func obs(_ b: Double, credits: Bool = true, promo: Bool = false) -> CreditObservation {
+        CreditObservation(balance: b, hasCredits: credits, hasPromo: promo)
+    }
+    expect(CreditBaselineMath.decide(stored: nil, observation: obs(500)) == .seed,
+           "no baseline seeds")
+    // A drop alone is never treated as an expiry: from the number it is
+    // identical to a heavy usage day.
+    expect(CreditBaselineMath.decide(stored: stored(50_000), observation: obs(5)) == .keep,
+           "even a savage drop is consumption without an epoch signal")
+    expect(CreditBaselineMath.decide(stored: stored(500), observation: obs(900)) == .raise,
+           "a rise above the peak is a top-up")
+    expect(CreditBaselineMath.decide(stored: stored(50_000, promo: true),
+                                     observation: obs(5_000, promo: false)) == .rebaseline,
+           "a promo that ends re-seeds the denominator")
+    expect(CreditBaselineMath.decide(stored: stored(900, credits: false),
+                                     observation: obs(100, credits: true)) == .rebaseline,
+           "credits returning after zero re-seed")
+    expect(!BaselineDecision.keep.adoptsObservedBalance,
+           "only keep preserves the stored denominator")
+}
+
+section("CreditBaselineMath") {
+    // First sighting seeds the denominator; consumed reads 0 because nothing
+    // tells us what was spent before the app started watching.
+    expect(CreditBaselineMath.updatedPeak(stored: nil, balance: 500) == 500, "first sighting seeds the peak")
+    expect(CreditBaselineMath.consumedPercent(peak: 500, balance: 500) == 0, "seeded baseline is 0% consumed")
+    // Draining keeps the denominator fixed.
+    expect(CreditBaselineMath.updatedPeak(stored: 500, balance: 400) == 500, "draining does not lower the peak")
+    expect(CreditBaselineMath.consumedPercent(peak: 500, balance: 400) == 20, "400 of 500 left is 20% consumed")
+    // A balance above the peak can only be a top-up: re-baseline.
+    expect(CreditBaselineMath.updatedPeak(stored: 500, balance: 900) == 900, "a top-up raises the peak")
+    expect(CreditBaselineMath.consumedPercent(peak: 900, balance: 900) == 0, "post top-up reads 0% consumed")
+    // Degenerate inputs must not produce NaN in a progress bar.
+    expect(CreditBaselineMath.consumedPercent(peak: 0, balance: 0) == nil, "zero peak yields no percentage")
+    expect(CreditBaselineMath.consumedPercent(peak: 100, balance: -5) == 100, "negative balance reads fully consumed")
+    expect(CreditBaselineMath.consumedPercent(peak: 100, balance: .nan) == nil,
+           "a garbled balance yields no bar, not a confident 0% or a red 100%")
+    expect(CreditBaselineMath.updatedPeak(stored: 500, balance: .nan) == 500, "NaN balance never corrupts the peak")
+    expect(CreditBaselineMath.consumedPercent(peak: 100, balance: 250) == 0, "balance above peak clamps to 0%")
 }
 
 section("Wire types: OpenRouter fixture (combined)") {

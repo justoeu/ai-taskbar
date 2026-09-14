@@ -358,6 +358,64 @@ vendor billed it and is never merged into that vendor's own totals: OpenAI
 traffic rides a subscription (zero marginal cost, so tokens are shown and
 dollars are not), and xAI's card already reports account-wide cycle spend from
 the Management API, so adding opencode's dollars there would double-count.
+
+### Codex credits are a QUANTITY — never render them as money
+
+`GET /backend-api/wham/usage` returns `"balance": "4890.3162520000"`: a bare
+decimal string, ten decimal places, **no currency symbol**. It was parsed by a
+`parseDollar` helper, stored as `creditsUSD`, and displayed via
+`"Credits: $%.2f"` — the `$` was fabricated in three separate places. Rules
+that came out of fixing that:
+
+- No layer may emit a currency symbol for credits. `OpenAICredits` tolerates a
+  stray symbol or thousands separator on input and never re-emits one; the UI
+  formats a locale-aware quantity, not currency.
+- **There is no granted total on the wire.** `spend_control.individual_limit`
+  and `promo` are null on real accounts. The progress bar's denominator is the
+  observed high-water mark, persisted by `CreditBaselineStore` in
+  `credits/<vendor>.json`; a balance above it means a top-up and re-baselines.
+  A first sighting draws NO bar: the peak equals the balance, so it carries no
+  information, and a green 0% would tell a user who had already spent 90% that
+  they had spent nothing. Do not invent a denominator from a hard-coded plan
+  tier.
+- **A falling balance is never guessed at.** Consumption and an expiring grant
+  look identical in the number, so the peak drops only on a signal that
+  actually exists in the payload: `has_credits` false → true (credits came
+  back), or a `promo` object present → absent (a promotional grant ended).
+  `CreditBaselineMath.decide` owns that rule and is pinned by tests including
+  the "50k promo expires, 5k purchased remains" case. Do NOT add a
+  drop-size heuristic — it would mistake a heavy usage day for an expiry.
+  Only the PRESENCE of `promo` is read; its inner shape has never been observed
+  populated, so do not decode fields inside it without a verbatim fixture.
+  The residual case (a promo shrinking while credits remain) is covered by the
+  manual `recalibrateCreditBaseline()`, surfaced as a context-menu item on the
+  credits row — not by widening the heuristic.
+- **No denominator, no bar.** `consumedPercent` returns nil for an unmetered
+  account, a missing baseline, or a non-finite balance, so the UI shows the
+  plain number. Never let NaN reach `ProgressView`.
+- Credits are **not** part of `VendorSnapshot.windows`, so they never move the
+  menu-bar percentage. Plan windows reset on a clock; credits drain against a
+  locally-derived denominator. Folding them together made the menu bar read 80%
+  from credits while the plan sat at 10%.
+- `approx_local_messages` and `approx_cloud_messages` are nested inside
+  `credits`, so they are credit-funded estimates by construction. Keep both, as
+  structured `CreditMessageRange` values — local (Codex CLI) and cloud (cloud
+  tasks) are different things and neither may stand in for the other. The old
+  code kept one pre-rendered English sentence, built in Providers, which is how
+  a pt-BR card ended up showing `local msgs left`. **Never build a
+  user-facing sentence inside a wire type**; emit structure and let the
+  localized view render it.
+- `rate_limit.allowed == false` (or `limit_reached == true`) with
+  `has_credits` and no `overage_limit_reached` means every request is now
+  credit-funded; surface that, because a bare red 100% bar reads as "blocked".
+  Conversely, only claim requests ARE blocked when the plan is spent **and**
+  the ceiling is hit (`requestsBlocked`): an overage ceiling alone stops
+  nothing while the plan window still has room.
+- **A missing `balance` must not discard the credits block.** An unmetered
+  account is the one most likely to omit the number, and it is also the one
+  `unlimited` and the message ranges describe; `balance` is therefore optional
+  and the block is built whenever the `credits` object exists.
+
 - **`AiTaskbarProviders`** — one file per vendor. All providers use the
   `CachedFetch` helper for the cache → fetch → write → decode → stale fallback
   lifecycle. **Do NOT re-introduce per-provider boilerplate.** If a vendor

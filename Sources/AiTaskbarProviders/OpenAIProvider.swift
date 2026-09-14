@@ -14,6 +14,11 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
     /// shared refresh token (which logs other Codex CLI sessions out). See
     /// `OpenAIConfig.manageOAuthRefresh` for the full rationale.
     private let manageOAuthRefresh: Bool
+    /// Supplies the credits progress bar its denominator. The usage payload
+    /// reports only the remaining balance and no granted total, so the
+    /// high-water mark observed across refreshes stands in for one. nil
+    /// disables the bar (the balance still renders as a plain number).
+    private let creditBaseline: CreditBaselineStore?
     private static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
     // Memoize the plan label keyed on the id_token. Reading auth.json + a
@@ -30,11 +35,13 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
     public init(credentials: FileCredentialReader = .init(),
                 cache: DiskCache,
                 http: HTTPClient,
-                manageOAuthRefresh: Bool = false) {
+                manageOAuthRefresh: Bool = false,
+                creditBaseline: CreditBaselineStore? = nil) {
         self.credentials = credentials
         self.fetcher = CachedFetch(cache: cache)
         self.http = http
         self.manageOAuthRefresh = manageOAuthRefresh
+        self.creditBaseline = creditBaseline
     }
 
     public convenience init(http: HTTPClient = .init(),
@@ -46,7 +53,10 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
             credentials: FileCredentialReader(path: codexAuthPath ?? Paths.defaultCodexAuth()),
             cache: cache,
             http: http,
-            manageOAuthRefresh: manageOAuthRefresh
+            manageOAuthRefresh: manageOAuthRefresh,
+            // Best-effort: an unwritable Application Support directory costs
+            // the bar, not the usage numbers.
+            creditBaseline: try? CreditBaselineStore.defaultFor(.openai)
         )
     }
 
@@ -143,6 +153,14 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
         PIIScrub.scrub(bytes: raw)
     }
 
+    /// Forgets the credits progress-bar baseline so the next refresh re-seeds
+    /// it from the current balance. The escape hatch for the one case the
+    /// epoch signals cannot catch: a promotional block shrinking while credits
+    /// remain, which looks exactly like ordinary spending.
+    public func recalibrateCreditBaseline() {
+        creditBaseline?.reset()
+    }
+
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
         let parsed: OpenAIUsageResponse
         do {
@@ -150,7 +168,18 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
         } catch {
             throw AppError.schema("openai usage decode: \(error)")
         }
-        return .openai(parsed.toSnapshot(planLabel: planLabel()))
+        let snapshot = parsed.toSnapshot(planLabel: planLabel())
+        // Fold the observed balance into the high-water mark and hand the
+        // resulting denominator back to the snapshot. Unmetered accounts get
+        // no bar, so they never touch the store.
+        guard let store = creditBaseline,
+              let credits = snapshot.credits,
+              let balance = credits.balance,
+              !credits.isUnlimited else { return .openai(snapshot) }
+        let observation = CreditObservation(balance: balance,
+                                            hasCredits: credits.hasCredits,
+                                            hasPromo: credits.hasPromo)
+        return .openai(snapshot.withCreditsPeak(store.record(observation)))
     }
 
     /// Returns the cached plan label when valid. Falls back to reading the

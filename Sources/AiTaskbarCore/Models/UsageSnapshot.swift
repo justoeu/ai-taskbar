@@ -119,12 +119,144 @@ public struct AnthropicSnapshot: Sendable, Equatable, Codable {
     }
 }
 
+/// Approximate messages a credit balance still funds. Codex reports a range,
+/// never a single number, so both ends are kept instead of collapsing them.
+public struct CreditMessageRange: Sendable, Equatable, Codable {
+    public let low: Int
+    public let high: Int
+
+    public init(low: Int, high: Int) {
+        self.low = min(low, high)
+        self.high = max(low, high)
+    }
+
+    /// Builds from the wire's two-element array; nil for any other shape.
+    public init?(wire: [Int]?) {
+        guard let wire, wire.count >= 2 else { return nil }
+        self.init(low: wire[0], high: wire[1])
+    }
+
+    /// Routes decoding through the normalizing initializer. The synthesized
+    /// one writes the stored properties directly, so a persisted `low > high`
+    /// would survive into a range no in-code construction can produce, and
+    /// render as "≈ 9–2 messages".
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(low: try c.decode(Int.self, forKey: .low),
+                  high: try c.decode(Int.self, forKey: .high))
+    }
+}
+
+/// Codex credits.
+///
+/// **These are a quantity, not money.** The wire sends
+/// `"balance": "4890.3162520000"` — a bare decimal string with no currency
+/// symbol and ten decimal places. An earlier version parsed it with a
+/// `parseDollar` helper, stored it as `creditsUSD` and rendered it as
+/// `"Credits: $%.2f"`, inventing a `$` the API never sent. Nothing in this
+/// type is currency and nothing formats it as currency.
+public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
+    /// Remaining credits. Optional because an unmetered account can omit the
+    /// number entirely — and that is precisely the account the `unlimited`
+    /// flag and the message ranges describe, so a missing balance must not
+    /// discard the whole credits block.
+    public let balance: Double?
+    /// Highest balance observed so far — the progress bar's denominator,
+    /// supplied by `CreditBaselineStore` because the API reports no granted
+    /// total. nil when no baseline is known yet.
+    public let peakBalance: Double?
+    /// Messages the balance still funds in the local Codex CLI.
+    public let localMessages: CreditMessageRange?
+    /// Messages the balance still funds for cloud tasks. Distinct from
+    /// `localMessages`: both are reported and they mean different things, so
+    /// neither is allowed to stand in for the other.
+    public let cloudMessages: CreditMessageRange?
+    public let hasCredits: Bool
+    /// A promotional grant was present in this payload. Presence only — the
+    /// object's shape is unverified. Used to notice when such a grant ends,
+    /// which drops the balance without any of it having been spent.
+    public let hasPromo: Bool
+    /// Credits are unmetered — a consumption bar would be meaningless.
+    public let isUnlimited: Bool
+    public let overageLimitReached: Bool
+    /// True when the plan window is exhausted and credits are the only reason
+    /// requests still go through. Drives the "spending credits" notice.
+    public let isFundingRequests: Bool
+    /// True only when the plan window is ALSO spent, so nothing can carry a
+    /// request any more. Hitting the overage ceiling while the plan still has
+    /// room blocks nothing, and claiming otherwise in red is worse than
+    /// staying quiet.
+    public let requestsBlocked: Bool
+
+    /// Credits ran out. Worth saying out loud: otherwise the bar just pins at
+    /// a red 100% with no explanation, which is the failure this change set
+    /// out to remove.
+    public var isExhausted: Bool { !isUnlimited && (balance ?? 0) <= 0 }
+
+    /// False when the account has no credits enabled and none left — there is
+    /// nothing worth a card row. Keeps a zero balance from rendering as a
+    /// meaningless "Credits: 0" on plans that never had any.
+    public var isWorthShowing: Bool { hasCredits || (balance ?? 0) > 0 }
+
+    /// Share of the observed baseline already spent, 0...100.
+    ///
+    /// nil until the baseline says something the balance does not. On the very
+    /// first sighting the peak IS the balance, and drawing a green 0% bar there
+    /// would tell a user who had already burned 90% of their credits that they
+    /// had spent nothing. The bar appears once real consumption has been
+    /// observed — the first moment the denominator carries information.
+    public var consumedPercent: Double? {
+        guard !isUnlimited, let balance, let peakBalance, peakBalance > balance else { return nil }
+        return CreditBaselineMath.consumedPercent(peak: peakBalance, balance: balance)
+    }
+
+    public init(balance: Double?,
+                peakBalance: Double? = nil,
+                localMessages: CreditMessageRange? = nil,
+                cloudMessages: CreditMessageRange? = nil,
+                hasCredits: Bool = false,
+                hasPromo: Bool = false,
+                isUnlimited: Bool = false,
+                overageLimitReached: Bool = false,
+                isFundingRequests: Bool = false,
+                requestsBlocked: Bool = false) {
+        self.balance = balance
+        self.peakBalance = peakBalance
+        self.localMessages = localMessages
+        self.cloudMessages = cloudMessages
+        self.hasCredits = hasCredits
+        self.hasPromo = hasPromo
+        self.isUnlimited = isUnlimited
+        self.overageLimitReached = overageLimitReached
+        self.isFundingRequests = isFundingRequests
+        self.requestsBlocked = requestsBlocked
+    }
+
+    /// Returns a copy carrying the denominator resolved by the provider.
+    public func withPeakBalance(_ peak: Double?) -> OpenAICreditsInfo {
+        OpenAICreditsInfo(balance: balance,
+                          peakBalance: peak,
+                          localMessages: localMessages,
+                          cloudMessages: cloudMessages,
+                          hasCredits: hasCredits,
+                          hasPromo: hasPromo,
+                          isUnlimited: isUnlimited,
+                          overageLimitReached: overageLimitReached,
+                          isFundingRequests: isFundingRequests,
+                          requestsBlocked: requestsBlocked)
+    }
+}
+
 public struct OpenAISnapshot: Sendable, Equatable, Codable {
     public let planLabel: String?
     public let primary: UsageWindow?
     public let secondary: UsageWindow?
-    public let creditsUSD: Double?
-    public let messageCountRange: String?  // e.g. "5–10 messages" — Codex reports a range
+    /// Paid usage credits. Deliberately NOT folded into `VendorSnapshot.windows`:
+    /// the menu-bar percentage tracks plan windows that reset on a clock, and
+    /// credits drain on a different axis with a locally-derived denominator.
+    /// Mixing them would make the menu bar read 80% because of credits while
+    /// the plan sits at 10%.
+    public let credits: OpenAICreditsInfo?
     /// Earned resets, not paid usage credits. nil means availability is unknown.
     public let availableResetCount: Int?
 
@@ -138,15 +270,23 @@ public struct OpenAISnapshot: Sendable, Equatable, Codable {
     public init(planLabel: String? = nil,
                 primary: UsageWindow? = nil,
                 secondary: UsageWindow? = nil,
-                creditsUSD: Double? = nil,
-                messageCountRange: String? = nil,
+                credits: OpenAICreditsInfo? = nil,
                 availableResetCount: Int? = nil) {
         self.planLabel = planLabel
         self.primary = primary
         self.secondary = secondary
-        self.creditsUSD = creditsUSD
-        self.messageCountRange = messageCountRange
+        self.credits = credits
         self.availableResetCount = availableResetCount
+    }
+
+    /// Returns a copy whose credits carry the resolved baseline.
+    public func withCreditsPeak(_ peak: Double?) -> OpenAISnapshot {
+        guard let credits else { return self }
+        return OpenAISnapshot(planLabel: planLabel,
+                              primary: primary,
+                              secondary: secondary,
+                              credits: credits.withPeakBalance(peak),
+                              availableResetCount: availableResetCount)
     }
 }
 

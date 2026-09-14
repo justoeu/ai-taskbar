@@ -92,6 +92,67 @@ public enum Fixtures {
                 "is_free_tier": false } }
     """#
 
+    /// The REAL shape of a credit-funded Codex account, captured verbatim from
+    /// `GET /backend-api/wham/usage` on a Pro plan whose weekly window is
+    /// spent. Note `balance`: a bare decimal string, ten decimal places, and
+    /// **no currency symbol** — credits are a quantity. Both message ranges
+    /// are present, and `allowed: false` is what makes the credits the only
+    /// reason requests still go through.
+    public static let openaiCreditsFunding200 = #"""
+    {
+      "plan_type": "pro",
+      "rate_limit": {
+        "allowed": false,
+        "limit_reached": true,
+        "secondary_window": null,
+        "primary_window": {
+          "reset_at": 1789817618,
+          "used_percent": 100,
+          "reset_after_seconds": 425600,
+          "limit_window_seconds": 604800
+        }
+      },
+      "credits": {
+        "balance": "4890.3162520000",
+        "approx_cloud_messages": [196, 1223],
+        "approx_local_messages": [1223, 6357],
+        "has_credits": true,
+        "unlimited": false,
+        "overage_limit_reached": false
+      }
+    }
+    """#
+
+    /// Same account while a promotional grant is still active. Only the
+    /// PRESENCE of `promo` is consumed — its inner shape has never been
+    /// observed populated, so this fixture keeps it deliberately opaque.
+    public static let openaiCreditsWithPromo200 = #"""
+    {
+      "plan_type": "pro",
+      "promo": { "kind": "opaque-unverified-shape" },
+      "rate_limit": { "allowed": true, "limit_reached": false,
+                      "primary_window": { "used_percent": 10.0,
+                                          "limit_window_seconds": 18000 } },
+      "credits": {
+        "balance": "50000.0",
+        "has_credits": true,
+        "unlimited": false,
+        "overage_limit_reached": false
+      }
+    }
+    """#
+
+    /// Unmetered credits: no bar is meaningful, so none is drawn.
+    public static let openaiCreditsUnlimited200 = #"""
+    {
+      "plan_type": "enterprise",
+      "rate_limit": { "allowed": true, "limit_reached": false,
+                      "primary_window": { "used_percent": 10.0,
+                                          "limit_window_seconds": 18000 } },
+      "credits": { "balance": "0", "has_credits": true, "unlimited": true }
+    }
+    """#
+
     /// OpenAI balance encoded as an Int (older format) — exercises the
     /// Int64 branch of OpenAICredits.balance decoding.
     public static let openaiUsageBalanceAsInt200 = #"""

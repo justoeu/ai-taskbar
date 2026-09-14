@@ -17,8 +17,8 @@ struct OpenAIProviderTests {
         #expect(snap.primary?.label == "Session (5h)")
         #expect(Int((snap.primary?.utilizationPercent ?? 0).rounded()) == 33)
         #expect(snap.secondary?.label == "Weekly (7d)")
-        #expect(snap.creditsUSD == 4.20)
-        #expect(snap.messageCountRange == "≈ 5–10 local msgs left")
+        #expect(snap.credits?.balance == 4.20)
+        #expect(snap.credits?.localMessages == CreditMessageRange(low: 5, high: 10))
     }
 
     @Test("openai stripPII removes user_id account_id email")

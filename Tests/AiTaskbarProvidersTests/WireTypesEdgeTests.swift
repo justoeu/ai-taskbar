@@ -13,9 +13,15 @@ struct WireTypesEdgeTests {
             from: Fixtures.data(Fixtures.openaiUsageBalanceAsInt200))
         let snap = parsed.toSnapshot(planLabel: nil,
                                      fallbackNow: Date(timeIntervalSince1970: 0))
-        #expect(snap.creditsUSD == 7)
-        // Approx cloud messages branch (cloud → "cloud msgs left").
-        expectTrue(snap.messageCountRange?.contains("cloud") ?? false)
+        #expect(snap.credits?.balance == 7)
+        // An integer balance is still a quantity. The old decoder turned this
+        // branch into the string "$7"; no branch may synthesize a currency.
+        let raw = try #require(parsed.credits?.balance_raw)
+        #expect(!raw.contains("$"))
+        // Cloud range present, local absent — and the absent one stays absent
+        // instead of borrowing the other, which the old single-string field did.
+        #expect(snap.credits?.cloudMessages == CreditMessageRange(low: 50, high: 75))
+        expectTrue(snap.credits?.localMessages == nil)
     }
 
     @Test("OpenRouter free tier uses fallback planLabel")
@@ -121,7 +127,7 @@ struct WireTypesEdgeTests {
         #expect(snap.planLabel == "OpenRouter: primary")
     }
 
-    @Test("OpenAI credits balance with neither string nor int → nil")
+    @Test("OpenAI credits without a balance keeps the block, with no number")
     func openai_credits_no_balance_branch() throws {
         let body = #"""
         {
@@ -136,7 +142,15 @@ struct WireTypesEdgeTests {
             OpenAIUsageResponse.self, from: Data(body.utf8))
         let snap = parsed.toSnapshot(planLabel: nil,
                                      fallbackNow: Date(timeIntervalSince1970: 0))
-        #expect(snap.creditsUSD == nil)
+        // The block survives: an unmetered account is exactly the one likely
+        // to omit `balance`, and dropping it would take the unlimited flag and
+        // the message ranges down with it.
+        let credits = try #require(snap.credits)
+        expectTrue(credits.balance == nil)
+        expectTrue(credits.consumedPercent == nil)
+        #expect(!credits.hasCredits)
+        // Nothing enabled and nothing left: the card shows no credits row.
+        #expect(!credits.isWorthShowing)
     }
 
     @Test("Z.AI entry without a known unit code falls back to a plain Session label")

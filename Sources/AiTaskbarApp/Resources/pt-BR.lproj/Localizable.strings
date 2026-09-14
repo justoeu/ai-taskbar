@@ -67,7 +67,6 @@
 "weekly_cost_unavailable" = "7d: preço indisponível";
 "price_unavailable_short" = "preço indisponível";
 "extra_usage_fmt" = "Uso extra: $%.2f";
-"credits_fmt" = "Créditos: $%.2f";
 "balance_fmt" = "Saldo: $%.2f";
 "voucher_fmt" = "Voucher: $%.2f";
 "cash_fmt" = "Dinheiro: $%.2f";
@@ -277,3 +276,16 @@
 "reset_failed" = "Não foi possível iniciar o reset. Verifique a conexão do Codex e tente novamente.";
 "reset_submission_uncertain" = "Não foi possível confirmar o resultado. Repita esta mesma tentativa; a chave é preservada mesmo ao reiniciar o app.";
 "reset_attempt_in_progress" = "Outra tentativa de reset está pendente ou em andamento. Tente novamente para recuperá-la.";
+
+// Créditos do Codex. O valor da API é QUANTIDADE (sem símbolo de moeda),
+// então nenhuma string aqui pode introduzir um.
+"credits_label" = "Créditos";
+"credits_balance_fmt" = "Créditos: %@";
+"credits_remaining_fmt" = "%@ de %@ restantes";
+"credits_unlimited" = "Créditos ilimitados";
+"credits_local_msgs_fmt" = "≈ %d–%d mensagens locais com créditos";
+"credits_cloud_msgs_fmt" = "≈ %d–%d mensagens na nuvem com créditos";
+"credits_funding_now" = "Janela do plano esgotada — consumindo créditos";
+"credits_recalibrate" = "Recalibrar barra de créditos";
+"credits_exhausted" = "Créditos esgotados";
+"credits_overage_reached" = "Limite de excedente atingido — requisições bloqueadas";
