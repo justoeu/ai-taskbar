@@ -127,7 +127,7 @@ struct WireTypesEdgeTests {
         #expect(snap.planLabel == "OpenRouter: primary")
     }
 
-    @Test("OpenAI credits balance with neither string nor int → nil")
+    @Test("OpenAI credits without a balance keeps the block, with no number")
     func openai_credits_no_balance_branch() throws {
         let body = #"""
         {
@@ -142,7 +142,15 @@ struct WireTypesEdgeTests {
             OpenAIUsageResponse.self, from: Data(body.utf8))
         let snap = parsed.toSnapshot(planLabel: nil,
                                      fallbackNow: Date(timeIntervalSince1970: 0))
-        expectTrue(snap.credits == nil)
+        // The block survives: an unmetered account is exactly the one likely
+        // to omit `balance`, and dropping it would take the unlimited flag and
+        // the message ranges down with it.
+        let credits = try #require(snap.credits)
+        expectTrue(credits.balance == nil)
+        expectTrue(credits.consumedPercent == nil)
+        #expect(!credits.hasCredits)
+        // Nothing enabled and nothing left: the card shows no credits row.
+        #expect(!credits.isWorthShowing)
     }
 
     @Test("Z.AI entry without a known unit code falls back to a plain Session label")

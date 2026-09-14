@@ -55,6 +55,22 @@ public struct CreditBaseline: Sendable, Equatable, Codable {
         self.peak = peak
         self.updatedAt = updatedAt
     }
+
+    /// Validates on the way in. The synthesized decoder would accept a NaN or
+    /// negative `peak` from a corrupted or hand-edited file and that value
+    /// would then stick forever, poisoning every percentage. Rejecting it makes
+    /// `load()` return nil, which re-seeds from the next observed balance.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let rawPeak = try c.decode(Double.self, forKey: .peak)
+        guard rawPeak.isFinite, rawPeak >= 0 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .peak, in: c,
+                debugDescription: "peak must be a finite, non-negative quantity")
+        }
+        peak = rawPeak
+        updatedAt = try c.decode(TimeInterval.self, forKey: .updatedAt)
+    }
 }
 
 /// Persists the credit high-water mark across launches in
@@ -65,10 +81,17 @@ public struct CreditBaseline: Sendable, Equatable, Codable {
 /// already `0700`. Failures are best-effort by design: losing the baseline
 /// costs a re-seeded bar on the next refresh, never a wrong number, so a
 /// read/write error must not fail the vendor's usage fetch.
-public final class CreditBaselineStore: @unchecked Sendable {
+public final class CreditBaselineStore: Sendable {
     public let vendor: VendorId
     public let baseDir: URL
     private let cached = OSAllocatedUnfairLock(initialState: CreditBaseline?.none)
+    /// Serializes the whole read-modify-write in `recordAndPeak`. `cached`
+    /// alone is not enough: it is released between the load and the save, so
+    /// two overlapping refreshes could interleave and the later, smaller
+    /// balance would overwrite a top-up — permanently under-seeding the
+    /// denominator. A plain mutex, not the unfair lock, because this one is
+    /// held across file I/O.
+    private let writeGate = NSLock()
 
     public init(vendor: VendorId, baseDir: URL) {
         self.vendor = vendor
@@ -91,6 +114,8 @@ public final class CreditBaselineStore: @unchecked Sendable {
     /// balance costs no disk I/O per refresh.
     @discardableResult
     public func recordAndPeak(balance: Double, at now: Date = .init()) -> Double {
+        writeGate.lock()
+        defer { writeGate.unlock() }
         let stored = load()?.peak
         let peak = CreditBaselineMath.updatedPeak(stored: stored, balance: balance)
         if stored == nil || peak > (stored ?? 0) {
@@ -109,7 +134,11 @@ public final class CreditBaselineStore: @unchecked Sendable {
     }
 
     /// Best-effort: a baseline we fail to persist is re-seeded next launch.
-    public func save(_ baseline: CreditBaseline) {
+    /// Internal because a non-finite `peak` would make the encode fail
+    /// silently; `recordAndPeak` is the only sanctioned entry point and it
+    /// cannot produce one.
+    internal func save(_ baseline: CreditBaseline) {
+        guard baseline.peak.isFinite, baseline.peak >= 0 else { return }
         cached.withLock { $0 = baseline }
         guard let data = try? SharedCoders.encoder.encode(baseline) else { return }
         try? AtomicFileWrite.write(data, to: fileURL)

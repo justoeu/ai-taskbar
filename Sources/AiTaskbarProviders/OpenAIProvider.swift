@@ -166,8 +166,9 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
         // no bar, so they never touch the store.
         guard let store = creditBaseline,
               let credits = snapshot.credits,
+              let balance = credits.balance,
               !credits.isUnlimited else { return .openai(snapshot) }
-        return .openai(snapshot.withCreditsPeak(store.recordAndPeak(balance: credits.balance)))
+        return .openai(snapshot.withCreditsPeak(store.recordAndPeak(balance: balance)))
     }
 
     /// Returns the cached plan label when valid. Falls back to reading the

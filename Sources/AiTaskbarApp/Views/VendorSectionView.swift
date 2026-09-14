@@ -458,14 +458,21 @@ public struct VendorSectionView: View {
 
     @ViewBuilder
     private func renderSnapshot(_ snap: VendorSnapshot) -> some View {
-        // One 1 Hz TimelineView for all windows in this card (N1-NEX-005).
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(snap.windows, id: \.label) { w in
-                    ProviderRowView(window: w, thresholds: thresholds, now: context.date)
+        VStack(alignment: .leading, spacing: 8) {
+            // One 1 Hz TimelineView for all windows in this card (N1-NEX-005).
+            // Only the windows read the clock, for their reset countdowns.
+            // `extras` depends on nothing time-varying, so it stays outside:
+            // inside, every card re-ran it once a second — cheap for two
+            // labels, wasteful now that the OpenAI card formats numbers and
+            // does several bundle lookups there.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(snap.windows, id: \.label) { w in
+                        ProviderRowView(window: w, thresholds: thresholds, now: context.date)
+                    }
                 }
-                extras(for: snap)
             }
+            extras(for: snap)
         }
     }
 
@@ -478,7 +485,7 @@ public struct VendorSectionView: View {
             EmptyView()
         case .openai(let s):
             OpenAIResetControls(vm: vm, reset: vm.openAIReset)
-            if let credits = s.credits {
+            if let credits = s.credits, credits.isWorthShowing {
                 OpenAICreditsView(credits: credits, thresholds: thresholds)
             }
         case .openrouter(let s):

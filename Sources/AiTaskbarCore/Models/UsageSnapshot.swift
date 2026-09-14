@@ -135,6 +135,16 @@ public struct CreditMessageRange: Sendable, Equatable, Codable {
         guard let wire, wire.count >= 2 else { return nil }
         self.init(low: wire[0], high: wire[1])
     }
+
+    /// Routes decoding through the normalizing initializer. The synthesized
+    /// one writes the stored properties directly, so a persisted `low > high`
+    /// would survive into a range no in-code construction can produce, and
+    /// render as "≈ 9–2 messages".
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(low: try c.decode(Int.self, forKey: .low),
+                  high: try c.decode(Int.self, forKey: .high))
+    }
 }
 
 /// Codex credits.
@@ -146,8 +156,11 @@ public struct CreditMessageRange: Sendable, Equatable, Codable {
 /// `"Credits: $%.2f"`, inventing a `$` the API never sent. Nothing in this
 /// type is currency and nothing formats it as currency.
 public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
-    /// Remaining credits.
-    public let balance: Double
+    /// Remaining credits. Optional because an unmetered account can omit the
+    /// number entirely — and that is precisely the account the `unlimited`
+    /// flag and the message ranges describe, so a missing balance must not
+    /// discard the whole credits block.
+    public let balance: Double?
     /// Highest balance observed so far — the progress bar's denominator,
     /// supplied by `CreditBaselineStore` because the API reports no granted
     /// total. nil when no baseline is known yet.
@@ -165,23 +178,43 @@ public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
     /// True when the plan window is exhausted and credits are the only reason
     /// requests still go through. Drives the "spending credits" notice.
     public let isFundingRequests: Bool
+    /// True only when the plan window is ALSO spent, so nothing can carry a
+    /// request any more. Hitting the overage ceiling while the plan still has
+    /// room blocks nothing, and claiming otherwise in red is worse than
+    /// staying quiet.
+    public let requestsBlocked: Bool
+
+    /// Credits ran out. Worth saying out loud: otherwise the bar just pins at
+    /// a red 100% with no explanation, which is the failure this change set
+    /// out to remove.
+    public var isExhausted: Bool { !isUnlimited && (balance ?? 0) <= 0 }
+
+    /// False when the account has no credits enabled and none left — there is
+    /// nothing worth a card row. Keeps a zero balance from rendering as a
+    /// meaningless "Credits: 0" on plans that never had any.
+    public var isWorthShowing: Bool { hasCredits || (balance ?? 0) > 0 }
 
     /// Share of the observed baseline already spent, 0...100.
-    /// nil while unmetered or before a baseline exists, so the UI shows the
-    /// bare balance instead of a fabricated 0%.
+    ///
+    /// nil until the baseline says something the balance does not. On the very
+    /// first sighting the peak IS the balance, and drawing a green 0% bar there
+    /// would tell a user who had already burned 90% of their credits that they
+    /// had spent nothing. The bar appears once real consumption has been
+    /// observed — the first moment the denominator carries information.
     public var consumedPercent: Double? {
-        guard !isUnlimited, let peakBalance else { return nil }
+        guard !isUnlimited, let balance, let peakBalance, peakBalance > balance else { return nil }
         return CreditBaselineMath.consumedPercent(peak: peakBalance, balance: balance)
     }
 
-    public init(balance: Double,
+    public init(balance: Double?,
                 peakBalance: Double? = nil,
                 localMessages: CreditMessageRange? = nil,
                 cloudMessages: CreditMessageRange? = nil,
                 hasCredits: Bool = false,
                 isUnlimited: Bool = false,
                 overageLimitReached: Bool = false,
-                isFundingRequests: Bool = false) {
+                isFundingRequests: Bool = false,
+                requestsBlocked: Bool = false) {
         self.balance = balance
         self.peakBalance = peakBalance
         self.localMessages = localMessages
@@ -190,6 +223,7 @@ public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
         self.isUnlimited = isUnlimited
         self.overageLimitReached = overageLimitReached
         self.isFundingRequests = isFundingRequests
+        self.requestsBlocked = requestsBlocked
     }
 
     /// Returns a copy carrying the denominator resolved by the provider.
@@ -201,7 +235,8 @@ public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
                           hasCredits: hasCredits,
                           isUnlimited: isUnlimited,
                           overageLimitReached: overageLimitReached,
-                          isFundingRequests: isFundingRequests)
+                          isFundingRequests: isFundingRequests,
+                          requestsBlocked: requestsBlocked)
     }
 }
 

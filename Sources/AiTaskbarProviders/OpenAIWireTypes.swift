@@ -146,8 +146,10 @@ extension OpenAIUsageResponse {
         // the localized view layer. Both ranges are carried: local (Codex CLI)
         // and cloud (cloud tasks) are reported together and mean different
         // things, so neither substitutes for the other.
-        let creditsInfo: OpenAICreditsInfo? = credits.flatMap { c -> OpenAICreditsInfo? in
-            guard let balance = c.balance_number else { return nil }
+        let creditsInfo: OpenAICreditsInfo? = credits.map { c -> OpenAICreditsInfo in
+            // A missing number does NOT discard the block: an unmetered account
+            // is exactly the one likely to omit `balance`, and it is also the
+            // one the `unlimited` flag and the ranges describe.
             let hasCredits = c.has_credits ?? false
             let overage = c.overage_limit_reached ?? false
             // `allowed == false` / `limit_reached == true` mean the plan
@@ -155,7 +157,7 @@ extension OpenAIUsageResponse {
             // ceiling hit, every further request is credit-funded.
             let planSpent = rate_limit?.limit_reached == true || rate_limit?.allowed == false
             return OpenAICreditsInfo(
-                balance: balance,
+                balance: c.balance_number,
                 // Denominator is resolved by the provider from the persisted
                 // baseline; the wire carries no granted total.
                 peakBalance: nil,
@@ -164,7 +166,9 @@ extension OpenAIUsageResponse {
                 hasCredits: hasCredits,
                 isUnlimited: c.unlimited ?? false,
                 overageLimitReached: overage,
-                isFundingRequests: planSpent && hasCredits && !overage
+                isFundingRequests: planSpent && hasCredits && !overage,
+                // Only a spent plan AND a hit ceiling actually blocks anything.
+                requestsBlocked: planSpent && overage
             )
         }
 

@@ -14,10 +14,13 @@ struct OpenAICreditsView: View {
     let credits: OpenAICreditsInfo
     let thresholds: ThresholdsConfig
 
-    /// Locale-aware quantity formatting — `String(format: "%.2f")` would hard-code
-    /// a `.` decimal separator regardless of the user's language.
+    /// Quantity formatting that follows the app's language, not just the
+    /// system's: `String(format: "%.2f")` would hard-code a `.` separator, and
+    /// omitting `locale` would print `4,890.32` inside an otherwise Portuguese
+    /// card whenever `ui.language` overrides the system locale.
     private static let quantityFormatter: NumberFormatter = {
         let f = NumberFormatter()
+        f.locale = L10n.effectiveLocale
         f.numberStyle = .decimal
         f.minimumFractionDigits = 0
         f.maximumFractionDigits = 2
@@ -34,9 +37,13 @@ struct OpenAICreditsView: View {
             if credits.isFundingRequests {
                 notice("credits_funding_now", systemImage: "bolt.fill", tint: .orange)
             }
-            if credits.overageLimitReached {
+            // Only claim requests are blocked when the plan is spent too.
+            // The overage ceiling alone stops nothing while the plan has room.
+            if credits.requestsBlocked {
                 notice("credits_overage_reached", systemImage: "exclamationmark.triangle.fill",
                        tint: .red)
+            } else if credits.isExhausted {
+                notice("credits_exhausted", systemImage: "xmark.circle", tint: .secondary)
             }
             messageEstimates
         }
@@ -50,18 +57,19 @@ struct OpenAICreditsView: View {
             Label(L10n.localizedString("credits_unlimited"), systemImage: "infinity.circle")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-        } else if let percent = credits.consumedPercent, let peak = credits.peakBalance {
+        } else if let percent = credits.consumedPercent,
+                  let balance = credits.balance, let peak = credits.peakBalance {
             ProviderRowView(
                 window: UsageWindow(
                     label: L10n.localizedString("credits_label"),
                     utilizationPercent: percent,
                     resetsAt: nil,
                     detail: L10n.localizedString("credits_remaining_fmt",
-                                                 Self.quantity(credits.balance),
+                                                 Self.quantity(balance),
                                                  Self.quantity(peak))),
                 thresholds: thresholds)
-        } else {
-            Label(L10n.localizedString("credits_balance_fmt", Self.quantity(credits.balance)),
+        } else if let balance = credits.balance {
+            Label(L10n.localizedString("credits_balance_fmt", Self.quantity(balance)),
                   systemImage: "circle.hexagongrid")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

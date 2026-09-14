@@ -8,7 +8,7 @@ import AiTaskbarTesting
 /// observed balance into the persisted baseline and hands the denominator
 /// back to the snapshot. These drive that wiring end to end.
 @Suite("OpenAIProvider — credits baseline wiring", .serialized)
-struct OpenAICreditsProviderTests {
+final class OpenAICreditsProviderTests {
     let tmpDir: URL
 
     init() throws {
@@ -16,6 +16,14 @@ struct OpenAICreditsProviderTests {
         tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ai-taskbar-credits-e2e-\(UUID().uuidString)")
         try Paths.ensureDir(tmpDir)
+    }
+
+    // One instance per @Test: clean up so runs do not pile up in TMPDIR, and
+    // clear the process-wide stub here rather than at the end of each test —
+    // a trailing reset is skipped whenever an assertion above it throws.
+    deinit {
+        StubURLProtocol.reset()
+        try? FileManager.default.removeItem(at: tmpDir)
     }
 
     /// Local base64url so this suite does not depend on another file's
@@ -67,10 +75,12 @@ struct OpenAICreditsProviderTests {
         #expect(info.cloudMessages == CreditMessageRange(low: 196, high: 1223))
         #expect(info.isFundingRequests)
         #expect(!info.overageLimitReached)
-        // First sighting seeds the baseline, so the bar starts at 0% consumed.
+        // The first sighting seeds the baseline, and a peak equal to the
+        // balance says nothing — so no bar, rather than a green 0% claiming
+        // the user has spent nothing.
         #expect(info.peakBalance == 4890.316252)
-        #expect(info.consumedPercent == 0)
-        StubURLProtocol.reset()
+        expectTrue(info.consumedPercent == nil)
+        expectTrue(!info.requestsBlocked)
     }
 
     @Test("a later, smaller balance advances the bar against the seeded baseline")
@@ -88,7 +98,6 @@ struct OpenAICreditsProviderTests {
         // 4890.316252 left of 5000 => 2.19% consumed.
         let percent = try #require(info.consumedPercent)
         #expect((percent * 100).rounded() == 219)
-        StubURLProtocol.reset()
     }
 
     @Test("unmetered credits never touch the baseline store and draw no bar")
@@ -104,7 +113,6 @@ struct OpenAICreditsProviderTests {
         expectTrue(info.consumedPercent == nil)
         expectTrue(store.load() == nil)
         expectTrue(!info.isFundingRequests)
-        StubURLProtocol.reset()
     }
 
     @Test("without a baseline store the balance still shows, just without a bar")
@@ -117,6 +125,5 @@ struct OpenAICreditsProviderTests {
         #expect(info.balance == 4890.316252)
         expectTrue(info.peakBalance == nil)
         expectTrue(info.consumedPercent == nil)
-        StubURLProtocol.reset()
     }
 }

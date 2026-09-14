@@ -203,11 +203,17 @@ are null on real accounts), so a percentage needs a denominator the app derives
 itself: the highest balance it has ever observed, persisted per vendor in
 `~/Library/Application Support/ai-taskbar/credits/<vendor>.json`. A balance
 *above* that high-water mark can only be a top-up, which re-baselines the bar to
-0%. The honest limitation: on the very first observation the bar reads 0%,
-because nothing reveals what was spent before the app started watching; it
-becomes exact after the next top-up. Unmetered accounts (`unlimited: true`) get
-no bar at all, and a missing or garbled balance shows the plain number rather
-than a fabricated 0%.
+0%. **No bar is drawn until the baseline says something the balance does not**:
+on the first sighting the peak *is* the balance, and a green 0% there would
+tell someone who had already burned 90% of their credits that they had spent
+nothing. The bar appears as soon as real consumption is observed, and is exact
+after the next top-up. Unmetered accounts (`unlimited: true`) get no bar at
+all, and a missing or garbled balance shows the plain number.
+
+Known limitation: the high-water mark only ever rises. If a large promotional
+grant expires and is replaced by a smaller purchase, the denominator stays at
+the old value and the bar over-reports consumption until the next top-up
+exceeds it. Deleting `credits/<vendor>.json` re-seeds it.
 
 The credits bar is deliberately **not** folded into the menu-bar percentage.
 That number tracks plan windows which reset on a clock; credits drain on a
@@ -222,7 +228,10 @@ them into one English sentence built inside the provider (which is why a
 Portuguese card showed `local msgs left`) and silently preferred whichever came
 first. When the plan window is spent (`allowed: false`) and credits are covering
 requests, the card says so instead of showing a bare red 100% bar that reads like
-a block.
+a block. "Requests are blocked" is claimed only when the plan window is spent
+*and* the overage ceiling is hit — an overage ceiling on its own stops nothing
+while the plan still has room. A drained balance says "credits used up" rather
+than leaving a red bar unexplained.
 
 ### OpenAI / Codex — earned rate-limit resets
 

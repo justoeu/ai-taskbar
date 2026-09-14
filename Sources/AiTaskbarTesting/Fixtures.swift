@@ -92,8 +92,6 @@ public enum Fixtures {
                 "is_free_tier": false } }
     """#
 
-    /// OpenAI balance encoded as an Int (older format) — exercises the
-    /// Int64 branch of OpenAICredits.balance decoding.
     /// The REAL shape of a credit-funded Codex account, captured verbatim from
     /// `GET /backend-api/wham/usage` on a Pro plan whose weekly window is
     /// spent. Note `balance`: a bare decimal string, ten decimal places, and
@@ -136,6 +134,8 @@ public enum Fixtures {
     }
     """#
 
+    /// OpenAI balance encoded as an Int (older format) — exercises the
+    /// Int64 branch of OpenAICredits.balance decoding.
     public static let openaiUsageBalanceAsInt200 = #"""
     {
       "user_id": "u_int",

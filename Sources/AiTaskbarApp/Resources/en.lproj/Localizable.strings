@@ -287,4 +287,5 @@
 "credits_local_msgs_fmt" = "≈ %d–%d local messages on credits";
 "credits_cloud_msgs_fmt" = "≈ %d–%d cloud messages on credits";
 "credits_funding_now" = "Plan window spent — running on credits";
+"credits_exhausted" = "Credits used up";
 "credits_overage_reached" = "Overage limit reached — requests are blocked";

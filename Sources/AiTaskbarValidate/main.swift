@@ -567,8 +567,14 @@ section("Wire types: OpenAI credits are a quantity, not money") {
     expect(s.primary?.utilizationPercent == 100, "plan window reported as spent")
     // No baseline yet => no bar, rather than a fabricated 0%.
     expect(credits?.consumedPercent == nil, "no denominator yet means no bar")
+    // A baseline equal to the balance is the FIRST sighting: still no bar,
+    // because a green 0% would tell someone who already burned 90% of their
+    // credits that they had spent nothing.
+    expect(s.withCreditsPeak(4890.316252).credits?.consumedPercent == nil,
+           "a peak equal to the balance carries no information, so no bar")
     expect(s.withCreditsPeak(5000).credits?.consumedPercent.map { Int($0.rounded()) } == 2,
            "with a 5000 baseline, 4890.32 remaining reads as 2% consumed")
+    expect(credits?.requestsBlocked == false, "a spent plan without an overage ceiling is not blocked")
 }
 
 section("Wire types: OpenAI unlimited credits draw no bar") {
@@ -579,6 +585,7 @@ section("Wire types: OpenAI unlimited credits draw no bar") {
     expect(credits?.isUnlimited == true, "unlimited flag parsed")
     expect(credits?.isFundingRequests == false, "an allowed plan is not credit-funded")
     expect(credits?.consumedPercent == nil, "unlimited credits have no consumption bar")
+    expect(credits?.isExhausted == false, "an unmetered account is never exhausted")
 }
 
 section("CreditBaselineMath") {

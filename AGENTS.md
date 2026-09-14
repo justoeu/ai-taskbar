@@ -374,8 +374,11 @@ that came out of fixing that:
   and `promo` are null on real accounts. The progress bar's denominator is the
   observed high-water mark, persisted by `CreditBaselineStore` in
   `credits/<vendor>.json`; a balance above it means a top-up and re-baselines.
-  A first sighting therefore reads 0% consumed — that is honest, not a bug.
-  Do not invent a denominator from a hard-coded plan tier.
+  A first sighting draws NO bar: the peak equals the balance, so it carries no
+  information, and a green 0% would tell a user who had already spent 90% that
+  they had spent nothing. Do not invent a denominator from a hard-coded plan
+  tier. Known limitation: the peak only rises, so an expired promo grant
+  replaced by a smaller purchase over-reports until the next bigger top-up.
 - **No denominator, no bar.** `consumedPercent` returns nil for an unmetered
   account, a missing baseline, or a non-finite balance, so the UI shows the
   plain number. Never let NaN reach `ProgressView`.
@@ -394,6 +397,13 @@ that came out of fixing that:
 - `rate_limit.allowed == false` (or `limit_reached == true`) with
   `has_credits` and no `overage_limit_reached` means every request is now
   credit-funded; surface that, because a bare red 100% bar reads as "blocked".
+  Conversely, only claim requests ARE blocked when the plan is spent **and**
+  the ceiling is hit (`requestsBlocked`): an overage ceiling alone stops
+  nothing while the plan window still has room.
+- **A missing `balance` must not discard the credits block.** An unmetered
+  account is the one most likely to omit the number, and it is also the one
+  `unlimited` and the message ranges describe; `balance` is therefore optional
+  and the block is built whenever the `credits` object exists.
 
 - **`AiTaskbarProviders`** — one file per vendor. All providers use the
   `CachedFetch` helper for the cache → fetch → write → decode → stale fallback
