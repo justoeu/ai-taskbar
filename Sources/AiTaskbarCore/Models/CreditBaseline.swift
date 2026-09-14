@@ -14,7 +14,67 @@ import os.lock
 /// because nothing tells us how much was spent before the app started
 /// watching. The bar becomes meaningful from that point forward and is exact
 /// after the next top-up.
+/// One reading of a vendor's credit state, reduced to what the baseline needs.
+/// `hasPromo` is *presence only* — whether the payload carried a `promo`
+/// object at all. Its inner shape has never been observed populated on a real
+/// account, so nothing here reads inside it, and nothing should until a
+/// verbatim fixture exists.
+public struct CreditObservation: Sendable, Equatable {
+    public let balance: Double
+    public let hasCredits: Bool
+    public let hasPromo: Bool
+
+    public init(balance: Double, hasCredits: Bool, hasPromo: Bool = false) {
+        self.balance = balance
+        self.hasCredits = hasCredits
+        self.hasPromo = hasPromo
+    }
+}
+
+/// What an observation means for the stored denominator.
+public enum BaselineDecision: Sendable, Equatable {
+    /// Nothing stored yet.
+    case seed
+    /// A new grant epoch began, so the old peak describes credits that no
+    /// longer exist and must be discarded even though the balance went DOWN.
+    case rebaseline
+    /// A top-up above the current peak.
+    case raise
+    /// Ordinary consumption — keep the denominator.
+    case keep
+
+    /// True when the peak must be replaced by the observed balance.
+    public var adoptsObservedBalance: Bool { self != .keep }
+}
+
 public enum CreditBaselineMath {
+    /// Decides what an observation does to the baseline.
+    ///
+    /// The hard case this exists for: a balance that DROPS is normally
+    /// consumption, but is a grant change when a promotional credit block
+    /// expires — and from the number alone the two are identical. Rather than
+    /// guess from the size of the drop (a heuristic that would mistake a heavy
+    /// usage day for an expiry, and vice versa), this reads the two epoch
+    /// signals the payload actually carries:
+    ///
+    /// - `has_credits` going false → true: credits came back after running out,
+    ///   so whatever the old peak measured is gone.
+    /// - a `promo` object that was present and is now absent: a promotional
+    ///   grant ended, which is exactly the case where the balance drops
+    ///   without any of it having been spent.
+    ///
+    /// Anything else that merely goes down is treated as consumption. A
+    /// partial expiry that trips neither signal still needs the manual
+    /// recalibrate; that is a known, documented gap, not a silent guess.
+    public static func decide(stored: CreditBaseline?,
+                              observation: CreditObservation) -> BaselineDecision {
+        guard let stored else { return .seed }
+        if !stored.hadCredits, observation.hasCredits { return .rebaseline }
+        if stored.hadPromo, !observation.hasPromo { return .rebaseline }
+        if sanitized(observation.balance) > stored.peak { return .raise }
+        return .keep
+    }
+
     /// The denominator to use after observing `balance`. Grows on a top-up,
     /// never shrinks while credits are being consumed.
     public static func updatedPeak(stored: Double?, balance: Double) -> Double {
@@ -44,16 +104,28 @@ public enum CreditBaselineMath {
     }
 }
 
-/// The persisted high-water mark for one vendor's credit balance.
+/// The persisted high-water mark for one vendor's credit balance, plus the
+/// epoch flags needed to notice that the grant behind it has been replaced.
 public struct CreditBaseline: Sendable, Equatable, Codable {
     /// Highest balance observed so far — the progress bar's denominator.
     public let peak: Double
-    /// When `peak` was last raised, for diagnostics.
+    /// When `peak` was last set, for diagnostics.
     public let updatedAt: TimeInterval
+    /// `has_credits` as of the last observation. A false → true transition
+    /// means a new grant, so the peak is re-seeded rather than kept.
+    public let hadCredits: Bool
+    /// Whether a `promo` object was present last time. Present → absent means
+    /// a promotional grant ended and the peak describes credits that expired.
+    public let hadPromo: Bool
 
-    public init(peak: Double, updatedAt: TimeInterval) {
+    public init(peak: Double,
+                updatedAt: TimeInterval,
+                hadCredits: Bool = false,
+                hadPromo: Bool = false) {
         self.peak = peak
         self.updatedAt = updatedAt
+        self.hadCredits = hadCredits
+        self.hadPromo = hadPromo
     }
 
     /// Validates on the way in. The synthesized decoder would accept a NaN or
@@ -70,6 +142,10 @@ public struct CreditBaseline: Sendable, Equatable, Codable {
         }
         peak = rawPeak
         updatedAt = try c.decode(TimeInterval.self, forKey: .updatedAt)
+        // Files written before the epoch flags existed decode as false; the
+        // first observation then rewrites them with the real values.
+        hadCredits = try c.decodeIfPresent(Bool.self, forKey: .hadCredits) ?? false
+        hadPromo = try c.decodeIfPresent(Bool.self, forKey: .hadPromo) ?? false
     }
 }
 
@@ -109,19 +185,38 @@ public final class CreditBaselineStore: Sendable {
         baseDir.appendingPathComponent("\(vendor.rawValue).json")
     }
 
-    /// Folds `balance` into the baseline and returns the denominator to use.
-    /// Writes only when the peak actually moves, so a steadily draining
-    /// balance costs no disk I/O per refresh.
+    /// Folds an observation into the baseline and returns the denominator to
+    /// use. Writes only when something actually changes, so a steadily
+    /// draining balance costs no disk I/O per refresh.
     @discardableResult
-    public func recordAndPeak(balance: Double, at now: Date = .init()) -> Double {
+    public func record(_ observation: CreditObservation, at now: Date = .init()) -> Double {
         writeGate.lock()
         defer { writeGate.unlock() }
-        let stored = load()?.peak
-        let peak = CreditBaselineMath.updatedPeak(stored: stored, balance: balance)
-        if stored == nil || peak > (stored ?? 0) {
-            save(CreditBaseline(peak: peak, updatedAt: now.timeIntervalSince1970))
+        let stored = load()
+        let decision = CreditBaselineMath.decide(stored: stored, observation: observation)
+        let peak = decision.adoptsObservedBalance
+            ? CreditBaselineMath.updatedPeak(stored: nil, balance: observation.balance)
+            : (stored?.peak ?? 0)
+        let updated = CreditBaseline(peak: peak,
+                                     updatedAt: decision == .keep
+                                        ? (stored?.updatedAt ?? now.timeIntervalSince1970)
+                                        : now.timeIntervalSince1970,
+                                     hadCredits: observation.hasCredits,
+                                     hadPromo: observation.hasPromo)
+        if stored != updated {
+            if decision == .rebaseline {
+                AppLog.cost.notice("Credit grant changed (has_credits or promo); re-seeding the progress-bar baseline from the current balance.")
+            }
+            save(updated)
         }
         return peak
+    }
+
+    /// Convenience for callers that only know the balance (tests, and any
+    /// vendor without epoch flags).
+    @discardableResult
+    public func recordAndPeak(balance: Double, at now: Date = .init()) -> Double {
+        record(CreditObservation(balance: balance, hasCredits: true), at: now)
     }
 
     public func load() -> CreditBaseline? {

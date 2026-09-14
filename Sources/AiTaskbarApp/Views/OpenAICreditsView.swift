@@ -13,6 +13,10 @@ import AiTaskbarCore
 struct OpenAICreditsView: View {
     let credits: OpenAICreditsInfo
     let thresholds: ThresholdsConfig
+    /// Forgets the bar's baseline and refreshes. Offered because the grant
+    /// signals cannot catch a promotional block that shrinks while credits
+    /// remain — that looks identical to ordinary spending.
+    var onRecalibrate: (() -> Void)?
 
     /// Quantity formatting that follows the app's language, not just the
     /// system's: `String(format: "%.2f")` would hard-code a `.` separator, and
@@ -46,6 +50,11 @@ struct OpenAICreditsView: View {
                 notice("credits_exhausted", systemImage: "xmark.circle", tint: .secondary)
             }
             messageEstimates
+        }
+        .contextMenu {
+            if let onRecalibrate {
+                Button(L10n.localizedString("credits_recalibrate")) { onRecalibrate() }
+            }
         }
     }
 

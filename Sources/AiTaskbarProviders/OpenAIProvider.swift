@@ -153,6 +153,14 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
         PIIScrub.scrub(bytes: raw)
     }
 
+    /// Forgets the credits progress-bar baseline so the next refresh re-seeds
+    /// it from the current balance. The escape hatch for the one case the
+    /// epoch signals cannot catch: a promotional block shrinking while credits
+    /// remain, which looks exactly like ordinary spending.
+    public func recalibrateCreditBaseline() {
+        creditBaseline?.reset()
+    }
+
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
         let parsed: OpenAIUsageResponse
         do {
@@ -168,7 +176,10 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
               let credits = snapshot.credits,
               let balance = credits.balance,
               !credits.isUnlimited else { return .openai(snapshot) }
-        return .openai(snapshot.withCreditsPeak(store.recordAndPeak(balance: balance)))
+        let observation = CreditObservation(balance: balance,
+                                            hasCredits: credits.hasCredits,
+                                            hasPromo: credits.hasPromo)
+        return .openai(snapshot.withCreditsPeak(store.record(observation)))
     }
 
     /// Returns the cached plan label when valid. Falls back to reading the

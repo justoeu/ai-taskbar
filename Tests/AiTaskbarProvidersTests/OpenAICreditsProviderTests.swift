@@ -115,6 +115,49 @@ final class OpenAICreditsProviderTests {
         expectTrue(!info.isFundingRequests)
     }
 
+    @Test("an expiring promo re-seeds the bar end to end")
+    func promo_expiry_reseeds_through_the_provider() async throws {
+        let store = CreditBaselineStore(vendor: .openai, baseDir: tmpDir)
+        // A 50k promotional grant is running.
+        StubURLProtocol.handler = { _ in
+            .init(data: Fixtures.data(Fixtures.openaiCreditsWithPromo200))
+        }
+        let withPromo = try credits(from: try await provider(baseline: store)
+            .fetchUsage(forceRefresh: true))
+        #expect(withPromo.hasPromo)
+        #expect(withPromo.peakBalance == 50_000)
+
+        // It expires; the account is left with its much smaller purchased
+        // balance. Without the epoch signal the bar would read ~90% consumed
+        // forever, because the drop is indistinguishable from spending.
+        StubURLProtocol.handler = { _ in
+            .init(data: Fixtures.data(Fixtures.openaiCreditsFunding200))
+        }
+        let afterExpiry = try credits(from: try await provider(baseline: store)
+            .fetchUsage(forceRefresh: true))
+        #expect(!afterExpiry.hasPromo)
+        #expect(afterExpiry.peakBalance == 4890.316252)
+        expectTrue(afterExpiry.consumedPercent == nil)
+        StubURLProtocol.reset()
+    }
+
+    @Test("recalibrate forgets the baseline so the next refresh re-seeds it")
+    func recalibrate_drops_the_baseline() async throws {
+        let store = CreditBaselineStore(vendor: .openai, baseDir: tmpDir)
+        _ = store.recordAndPeak(balance: 50_000)
+        StubURLProtocol.handler = { _ in
+            .init(data: Fixtures.data(Fixtures.openaiCreditsFunding200))
+        }
+        let p = try provider(baseline: store)
+        let stale = try credits(from: try await p.fetchUsage(forceRefresh: true))
+        #expect(stale.peakBalance == 50_000)
+
+        p.recalibrateCreditBaseline()
+        let fresh = try credits(from: try await p.fetchUsage(forceRefresh: true))
+        #expect(fresh.peakBalance == 4890.316252)
+        StubURLProtocol.reset()
+    }
+
     @Test("without a baseline store the balance still shows, just without a bar")
     func no_store_still_reports_balance() async throws {
         StubURLProtocol.handler = { _ in

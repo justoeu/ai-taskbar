@@ -588,6 +588,31 @@ section("Wire types: OpenAI unlimited credits draw no bar") {
     expect(credits?.isExhausted == false, "an unmetered account is never exhausted")
 }
 
+section("CreditBaselineMath.decide — expiry vs spending") {
+    func stored(_ peak: Double, credits: Bool = true, promo: Bool = false) -> CreditBaseline {
+        CreditBaseline(peak: peak, updatedAt: 0, hadCredits: credits, hadPromo: promo)
+    }
+    func obs(_ b: Double, credits: Bool = true, promo: Bool = false) -> CreditObservation {
+        CreditObservation(balance: b, hasCredits: credits, hasPromo: promo)
+    }
+    expect(CreditBaselineMath.decide(stored: nil, observation: obs(500)) == .seed,
+           "no baseline seeds")
+    // A drop alone is never treated as an expiry: from the number it is
+    // identical to a heavy usage day.
+    expect(CreditBaselineMath.decide(stored: stored(50_000), observation: obs(5)) == .keep,
+           "even a savage drop is consumption without an epoch signal")
+    expect(CreditBaselineMath.decide(stored: stored(500), observation: obs(900)) == .raise,
+           "a rise above the peak is a top-up")
+    expect(CreditBaselineMath.decide(stored: stored(50_000, promo: true),
+                                     observation: obs(5_000, promo: false)) == .rebaseline,
+           "a promo that ends re-seeds the denominator")
+    expect(CreditBaselineMath.decide(stored: stored(900, credits: false),
+                                     observation: obs(100, credits: true)) == .rebaseline,
+           "credits returning after zero re-seed")
+    expect(!BaselineDecision.keep.adoptsObservedBalance,
+           "only keep preserves the stored denominator")
+}
+
 section("CreditBaselineMath") {
     // First sighting seeds the denominator; consumed reads 0 because nothing
     // tells us what was spent before the app started watching.

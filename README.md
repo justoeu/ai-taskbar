@@ -210,10 +210,21 @@ nothing. The bar appears as soon as real consumption is observed, and is exact
 after the next top-up. Unmetered accounts (`unlimited: true`) get no bar at
 all, and a missing or garbled balance shows the plain number.
 
-Known limitation: the high-water mark only ever rises. If a large promotional
-grant expires and is replaced by a smaller purchase, the denominator stays at
-the old value and the bar over-reports consumption until the next top-up
-exceeds it. Deleting `credits/<vendor>.json` re-seeds it.
+**Telling an expiry from ordinary spending.** A balance that falls is normally
+consumption, but it is a grant change when a promotional block expires — and
+from the number alone the two are identical. Rather than guess from the size of
+the drop (a heuristic that would mistake a heavy day for an expiry and vice
+versa), the app reads the two epoch signals the payload actually carries:
+`has_credits` going false then true means credits came back after running out,
+and a `promo` object that was present and is now absent means a promotional
+grant ended. Either one re-seeds the denominator from the current balance. Only
+the *presence* of `promo` is used; its inner shape has never been seen
+populated on a real account, so nothing reads inside it.
+
+One case remains that no signal can catch: a promotional block shrinking while
+other credits remain, which looks exactly like spending. For that, right-click
+the credits row and choose **Recalibrate credits bar** — it forgets the
+baseline and re-seeds from the current balance on the next refresh.
 
 The credits bar is deliberately **not** folded into the menu-bar percentage.
 That number tracks plan windows which reset on a clock; credits drain on a

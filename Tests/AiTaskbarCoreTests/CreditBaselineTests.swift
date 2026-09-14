@@ -56,6 +56,67 @@ struct CreditBaselineMathTests {
     }
 }
 
+@Suite("CreditBaselineMath.decide — telling an expiry from ordinary spending")
+struct CreditBaselineDecisionTests {
+    private func obs(_ balance: Double, credits: Bool = true, promo: Bool = false) -> CreditObservation {
+        CreditObservation(balance: balance, hasCredits: credits, hasPromo: promo)
+    }
+    private func stored(_ peak: Double, credits: Bool = true, promo: Bool = false) -> CreditBaseline {
+        CreditBaseline(peak: peak, updatedAt: 0, hadCredits: credits, hadPromo: promo)
+    }
+
+    @Test("nothing stored seeds the baseline")
+    func seeds() {
+        #expect(CreditBaselineMath.decide(stored: nil, observation: obs(500)) == .seed)
+    }
+
+    @Test("a falling balance is ordinary consumption, not an expiry")
+    func falling_is_consumption() {
+        #expect(CreditBaselineMath.decide(stored: stored(500), observation: obs(400)) == .keep)
+        // Even a savage drop: from the number alone this is indistinguishable
+        // from a heavy day, so it must NOT be guessed at.
+        #expect(CreditBaselineMath.decide(stored: stored(50_000), observation: obs(5)) == .keep)
+    }
+
+    @Test("a rise above the peak is a top-up")
+    func rise_is_topup() {
+        #expect(CreditBaselineMath.decide(stored: stored(500), observation: obs(900)) == .raise)
+    }
+
+    @Test("credits coming back after running out starts a new epoch")
+    func credits_returning_rebaselines() {
+        #expect(CreditBaselineMath.decide(stored: stored(50_000, credits: false),
+                                          observation: obs(5_000, credits: true)) == .rebaseline)
+    }
+
+    @Test("a promo that disappears rebaselines even though the balance fell")
+    func promo_ending_rebaselines() {
+        // The motivating case: 50k promo expires, 5k purchased remains.
+        #expect(CreditBaselineMath.decide(stored: stored(50_000, promo: true),
+                                          observation: obs(5_000, promo: false)) == .rebaseline)
+    }
+
+    @Test("a promo that is still running changes nothing")
+    func promo_still_active_keeps() {
+        #expect(CreditBaselineMath.decide(stored: stored(50_000, promo: true),
+                                          observation: obs(49_000, promo: true)) == .keep)
+    }
+
+    @Test("a promo appearing is not an ending")
+    func promo_appearing_is_not_an_ending() {
+        #expect(CreditBaselineMath.decide(stored: stored(500, promo: false),
+                                          observation: obs(400, promo: true)) == .keep)
+    }
+
+    @Test("only .keep preserves the stored denominator")
+    func adopts_observed_balance() {
+        #expect(!BaselineDecision.keep.adoptsObservedBalance)
+        for d in [BaselineDecision.seed, .rebaseline, .raise] {
+            #expect(d.adoptsObservedBalance)
+        }
+    }
+}
+
 @Suite("CreditBaselineStore — persistence across refreshes", .serialized)
 final class CreditBaselineStoreTests {
     private let dir: URL
@@ -92,6 +153,44 @@ final class CreditBaselineStoreTests {
         #expect(store().recordAndPeak(balance: 4000) == 5000)
         #expect(store().recordAndPeak(balance: 9000) == 9000)
         #expect(store().recordAndPeak(balance: 8000) == 9000)
+    }
+
+    @Test("an expiring promo re-seeds the denominator instead of over-reporting")
+    func promo_expiry_reseeds() {
+        let s = store()
+        // 50k promo running.
+        #expect(s.record(CreditObservation(balance: 50_000, hasCredits: true, hasPromo: true)) == 50_000)
+        #expect(s.record(CreditObservation(balance: 49_000, hasCredits: true, hasPromo: true)) == 50_000)
+        // Promo expires, 5k purchased remains. Without the epoch signal the
+        // bar would read 90% consumed forever.
+        #expect(s.record(CreditObservation(balance: 5_000, hasCredits: true, hasPromo: false)) == 5_000)
+        // And it keeps behaving normally afterwards.
+        #expect(s.record(CreditObservation(balance: 4_500, hasCredits: true, hasPromo: false)) == 5_000)
+    }
+
+    @Test("credits returning after zero re-seed rather than inherit the old peak")
+    func credits_returning_reseeds() {
+        let s = store()
+        #expect(s.record(CreditObservation(balance: 900, hasCredits: true)) == 900)
+        #expect(s.record(CreditObservation(balance: 0, hasCredits: false)) == 900)
+        #expect(s.record(CreditObservation(balance: 100, hasCredits: true)) == 100)
+    }
+
+    @Test("the epoch flags survive a relaunch")
+    func flags_persist() {
+        #expect(store().record(CreditObservation(balance: 50_000, hasCredits: true, hasPromo: true)) == 50_000)
+        // A fresh instance must still know a promo was running.
+        #expect(store().record(CreditObservation(balance: 5_000, hasCredits: true, hasPromo: false)) == 5_000)
+    }
+
+    @Test("a baseline written before the epoch flags existed still loads")
+    func legacy_file_loads() throws {
+        try #"{"peak": 800, "updatedAt": 0}"#.write(
+            to: dir.appendingPathComponent("openai.json"), atomically: true, encoding: .utf8)
+        let loaded = try #require(store().load())
+        #expect(loaded.peak == 800)
+        #expect(!loaded.hadCredits)
+        #expect(!loaded.hadPromo)
     }
 
     @Test("the baseline lands on disk under the vendor's name")

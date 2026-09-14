@@ -286,5 +286,6 @@
 "credits_local_msgs_fmt" = "≈ %d–%d mensagens locais com créditos";
 "credits_cloud_msgs_fmt" = "≈ %d–%d mensagens na nuvem com créditos";
 "credits_funding_now" = "Janela do plano esgotada — consumindo créditos";
+"credits_recalibrate" = "Recalibrar barra de créditos";
 "credits_exhausted" = "Créditos esgotados";
 "credits_overage_reached" = "Limite de excedente atingido — requisições bloqueadas";

@@ -172,6 +172,10 @@ public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
     /// neither is allowed to stand in for the other.
     public let cloudMessages: CreditMessageRange?
     public let hasCredits: Bool
+    /// A promotional grant was present in this payload. Presence only — the
+    /// object's shape is unverified. Used to notice when such a grant ends,
+    /// which drops the balance without any of it having been spent.
+    public let hasPromo: Bool
     /// Credits are unmetered — a consumption bar would be meaningless.
     public let isUnlimited: Bool
     public let overageLimitReached: Bool
@@ -211,6 +215,7 @@ public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
                 localMessages: CreditMessageRange? = nil,
                 cloudMessages: CreditMessageRange? = nil,
                 hasCredits: Bool = false,
+                hasPromo: Bool = false,
                 isUnlimited: Bool = false,
                 overageLimitReached: Bool = false,
                 isFundingRequests: Bool = false,
@@ -220,6 +225,7 @@ public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
         self.localMessages = localMessages
         self.cloudMessages = cloudMessages
         self.hasCredits = hasCredits
+        self.hasPromo = hasPromo
         self.isUnlimited = isUnlimited
         self.overageLimitReached = overageLimitReached
         self.isFundingRequests = isFundingRequests
@@ -233,6 +239,7 @@ public struct OpenAICreditsInfo: Sendable, Equatable, Codable {
                           localMessages: localMessages,
                           cloudMessages: cloudMessages,
                           hasCredits: hasCredits,
+                          hasPromo: hasPromo,
                           isUnlimited: isUnlimited,
                           overageLimitReached: overageLimitReached,
                           isFundingRequests: isFundingRequests,

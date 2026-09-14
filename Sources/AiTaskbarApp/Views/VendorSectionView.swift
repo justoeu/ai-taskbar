@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AiTaskbarCore
+import AiTaskbarProviders
 
 public struct VendorSectionView: View {
     @ObservedObject var vm: VendorViewModel
@@ -476,6 +477,14 @@ public struct VendorSectionView: View {
         }
     }
 
+    /// Drops the credits baseline on the provider that owns it, then refreshes
+    /// so the bar re-seeds from the current balance immediately.
+    private func recalibrateCredits() {
+        guard let provider = vm.provider as? OpenAIProvider else { return }
+        provider.recalibrateCreditBaseline()
+        vm.refresh(forceRefresh: true)
+    }
+
     @ViewBuilder
     private func extras(for snap: VendorSnapshot) -> some View {
         switch snap {
@@ -486,7 +495,8 @@ public struct VendorSectionView: View {
         case .openai(let s):
             OpenAIResetControls(vm: vm, reset: vm.openAIReset)
             if let credits = s.credits, credits.isWorthShowing {
-                OpenAICreditsView(credits: credits, thresholds: thresholds)
+                OpenAICreditsView(credits: credits, thresholds: thresholds,
+                                  onRecalibrate: recalibrateCredits)
             }
         case .openrouter(let s):
             if let models = s.topModels, !models.isEmpty {

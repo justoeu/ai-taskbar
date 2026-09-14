@@ -14,10 +14,21 @@ public struct OpenAIUsageResponse: Decodable {
     public let code_review_rate_limit: OpenAIRateLimit?
     public let credits: OpenAICredits?
     public let rate_limit_reset_credits: OpenAIResetCreditsSummary?
+    /// Decoded as an opaque value on purpose. Only its PRESENCE is used — a
+    /// promo object that disappears marks the end of a promotional grant. Its
+    /// inner shape has never been seen populated on a real account, so nothing
+    /// reads inside it until a verbatim fixture exists.
+    public let promo: JSONValue?
 
     enum CodingKeys: String, CodingKey {
         case user_id, account_id, email, plan_type, rate_limit,
-             code_review_rate_limit, credits, rate_limit_reset_credits
+             code_review_rate_limit, credits, rate_limit_reset_credits, promo
+    }
+
+    /// True when the payload carried a promo object with actual content.
+    public var hasPromo: Bool {
+        guard let promo else { return false }
+        return promo != .null
     }
 }
 
@@ -164,6 +175,7 @@ extension OpenAIUsageResponse {
                 localMessages: CreditMessageRange(wire: c.approx_local_messages),
                 cloudMessages: CreditMessageRange(wire: c.approx_cloud_messages),
                 hasCredits: hasCredits,
+                hasPromo: hasPromo,
                 isUnlimited: c.unlimited ?? false,
                 overageLimitReached: overage,
                 isFundingRequests: planSpent && hasCredits && !overage,

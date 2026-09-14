@@ -377,8 +377,19 @@ that came out of fixing that:
   A first sighting draws NO bar: the peak equals the balance, so it carries no
   information, and a green 0% would tell a user who had already spent 90% that
   they had spent nothing. Do not invent a denominator from a hard-coded plan
-  tier. Known limitation: the peak only rises, so an expired promo grant
-  replaced by a smaller purchase over-reports until the next bigger top-up.
+  tier.
+- **A falling balance is never guessed at.** Consumption and an expiring grant
+  look identical in the number, so the peak drops only on a signal that
+  actually exists in the payload: `has_credits` false → true (credits came
+  back), or a `promo` object present → absent (a promotional grant ended).
+  `CreditBaselineMath.decide` owns that rule and is pinned by tests including
+  the "50k promo expires, 5k purchased remains" case. Do NOT add a
+  drop-size heuristic — it would mistake a heavy usage day for an expiry.
+  Only the PRESENCE of `promo` is read; its inner shape has never been observed
+  populated, so do not decode fields inside it without a verbatim fixture.
+  The residual case (a promo shrinking while credits remain) is covered by the
+  manual `recalibrateCreditBaseline()`, surfaced as a context-menu item on the
+  credits row — not by widening the heuristic.
 - **No denominator, no bar.** `consumedPercent` returns nil for an unmetered
   account, a missing baseline, or a non-finite balance, so the UI shows the
   plain number. Never let NaN reach `ProgressView`.

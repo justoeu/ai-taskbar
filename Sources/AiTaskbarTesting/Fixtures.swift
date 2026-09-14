@@ -123,6 +123,25 @@ public enum Fixtures {
     }
     """#
 
+    /// Same account while a promotional grant is still active. Only the
+    /// PRESENCE of `promo` is consumed — its inner shape has never been
+    /// observed populated, so this fixture keeps it deliberately opaque.
+    public static let openaiCreditsWithPromo200 = #"""
+    {
+      "plan_type": "pro",
+      "promo": { "kind": "opaque-unverified-shape" },
+      "rate_limit": { "allowed": true, "limit_reached": false,
+                      "primary_window": { "used_percent": 10.0,
+                                          "limit_window_seconds": 18000 } },
+      "credits": {
+        "balance": "50000.0",
+        "has_credits": true,
+        "unlimited": false,
+        "overage_limit_reached": false
+      }
+    }
+    """#
+
     /// Unmetered credits: no bar is meaningful, so none is drawn.
     public static let openaiCreditsUnlimited200 = #"""
     {
