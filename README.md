@@ -188,6 +188,42 @@ can still increase `[ui] refresh_interval_seconds` from `300` to `900` or
 no polling quota for it, so the app cannot calculate an exact retry time unless
 the response supplies one.
 
+### OpenAI / Codex — credits are a quantity, not money
+
+Codex reports paid usage credits as a bare decimal with **no currency symbol**:
+the wire literally carries `"balance": "4890.3162520000"`. Earlier builds parsed
+it with a `parseDollar` helper, stored it as `creditsUSD` and rendered
+`Credits: $4890.32`, inventing a `$` the API never sent. Nothing in the app
+formats credits as currency any more; the card shows a locale-formatted
+quantity.
+
+**Progress bar.** The payload reports only the *remaining* balance — there is
+no granted total anywhere in it (`spend_control.individual_limit` and `promo`
+are null on real accounts), so a percentage needs a denominator the app derives
+itself: the highest balance it has ever observed, persisted per vendor in
+`~/Library/Application Support/ai-taskbar/credits/<vendor>.json`. A balance
+*above* that high-water mark can only be a top-up, which re-baselines the bar to
+0%. The honest limitation: on the very first observation the bar reads 0%,
+because nothing reveals what was spent before the app started watching; it
+becomes exact after the next top-up. Unmetered accounts (`unlimited: true`) get
+no bar at all, and a missing or garbled balance shows the plain number rather
+than a fabricated 0%.
+
+The credits bar is deliberately **not** folded into the menu-bar percentage.
+That number tracks plan windows which reset on a clock; credits drain on a
+different axis against a locally-derived denominator, and mixing them would make
+the menu bar read 80% because of credits while the plan sits at 10%.
+
+**Credit-funded messages.** `approx_local_messages` and `approx_cloud_messages`
+live *inside* the `credits` object, so both are estimates of what the remaining
+credits still buy. They mean different things — the local Codex CLI versus cloud
+tasks — and both are now shown, labeled as credit-funded. The old code collapsed
+them into one English sentence built inside the provider (which is why a
+Portuguese card showed `local msgs left`) and silently preferred whichever came
+first. When the plan window is spent (`allowed: false`) and credits are covering
+requests, the card says so instead of showing a bare red 100% bar that reads like
+a block.
+
 ### OpenAI / Codex — earned rate-limit resets
 
 When a current, healthy usage snapshot reports an active window **above 90%**

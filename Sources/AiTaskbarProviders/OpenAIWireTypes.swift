@@ -42,6 +42,10 @@ public struct OpenAIResetCreditsSummary: Decodable {
 public struct OpenAIRateLimit: Decodable {
     public let primary_window: OpenAIWindow?
     public let secondary_window: OpenAIWindow?
+    /// False once the plan window is spent — the account keeps working only
+    /// if credits cover it. Absent on older payloads.
+    public let allowed: Bool?
+    public let limit_reached: Bool?
 }
 
 public struct OpenAIWindow: Decodable {
@@ -64,45 +68,62 @@ public struct OpenAIWindow: Decodable {
     }
 }
 
+/// Codex credit balance.
+///
+/// **The balance is a quantity, not money.** The real payload carries
+/// `"balance": "4890.3162520000"` — a bare decimal string, no currency
+/// symbol, ten decimal places. The previous decoder ran it through a
+/// `parseDollar` helper and, on the numeric branches, *built* a
+/// `"$%.2f"` string, fabricating a currency the API never sent. Parsing stays
+/// tolerant of a stray symbol or thousands separator, but this type never
+/// adds one.
 public struct OpenAICredits: Decodable {
-    /// API returns either a formatted string ("$5.00") or a raw number.
-    public let balance_string: String?
+    /// The balance as the wire sent it when it arrived as a string; for the
+    /// numeric forms, the number rendered back plainly. Either way it never
+    /// carries a currency symbol this app invented. Diagnostics only.
+    public let balance_raw: String?
     public let balance_number: Double?
     public let has_credits: Bool?
     public let unlimited: Bool?
+    public let overage_limit_reached: Bool?
     public let approx_local_messages: [Int]?
     public let approx_cloud_messages: [Int]?
 
     enum CodingKeys: String, CodingKey {
-        case balance, has_credits, unlimited,
+        case balance, has_credits, unlimited, overage_limit_reached,
              approx_local_messages, approx_cloud_messages
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         if let s = try? c.decodeIfPresent(String.self, forKey: .balance) {
-            balance_string = s
-            balance_number = Self.parseDollar(s)
+            balance_raw = s
+            balance_number = Self.parseDecimal(s)
         } else if let d = try? c.decodeIfPresent(Double.self, forKey: .balance) {
             balance_number = d
-            balance_string = String(format: "$%.2f", d)
+            balance_raw = String(d)
         } else if let i = try? c.decodeIfPresent(Int64.self, forKey: .balance) {
             balance_number = Double(i)
-            balance_string = String(format: "$%d", i)
+            balance_raw = String(i)
         } else {
-            balance_string = nil
+            balance_raw = nil
             balance_number = nil
         }
         has_credits = try c.decodeIfPresent(Bool.self, forKey: .has_credits)
         unlimited = try c.decodeIfPresent(Bool.self, forKey: .unlimited)
+        overage_limit_reached = try c.decodeIfPresent(Bool.self, forKey: .overage_limit_reached)
         approx_local_messages = try c.decodeIfPresent([Int].self, forKey: .approx_local_messages)
         approx_cloud_messages = try c.decodeIfPresent([Int].self, forKey: .approx_cloud_messages)
     }
 
-    private static let dollarStrip = CharacterSet(charactersIn: "$ ,")
+    /// Symbols and separators dropped before parsing. Commas are thousands
+    /// separators on this wire (the decimal point is always `.`), so removing
+    /// them everywhere — not just at the ends — is safe here.
+    private static let strippable = CharacterSet(charactersIn: "$€£¥ \u{00a0},_")
 
-    private static func parseDollar(_ s: String) -> Double? {
-        Double(s.trimmingCharacters(in: dollarStrip))
+    private static func parseDecimal(_ s: String) -> Double? {
+        let kept = s.unicodeScalars.filter { !strippable.contains($0) }
+        return Double(String(String.UnicodeScalarView(kept)))
     }
 }
 
@@ -119,19 +140,39 @@ extension OpenAIUsageResponse {
                                detail: nil)
         }
 
-        var msgRange: String?
-        if let local = credits?.approx_local_messages, local.count >= 2 {
-            msgRange = "≈ \(local[0])–\(local[1]) local msgs left"
-        } else if let cloud = credits?.approx_cloud_messages, cloud.count >= 2 {
-            msgRange = "≈ \(cloud[0])–\(cloud[1]) cloud msgs left"
+        // Structured, not a pre-rendered sentence: the old code built
+        // "≈ 5–10 local msgs left" here, in English, inside Providers — which
+        // is why a pt-BR card showed an English line. Formatting belongs to
+        // the localized view layer. Both ranges are carried: local (Codex CLI)
+        // and cloud (cloud tasks) are reported together and mean different
+        // things, so neither substitutes for the other.
+        let creditsInfo: OpenAICreditsInfo? = credits.flatMap { c -> OpenAICreditsInfo? in
+            guard let balance = c.balance_number else { return nil }
+            let hasCredits = c.has_credits ?? false
+            let overage = c.overage_limit_reached ?? false
+            // `allowed == false` / `limit_reached == true` mean the plan
+            // window is spent; with credits still available and no overage
+            // ceiling hit, every further request is credit-funded.
+            let planSpent = rate_limit?.limit_reached == true || rate_limit?.allowed == false
+            return OpenAICreditsInfo(
+                balance: balance,
+                // Denominator is resolved by the provider from the persisted
+                // baseline; the wire carries no granted total.
+                peakBalance: nil,
+                localMessages: CreditMessageRange(wire: c.approx_local_messages),
+                cloudMessages: CreditMessageRange(wire: c.approx_cloud_messages),
+                hasCredits: hasCredits,
+                isUnlimited: c.unlimited ?? false,
+                overageLimitReached: overage,
+                isFundingRequests: planSpent && hasCredits && !overage
+            )
         }
 
         return OpenAISnapshot(
             planLabel: planLabel ?? plan_type.map { "ChatGPT \($0.capitalized)" },
             primary: window(rate_limit?.primary_window, kind: .primary),
             secondary: window(rate_limit?.secondary_window, kind: .secondary),
-            creditsUSD: credits?.balance_number,
-            messageCountRange: msgRange,
+            credits: creditsInfo,
             availableResetCount: rate_limit_reset_credits?.available_count
         )
     }

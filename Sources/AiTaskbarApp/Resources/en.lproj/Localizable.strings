@@ -68,7 +68,6 @@
 "weekly_cost_unavailable" = "7d: price unavailable";
 "price_unavailable_short" = "price unavailable";
 "extra_usage_fmt" = "Extra usage: $%.2f";
-"credits_fmt" = "Credits: $%.2f";
 "balance_fmt" = "Balance: $%.2f";
 "voucher_fmt" = "Voucher: $%.2f";
 "cash_fmt" = "Cash: $%.2f";
@@ -278,3 +277,14 @@
 "reset_failed" = "Could not start the reset. Check the Codex connection and try again.";
 "reset_submission_uncertain" = "Could not confirm the result. Retry this same attempt; its key is preserved across app restarts.";
 "reset_attempt_in_progress" = "Another reset attempt is pending or running. Try again to recover that attempt.";
+
+// Codex credits. The wire value is a QUANTITY (no currency symbol), so no
+// string here may introduce one.
+"credits_label" = "Credits";
+"credits_balance_fmt" = "Credits: %@";
+"credits_remaining_fmt" = "%@ of %@ left";
+"credits_unlimited" = "Unlimited credits";
+"credits_local_msgs_fmt" = "≈ %d–%d local messages on credits";
+"credits_cloud_msgs_fmt" = "≈ %d–%d cloud messages on credits";
+"credits_funding_now" = "Plan window spent — running on credits";
+"credits_overage_reached" = "Overage limit reached — requests are blocked";

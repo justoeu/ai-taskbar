@@ -65,8 +65,9 @@ struct GoldenSnapshotTests {
         #expect(Int((snap.primary?.utilizationPercent ?? 0).rounded()) == 33)
         #expect(snap.secondary?.label == "Weekly (7d)")
         #expect(Int((snap.secondary?.utilizationPercent ?? 0).rounded()) == 5)
-        #expect(snap.creditsUSD == 4.20)
-        #expect(snap.messageCountRange == "≈ 5–10 local msgs left")
+        #expect(snap.credits?.balance == 4.20)
+        #expect(snap.credits?.localMessages == CreditMessageRange(low: 5, high: 10))
+        expectTrue(snap.credits?.cloudMessages == nil)
         expectTrue(snap.availableResetCount == nil)
     }
 

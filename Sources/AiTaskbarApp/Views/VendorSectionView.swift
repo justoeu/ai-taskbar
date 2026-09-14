@@ -478,16 +478,8 @@ public struct VendorSectionView: View {
             EmptyView()
         case .openai(let s):
             OpenAIResetControls(vm: vm, reset: vm.openAIReset)
-            if let credits = s.creditsUSD {
-                Label(L10n.localizedString("credits_fmt", credits),
-                      systemImage: "dollarsign.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            if let range = s.messageCountRange {
-                Label(range, systemImage: "message")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            if let credits = s.credits {
+                OpenAICreditsView(credits: credits, thresholds: thresholds)
             }
         case .openrouter(let s):
             if let models = s.topModels, !models.isEmpty {
