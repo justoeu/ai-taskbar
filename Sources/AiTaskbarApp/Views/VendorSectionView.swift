@@ -559,11 +559,25 @@ public struct VendorSectionView: View {
                 .padding(.leading, 2)
             }
         case .gemini(let s):
-            if let count = s.modelCount {
-                Label("\(count) models available",
-                      systemImage: "sparkles")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                if let count = s.modelCount, !s.isAntigravityActive {
+                    Label("\(count) models available",
+                          systemImage: "sparkles")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let disclaimer = s.disclaimer {
+                    HStack(alignment: .top, spacing: 5) {
+                        Image(systemName: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(disclaimer)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 2)
+                }
             }
         case .kimi(let s):
             VStack(alignment: .leading, spacing: 2) {
@@ -620,6 +634,18 @@ public struct VendorSectionView: View {
                           systemImage: "creditcard")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                }
+                if let disclaimer = s.disclaimer {
+                    HStack(alignment: .top, spacing: 5) {
+                        Image(systemName: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(disclaimer)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 2)
                 }
             }
         }

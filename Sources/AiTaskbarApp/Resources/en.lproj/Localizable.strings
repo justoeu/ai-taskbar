@@ -167,6 +167,11 @@
 "settings_xai_management_key_help" = "xAI Management API key from console.x.ai → Settings → Management Keys. This is NOT the inference API key used with api.x.ai. Stored in config.toml with 0600 perms.";
 "settings_xai_management_key_env" = "Management key env var";
 "settings_xai_management_key_env_help" = "Name of the environment variable that holds the management key (default XAI_MANAGEMENT_KEY). GUI apps often miss shell env — prefer the inline key above.";
+"settings_grok_cli_disclaimer" = "To monitor Grok with quota percentage and reset countdown, Grok CLI must be installed and authenticated (grok login). Corporate Management API keys remain supported in Advanced.";
+"settings_grok_auth_path" = "Grok auth.json path";
+"settings_grok_auth_path_help" = "Path to Grok CLI's auth.json credentials file (default: ~/.grok/auth.json).";
+"settings_xai_advanced" = "xAI Management API Settings (Advanced)";
+"settings_xai_advanced_help" = "Settings for checking dollar balance via console.x.ai (optional).";
 "settings_team_id" = "Team ID";
 "settings_team_id_help" = "Team UUID from console.x.ai → Team settings (https://console.x.ai/team/default/settings/team). Required for billing endpoints. You can also GET management-api.x.ai/auth/management-keys/validation with the key and read scopeId.";
 "settings_plan_tier" = "Plan tier";
@@ -290,3 +295,17 @@
 "credits_recalibrate" = "Recalibrate credits bar";
 "credits_exhausted" = "Credits used up";
 "credits_overage_reached" = "Overage limit reached — requests are blocked";
+
+// Gemini / Antigravity
+"gemini_antigravity_disclaimer" = "To monitor Gemini quotas, Antigravity must be installed and authenticated.";
+"gemini_antigravity_settings_hint" = "Gemini quota monitoring requires Antigravity installed and authenticated (`agy`). Without it, only API Key status can be verified.";
+"gemini_antigravity_not_installed" = "Antigravity not found — install and authenticate Antigravity (`agy`) to monitor Gemini.";
+"gemini_antigravity_not_logged_in" = "Antigravity not authenticated — run 'agy' in Terminal to log in.";
+"settings_gemini_agy_path" = "Antigravity agy executable path";
+"settings_gemini_agy_path_help" = "Absolute path to the Google Antigravity 'agy' executable. Leave blank for auto-discovery in standard locations (~/.local/bin/agy, Homebrew, etc.).";
+"settings_gemini_advanced" = "Google AI Studio (API Key Fallback)";
+"settings_gemini_advanced_help" = "Optional settings to verify Google AI Studio API key status when Antigravity is not present (does not provide usage quotas).";
+
+// Grok / xAI
+"xai_grok_disclaimer" = "To monitor Grok, Grok must be installed and authenticated.";
+

@@ -302,6 +302,68 @@ public enum Fixtures {
     }
     """#
 
+    /// Grok CLI billing credits response — `cli-chat-proxy.grok.com/v1/billing?format=credits`
+    public static let grokBillingCredits200 = #"""
+    {
+      "config": {
+        "currentPeriod": {
+          "type": "USAGE_PERIOD_TYPE_WEEKLY",
+          "start": "2026-09-18T18:50:18.983876+00:00",
+          "end": "2026-09-25T18:50:18.983876+00:00"
+        },
+        "creditUsagePercent": 3.0,
+        "onDemandCap": {
+          "val": 0
+        },
+        "onDemandUsed": {
+          "val": 0
+        },
+        "productUsage": [
+          {
+            "product": "GrokBuild",
+            "usagePercent": 3.0
+          }
+        ],
+        "isUnifiedBillingUser": true,
+        "prepaidBalance": {
+          "val": 4000
+        },
+        "topUpMethod": "TOP_UP_METHOD_SAVED_PAYMENT_METHOD",
+        "billingPeriodStart": "2026-09-18T18:50:18.983876+00:00",
+        "billingPeriodEnd": "2026-09-25T18:50:18.983876+00:00"
+      }
+    }
+    """#
+
+    /// Grok CLI settings response — `cli-chat-proxy.grok.com/v1/settings`
+    public static let grokSettings200 = #"""
+    {
+      "subscription_tier_display": "SuperGrok Heavy"
+    }
+    """#
+
+    /// Grok CLI auth.json fixture — `~/.grok/auth.json`
+    public static let grokAuthJSON = #"""
+    {
+      "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828": {
+        "key": "test-grok-token-12345",
+        "auth_mode": "oidc",
+        "create_time": "2026-09-18T22:41:03.836710Z",
+        "user_id": "b1a00492-073a-47ea-816f-4c329264a828",
+        "email": "user@example.com",
+        "first_name": "Test",
+        "last_name": "User",
+        "principal_type": "user",
+        "principal_id": "test-principal",
+        "team_id": "test-team",
+        "refresh_token": "test-refresh-token",
+        "expires_at": "2026-09-25T07:41:03.836710Z",
+        "oidc_issuer": "https://auth.x.ai",
+        "oidc_client_id": "test-client-id"
+      }
+    }
+    """#
+
     /// Gemini `models.list` payload — heartbeat used as a stand-in for a
     /// quota signal (Google AI doesn't expose one publicly). Three sample
     /// models so the snapshot's modelCount has something to count.
@@ -331,6 +393,62 @@ public enum Fixtures {
     /// valid 200, just an API key without access).
     public static let geminiModelsEmpty200 = #"""
     { "models": [] }
+    """#
+
+    /// Antigravity CLI `/usage` JSON fixture reporting dynamic 5-hour and
+    /// weekly limits for Gemini Models and third-party models.
+    public static let antigravityUsage200 = #"""
+    {
+      "status": "SUCCESS",
+      "command": {
+        "name": "usage",
+        "data": {
+          "description": "Within each group, models share a weekly limit and a 5-hour limit.",
+          "groups": [
+            {
+              "name": "Gemini Models",
+              "description": "Models within this group: Gemini Flash, Gemini Pro",
+              "buckets": [
+                {
+                  "id": "gemini-5h",
+                  "name": "Five Hour Limit Remaining",
+                  "window": "5h",
+                  "remaining_fraction": 0.8365595936775208,
+                  "reset_time": "2026-09-19T01:49:06Z"
+                },
+                {
+                  "id": "gemini-weekly",
+                  "name": "Weekly Limit Remaining",
+                  "window": "weekly",
+                  "remaining_fraction": 0.9807265996932983,
+                  "reset_time": "2026-09-25T15:49:06Z"
+                }
+              ]
+            },
+            {
+              "name": "Claude and GPT models",
+              "description": "Models within this group: Claude Opus, Claude Sonnet, GPT-OSS",
+              "buckets": [
+                {
+                  "id": "3p-5h",
+                  "name": "Five Hour Limit Remaining",
+                  "window": "5h",
+                  "remaining_fraction": 1.0,
+                  "reset_time": "2026-09-19T04:52:55Z"
+                },
+                {
+                  "id": "3p-weekly",
+                  "name": "Weekly Limit Remaining",
+                  "window": "weekly",
+                  "remaining_fraction": 1.0,
+                  "reset_time": "2026-09-25T23:52:55Z"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
     """#
 
     /// Synthetic OAuth refresh response.

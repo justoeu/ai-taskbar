@@ -168,6 +168,41 @@ struct GoldenSnapshotTests {
         let snap = parsed.toSnapshot()
         #expect(snap.modelCount == 0)
         #expect(snap.status?.detail == "API key valid (no models visible)")
+        #expect(snap.disclaimer != nil)
+    }
+
+    @Test("Gemini golden — Antigravity usage JSON produces 5h and weekly quota windows")
+    func gemini_antigravity_golden() throws {
+        let parsed = try JSONDecoder().decode(
+            AntigravityUsageResponse.self,
+            from: Fixtures.data(Fixtures.antigravityUsage200))
+        let snap = parsed.toSnapshot()
+
+        #expect(snap.planLabel == "Antigravity")
+        #expect(snap.isAntigravityActive)
+        #expect(snap.disclaimer == "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado.")
+
+        #expect(snap.fiveHour?.label == "Gemini (5h)")
+        let fiveHourUtil = snap.fiveHour?.utilizationPercent ?? 0
+        #expect(abs(fiveHourUtil - 16.344) < 0.01)
+        #expect(snap.fiveHour?.detail == "84% remaining")
+
+        #expect(snap.weekly?.label == "Gemini (Weekly)")
+        let weeklyUtil = snap.weekly?.utilizationPercent ?? 0
+        #expect(abs(weeklyUtil - 1.927) < 0.01)
+        #expect(snap.weekly?.detail == "98% remaining")
+
+        #expect(snap.thirdParty5Hour?.label == "Claude & GPT (5h)")
+        #expect(snap.thirdParty5Hour?.utilizationPercent == 0)
+        #expect(snap.thirdParty5Hour?.detail == "100% remaining")
+
+        #expect(snap.thirdPartyWeekly?.label == "Claude & GPT (Weekly)")
+        #expect(snap.thirdPartyWeekly?.utilizationPercent == 0)
+        #expect(snap.thirdPartyWeekly?.detail == "100% remaining")
+
+        let windows = VendorSnapshot.gemini(snap).windows
+        #expect(windows.count == 4)
+        #expect(abs(VendorSnapshot.gemini(snap).maxUtilization - 16.344) < 0.01)
     }
 
     // MARK: - DeepSeek

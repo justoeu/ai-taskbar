@@ -147,21 +147,195 @@ public struct XAIBillingCycle: Decodable, Encodable, Sendable, Equatable {
     }
 }
 
+// MARK: - Grok CLI wire types (cli-chat-proxy.grok.com)
+
+public struct GrokBillingResponse: Decodable, Encodable, Sendable, Equatable {
+    public let config: GrokBillingConfig?
+
+    enum CodingKeys: String, CodingKey {
+        case config
+    }
+
+    public init(config: GrokBillingConfig?) {
+        self.config = config
+    }
+}
+
+public struct GrokBillingConfig: Decodable, Encodable, Sendable, Equatable {
+    public let currentPeriod: GrokPeriod?
+    public let creditUsagePercent: Double?
+    public let onDemandCap: XAICentsValue?
+    public let onDemandUsed: XAICentsValue?
+    public let productUsage: [GrokProductUsage]?
+    public let isUnifiedBillingUser: Bool?
+    public let prepaidBalance: XAICentsValue?
+    public let billingPeriodStart: String?
+    public let billingPeriodEnd: String?
+
+    enum CodingKeys: String, CodingKey {
+        case currentPeriod
+        case creditUsagePercent
+        case onDemandCap
+        case onDemandUsed
+        case productUsage
+        case isUnifiedBillingUser
+        case prepaidBalance
+        case billingPeriodStart
+        case billingPeriodEnd
+    }
+
+    public init(currentPeriod: GrokPeriod? = nil,
+                creditUsagePercent: Double? = nil,
+                onDemandCap: XAICentsValue? = nil,
+                onDemandUsed: XAICentsValue? = nil,
+                productUsage: [GrokProductUsage]? = nil,
+                isUnifiedBillingUser: Bool? = nil,
+                prepaidBalance: XAICentsValue? = nil,
+                billingPeriodStart: String? = nil,
+                billingPeriodEnd: String? = nil) {
+        self.currentPeriod = currentPeriod
+        self.creditUsagePercent = creditUsagePercent
+        self.onDemandCap = onDemandCap
+        self.onDemandUsed = onDemandUsed
+        self.productUsage = productUsage
+        self.isUnifiedBillingUser = isUnifiedBillingUser
+        self.prepaidBalance = prepaidBalance
+        self.billingPeriodStart = billingPeriodStart
+        self.billingPeriodEnd = billingPeriodEnd
+    }
+}
+
+public struct GrokPeriod: Decodable, Encodable, Sendable, Equatable {
+    public let type: String?
+    public let start: String?
+    public let end: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type, start, end
+    }
+
+    public init(type: String? = nil, start: String? = nil, end: String? = nil) {
+        self.type = type
+        self.start = start
+        self.end = end
+    }
+}
+
+public struct GrokProductUsage: Decodable, Encodable, Sendable, Equatable {
+    public let product: String?
+    public let usagePercent: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case product, usagePercent
+    }
+
+    public init(product: String? = nil, usagePercent: Double? = nil) {
+        self.product = product
+        self.usagePercent = usagePercent
+    }
+}
+
+public struct GrokSettingsResponse: Decodable, Encodable, Sendable, Equatable {
+    public let subscriptionTierDisplay: String?
+
+    enum CodingKeys: String, CodingKey {
+        case subscriptionTierDisplay = "subscription_tier_display"
+    }
+
+    public init(subscriptionTierDisplay: String? = nil) {
+        self.subscriptionTierDisplay = subscriptionTierDisplay
+    }
+}
+
+extension GrokBillingResponse {
+    public static let defaultDisclaimer = "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado."
+
+    public func toSnapshot(planLabel: String? = nil, disclaimer: String? = nil) -> XAISnapshot {
+        guard let cfg = config else {
+            return XAISnapshot(
+                planLabel: planLabel ?? "SuperGrok",
+                disclaimer: disclaimer ?? Self.defaultDisclaimer
+            )
+        }
+
+        let util = cfg.creditUsagePercent ?? 0.0
+
+        let resetsAt: Date? = {
+            guard let raw = cfg.currentPeriod?.end ?? cfg.billingPeriodEnd else { return nil }
+            return ISO8601Parsing.parse(raw)
+        }()
+
+        let weeklyWindow = UsageWindow(
+            label: "Weekly",
+            utilizationPercent: util,
+            resetsAt: resetsAt,
+            detail: String(format: "%.0f%% used", util)
+        )
+
+        let prepaidUSD = cfg.prepaidBalance?.usd
+        let balanceWindow: UsageWindow? = {
+            guard let usd = prepaidUSD, usd > 0 else { return nil }
+            return UsageWindow(
+                label: "Balance",
+                utilizationPercent: 0,
+                resetsAt: nil,
+                detail: String(format: "$%.2f available", usd)
+            )
+        }()
+
+        return XAISnapshot(
+            planLabel: planLabel ?? "SuperGrok",
+            weekly: weeklyWindow,
+            balance: balanceWindow,
+            monthly: nil,
+            prepaidUSD: prepaidUSD,
+            spentUSD: nil,
+            spendingLimitUSD: nil,
+            prepaidUsedUSD: nil,
+            billingCycleLabel: nil,
+            disclaimer: disclaimer ?? Self.defaultDisclaimer
+        )
+    }
+}
+
 // MARK: - Cached multi-endpoint payload
 
 public struct XAICachedPayload: Codable, Sendable, Equatable {
     public let prepaid: XAIPrepaidBalanceResponse?
     public let preview: XAIInvoicePreviewResponse?
+    public let grokBilling: GrokBillingResponse?
+    public let grokSettings: GrokSettingsResponse?
 
-    public init(prepaid: XAIPrepaidBalanceResponse?,
-                preview: XAIInvoicePreviewResponse?) {
+    public init(prepaid: XAIPrepaidBalanceResponse? = nil,
+                preview: XAIInvoicePreviewResponse? = nil,
+                grokBilling: GrokBillingResponse? = nil,
+                grokSettings: GrokSettingsResponse? = nil) {
         self.prepaid = prepaid
         self.preview = preview
+        self.grokBilling = grokBilling
+        self.grokSettings = grokSettings
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case prepaid, preview, grokBilling, grokSettings
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        prepaid = try c.decodeIfPresent(XAIPrepaidBalanceResponse.self, forKey: .prepaid)
+        preview = try c.decodeIfPresent(XAIInvoicePreviewResponse.self, forKey: .preview)
+        grokBilling = try c.decodeIfPresent(GrokBillingResponse.self, forKey: .grokBilling)
+        grokSettings = try c.decodeIfPresent(GrokSettingsResponse.self, forKey: .grokSettings)
     }
 }
 
 extension XAICachedPayload {
     public func toSnapshot() -> XAISnapshot {
+        if let grok = grokBilling {
+            let label = grokSettings?.subscriptionTierDisplay ?? "SuperGrok"
+            return grok.toSnapshot(planLabel: label)
+        }
+
         // Prefer prepaid/balance total; fall back to invoice.prepaidCredits.
         let prepaidCents = prepaid?.total?.val
             ?? preview?.coreInvoice?.prepaidCredits?.val
@@ -212,13 +386,15 @@ extension XAICachedPayload {
 
         return XAISnapshot(
             planLabel: "xAI",
+            weekly: nil,
             balance: balanceWindow,
             monthly: monthlyWindow,
             prepaidUSD: prepaidUSD,
             spentUSD: spentUSD,
             spendingLimitUSD: limitUSD,
             prepaidUsedUSD: prepaidUsedUSD,
-            billingCycleLabel: cycleLabel
+            billingCycleLabel: cycleLabel,
+            disclaimer: GrokBillingResponse.defaultDisclaimer
         )
     }
 }

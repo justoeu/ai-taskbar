@@ -498,6 +498,10 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
     public var enabled: Bool = true
     public var apiKeyEnv: String = "GEMINI_API_KEY"
     public var apiKey: String?
+    /// Path to custom `agy` binary if not in standard locations (~/.local/bin/agy, /opt/homebrew/bin/agy).
+    public var agyPath: String?
+    /// Whether to prefer Antigravity for quota and limit monitoring when available (default true).
+    public var preferAntigravity: Bool = true
     /// Base URL — defaults to the Generative Language API host. Validated to
     /// prevent API-key exfil via attacker-controlled config: only `https://`
     /// and the official Google AI hosts are accepted; anything else falls
@@ -514,11 +518,15 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
     public init(enabled: Bool = true,
                 apiKeyEnv: String = "GEMINI_API_KEY",
                 apiKey: String? = nil,
-                baseURL: String = defaultBaseURL) {
+                baseURL: String = defaultBaseURL,
+                agyPath: String? = nil,
+                preferAntigravity: Bool = true) {
         self.enabled = enabled
         self.apiKeyEnv = apiKeyEnv
         self.apiKey = apiKey
         self.baseURL = Self.validate(baseURL) ?? Self.defaultBaseURL
+        self.agyPath = agyPath
+        self.preferAntigravity = preferAntigravity
     }
 
     public init(from decoder: Decoder) throws {
@@ -526,6 +534,8 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         apiKeyEnv = try c.decodeIfPresent(String.self, forKey: .apiKeyEnv) ?? "GEMINI_API_KEY"
         apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey)
+        agyPath = try c.decodeIfPresent(String.self, forKey: .agyPath)
+        preferAntigravity = try c.decodeIfPresent(Bool.self, forKey: .preferAntigravity) ?? true
         let raw = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? Self.defaultBaseURL
         if let validated = Self.validate(raw) {
             baseURL = validated
@@ -566,6 +576,8 @@ public struct GeminiConfig: Codable, Sendable, Equatable {
         case apiKeyEnv = "api_key_env"
         case apiKey = "api_key"
         case baseURL = "base_url"
+        case agyPath = "agy_path"
+        case preferAntigravity = "prefer_antigravity"
     }
 }
 
@@ -629,29 +641,47 @@ public struct DeepSeekConfig: Codable, Sendable, Equatable {
     }
 }
 
-/// xAI Management API config. Inference keys (`xai-...` on `api.x.ai`) cannot
-/// read billing; a separate **management key** from console.x.ai → Settings →
-/// Management Keys is required, plus the team UUID.
+/// xAI Management API and Grok CLI config.
+/// Grok CLI mode reads `~/.grok/auth.json` to query `cli-chat-proxy.grok.com` for weekly quota.
+/// Management mode requires a management key from console.x.ai → Settings → Management Keys + team UUID.
 public struct XAIConfig: Codable, Sendable, Equatable {
     public var enabled: Bool = true
+    public var preferGrokCLI: Bool = true
+    public var grokAuthPath: String?
+    public var grokBaseURL: String = defaultGrokBaseURL
     public var apiKeyEnv: String = "XAI_MANAGEMENT_KEY"
     public var apiKey: String?
     /// Team UUID from https://console.x.ai/team/default/settings/team
     public var teamId: String = ""
     /// Management API base — `https://management-api.x.ai`. Host-allowlisted.
-    public var baseURL: String = "https://management-api.x.ai"
+    public var baseURL: String = defaultBaseURL
 
     public static let allowedHosts: Set<String> = [
         "management-api.x.ai",
+        "cli-chat-proxy.grok.com",
     ]
     public static let defaultBaseURL = "https://management-api.x.ai"
+    public static let defaultGrokBaseURL = "https://cli-chat-proxy.grok.com"
+
+    public var grokAuthURL: URL {
+        if let p = grokAuthPath, !p.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return URL(fileURLWithPath: (p as NSString).expandingTildeInPath)
+        }
+        return Paths.defaultGrokAuth()
+    }
 
     public init(enabled: Bool = true,
+                preferGrokCLI: Bool = true,
+                grokAuthPath: String? = nil,
+                grokBaseURL: String = defaultGrokBaseURL,
                 apiKeyEnv: String = "XAI_MANAGEMENT_KEY",
                 apiKey: String? = nil,
                 teamId: String = "",
                 baseURL: String = defaultBaseURL) {
         self.enabled = enabled
+        self.preferGrokCLI = preferGrokCLI
+        self.grokAuthPath = grokAuthPath
+        self.grokBaseURL = Self.validate(grokBaseURL) ?? Self.defaultGrokBaseURL
         self.apiKeyEnv = apiKeyEnv
         self.apiKey = apiKey
         self.teamId = teamId
@@ -661,6 +691,15 @@ public struct XAIConfig: Codable, Sendable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        preferGrokCLI = try c.decodeIfPresent(Bool.self, forKey: .preferGrokCLI) ?? true
+        grokAuthPath = try c.decodeIfPresent(String.self, forKey: .grokAuthPath)
+        let rawGrok = try c.decodeIfPresent(String.self, forKey: .grokBaseURL) ?? Self.defaultGrokBaseURL
+        if let validated = Self.validate(rawGrok) {
+            grokBaseURL = validated
+        } else {
+            AppLog.config.warning("XAIConfig.grok_base_url \(rawGrok, privacy: .public) rejected — falling back to default")
+            grokBaseURL = Self.defaultGrokBaseURL
+        }
         apiKeyEnv = try c.decodeIfPresent(String.self, forKey: .apiKeyEnv) ?? "XAI_MANAGEMENT_KEY"
         apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey)
         teamId = try c.decodeIfPresent(String.self, forKey: .teamId) ?? ""
@@ -685,6 +724,9 @@ public struct XAIConfig: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case enabled
+        case preferGrokCLI = "prefer_grok_cli"
+        case grokAuthPath = "grok_auth_path"
+        case grokBaseURL = "grok_base_url"
         case apiKeyEnv = "api_key_env"
         case apiKey = "api_key"
         case teamId = "team_id"

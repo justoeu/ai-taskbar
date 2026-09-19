@@ -188,4 +188,294 @@ struct GeminiProviderTests {
         #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1alpha") != nil)
         #expect(GeminiConfig.validate("https://generativelanguage.googleapis.com/v1beta/models") != nil)
     }
+
+    // MARK: - Antigravity Integration Tests
+
+    @Test("preferAntigravity uses Antigravity executor when installed")
+    func antigravity_happy_path() async throws {
+        let mock = MockAntigravityExecutor(
+            installed: true,
+            data: Fixtures.data(Fixtures.antigravityUsage200)
+        )
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_GEMINI_AGY",
+            inlineKey: nil,
+            vendorName: "Gemini"
+        )
+        let provider = GeminiProvider(
+            credentials: creds,
+            cache: cache,
+            http: http,
+            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta")!,
+            antigravity: mock,
+            preferAntigravity: true
+        )
+        let outcome = try await provider.fetchUsage(forceRefresh: true)
+        guard case .gemini(let s) = outcome.snapshot else {
+            Issue.record("expected .gemini snapshot")
+            return
+        }
+        expectTrue(s.isAntigravityActive)
+        #expect(s.planLabel == "Antigravity")
+        #expect(s.disclaimer != nil)
+        #expect(s.fiveHour != nil)
+        #expect(s.weekly != nil)
+        #expect(s.thirdParty5Hour != nil)
+        #expect(s.thirdPartyWeekly != nil)
+        #expect(StubURLProtocol.captured.isEmpty)
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+    }
+
+    @Test("Antigravity unauthenticated error bubbles up as 401")
+    func antigravity_unauthenticated_error() async throws {
+        let mock = MockAntigravityExecutor(
+            installed: true,
+            error: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal.")
+        )
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_GEMINI_AGY_UNAUTH",
+            inlineKey: nil,
+            vendorName: "Gemini"
+        )
+        let provider = GeminiProvider(
+            credentials: creds,
+            cache: cache,
+            http: http,
+            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta")!,
+            antigravity: mock,
+            preferAntigravity: true
+        )
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected AppError.http(401)")
+        } catch let err as AppError {
+            expectTrue(err.isUnauthorized)
+        }
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+    }
+
+    @Test("Antigravity falls back to HTTP models heartbeat when not installed but API key is present")
+    func antigravity_fallback_when_not_installed() async throws {
+        StubURLProtocol.handler = { _ in
+            .init(data: Fixtures.data(Fixtures.geminiModels200))
+        }
+        let mock = MockAntigravityExecutor(installed: false)
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_GEMINI_FALLBACK",
+            inlineKey: "AIzaTestKey",
+            vendorName: "Gemini"
+        )
+        let provider = GeminiProvider(
+            credentials: creds,
+            cache: cache,
+            http: http,
+            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta")!,
+            antigravity: mock,
+            preferAntigravity: true
+        )
+        let outcome = try await provider.fetchUsage(forceRefresh: true)
+        guard case .gemini(let s) = outcome.snapshot else {
+            Issue.record("expected .gemini snapshot")
+            return
+        }
+        expectFalse(s.isAntigravityActive)
+        #expect(s.modelCount == 3)
+        #expect(s.disclaimer != nil)
+        #expect(StubURLProtocol.captured.count == 1)
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
+    }
+
+    @Test("Antigravity throws disclaimer error when not installed and no API key is set")
+    func antigravity_not_installed_no_api_key_throws_disclaimer() async throws {
+        let mock = MockAntigravityExecutor(installed: false)
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_GEMINI_NONE",
+            inlineKey: nil,
+            vendorName: "Gemini"
+        )
+        let provider = GeminiProvider(
+            credentials: creds,
+            cache: cache,
+            http: http,
+            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta")!,
+            antigravity: mock,
+            preferAntigravity: true
+        )
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected credentials error")
+        } catch let err as AppError {
+            if case .credentials(let msg) = err {
+                expectTrue(msg.contains("Antigravity instalado e autenticado"))
+            } else {
+                Issue.record("expected credentials, got \(err)")
+            }
+        }
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+    }
+
+    @Test("preferAntigravity = false skips Antigravity even if installed")
+    func prefer_antigravity_false_skips() async throws {
+        StubURLProtocol.handler = { _ in
+            .init(data: Fixtures.data(Fixtures.geminiModels200))
+        }
+        let mock = MockAntigravityExecutor(
+            installed: true,
+            data: Fixtures.data(Fixtures.antigravityUsage200)
+        )
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_GEMINI_NOPREFER",
+            inlineKey: "AIzaTestKey",
+            vendorName: "Gemini"
+        )
+        let provider = GeminiProvider(
+            credentials: creds,
+            cache: cache,
+            http: http,
+            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta")!,
+            antigravity: mock,
+            preferAntigravity: false
+        )
+        let outcome = try await provider.fetchUsage(forceRefresh: true)
+        guard case .gemini(let s) = outcome.snapshot else {
+            Issue.record("expected .gemini snapshot")
+            return
+        }
+        expectFalse(s.isAntigravityActive)
+        #expect(s.modelCount == 3)
+        #expect(StubURLProtocol.captured.count == 1)
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
+    }
+
+    // MARK: - ProcessAntigravityExecutor Tests
+
+    @Test("ProcessAntigravityExecutor resolves custom path and validates executable")
+    func process_executor_custom_path() throws {
+        let scriptDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-script-\(UUID().uuidString)")
+        try Paths.ensureDir(scriptDir)
+        let scriptPath = scriptDir.appendingPathComponent("fake_agy").path
+        let scriptContent = "#!/bin/sh\necho 'hello'\n"
+        try scriptContent.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
+
+        let customExec = ProcessAntigravityExecutor(customPath: scriptPath)
+        #expect(customExec.resolvedExecutableURL?.path == scriptPath)
+        expectTrue(customExec.isInstalled())
+
+        try? FileManager.default.removeItem(at: scriptDir)
+    }
+
+    @Test("ProcessAntigravityExecutor.fetchUsageJSON throws credentials when not installed")
+    func process_executor_not_installed_throws() async throws {
+        let exec = ProcessAntigravityExecutor(customPath: "/nonexistent/path/to/agy")
+        if !exec.isInstalled() {
+            do {
+                _ = try await exec.fetchUsageJSON()
+                Issue.record("expected credentials error")
+            } catch let err as AppError {
+                if case .credentials(let msg) = err {
+                    expectTrue(msg.contains("Antigravity instalado e autenticado"))
+                } else {
+                    Issue.record("expected credentials, got \(err)")
+                }
+            }
+        }
+    }
+
+    @Test("ProcessAntigravityExecutor executes fake script returning usage JSON")
+    func process_executor_runs_script() async throws {
+        let scriptDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-script-\(UUID().uuidString)")
+        try Paths.ensureDir(scriptDir)
+        let scriptPath = scriptDir.appendingPathComponent("agy_mock").path
+        let scriptContent = "#!/bin/sh\ncat << 'EOF'\n\(Fixtures.antigravityUsage200)\nEOF\n"
+        try scriptContent.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
+
+        let exec = ProcessAntigravityExecutor(customPath: scriptPath)
+        let data = try await exec.fetchUsageJSON()
+        let str = String(data: data, encoding: .utf8) ?? ""
+        expectTrue(str.contains("\"command\""))
+
+        try? FileManager.default.removeItem(at: scriptDir)
+    }
+
+    @Test("ProcessAntigravityExecutor maps unauthenticated exit to AppError.http(401)")
+    func process_executor_unauthenticated_exit() async throws {
+        let scriptDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-script-\(UUID().uuidString)")
+        try Paths.ensureDir(scriptDir)
+        let scriptPath = scriptDir.appendingPathComponent("agy_unauth").path
+        let scriptContent = "#!/bin/sh\necho 'Error: not logged in' >&2\nexit 1\n"
+        try scriptContent.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
+
+        let exec = ProcessAntigravityExecutor(customPath: scriptPath)
+        do {
+            _ = try await exec.fetchUsageJSON()
+            Issue.record("expected 401 error")
+        } catch let err as AppError {
+            expectTrue(err.isUnauthorized)
+        }
+
+        try? FileManager.default.removeItem(at: scriptDir)
+    }
+
+    @Test("ProcessAntigravityExecutor maps general failure exit to AppError.io")
+    func process_executor_general_failure() async throws {
+        let scriptDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-script-\(UUID().uuidString)")
+        try Paths.ensureDir(scriptDir)
+        let scriptPath = scriptDir.appendingPathComponent("agy_fail").path
+        let scriptContent = "#!/bin/sh\necho 'network failure' >&2\nexit 2\n"
+        try scriptContent.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
+
+        let exec = ProcessAntigravityExecutor(customPath: scriptPath)
+        do {
+            _ = try await exec.fetchUsageJSON()
+            Issue.record("expected AppError.io")
+        } catch let err as AppError {
+            if case .io(let msg) = err {
+                expectTrue(msg.contains("código 2"))
+            } else {
+                Issue.record("expected io error, got \(err)")
+            }
+        }
+
+        try? FileManager.default.removeItem(at: scriptDir)
+    }
+}
+
+private struct MockAntigravityExecutor: AntigravityExecuting, Sendable {
+    var installed: Bool = true
+    var data: Data? = Fixtures.data(Fixtures.antigravityUsage200)
+    var error: AppError? = nil
+
+    func isInstalled() -> Bool {
+        installed
+    }
+
+    func fetchUsageJSON() async throws -> Data {
+        if let error = error {
+            throw error
+        }
+        if let data = data {
+            return data
+        }
+        throw AppError.io("No mock data")
+    }
 }
