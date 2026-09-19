@@ -15,20 +15,27 @@ public final class GeminiProvider: UsageProvider {
     private let fetcher: CachedFetch
     private let http: HTTPClient
     private let baseURL: URL
+    private let antigravity: AntigravityExecuting
+    private let preferAntigravity: Bool
 
     public init(credentials: EnvOrConfigCredentialReader,
                 cache: DiskCache,
                 http: HTTPClient,
-                baseURL: URL) {
+                baseURL: URL,
+                antigravity: AntigravityExecuting = ProcessAntigravityExecutor(),
+                preferAntigravity: Bool = false) {
         self.credentials = credentials
         self.fetcher = CachedFetch(cache: cache)
         self.http = http
         self.baseURL = baseURL
+        self.antigravity = antigravity
+        self.preferAntigravity = preferAntigravity
     }
 
     public convenience init(config: GeminiConfig,
                             http: HTTPClient = .init(),
-                            cacheTTL: TimeInterval = 300) throws {
+                            cacheTTL: TimeInterval = 300,
+                            antigravity: AntigravityExecuting? = nil) throws {
         let cache = try DiskCache.defaultFor(.gemini, ttl: cacheTTL)
         // GeminiConfig.init(from:) already normalizes user input to the
         // default on parse failure, but we belt-and-suspenders here:
@@ -40,6 +47,7 @@ public final class GeminiProvider: UsageProvider {
             throw AppError.io(
                 "GeminiConfig.baseURL '\(config.baseURL)' is unparseable and the built-in default also failed")
         }
+        let exec = antigravity ?? ProcessAntigravityExecutor(customPath: config.agyPath)
         self.init(
             credentials: EnvOrConfigCredentialReader(
                 envVarName: config.apiKeyEnv,
@@ -48,7 +56,9 @@ public final class GeminiProvider: UsageProvider {
             ),
             cache: cache,
             http: http,
-            baseURL: baseURL
+            baseURL: baseURL,
+            antigravity: exec,
+            preferAntigravity: config.preferAntigravity
         )
     }
 
@@ -57,7 +67,23 @@ public final class GeminiProvider: UsageProvider {
             forceRefresh: forceRefresh,
             decode: decodeSnapshot,
             fetch: { [self] in
-                let apiKey = try credentials.read()
+                if preferAntigravity && antigravity.isInstalled() {
+                    return try await antigravity.fetchUsageJSON()
+                }
+
+                // If Antigravity is not installed or not preferred, attempt Google AI Studio heartbeat
+                let apiKey: String
+                do {
+                    apiKey = try credentials.read()
+                } catch {
+                    if preferAntigravity {
+                        throw AppError.credentials(
+                            "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado. (Instale o 'agy' ou defina GEMINI_API_KEY para verificar a API)."
+                        )
+                    }
+                    throw error
+                }
+
                 var req = URLRequest(url: baseURL.appendingPathComponent("models"))
                 req.timeoutInterval = 10
                 // Header form keeps the key out of URL/query logs. The query
@@ -71,6 +97,12 @@ public final class GeminiProvider: UsageProvider {
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
+        // Attempt decoding as Antigravity /usage JSON
+        if let agy = try? SharedCoders.decoder.decode(AntigravityUsageResponse.self, from: data),
+           agy.command?.name == "usage" || (agy.command?.data?.groups != nil && !(agy.command?.data?.groups?.isEmpty ?? true)) {
+            return .gemini(agy.toSnapshot())
+        }
+
         let parsed: GeminiModelsResponse
         do {
             parsed = try SharedCoders.decoder.decode(GeminiModelsResponse.self, from: data)

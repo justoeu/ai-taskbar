@@ -259,6 +259,9 @@ public final class SettingsViewModel: ObservableObject {
         if old.gemini.baseURL != new.gemini.baseURL {
             out.append(.string(section: "gemini", key: "base_url", value: new.gemini.baseURL))
         }
+        if old.gemini.agyPath != new.gemini.agyPath {
+            out.append(.string(section: "gemini", key: "agy_path", value: new.gemini.agyPath))
+        }
 
         // [deepseek]
         if old.deepseek.enabled != new.deepseek.enabled {
@@ -277,6 +280,9 @@ public final class SettingsViewModel: ObservableObject {
         // [xai]
         if old.xai.enabled != new.xai.enabled {
             out.append(.bool(section: "xai", key: "enabled", value: new.xai.enabled))
+        }
+        if old.xai.grokAuthPath != new.xai.grokAuthPath {
+            out.append(.string(section: "xai", key: "grok_auth_path", value: new.xai.grokAuthPath ?? ""))
         }
         if old.xai.apiKeyEnv != new.xai.apiKeyEnv {
             out.append(.string(section: "xai", key: "api_key_env", value: new.xai.apiKeyEnv))

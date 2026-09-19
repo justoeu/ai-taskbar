@@ -21,6 +21,8 @@ public struct SettingsView: View {
     @State private var pinHostsText: String = ""
     @State private var expandedVendor: String? = nil
     @State private var activeHelpKey: String? = nil
+    @State private var showGeminiAdvanced = false
+    @State private var showXAIAdvanced = false
 
     public init(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -40,22 +42,22 @@ public struct SettingsView: View {
                 // a Form+Section on macOS 13 silently breaks expand/collapse.
                 // The header line on each Section acts as the affordance.
                 Section(content: { vendorAnthropic },
-                        header: { vendorHeader("Anthropic", icon: "person.crop.circle") },
+                        header: { vendorHeader("Anthropic", isEnabled: viewModel.draft.anthropic.enabled) },
                         footer: { Text(L10n.localizedString("settings_vendor_footer")).font(.caption2).foregroundStyle(.secondary) })
                 Section(content: { vendorOpenAI },
-                        header: { vendorHeader("OpenAI / Codex", icon: "person.crop.circle") })
+                        header: { vendorHeader("OpenAI / Codex", isEnabled: viewModel.draft.openai.enabled) })
                 Section(content: { vendorZAI },
-                        header: { vendorHeader("Z.AI", icon: "person.crop.circle") })
+                        header: { vendorHeader("Z.AI", isEnabled: viewModel.draft.zai.enabled) })
                 Section(content: { vendorOpenRouter },
-                        header: { vendorHeader("OpenRouter", icon: "person.crop.circle") })
+                        header: { vendorHeader("OpenRouter", isEnabled: viewModel.draft.openrouter.enabled) })
                 Section(content: { vendorKimi },
-                        header: { vendorHeader("Kimi (Moonshot)", icon: "person.crop.circle") })
+                        header: { vendorHeader("Kimi (Moonshot)", isEnabled: viewModel.draft.kimi.enabled) })
                 Section(content: { vendorGemini },
-                        header: { vendorHeader("Gemini", icon: "person.crop.circle") })
+                        header: { vendorHeader("Gemini", isEnabled: viewModel.draft.gemini.enabled) })
                 Section(content: { vendorDeepSeek },
-                        header: { vendorHeader("DeepSeek", icon: "person.crop.circle") })
+                        header: { vendorHeader("DeepSeek", isEnabled: viewModel.draft.deepseek.enabled) })
                 Section(content: { vendorXAI },
-                        header: { vendorHeader("xAI (Grok)", icon: "person.crop.circle") })
+                        header: { vendorHeader("xAI (Grok)", isEnabled: viewModel.draft.xai.enabled) })
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -404,13 +406,16 @@ public struct SettingsView: View {
 
     /// Per-vendor Section header. Clicking toggles the expansion state we
     /// track locally — the body content reads the same flag to show/hide.
-    private func vendorHeader(_ name: String, icon: String) -> some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    /// Shows a green checkmark when enabled, a neutral circle when disabled,
+    /// and differentiates font weight and foreground style.
+    private func vendorHeader(_ name: String, isEnabled: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
+                .font(.subheadline)
+                .foregroundStyle(isEnabled ? Color.green : Color.secondary.opacity(0.4))
             Text(name)
-                .font(.subheadline.weight(.medium))
+                .font(.subheadline.weight(isEnabled ? .semibold : .regular))
+                .foregroundStyle(isEnabled ? Color.primary : Color.secondary)
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.caption2)
@@ -596,26 +601,69 @@ public struct SettingsView: View {
                        isOn: Binding(
                         get: { viewModel.draft.gemini.enabled },
                         set: { viewModel.draft.gemini.enabled = $0 }))
-            HelpTextField(label: L10n.localizedString("settings_api_key_env"),
-                          helpKey: "settings_api_key_env_help",
+
+            HelpTextField(label: L10n.localizedString("settings_gemini_agy_path"),
+                          helpKey: "settings_gemini_agy_path_help",
                           text: Binding(
-                            get: { viewModel.draft.gemini.apiKeyEnv },
-                            set: { viewModel.draft.gemini.apiKeyEnv = $0 }))
-            SecureInlineField(label: L10n.localizedString("settings_api_key"),
-                              helpKey: "settings_api_key_help",
-                              value: Binding(
-                                get: { viewModel.draft.gemini.apiKey ?? "" },
-                                set: { viewModel.draft.gemini.apiKey = $0.isEmpty ? nil : $0 }))
-            Picker(L10n.localizedString("settings_base_url"),
-                   selection: Binding(
-                    get: { viewModel.draft.gemini.baseURL },
-                    set: { viewModel.draft.gemini.baseURL = $0 })) {
-                Text("v1beta").tag("https://generativelanguage.googleapis.com/v1beta")
-                Text("v1").tag("https://generativelanguage.googleapis.com/v1")
-                Text("v1alpha").tag("https://generativelanguage.googleapis.com/v1alpha")
+                            get: { viewModel.draft.gemini.agyPath ?? "" },
+                            set: { viewModel.draft.gemini.agyPath = $0.isEmpty ? nil : $0 }))
+
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                Text(L10n.localizedString("gemini_antigravity_settings_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .pickerStyle(.menu)
-            .help(L10n.localizedString("settings_base_url_help"))
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(0.04))
+            )
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showGeminiAdvanced.toggle()
+                }
+            } label: {
+                HStack {
+                    Text(L10n.localizedString("settings_gemini_advanced"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(showGeminiAdvanced ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L10n.localizedString("settings_gemini_advanced_help"))
+
+            if showGeminiAdvanced {
+                HelpTextField(label: L10n.localizedString("settings_api_key_env"),
+                              helpKey: "settings_api_key_env_help",
+                              text: Binding(
+                                get: { viewModel.draft.gemini.apiKeyEnv },
+                                set: { viewModel.draft.gemini.apiKeyEnv = $0 }))
+                SecureInlineField(label: L10n.localizedString("settings_api_key"),
+                                  helpKey: "settings_api_key_help",
+                                  value: Binding(
+                                    get: { viewModel.draft.gemini.apiKey ?? "" },
+                                    set: { viewModel.draft.gemini.apiKey = $0.isEmpty ? nil : $0 }))
+                Picker(L10n.localizedString("settings_base_url"),
+                       selection: Binding(
+                        get: { viewModel.draft.gemini.baseURL },
+                        set: { viewModel.draft.gemini.baseURL = $0 })) {
+                    Text("v1beta").tag("https://generativelanguage.googleapis.com/v1beta")
+                    Text("v1").tag("https://generativelanguage.googleapis.com/v1")
+                    Text("v1alpha").tag("https://generativelanguage.googleapis.com/v1alpha")
+                }
+                .pickerStyle(.menu)
+                .help(L10n.localizedString("settings_base_url_help"))
+            }
         }
     }
 
@@ -651,7 +699,7 @@ public struct SettingsView: View {
     }
 
     // MARK: - Vendor: xAI
-
+ 
     @ViewBuilder
     private var vendorXAI: some View {
         vendorBody("xAI (Grok)") {
@@ -660,29 +708,69 @@ public struct SettingsView: View {
                        isOn: Binding(
                         get: { viewModel.draft.xai.enabled },
                         set: { viewModel.draft.xai.enabled = $0 }))
-            HelpTextField(label: L10n.localizedString("settings_xai_management_key_env"),
-                          helpKey: "settings_xai_management_key_env_help",
-                          text: Binding(
-                            get: { viewModel.draft.xai.apiKeyEnv },
-                            set: { viewModel.draft.xai.apiKeyEnv = $0 }))
-            SecureInlineField(label: L10n.localizedString("settings_xai_management_key"),
-                              helpKey: "settings_xai_management_key_help",
-                              value: Binding(
-                                get: { viewModel.draft.xai.apiKey ?? "" },
-                                set: { viewModel.draft.xai.apiKey = $0.isEmpty ? nil : $0 }))
-            HelpTextField(label: L10n.localizedString("settings_team_id"),
-                          helpKey: "settings_team_id_help",
-                          text: Binding(
-                            get: { viewModel.draft.xai.teamId },
-                            set: { viewModel.draft.xai.teamId = $0 }))
-            Picker(L10n.localizedString("settings_base_url"),
-                   selection: Binding(
-                    get: { viewModel.draft.xai.baseURL },
-                    set: { viewModel.draft.xai.baseURL = $0 })) {
-                Text("management-api.x.ai").tag("https://management-api.x.ai")
+
+            // Disclaimer banner
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                Text(L10n.localizedString("settings_grok_cli_disclaimer"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .pickerStyle(.menu)
-            .help(L10n.localizedString("settings_base_url_help"))
+            .padding(.vertical, 2)
+
+            HelpTextField(label: L10n.localizedString("settings_grok_auth_path"),
+                          helpKey: "settings_grok_auth_path_help",
+                          text: Binding(
+                            get: { viewModel.draft.xai.grokAuthPath ?? "" },
+                            set: { viewModel.draft.xai.grokAuthPath = $0.isEmpty ? nil : $0 }))
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showXAIAdvanced.toggle()
+                }
+            } label: {
+                HStack {
+                    Text(L10n.localizedString("settings_xai_advanced"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(showXAIAdvanced ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L10n.localizedString("settings_xai_advanced_help"))
+
+            if showXAIAdvanced {
+                HelpTextField(label: L10n.localizedString("settings_xai_management_key_env"),
+                              helpKey: "settings_xai_management_key_env_help",
+                              text: Binding(
+                                get: { viewModel.draft.xai.apiKeyEnv },
+                                set: { viewModel.draft.xai.apiKeyEnv = $0 }))
+                SecureInlineField(label: L10n.localizedString("settings_xai_management_key"),
+                                  helpKey: "settings_xai_management_key_help",
+                                  value: Binding(
+                                    get: { viewModel.draft.xai.apiKey ?? "" },
+                                    set: { viewModel.draft.xai.apiKey = $0.isEmpty ? nil : $0 }))
+                HelpTextField(label: L10n.localizedString("settings_team_id"),
+                              helpKey: "settings_team_id_help",
+                              text: Binding(
+                                get: { viewModel.draft.xai.teamId },
+                                set: { viewModel.draft.xai.teamId = $0 }))
+                Picker(L10n.localizedString("settings_base_url"),
+                       selection: Binding(
+                        get: { viewModel.draft.xai.baseURL },
+                        set: { viewModel.draft.xai.baseURL = $0 })) {
+                    Text("management-api.x.ai").tag("https://management-api.x.ai")
+                }
+                .pickerStyle(.menu)
+                .help(L10n.localizedString("settings_base_url_help"))
+            }
         }
     }
 }

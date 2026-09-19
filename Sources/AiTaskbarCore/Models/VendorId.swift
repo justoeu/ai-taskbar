@@ -49,6 +49,8 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         switch self {
         case .anthropic:  return "claude auth login"
         case .openai:     return "codex login"
+        case .gemini:     return "agy"
+        case .xai:        return "grok login"
         default:          return nil
         }
     }

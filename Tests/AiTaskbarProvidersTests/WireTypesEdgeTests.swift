@@ -292,4 +292,53 @@ struct WireTypesEdgeTests {
         #expect(snap.toppedUpBalance == 10.00)
         #expect(snap.currency == nil)
     }
+
+    @Test("Antigravity empty groups yields snapshot without quota windows")
+    func antigravity_empty_groups() throws {
+        let body = #"""
+        {
+          "command": {
+            "name": "usage",
+            "data": { "groups": [] }
+          }
+        }
+        """#
+        let parsed = try JSONDecoder().decode(AntigravityUsageResponse.self, from: Data(body.utf8))
+        let snap = parsed.toSnapshot()
+        expectTrue(snap.isAntigravityActive)
+        #expect(snap.fiveHour == nil)
+        #expect(snap.weekly == nil)
+        #expect(snap.thirdParty5Hour == nil)
+        #expect(snap.thirdPartyWeekly == nil)
+        #expect(snap.disclaimer != nil)
+    }
+
+    @Test("Antigravity bucket with nil remainingFraction defaults to 0% utilization")
+    func antigravity_nil_remaining_fraction() throws {
+        let body = #"""
+        {
+          "command": {
+            "name": "usage",
+            "data": {
+              "groups": [
+                {
+                  "name": "Gemini Models",
+                  "buckets": [
+                    { "id": "gemini-5h", "window": "5h" }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+        """#
+        let parsed = try JSONDecoder().decode(AntigravityUsageResponse.self, from: Data(body.utf8))
+        let snap = parsed.toSnapshot(disclaimer: "Custom Disclaimer")
+        expectTrue(snap.isAntigravityActive)
+        #expect(snap.disclaimer == "Custom Disclaimer")
+        #expect(snap.fiveHour?.label == "Gemini (5h)")
+        #expect(snap.fiveHour?.utilizationPercent == 0)
+        #expect(snap.fiveHour?.detail == "100% remaining")
+    }
 }
+

@@ -53,7 +53,8 @@ extension GeminiModelsResponse {
                                         utilizationPercent: 0,
                                         resetsAt: nil,
                                         detail: "API key valid (no models visible)"),
-                    modelCount: 0
+                    modelCount: 0,
+                    disclaimer: "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
                 )
             }
         } else {
@@ -66,7 +67,130 @@ extension GeminiModelsResponse {
                                 utilizationPercent: 0,
                                 resetsAt: nil,
                                 detail: detail),
-            modelCount: count
+            modelCount: count,
+            disclaimer: "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
+        )
+    }
+}
+
+// MARK: - Antigravity Quota Wire Types
+
+/// Response from `agy --output-format json --print "/usage"`.
+public struct AntigravityUsageResponse: Decodable, Sendable {
+    public let conversationId: String?
+    public let status: String?
+    public let response: String?
+    public let command: AntigravityCommand?
+
+    enum CodingKeys: String, CodingKey {
+        case conversationId = "conversation_id"
+        case status
+        case response
+        case command
+    }
+}
+
+public struct AntigravityCommand: Decodable, Sendable {
+    public let name: String?
+    public let data: AntigravityCommandData?
+}
+
+public struct AntigravityCommandData: Decodable, Sendable {
+    public let description: String?
+    public let groups: [AntigravityGroup]?
+}
+
+public struct AntigravityGroup: Decodable, Sendable {
+    public let name: String?
+    public let description: String?
+    public let buckets: [AntigravityBucket]?
+}
+
+public struct AntigravityBucket: Decodable, Sendable {
+    public let id: String?
+    public let name: String?
+    public let description: String?
+    public let window: String?
+    public let remainingFraction: Double?
+    public let resetTime: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case window
+        case remainingFraction = "remaining_fraction"
+        case resetTime = "reset_time"
+    }
+}
+
+extension AntigravityUsageResponse {
+    public func toSnapshot(disclaimer: String? = nil) -> GeminiSnapshot {
+        var fiveHour: UsageWindow?
+        var weekly: UsageWindow?
+        var thirdParty5Hour: UsageWindow?
+        var thirdPartyWeekly: UsageWindow?
+
+        let resolvedDisclaimer = disclaimer ?? "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
+
+        if let groups = command?.data?.groups {
+            for group in groups {
+                let gName = (group.name ?? "").lowercased()
+                let isGemini = gName.contains("gemini")
+                let isThirdParty = gName.contains("claude") || gName.contains("gpt") || gName.contains("3p")
+
+                for bucket in group.buckets ?? [] {
+                    let bId = (bucket.id ?? "").lowercased()
+                    let bWin = (bucket.window ?? "").lowercased()
+                    let is5h = bWin == "5h" || bId.contains("5h")
+                    let isWeekly = bWin == "weekly" || bId.contains("weekly")
+
+                    let rem = bucket.remainingFraction ?? 1.0
+                    let consumedFraction = max(0.0, min(1.0, 1.0 - rem))
+                    let util = consumedFraction * 100.0
+                    let resetsAt = bucket.resetTime.flatMap(ISO8601Parsing.parse)
+                    let remPercentInt = Int((rem * 100.0).rounded())
+                    let detail = "\(remPercentInt)% remaining"
+
+                    if isGemini {
+                        if is5h {
+                            fiveHour = UsageWindow(label: "Gemini (5h)",
+                                                   utilizationPercent: util,
+                                                   resetsAt: resetsAt,
+                                                   detail: detail)
+                        } else if isWeekly {
+                            weekly = UsageWindow(label: "Gemini (Weekly)",
+                                                 utilizationPercent: util,
+                                                 resetsAt: resetsAt,
+                                                 detail: detail)
+                        }
+                    } else if isThirdParty {
+                        if is5h {
+                            thirdParty5Hour = UsageWindow(label: "Claude & GPT (5h)",
+                                                          utilizationPercent: util,
+                                                          resetsAt: resetsAt,
+                                                          detail: detail)
+                        } else if isWeekly {
+                            thirdPartyWeekly = UsageWindow(label: "Claude & GPT (Weekly)",
+                                                           utilizationPercent: util,
+                                                           resetsAt: resetsAt,
+                                                           detail: detail)
+                        }
+                    }
+                }
+            }
+        }
+
+        return GeminiSnapshot(
+            planLabel: "Antigravity",
+            status: nil,
+            modelCount: nil,
+            fiveHour: fiveHour,
+            weekly: weekly,
+            thirdParty5Hour: thirdParty5Hour,
+            thirdPartyWeekly: thirdPartyWeekly,
+            disclaimer: resolvedDisclaimer,
+            isAntigravityActive: true
         )
     }
 }

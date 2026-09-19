@@ -53,11 +53,15 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .kimi(let s):
             return [s.balance].compactMap { $0 }
         case .gemini(let s):
+            let agyWindows = [s.fiveHour, s.weekly, s.thirdParty5Hour, s.thirdPartyWeekly].compactMap { $0 }
+            if !agyWindows.isEmpty {
+                return agyWindows
+            }
             return [s.status].compactMap { $0 }
         case .deepseek(let s):
             return [s.balance].compactMap { $0 }
         case .xai(let s):
-            return [s.balance, s.monthly].compactMap { $0 }
+            return [s.weekly, s.balance, s.monthly].compactMap { $0 }
         }
     }
 
@@ -395,26 +399,51 @@ public struct DeepSeekSnapshot: Sendable, Equatable, Codable {
     }
 }
 
-/// Google Gemini doesn't expose a public quota/billing REST endpoint on the
-/// `generativelanguage.googleapis.com` host. We instead use the `models` list
-/// as an authenticated heartbeat: it validates the API key and reports how
-/// many models the key can see. The status row shows 0% utilization (we have
-/// no quota signal) and the model count is surfaced via `detail`.
+/// Google Gemini usage snapshot.
+///
+/// Quota and usage metrics can be monitored in two ways:
+/// 1. Via Antigravity (`agy`), which tracks dynamic 5-hour and weekly quota windows
+///    for Gemini Models and third-party models (Claude/GPT).
+/// 2. Via Google AI Studio API key heartbeat (`GET /models`), showing model availability.
+///
+/// Note: To monitor actual usage and quotas, Antigravity must be installed and authenticated.
 public struct GeminiSnapshot: Sendable, Equatable, Codable {
     public let planLabel: String?
-    /// Single status row — utilization is always 0%, the detail string carries
-    /// "N models available". Acts as a connectivity check.
+    /// Single status row — used as fallback or connectivity check.
     public let status: UsageWindow?
-    /// Number of models the API key can list. Useful as a quick sanity that
-    /// the key still has access to the Generative Language API.
+    /// Number of models the API key can list (Google AI Studio fallback).
     public let modelCount: Int?
+    /// 5-hour quota window from Antigravity.
+    public let fiveHour: UsageWindow?
+    /// Weekly quota window from Antigravity.
+    public let weekly: UsageWindow?
+    /// 3rd-party models (Claude/GPT) 5-hour quota window from Antigravity.
+    public let thirdParty5Hour: UsageWindow?
+    /// 3rd-party models (Claude/GPT) weekly quota window from Antigravity.
+    public let thirdPartyWeekly: UsageWindow?
+    /// Mandatory disclaimer explaining that Antigravity is required for quota monitoring.
+    public let disclaimer: String?
+    /// True when backed by active, authenticated Antigravity data.
+    public let isAntigravityActive: Bool
 
     public init(planLabel: String? = nil,
                 status: UsageWindow? = nil,
-                modelCount: Int? = nil) {
+                modelCount: Int? = nil,
+                fiveHour: UsageWindow? = nil,
+                weekly: UsageWindow? = nil,
+                thirdParty5Hour: UsageWindow? = nil,
+                thirdPartyWeekly: UsageWindow? = nil,
+                disclaimer: String? = nil,
+                isAntigravityActive: Bool = false) {
         self.planLabel = planLabel
         self.status = status
         self.modelCount = modelCount
+        self.fiveHour = fiveHour
+        self.weekly = weekly
+        self.thirdParty5Hour = thirdParty5Hour
+        self.thirdPartyWeekly = thirdPartyWeekly
+        self.disclaimer = disclaimer
+        self.isAntigravityActive = isAntigravityActive
     }
 }
 
@@ -441,12 +470,14 @@ public struct OpenRouterSnapshot: Sendable, Equatable, Codable {
     }
 }
 
-/// xAI Management API billing snapshot. Inference API keys cannot read usage —
-/// only a **management key** + team ID can. Surfaces:
+/// xAI Management API and Grok CLI billing snapshot.
+/// Surfaces:
+/// - Grok weekly quota usage % and reset countdown (when using Grok CLI)
 /// - prepaid credit remaining (balance bar at 0% util, detail = $ available)
 /// - current billing-cycle spend vs soft spending limit (monthly % bar when limit > 0)
 public struct XAISnapshot: Sendable, Equatable, Codable {
     public let planLabel: String?
+    public let weekly: UsageWindow?
     public let balance: UsageWindow?
     public let monthly: UsageWindow?
     /// Prepaid credits remaining in USD (absolute dollars).
@@ -459,16 +490,21 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
     public let prepaidUsedUSD: Double?
     /// Billing cycle label, e.g. "2026-07".
     public let billingCycleLabel: String?
+    /// Mandatory disclaimer explaining that Grok CLI is required for quota monitoring.
+    public let disclaimer: String?
 
     public init(planLabel: String? = nil,
+                weekly: UsageWindow? = nil,
                 balance: UsageWindow? = nil,
                 monthly: UsageWindow? = nil,
                 prepaidUSD: Double? = nil,
                 spentUSD: Double? = nil,
                 spendingLimitUSD: Double? = nil,
                 prepaidUsedUSD: Double? = nil,
-                billingCycleLabel: String? = nil) {
+                billingCycleLabel: String? = nil,
+                disclaimer: String? = nil) {
         self.planLabel = planLabel
+        self.weekly = weekly
         self.balance = balance
         self.monthly = monthly
         self.prepaidUSD = prepaidUSD
@@ -476,5 +512,27 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
         self.spendingLimitUSD = spendingLimitUSD
         self.prepaidUsedUSD = prepaidUsedUSD
         self.billingCycleLabel = billingCycleLabel
+        self.disclaimer = disclaimer
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case planLabel, weekly, balance, monthly,
+             prepaidUSD, spentUSD, spendingLimitUSD,
+             prepaidUsedUSD, billingCycleLabel,
+             disclaimer
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        planLabel = try c.decodeIfPresent(String.self, forKey: .planLabel)
+        weekly = try c.decodeIfPresent(UsageWindow.self, forKey: .weekly)
+        balance = try c.decodeIfPresent(UsageWindow.self, forKey: .balance)
+        monthly = try c.decodeIfPresent(UsageWindow.self, forKey: .monthly)
+        prepaidUSD = try c.decodeIfPresent(Double.self, forKey: .prepaidUSD)
+        spentUSD = try c.decodeIfPresent(Double.self, forKey: .spentUSD)
+        spendingLimitUSD = try c.decodeIfPresent(Double.self, forKey: .spendingLimitUSD)
+        prepaidUsedUSD = try c.decodeIfPresent(Double.self, forKey: .prepaidUsedUSD)
+        billingCycleLabel = try c.decodeIfPresent(String.self, forKey: .billingCycleLabel)
+        disclaimer = try c.decodeIfPresent(String.self, forKey: .disclaimer)
     }
 }

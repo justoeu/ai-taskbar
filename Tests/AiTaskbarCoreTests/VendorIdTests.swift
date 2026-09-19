@@ -26,10 +26,12 @@ struct VendorIdTests {
         }
     }
 
-    @Test("OAuth vendors expose their CLI re-login commands")
+    @Test("CLI/OAuth vendors expose re-login commands")
     func oauth_vendors_expose_relogin_commands() {
         #expect(VendorId.anthropic.reloginCommand == "claude auth login")
         #expect(VendorId.openai.reloginCommand == "codex login")
+        #expect(VendorId.gemini.reloginCommand == "agy")
+        #expect(VendorId.xai.reloginCommand == "grok login")
     }
 
     @Test("API-key vendors do not expose a misleading re-login command")
@@ -37,9 +39,7 @@ struct VendorIdTests {
         #expect(VendorId.zai.reloginCommand == nil)
         #expect(VendorId.openrouter.reloginCommand == nil)
         #expect(VendorId.kimi.reloginCommand == nil)
-        #expect(VendorId.gemini.reloginCommand == nil)
         #expect(VendorId.deepseek.reloginCommand == nil)
-        #expect(VendorId.xai.reloginCommand == nil)
     }
 
     @Test("id mirrors rawValue (Identifiable)")

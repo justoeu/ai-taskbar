@@ -66,6 +66,16 @@ public enum Paths {
         return home.appendingPathComponent(".codex/auth.json")
     }
 
+    public static func defaultGrokAuth() -> URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return home.appendingPathComponent(".grok/auth.json")
+    }
+
+    public static func defaultGrokSettingsCache() -> URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return home.appendingPathComponent(".grok/settings_cache.json")
+    }
+
     /// Codex CLI rollout transcripts: `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`.
     /// These carry the per-turn token accounting `CodexSessionScanner` prices.
     public static func defaultCodexSessions() -> URL {

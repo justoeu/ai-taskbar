@@ -146,6 +146,33 @@ section("Wire types: Gemini fixture") {
            "Gemini empty list uses validity hint")
 }
 
+section("Wire types: Antigravity Gemini fixture") {
+    let parsed = try SharedCoders.decoder.decode(
+        AntigravityUsageResponse.self,
+        from: Fixtures.data(Fixtures.antigravityUsage200))
+    let s = parsed.toSnapshot()
+    expect(s.planLabel == "Antigravity", "Antigravity plan label")
+    expect(s.isAntigravityActive, "isAntigravityActive is true")
+    expect(s.disclaimer == "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado.",
+           "Antigravity disclaimer matches mandatory text")
+    expect(s.fiveHour?.label == "Gemini (5h)", "Gemini 5h label")
+    expect(abs((s.fiveHour?.utilizationPercent ?? 0) - 16.344) < 0.01,
+           "Gemini 5h utilization matches fixture")
+    expect(s.fiveHour?.detail == "84% remaining", "Gemini 5h detail")
+    expect(s.weekly?.label == "Gemini (Weekly)", "Gemini weekly label")
+    expect(abs((s.weekly?.utilizationPercent ?? 0) - 1.927) < 0.01,
+           "Gemini weekly utilization matches fixture")
+    expect(s.weekly?.detail == "98% remaining", "Gemini weekly detail")
+    expect(s.thirdParty5Hour?.label == "Claude & GPT (5h)", "Claude & GPT 5h label")
+    expect(s.thirdParty5Hour?.utilizationPercent == 0, "Claude & GPT 5h utilization 0%")
+    expect(s.thirdPartyWeekly?.label == "Claude & GPT (Weekly)", "Claude & GPT weekly label")
+    expect(s.thirdPartyWeekly?.utilizationPercent == 0, "Claude & GPT weekly utilization 0%")
+
+    let snap = VendorSnapshot.gemini(s)
+    expect(snap.windows.count == 4, "Antigravity exposes 4 quota windows")
+    expect(abs(snap.maxUtilization - 16.344) < 0.01, "Antigravity maxUtilization matches peak")
+}
+
 section("Wire types: DeepSeek fixture") {
     let parsed = try SharedCoders.decoder.decode(
         DeepSeekBalanceResponse.self,
@@ -223,6 +250,44 @@ section("Wire types: xAI fixtures") {
     expect(po.prepaidUSD == 10.0, "xAI prepaid-only falls back to invoice credits")
     expect(po.monthly?.utilizationPercent == 0, "xAI prepaid-only monthly util 0")
     expect(po.monthly?.detail == "$0.00 spent", "xAI prepaid-only detail")
+}
+
+section("Wire types: Grok CLI fixtures") {
+    let billing = try SharedCoders.decoder.decode(
+        GrokBillingResponse.self,
+        from: Fixtures.data(Fixtures.grokBillingCredits200))
+    expect(billing.config?.creditUsagePercent == 3.0, "grok credit usage percent")
+    expect(billing.config?.prepaidBalance?.usd == 40.0, "grok prepaid balance USD")
+    expect(billing.config?.currentPeriod?.type == "USAGE_PERIOD_TYPE_WEEKLY", "grok period type")
+
+    let settings = try SharedCoders.decoder.decode(
+        GrokSettingsResponse.self,
+        from: Fixtures.data(Fixtures.grokSettings200))
+    expect(settings.subscriptionTierDisplay == "SuperGrok Heavy", "grok subscription tier")
+
+    let snap = billing.toSnapshot(planLabel: settings.subscriptionTierDisplay)
+    expect(snap.planLabel == "SuperGrok Heavy", "grok snapshot plan label")
+    expect(snap.weekly?.label == "Weekly", "grok weekly window label")
+    expect(snap.weekly?.utilizationPercent == 3.0, "grok weekly util")
+    expect(snap.weekly?.resetsAt != nil, "grok weekly resetsAt")
+    expect(snap.balance?.detail == "$40.00 available", "grok balance detail")
+    expect(snap.prepaidUSD == 40.0, "grok prepaid USD")
+    expect(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.",
+           "grok disclaimer matches mandatory text")
+
+    let cached = XAICachedPayload(grokBilling: billing, grokSettings: settings)
+    let cs = cached.toSnapshot()
+    expect(cs.planLabel == "SuperGrok Heavy", "grok cached payload snapshot plan label")
+    expect(cs.weekly?.utilizationPercent == 3.0, "grok cached payload weekly util")
+    expect(cs.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.",
+           "grok cached payload has disclaimer")
+
+    let authEntries = try SharedCoders.decoder.decode(
+        [String: GrokAuthEntry].self,
+        from: Fixtures.data(Fixtures.grokAuthJSON))
+    let entry = authEntries.values.first
+    expect(entry?.key == "test-grok-token-12345", "grok auth entry key")
+    expect(entry?.isExpired == false, "grok auth not expired")
 }
 
 section("XAIConfig.validate") {
