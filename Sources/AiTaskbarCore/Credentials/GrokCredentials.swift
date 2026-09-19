@@ -95,12 +95,12 @@ public struct GrokAuthReader: Sendable {
 public enum GrokLocalCache {
     public static func readSubscriptionTierDisplay(at path: URL = Paths.defaultGrokSettingsCache()) -> String? {
         guard let data = try? Data(contentsOf: path),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let payloadStr = json["payload"] as? String,
+              let json = try? JSONDecoder().decode([String: JSONValue].self, from: data),
+              case .string(let payloadStr)? = json["payload"],
               let payloadData = payloadStr.data(using: .utf8),
-              let payloadJson = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-              let settings = payloadJson["settings"] as? [String: Any],
-              let tier = settings["subscription_tier_display"] as? String,
+              let payloadJson = try? JSONDecoder().decode([String: JSONValue].self, from: payloadData),
+              case .object(let settings)? = payloadJson["settings"],
+              case .string(let tier)? = settings["subscription_tier_display"],
               !tier.isEmpty
         else { return nil }
         return tier
