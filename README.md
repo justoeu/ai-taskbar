@@ -30,9 +30,10 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
 - **Daily + 7-day cost estimates** computed locally from your CLI logs
 - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
 - **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
+- **Service health & status monitor** — Live popover panel monitoring upstream operational status, active incidents, and scheduled maintenance across providers (Claude, OpenAI, Gemini, Grok, DeepSeek, Kimi, OpenRouter) with direct links to official status pages
 - **Click the card header** (chevron + name + empty space) to expand/collapse; dashboard / reorder / refresh stay on the trailing buttons
 - **Reorder cards** with ↑ / ↓ on each header (order saved on this Mac)
-- **Locked card with explanation** when a provider has no credentials
+- **Locked card with explanation** when a provider has no credentials (with helpful guidance for local CLI requirements on Gemini and Grok)
 
 The app runs entirely on-device — **no telemetry, no remote logging, no auto-update without your click**.
 
@@ -40,6 +41,7 @@ The app runs entirely on-device — **no telemetry, no remote logging, no auto-u
 
 - [Install](#install)
 - [Setup per provider](#setup-per-provider)
+- [Service status & health pages](#service-status--health-pages)
 - [What's in this version](#whats-in-this-version)
 - [How it works](#how-it-works)
 - [Configuration](#configuration)
@@ -92,8 +94,8 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 | **Z.AI (GLM)** | API key | Add `api_key = "..."` to `[zai]` in config |
 | **Kimi (Moonshot)** | API key | Add `api_key = "sk-..."` to `[kimi]` in config |
 | **DeepSeek** | API key | Add `api_key = "sk-..."` to `[deepseek]` in config |
-| **Gemini** | API key | Add `api_key = "AIza..."` to `[gemini]` — **heartbeat only** (see below) |
-| **xAI (Grok)** | Management key + team ID | Create a **management** key at [console.x.ai](https://console.x.ai) → Settings → Management Keys (not the inference API key); copy the team UUID from Team settings; set `api_key` + `team_id` under `[xai]` |
+| **Gemini** | Antigravity CLI (`agy`) or API key | **Requires local CLI:** Run `agy` to authenticate (required for live quota/usage monitoring). Fallback: API key in `[gemini]` for heartbeat only. |
+| **xAI (Grok)** | Grok CLI (`~/.grok/auth.json`) or Management API | **Requires local CLI:** Run `grok login` (required for SuperGrok quota & balance). Fallback: Management key + `team_id` in `[xai]` for team API billing. |
 
 > ⚠️ **macOS env vars footgun:** GUI apps launched from Finder do **not** inherit your shell environment. If you set `OPENROUTER_API_KEY=...` in `~/.zshrc`, the menu bar app **won't see it**. Three workarounds:
 > 1. **Put the key directly in `config.toml`** (file is `chmod 600`).
@@ -262,24 +264,90 @@ cross-process lock prevent separate local app instances from replacing a pending
 attempt. See the [implementation SDD](docs/SDD-native-authorization-and-openai-reset.md)
 for the protocol, security boundaries, tests and manual acceptance checks.
 
-### xAI (Grok) — API team billing, not SuperGrok consumer usage
+### xAI (Grok) — SuperGrok CLI monitoring & API team billing
 
-The xAI card reads the **Management API** (`management-api.x.ai`): prepaid credit balance and current-cycle postpaid spend vs soft spending limit. That is **developer/team API billing**, not the weekly SuperGrok / grok.com consumer quota UI. Inference keys on `api.x.ai` cannot read billing; a separate management key + `team_id` are required. SuperGrok subscription limits have no public usage API today.
+> ⚠️ **Important requirement:** xAI does **not** provide a public REST API for querying individual SuperGrok / grok.com quotas or token balances. To monitor your SuperGrok usage and quota, you **must have the official Grok CLI installed and authenticated locally** (`grok login`).
 
-### Google Gemini — limited; no usable usage/quota API
+AI Taskbar supports two modes for xAI:
 
-Gemini ships as a provider but it can only do an **API-key heartbeat**: with a Google AI Studio key it validates the key and reports the model count (`GET /v1beta/models`). **It cannot show usage or cost**, because none of Google's surfaces expose a readable consumption API for the products people actually have:
+1. **Grok CLI mode (default & recommended):**
+   - **How it works:** AI Taskbar reads the local session credentials at `~/.grok/auth.json` (created upon running `grok login`) and queries Grok's internal billing proxy (`https://cli-chat-proxy.grok.com/v1/billing?format=credits` and `v1/settings`) using your authenticated Bearer token.
+   - **What the card displays:**
+     - **Subscription tier:** Identifies active tier (e.g. `SuperGrok Heavy`).
+     - **Weekly quota window:** Current utilization percentage (e.g. `3% used`) and reset time.
+     - **Prepaid balance:** Available balance (e.g. `$40.00 available`).
+     - **Disclaimer:** An in-card informational notice reminds you that Grok CLI must remain installed and logged in: *"Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado."*
+   - **Setup:** Simply install the Grok CLI and run `grok login` in Terminal. No manual API keys or team IDs needed in `config.toml`.
+   - **Recovery / 401:** If the token expires or is missing, the card displays a **Re-login** button that executes `grok login`.
 
-| Surface | Usage API? |
-|---|---|
-| **Gemini app subscription** (Plus / AI Pro / Ultra, `gemini.google.com/usage`) | ❌ No public API — the 5-hour/weekly limits live only in the app UI. |
-| **Developer API** (AI Studio key / Vertex via a GCP project) | ✅ Cloud Monitoring (`serviceruntime.googleapis.com/quota/...`) — but it measures *GCP-project API requests*, needs a Cloud project + monitoring scope, and is **not** your consumer subscription. |
-| **Gemini Code Assist** (the `gemini-cli`, `~/.gemini/oauth_creds.json`) | ⚠️ Undocumented `cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` — per-model `remainingFraction`. **Being retired for individuals on 2026-06-18** in favor of Antigravity, and it's the free coding tier, *separate from* a paid Gemini app subscription. |
-| **Antigravity CLI** (`agy`) | ❌ No `usage` subcommand; the app stores auth as encrypted Electron cookies + Keychain safeStorage — no readable token, no usage endpoint. |
+2. **Management API mode (for team/developer spend):**
+   - If you do not use the Grok CLI and wish to track developer API credit spend instead, set `prefer_grok_cli = false` under `[xai]` in `config.toml`.
+   - Requires a **Management key** from [console.x.ai](https://console.x.ai) → Settings → Management Keys (not an inference API key) and your Team UUID (`team_id`).
+   - Reads prepaid balance and current-cycle postpaid invoices from `management-api.x.ai`.
 
-**Bottom line:** there is no durable, official way to read your Gemini *subscription* usage today. If you don't have (or don't want) a Gemini API key, set `[gemini] enabled = false` in `config.toml` to hide the "no credentials" row. This will be revisited if Google ships a real consumer usage API (OAuth, not web cookies).
+---
+
+### Google Gemini — Antigravity CLI monitoring & heartbeat
+
+> ⚠️ **Important requirement:** Google does **not** provide a public REST API for personal Gemini subscription quotas (such as the 5-hour or weekly consumer limits on gemini.google.com). To monitor Gemini quotas and models, you **must have Google's Antigravity CLI (`agy`) installed and authenticated locally**.
+
+AI Taskbar supports two monitoring paths for Google Gemini:
+
+1. **Antigravity CLI mode (default & recommended):**
+   - **How it works:** AI Taskbar executes the local Antigravity CLI in the background (`agy --output-format json --print "/usage"`) with a safe 15-second budget and closed standard input.
+   - **Binary auto-detection:** Automatically discovers `agy` in standard install paths:
+     - `~/.local/bin/agy`
+     - `/opt/homebrew/bin/agy`
+     - `/usr/local/bin/agy`
+     - `~/.gemini/antigravity/bin/agy`
+     - Or specify an explicit path via `agy_path = "/path/to/agy"` under `[gemini]` in `config.toml`.
+   - **What the card displays:**
+     - **Gemini (5h):** Session quota window utilization and remaining fraction.
+     - **Gemini (Weekly):** Weekly quota window utilization and reset countdown.
+     - **Third-party models (5h & Weekly):** Tracks secondary quotas for third-party models accessed through Antigravity (e.g. Claude).
+     - **Disclaimer:** When Antigravity is unauthenticated or missing, the card shows a clear notice: *"Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."*
+   - **Setup:** Install the Antigravity CLI and log in by running `agy` in Terminal.
+   - **Recovery / 401:** If the session is unauthenticated, clicking the **Re-login** button runs `agy` in Terminal to re-authenticate.
+
+2. **API Key Heartbeat (fallback):**
+   - If you do not use Antigravity, you can set `prefer_antigravity = false` and supply a Google AI Studio API key (`api_key = "AIza..."` or `GEMINI_API_KEY`).
+   - Acts strictly as an authenticated heartbeat (`GET /v1beta/models`) to check key validity and count available models. Developer keys do not expose subscription usage or remaining quotas.
+
+---
+
+## Service status & health pages
+
+AI Taskbar features an integrated **Service Status & Health Dashboard** that monitors upstream operational availability, active incidents, and scheduled maintenance across supported providers.
+
+- **How to open:** Click the status indicator icon in the popover header to open the dedicated status window.
+- **6-hour sliding window:** Tracks incidents within the `[now - 6h, now]` interval, displaying progress phases (Investigating, Identified, Monitoring, Resolved).
+- **Aggregated health:** Evaluates overall service state using worst-case severity (Operational, Degraded Performance, Partial Outage, Major Outage).
+- **Official status sources:**
+
+| Provider | Official Status Page | Integration Type |
+|---|---|---|
+| **Anthropic (Claude)** | [status.claude.com](https://status.claude.com) | Statuspage API |
+| **OpenAI (ChatGPT/Codex)** | [status.openai.com](https://status.openai.com) | Statuspage API |
+| **Google Gemini / AI Studio** | [aistudio.google.com/status](https://aistudio.google.com/status) | Official Health Page |
+| **xAI (Grok)** | [status.x.ai](https://status.x.ai) | RSS Status Source |
+| **DeepSeek** | [status.deepseek.com](https://status.deepseek.com) | Status API |
+| **Kimi (Moonshot)** | [status.moonshot.cn](https://status.moonshot.cn) | Statuspage API |
+| **OpenRouter** | [status.openrouter.ai](https://status.openrouter.ai) | RSS Status Source |
+| **Z.AI** | *(None)* | Unmonitored (no public status page) |
+
+Clicking any row in the status window opens the provider's official status page directly in your browser.
+
+---
 
 ## What's in this version
+
+### v0.20.0 — Gemini Antigravity, Grok CLI SuperGrok quotas, service health and settings indicators
+
+- **Google Gemini via Antigravity CLI (`agy`):** Real-time monitoring of 5-hour and weekly quota windows for Gemini and third-party models using local `agy` execution with automatic binary discovery.
+- **xAI / Grok CLI integration:** SuperGrok Heavy subscription tier, weekly usage %, reset countdown, and prepaid balance via `~/.grok/auth.json` and Grok billing proxy.
+- **Vendor installation disclaimers:** Clear, helpful disclaimers in Gemini and xAI cards highlighting that local CLIs must be installed and logged in.
+- **Service Status & Health Panel:** Dedicated panel tracking upstream outages, maintenance, and incident history across all providers with links to official status pages (including Google AI Studio and status.x.ai).
+- **Settings redesign:** Clear visual active/enabled indicators with green checkmarks and distinct styling for active providers.
 
 ### v0.12 — xAI billing, reorderable cards, full-header expand
 
@@ -452,8 +520,10 @@ api_key_env = "MOONSHOT_API_KEY"
 
 [gemini]
 enabled = true
-api_key_env = "GEMINI_API_KEY"
-# api_key = "AIza..."        # heartbeat only — no usage/quota API
+prefer_antigravity = true        # default true: queries local 'agy' CLI for live quota windows
+# agy_path = "/path/to/agy"     # optional: custom path if not in standard locations
+api_key_env = "GEMINI_API_KEY"  # fallback heartbeat if Antigravity is not installed
+# api_key = "AIza..."
 
 [deepseek]
 enabled = true
@@ -463,8 +533,11 @@ api_key_env = "DEEPSEEK_API_KEY"
 
 [xai]
 enabled = true
-api_key_env = "XAI_MANAGEMENT_KEY"
-# api_key = "xai-..."        # management key (NOT the inference API key)
+prefer_grok_cli = true          # default true: reads ~/.grok/auth.json for SuperGrok Heavy quota
+# grok_auth_path = "/Users/you/.grok/auth.json"
+# Management API fallback (if prefer_grok_cli = false):
+# api_key_env = "XAI_MANAGEMENT_KEY"
+# api_key = "xai-..."
 # team_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 # base_url = "https://management-api.x.ai"
 ```
