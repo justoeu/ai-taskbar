@@ -5,6 +5,7 @@ import AiTaskbarCore
 public struct AboutView: View {
     public let onDone: () -> Void
     @EnvironmentObject var updates: UpdateChecker
+    @State private var showQuitConfirmation = false
 
     public init(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -87,6 +88,28 @@ public struct AboutView: View {
             Spacer(minLength: 4)
 
             HStack(spacing: 12) {
+                Button(role: .destructive) {
+                    showQuitConfirmation = true
+                } label: {
+                    Label(L10n.localizedString("quit_app"), systemImage: "power")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .confirmationDialog(
+                    L10n.localizedString("quit_confirm_title"),
+                    isPresented: $showQuitConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button(L10n.localizedString("quit_confirm_button"), role: .destructive) {
+                        NSApplication.shared.terminate(nil)
+                    }
+                    Button(L10n.localizedString("cancel"), role: .cancel) {}
+                } message: {
+                    Text(L10n.localizedString("quit_confirm_message"))
+                }
+
+                Spacer()
+
                 Button(L10n.localizedString("done")) { onDone() }
                     .keyboardShortcut(.defaultAction)
             }

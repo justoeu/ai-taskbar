@@ -307,3 +307,25 @@
 
 // Grok / xAI
 "xai_grok_disclaimer" = "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.";
+
+// Analytics & Visão Geral de Consumo
+"analytics_toolbar_button" = "Visão Geral de Consumo e Gráficos";
+"analytics_title" = "Consumo & Métricas";
+"analytics_subtitle" = "Visão consolidada entre todos os LLMs";
+"analytics_distribution_title" = "Distribuição de Consumo e Custos";
+"analytics_usage" = "Uso";
+"analytics_usage_share" = "Fatia de Uso";
+"analytics_by_llm_title" = "Consumo por LLM";
+"analytics_empty_data" = "Nenhum consumo registrado no período.";
+"analytics_busiest_day" = "Dia mais movimentado";
+"analytics_sessions" = "sessões ativas";
+"timeframe_daily" = "Hoje";
+"timeframe_weekly" = "Semana";
+"timeframe_monthly" = "Mês";
+"compare_previous_period" = "Comparar com período anterior";
+
+// Confirmação de Saída
+"quit_confirm_title" = "Deseja realmente fechar o AI Taskbar?";
+"quit_confirm_message" = "O monitoramento contínuo das quotas na barra de menu será interrompido.";
+"quit_confirm_button" = "Fechar App";
+

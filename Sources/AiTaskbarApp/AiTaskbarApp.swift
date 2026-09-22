@@ -9,10 +9,11 @@ struct AiTaskbarApp: App {
     @StateObject private var statusStore: ServiceStatusStore
     @StateObject private var scheduler: RefreshScheduler
     @StateObject private var loginItem = LoginItemService()
-    @StateObject private var cost = CostEstimator()
+    @StateObject private var cost: CostEstimator
     @StateObject private var updates: UpdateChecker
     @StateObject private var configWatcher: ConfigWatcher
     @StateObject private var settingsViewModel: SettingsViewModel
+    @StateObject private var analyticsStore: AnalyticsStore
     private let env: AppEnvironment
 
     init() {
@@ -65,6 +66,10 @@ struct AiTaskbarApp: App {
         // Kick off the refresh + compact loops from launch so usage starts
         // accumulating without requiring the user to open the popover first.
         scheduler.start()
+        let costEstimator = CostEstimator()
+        _cost = StateObject(wrappedValue: costEstimator)
+        let analyticsStore = AnalyticsStore(usageStore: store, costEstimator: costEstimator)
+        _analyticsStore = StateObject(wrappedValue: analyticsStore)
         _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(
             config: env.config, configLoader: env.configLoader))
         self.env = env
@@ -82,6 +87,7 @@ struct AiTaskbarApp: App {
             .environmentObject(statusStore)
             .environmentObject(loginItem)
             .environmentObject(cost)
+            .environmentObject(analyticsStore)
             .environmentObject(updates)
             .environmentObject(configWatcher)
             .environmentObject(settingsViewModel)
