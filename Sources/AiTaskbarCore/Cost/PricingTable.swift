@@ -144,6 +144,40 @@ public enum PricingTable {
         "gpt-5":           ModelPricing(input: 1.25, output: 10,   cacheRead: 0.125),
     ]
 
+    /// xAI — Grok family. Consumed by local scanners and Opencode attribution.
+    /// Prices in USD per 1M tokens as of 2026-09-21.
+    public static let xai: [String: ModelPricing] = [
+        // Grok 4.7 — Flagship frontier model with reasoning effort levels.
+        "grok-4.7":           ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        "grok-4.7-thinking":  ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        "grok-4.7-code":      ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        // Grok 4.x / Grok 4
+        "grok-4":             ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        // Grok 2 line
+        "grok-2":             ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.50),
+        "grok-2-mini":        ModelPricing(input: 0.20, output: 1.0, cacheRead: 0.05),
+        "grok-beta":          ModelPricing(input: 5.0, output: 15.0),
+    ]
+
+    /// Google Gemini family. Consumed by Opencode and local scanners.
+    /// Prices in USD per 1M tokens based on Google Cloud official pricing.
+    public static let gemini: [String: ModelPricing] = [
+        // Gemini 2.5 Pro (Prompt <= 128k: $1.25 in / $5.00 out; > 128k: $2.50 in / $10.00 out)
+        "gemini-2.5-pro":     ModelPricing(input: 1.25, output: 5.00, cacheRead: 0.3125,
+                                           longContextThreshold: 128_000,
+                                           longContextInputMultiplier: 2.0,
+                                           longContextOutputMultiplier: 2.0),
+        // Gemini 2.5 Flash
+        "gemini-2.5-flash":   ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
+        // Gemini 1.5 Pro
+        "gemini-1.5-pro":     ModelPricing(input: 1.25, output: 5.00, cacheRead: 0.3125,
+                                           longContextThreshold: 128_000,
+                                           longContextInputMultiplier: 2.0,
+                                           longContextOutputMultiplier: 2.0),
+        // Gemini 1.5 Flash
+        "gemini-1.5-flash":   ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
+    ]
+
     public static func lookup(_ model: String, table: [String: ModelPricing]) -> ModelPricing? {
         if let exact = table[model] { return exact }
         // Longest-prefix wins. Log lines may carry suffixes ("gpt-5.5-2026-04",

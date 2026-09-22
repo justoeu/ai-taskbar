@@ -23,8 +23,9 @@ public final class UsageHistoryStore: @unchecked Sendable {
         var writeHandle: FileHandle?
     }
     private let state = OSAllocatedUnfairLock(initialState: LockedState())
+    public static let defaultRetention: TimeInterval = 90 * 86_400 // 90 days
 
-    public init(vendor: VendorId, baseDir: URL, retention: TimeInterval = 7 * 86_400) {
+    public init(vendor: VendorId, baseDir: URL, retention: TimeInterval = defaultRetention) {
         self.vendor = vendor
         self.baseDir = baseDir
         self.retention = retention
@@ -121,6 +122,12 @@ public final class UsageHistoryStore: @unchecked Sendable {
         // protect downstream chart/sparkline code from any future skew.
         out.sort { $0.at < $1.at }
         return out
+    }
+
+    public func load(between start: Date, and end: Date) -> [Sample] {
+        let samples = load(since: start)
+        let endCutoff = end.timeIntervalSince1970
+        return samples.filter { $0.at <= endCutoff }
     }
 
     // MARK: - Compact
