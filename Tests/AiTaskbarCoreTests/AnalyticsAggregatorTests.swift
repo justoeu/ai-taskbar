@@ -115,7 +115,7 @@ struct AnalyticsAggregatorTests {
         let peak = AnalyticsAggregator.computePeakDay(from: samples, now: today)
         #expect(peak != nil)
         #expect(peak?.utilizationPercent == 85.0)
-        #expect(peak?.isHistoricalPeak == true)
+        expectTrue(peak?.isHistoricalPeak ?? false)
     }
 
     @Test("delta comparison calculates percent change")

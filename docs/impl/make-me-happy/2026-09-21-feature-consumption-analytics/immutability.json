@@ -1,0 +1,11 @@
+{
+  "green": true,
+  "suite": [
+    "PricingTable",
+    "UsageHistoryStore",
+    "AnalyticsAggregator",
+    "AnalyticsStore",
+    "DonutChart",
+    "AnalyticsView"
+  ]
+}

@@ -1,0 +1,45 @@
+flowchart TD
+    subgraph Data Sources
+        UHS[UsageHistoryStore 90 days]
+        CSS[ClaudeSessionScanner]
+        CXS[CodexSessionScanner]
+        OCS[OpencodeScanner SQLite opencode.db]
+        VSS[VendorSnapshots Active Quotas]
+    end
+
+    subgraph Core Logic
+        PT[PricingTable xAI Grok 4.7 & Gemini]
+        AA[AnalyticsAggregator]
+        UHS --> AA
+        CSS --> AA
+        CXS --> AA
+        OCS --> AA
+        VSS --> AA
+        PT --> AA
+        AA --> GAS[GlobalAnalyticsSnapshot]
+        AA --> VAS[VendorAnalyticsSummary per LLM]
+        AA --> PDR[PeakDayRecord flame icon]
+    end
+
+    subgraph State Management
+        AST[AnalyticsStore ObservableObject]
+        GAS --> AST
+        VAS --> AST
+        PDR --> AST
+    end
+
+    subgraph Presentation
+        TB[Top Toolbar: Refresh -> Status -> Analytics -> About]
+        AV[AnalyticsView]
+        DC1[Donut Chart: % Usage Share]
+        DC2[Donut Chart: Total Cost USD + Legend]
+        VAC[Vendor Cards: Peak Day + Sessions + Model Breakdown]
+        ABV[AboutView: Fechar App with Confirmation Alert]
+
+        TB -->|Open Analytics| AV
+        TB -->|Open About| ABV
+        AST --> AV
+        AV --> DC1
+        AV --> DC2
+        AV --> VAC
+    end
