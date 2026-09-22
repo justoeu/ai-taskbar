@@ -45,6 +45,7 @@ public final class CostEstimator: ObservableObject {
         .openai: ["openai"],
         .zai: ["zai", "zai-coding-plan"],
         .xai: ["xai"],
+        .gemini: ["gemini", "google"],
     ]
     /// Skip recomputation if the last result is younger than this.
     private let minRecomputeInterval: TimeInterval = 60
