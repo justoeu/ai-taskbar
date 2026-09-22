@@ -25,10 +25,11 @@ struct CostEstimatorLoadingTests {
         )
     }
 
-    @Test("opencode aliases route current Z.AI and xAI models to their vendor cards")
+    @Test("opencode aliases route current Z.AI, xAI and Gemini models to their vendor cards")
     func opencode_aliases_route_to_vendor_cards() {
         expectTrue(CostEstimator.opencodeProviders[.zai] == ["zai", "zai-coding-plan"])
         expectTrue(CostEstimator.opencodeProviders[.xai] == ["xai"])
+        expectTrue(CostEstimator.opencodeProviders[.gemini] == ["gemini", "google"])
     }
 
     @MainActor
