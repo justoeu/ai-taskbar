@@ -309,3 +309,25 @@
 // Grok / xAI
 "xai_grok_disclaimer" = "To monitor Grok, Grok must be installed and authenticated.";
 
+// Analytics & Consumption Overview
+"analytics_toolbar_button" = "Consumption Overview & Charts";
+"analytics_title" = "Consumption & Analytics";
+"analytics_subtitle" = "Consolidated overview across all LLMs";
+"analytics_distribution_title" = "Usage & Cost Distribution";
+"analytics_usage" = "Usage";
+"analytics_usage_share" = "Usage Share";
+"analytics_by_llm_title" = "Breakdown by LLM";
+"analytics_empty_data" = "No consumption recorded in this timeframe.";
+"analytics_busiest_day" = "Busiest day";
+"analytics_sessions" = "active sessions";
+"timeframe_daily" = "Today";
+"timeframe_weekly" = "Week";
+"timeframe_monthly" = "Month";
+"compare_previous_period" = "Compare with previous period";
+
+// Quit confirmation
+"quit_confirm_title" = "Are you sure you want to quit AI Taskbar?";
+"quit_confirm_message" = "Continuous menu bar quota monitoring will be stopped.";
+"quit_confirm_button" = "Quit App";
+
+

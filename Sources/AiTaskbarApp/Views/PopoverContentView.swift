@@ -5,6 +5,7 @@ import AiTaskbarCore
 public struct PopoverContentView: View {
     private enum Overlay: Equatable {
         case status
+        case analytics
         case about
         case settings
     }
@@ -13,6 +14,7 @@ public struct PopoverContentView: View {
     @EnvironmentObject var statusStore: ServiceStatusStore
     @EnvironmentObject var loginItem: LoginItemService
     @EnvironmentObject var cost: CostEstimator
+    @EnvironmentObject var analyticsStore: AnalyticsStore
     @EnvironmentObject var configWatcher: ConfigWatcher
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -76,6 +78,10 @@ public struct PopoverContentView: View {
                     StatusPanelView { dismissOverlay(restoreStatusFocus: true) }
                         .environmentObject(statusStore)
                         .transition(overlayTransition)
+                case .analytics:
+                    AnalyticsView { self.overlay = nil }
+                        .environmentObject(analyticsStore)
+                        .transition(overlayTransition)
                 case .about:
                     AboutView { self.overlay = nil }
                         .transition(overlayTransition)
@@ -112,6 +118,16 @@ public struct PopoverContentView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                // 1. Refresh
+                Button {
+                    store.refreshAll(forceRefresh: true)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.localizedString("refresh_all_help"))
+
+                // 2. Status
                 if !statusStore.rows.isEmpty {
                     Button {
                         overlay = .status
@@ -140,6 +156,17 @@ public struct PopoverContentView: View {
                     .accessibilityValue(statusAccessibilityValue)
                     .accessibilityHint(L10n.localizedString("service_status_ax_hint"))
                 }
+
+                // 3. Analytics
+                Button {
+                    overlay = .analytics
+                } label: {
+                    Image(systemName: "chart.pie.fill")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.localizedString("analytics_toolbar_button"))
+
+                // 4. About
                 Button {
                     overlay = .about
                 } label: {
@@ -147,13 +174,6 @@ public struct PopoverContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .help(L10n.localizedString("about_help"))
-                Button {
-                    store.refreshAll(forceRefresh: true)
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .help(L10n.localizedString("refresh_all_help"))
             }
             HStack(spacing: 4) {
                 Image(systemName: "info.circle")
@@ -190,12 +210,6 @@ public struct PopoverContentView: View {
             .controlSize(.small)
             .help(loginItem.statusDescription)
             Spacer()
-            Button(role: .destructive) {
-                onQuit()
-            } label: {
-                Label(L10n.localizedString("quit"), systemImage: "power")
-            }
-            .buttonStyle(.borderless)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
