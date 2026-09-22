@@ -41,6 +41,7 @@ public enum AnalyticsAggregator {
     public static func aggregate(
         timeframe: AnalyticsTimeframe,
         compareWithPrevious: Bool,
+        comparisonOffset: Int = 1,
         now: Date = Date(),
         histories: [VendorId: [UsageHistoryStore.Sample]] = [:],
         estimates: [VendorId: CostEstimate] = [:],
@@ -48,6 +49,34 @@ public enum AnalyticsAggregator {
     ) -> GlobalAnalyticsSnapshot {
         var vendorSummaries: [VendorAnalyticsSummary] = []
         var totalCostUSD: Double = 0
+
+        // Time intervals for current and comparison periods
+        let currentDuration: TimeInterval
+        let compareOffsetDuration: TimeInterval
+        let compareDuration: TimeInterval
+
+        switch timeframe {
+        case .daily:
+            currentDuration = 86_400
+            let daysBack = Double(max(1, comparisonOffset))
+            compareOffsetDuration = daysBack * 86_400
+            compareDuration = 86_400
+        case .weekly:
+            currentDuration = 7 * 86_400
+            let weeksBack = Double(max(1, comparisonOffset))
+            compareOffsetDuration = weeksBack * 7 * 86_400
+            compareDuration = 7 * 86_400
+        case .monthly:
+            currentDuration = 30 * 86_400
+            let monthsBack = Double(max(1, comparisonOffset))
+            compareOffsetDuration = monthsBack * 30 * 86_400
+            compareDuration = 30 * 86_400
+        }
+
+        let nowTs = now.timeIntervalSince1970
+        let currentStart = nowTs - currentDuration
+        let compareStart = nowTs - compareOffsetDuration - compareDuration
+        let compareEnd = nowTs - compareOffsetDuration
 
         // Gather all participating vendors
         let allVendors = Set(estimates.keys).union(snapshots.keys).union(histories.keys)
@@ -87,6 +116,18 @@ public enum AnalyticsAggregator {
                 }
             }
 
+            // Delta computation if compareWithPrevious is requested
+            var deltaPercent: Double? = nil
+            if compareWithPrevious, !history.isEmpty {
+                let currentSamples = history.filter { $0.at >= currentStart && $0.at <= nowTs }
+                let compareSamples = history.filter { $0.at >= compareStart && $0.at <= compareEnd }
+                if !currentSamples.isEmpty, !compareSamples.isEmpty {
+                    let currAvg = currentSamples.map(\.max).reduce(0, +) / Double(currentSamples.count)
+                    let compAvg = compareSamples.map(\.max).reduce(0, +) / Double(compareSamples.count)
+                    deltaPercent = computeDelta(current: currAvg, previous: compAvg)
+                }
+            }
+
             let summary = VendorAnalyticsSummary(
                 vendor: vendor,
                 planLabel: snapshot?.planLabel,
@@ -96,7 +137,7 @@ public enum AnalyticsAggregator {
                 peakDay: peakDay,
                 costByModel: modelBreakdown,
                 usageHistory: history,
-                deltaPreviousPeriodPercent: nil
+                deltaPreviousPeriodPercent: deltaPercent
             )
             vendorSummaries.append(summary)
         }
@@ -117,6 +158,7 @@ public enum AnalyticsAggregator {
         return GlobalAnalyticsSnapshot(
             timeframe: timeframe,
             compareWithPrevious: compareWithPrevious,
+            comparisonOffset: comparisonOffset,
             totalCostUSD: totalCostUSD,
             vendorShares: vendorShares,
             vendorSummaries: vendorSummaries,

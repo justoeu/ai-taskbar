@@ -129,4 +129,29 @@ struct AnalyticsAggregatorTests {
         let zeroPrev = AnalyticsAggregator.computeDelta(current: 50.0, previous: 0.0)
         #expect(zeroPrev == nil)
     }
+
+    @Test("aggregate calculates deltaPreviousPeriodPercent when compareWithPrevious is enabled")
+    func aggregate_delta_calculation() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let nowTs = now.timeIntervalSince1970
+        // Current week samples: average 60.0
+        let s1 = UsageHistoryStore.Sample(at: nowTs - (2 * 86_400), max: 60.0)
+        // Previous week samples (between 7 and 14 days ago): average 40.0
+        let s2 = UsageHistoryStore.Sample(at: nowTs - (10 * 86_400), max: 40.0)
+
+        let snapshot = AnalyticsAggregator.aggregate(
+            timeframe: .weekly,
+            compareWithPrevious: true,
+            comparisonOffset: 1,
+            now: now,
+            histories: [.anthropic: [s1, s2]],
+            estimates: [.anthropic: CostEstimate(usdToday: 5.0, usdLast7Days: 20.0)],
+            snapshots: [:]
+        )
+
+        let summary = snapshot.vendorSummaries.first(where: { $0.vendor == .anthropic })
+        #expect(summary != nil)
+        // Delta from 40 to 60 is +50%
+        #expect(summary?.deltaPreviousPeriodPercent == 50.0)
+    }
 }

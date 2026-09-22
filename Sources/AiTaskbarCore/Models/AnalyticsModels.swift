@@ -73,6 +73,7 @@ public struct VendorShare: Sendable, Equatable, Identifiable {
 public struct GlobalAnalyticsSnapshot: Sendable, Equatable {
     public let timeframe: AnalyticsTimeframe
     public let compareWithPrevious: Bool
+    public let comparisonOffset: Int
     public let totalCostUSD: Double
     public let vendorShares: [VendorShare]
     public let vendorSummaries: [VendorAnalyticsSummary]
@@ -80,12 +81,14 @@ public struct GlobalAnalyticsSnapshot: Sendable, Equatable {
 
     public init(timeframe: AnalyticsTimeframe = .daily,
                 compareWithPrevious: Bool = false,
+                comparisonOffset: Int = 1,
                 totalCostUSD: Double,
                 vendorShares: [VendorShare] = [],
                 vendorSummaries: [VendorAnalyticsSummary] = [],
                 computedAt: Date = Date()) {
         self.timeframe = timeframe
         self.compareWithPrevious = compareWithPrevious
+        self.comparisonOffset = comparisonOffset
         self.totalCostUSD = totalCostUSD
         self.vendorShares = vendorShares
         self.vendorSummaries = vendorSummaries

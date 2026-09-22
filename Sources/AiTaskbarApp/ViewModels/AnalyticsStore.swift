@@ -22,6 +22,14 @@ public final class AnalyticsStore: ObservableObject {
         }
     }
 
+    @Published public var comparisonOffset: Int = 1 {
+        didSet {
+            if oldValue != comparisonOffset {
+                recompute()
+            }
+        }
+    }
+
     @Published public private(set) var snapshot: GlobalAnalyticsSnapshot?
     @Published public private(set) var isLoading: Bool = false
 
@@ -93,6 +101,7 @@ public final class AnalyticsStore: ObservableObject {
         self.snapshot = AnalyticsAggregator.aggregate(
             timeframe: timeframe,
             compareWithPrevious: compareWithPrevious,
+            comparisonOffset: comparisonOffset,
             now: Date(),
             histories: histories,
             estimates: estimates,

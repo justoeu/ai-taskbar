@@ -81,6 +81,7 @@ public struct PopoverContentView: View {
                 case .analytics:
                     AnalyticsView { self.overlay = nil }
                         .environmentObject(analyticsStore)
+                        .environmentObject(store)
                         .transition(overlayTransition)
                 case .about:
                     AboutView { self.overlay = nil }
@@ -193,13 +194,6 @@ public struct PopoverContentView: View {
 
     private var footerBar: some View {
         HStack(spacing: 12) {
-            Button {
-                overlay = .settings
-            } label: {
-                Label(L10n.localizedString("settings"), systemImage: "gearshape")
-            }
-            .buttonStyle(.borderless)
-            .help(L10n.localizedString("settings_help"))
             Toggle(isOn: Binding(
                 get: { loginItem.isRegistered },
                 set: { _ in loginItem.toggle() }
@@ -209,7 +203,16 @@ public struct PopoverContentView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .help(loginItem.statusDescription)
+
             Spacer()
+
+            Button {
+                overlay = .settings
+            } label: {
+                Label(L10n.localizedString("settings"), systemImage: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.localizedString("settings_help"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

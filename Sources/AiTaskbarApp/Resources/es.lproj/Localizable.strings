@@ -324,8 +324,22 @@
 "timeframe_monthly" = "Mes";
 "compare_previous_period" = "Comparar con período anterior";
 
-// Confirmación de Salida
 "quit_confirm_title" = "¿Realmente deseas salir de AI Taskbar?";
 "quit_confirm_message" = "El monitoreo continuo de cuotas en la barra de menú se detendrá.";
 "quit_confirm_button" = "Cerrar App";
+"quit_app" = "Cerrar App";
+"back" = "Volver";
+"analytics_usage_distribution_title" = "Cuota de Uso (% Cuota)";
+"analytics_cost_distribution_title" = "Consumo en Dólares (USD)";
+"compare_target_label" = "Comparar con:";
+"compare_prev_week_1" = "Semana anterior";
+"compare_prev_week_2" = "Hace 2 semanas";
+"compare_prev_week_3" = "Hace 3 semanas";
+"compare_prev_week_4" = "Hace 4 semanas";
+"compare_prev_day_1" = "Ayer";
+"compare_prev_day_7" = "Hace 7 días";
+"compare_prev_month_1" = "Mes anterior";
+"compare_prev_month_2" = "Hace 2 meses";
+"vs_previous_period_fmt" = "%@ vs. anterior";
+
 

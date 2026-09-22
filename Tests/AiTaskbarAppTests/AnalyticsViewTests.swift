@@ -23,4 +23,44 @@ struct AnalyticsViewTests {
         #expect(text.contains("🔥"))
         #expect(text.contains("84%"))
     }
+
+    @Test("VendorAnalyticsCardView initializes with reorder affordances")
+    func card_view_initialization() {
+        let summary = VendorAnalyticsSummary(
+            vendor: .anthropic,
+            totalCostUSD: 10.0,
+            totalUsagePercent: 25.0
+        )
+        var movedUp = false
+        var movedDown = false
+        let card = VendorAnalyticsCardView(
+            summary: summary,
+            canMoveUp: true,
+            canMoveDown: false,
+            onMoveUp: { movedUp = true },
+            onMoveDown: { movedDown = true }
+        )
+        #expect(card.canMoveUp)
+        card.onMoveUp?()
+        #expect(movedUp)
+        card.onMoveDown?()
+        #expect(movedDown)
+    }
+
+    @Test("AnalyticsTimeframePicker supports comparisonOffset binding")
+    func timeframe_picker_initialization() {
+        var timeframe: AnalyticsTimeframe = .weekly
+        var compare = true
+        var offset = 2
+        let timeframeBinding = Binding(get: { timeframe }, set: { timeframe = $0 })
+        let compareBinding = Binding(get: { compare }, set: { compare = $0 })
+        let offsetBinding = Binding(get: { offset }, set: { offset = $0 })
+
+        _ = AnalyticsTimeframePicker(
+            timeframe: timeframeBinding,
+            compareWithPrevious: compareBinding,
+            comparisonOffset: offsetBinding
+        )
+        #expect(offset == 2)
+    }
 }

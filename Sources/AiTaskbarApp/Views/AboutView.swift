@@ -92,9 +92,10 @@ public struct AboutView: View {
                     showQuitConfirmation = true
                 } label: {
                     Label(L10n.localizedString("quit_app"), systemImage: "power")
-                        .foregroundStyle(.red)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .controlSize(.regular)
                 .confirmationDialog(
                     L10n.localizedString("quit_confirm_title"),
                     isPresented: $showQuitConfirmation,
@@ -110,8 +111,14 @@ public struct AboutView: View {
 
                 Spacer()
 
-                Button(L10n.localizedString("done")) { onDone() }
-                    .keyboardShortcut(.defaultAction)
+                Button {
+                    onDone()
+                } label: {
+                    Label(L10n.localizedString("back"), systemImage: "chevron.backward")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .keyboardShortcut(.defaultAction)
             }
             .padding(.bottom, 4)
         }

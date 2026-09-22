@@ -325,9 +325,23 @@
 "timeframe_monthly" = "Month";
 "compare_previous_period" = "Compare with previous period";
 
-// Quit confirmation
 "quit_confirm_title" = "Are you sure you want to quit AI Taskbar?";
 "quit_confirm_message" = "Continuous menu bar quota monitoring will be stopped.";
 "quit_confirm_button" = "Quit App";
+"quit_app" = "Quit App";
+"back" = "Back";
+"analytics_usage_distribution_title" = "Usage Share (% Quota)";
+"analytics_cost_distribution_title" = "Cost Consumption (USD)";
+"compare_target_label" = "Compare with:";
+"compare_prev_week_1" = "Previous week";
+"compare_prev_week_2" = "2 weeks ago";
+"compare_prev_week_3" = "3 weeks ago";
+"compare_prev_week_4" = "4 weeks ago";
+"compare_prev_day_1" = "Yesterday";
+"compare_prev_day_7" = "7 days ago";
+"compare_prev_month_1" = "Previous month";
+"compare_prev_month_2" = "2 months ago";
+"vs_previous_period_fmt" = "%@ vs. previous";
+
 
 
