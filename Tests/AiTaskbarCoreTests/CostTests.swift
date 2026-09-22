@@ -205,6 +205,43 @@ struct CostTests {
         #expect(total == 0)
         #expect(breakdown["future-model"] == 0)
     }
+
+    @Test("Grok 4.7 has explicit pricing at $2/$6 with $0.50 cache read")
+    func lookup_grok47() {
+        let m = PricingTable.lookup("grok-4.7", table: PricingTable.xai)
+        #expect(m?.inputPer1M == 2.0)
+        #expect(m?.outputPer1M == 6.0)
+        #expect(m?.cacheReadPer1M == 0.50)
+    }
+
+    @Test("Grok 4.7 thinking and code variants resolve to the 4.7 tier")
+    func lookup_grok47_variants() {
+        let thinking = PricingTable.lookup("grok-4.7-thinking", table: PricingTable.xai)
+        #expect(thinking?.inputPer1M == 2.0)
+        #expect(thinking?.outputPer1M == 6.0)
+        let code = PricingTable.lookup("grok-4.7-code", table: PricingTable.xai)
+        #expect(code?.inputPer1M == 2.0)
+        #expect(code?.outputPer1M == 6.0)
+    }
+
+    @Test("Gemini 2.5 Flash has explicit pricing at $0.075/$0.30")
+    func lookup_gemini25_flash() {
+        let m = PricingTable.lookup("gemini-2.5-flash", table: PricingTable.gemini)
+        #expect(m?.inputPer1M == 0.075)
+        #expect(m?.outputPer1M == 0.30)
+        #expect(m?.cacheReadPer1M == 0.01875)
+    }
+
+    @Test("Gemini 2.5 Pro has 128k long-context threshold and multipliers")
+    func lookup_gemini25_pro() {
+        let m = PricingTable.lookup("gemini-2.5-pro", table: PricingTable.gemini)
+        #expect(m?.inputPer1M == 1.25)
+        #expect(m?.outputPer1M == 5.00)
+        #expect(m?.cacheReadPer1M == 0.3125)
+        #expect(m?.longContextThresholdTokens == 128_000)
+        #expect(m?.longContextInputMultiplier == 2.0)
+        #expect(m?.longContextOutputMultiplier == 2.0)
+    }
 }
 
 @Suite("CostEstimate / ModelUsage")
