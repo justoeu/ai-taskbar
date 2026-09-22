@@ -340,5 +340,15 @@ struct WireTypesEdgeTests {
         #expect(snap.fiveHour?.utilizationPercent == 0)
         #expect(snap.fiveHour?.detail == "100% remaining")
     }
+
+    @Test("Z.AI envelope with nil data produces fallback snapshot")
+    func zai_nil_data_snapshot() {
+        let env = ZAIEnvelope(code: 200, msg: "ok", success: true, data: nil)
+        let snap = env.toSnapshot(configTier: "pro")
+        #expect(snap.planLabel == "GLM Pro")
+        #expect(snap.session == nil)
+        #expect(snap.weekly == nil)
+        #expect(snap.mcp == nil)
+    }
 }
 

@@ -1,5 +1,6 @@
 import Foundation
 import AiTaskbarCore
+import os
 
 /// Abstraction for invoking the Antigravity CLI (`agy`).
 ///
@@ -78,9 +79,11 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
 
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
+                let timedOut = OSAllocatedUnfairLock(initialState: false)
                 let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
-                timer.schedule(deadline: .now() + 15)
+                timer.schedule(deadline: .now() + 35)
                 timer.setEventHandler {
+                    timedOut.withLock { $0 = true }
                     if process.isRunning {
                         process.terminate()
                     }
@@ -100,15 +103,36 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                 process.waitUntilExit()
                 timer.cancel()
 
+                if timedOut.withLock({ $0 }) {
+                    continuation.resume(throwing: AppError.io("Tempo limite esgotado ao consultar o Antigravity (agy). Tente novamente."))
+                    return
+                }
+
                 let errStr = String(data: errData, encoding: .utf8) ?? ""
                 let outStr = String(data: outData, encoding: .utf8) ?? ""
 
-                if process.terminationStatus != 0 {
-                    let fullErr = (errStr + " " + outStr).trimmingCharacters(in: .whitespacesAndNewlines)
+                // Extract clean error message from structured agy JSON if available
+                let structuredError = Self.extractStructuredError(outData: outData, errData: errData)
+
+                if process.terminationStatus != 0 || structuredError != nil {
+                    let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
                     if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
                         continuation.resume(throwing: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal para fazer login."))
+                    } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
+                        continuation.resume(throwing: AppError.http(status: 503, body: "Serviço do Google Antigravity temporariamente indisponível. Tente novamente."))
+                    } else if let structured = structuredError {
+                        if structured == "context canceled" {
+                            continuation.resume(throwing: AppError.io("Operação cancelada ou tempo limite esgotado pelo Antigravity."))
+                        } else {
+                            continuation.resume(throwing: AppError.io("agy: \(structured)"))
+                        }
                     } else {
-                        continuation.resume(throwing: AppError.io("agy falhou (código \(process.terminationStatus)): \(fullErr)"))
+                        let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
+                            : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
+                        let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
+                        continuation.resume(throwing: AppError.io("agy falhou (código \(process.terminationStatus)): \(clean)"))
                     }
                     return
                 }
@@ -121,5 +145,39 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                 continuation.resume(returning: outData)
             }
         }
+    }
+
+    private static func extractStructuredError(outData: Data, errData: Data) -> String? {
+        struct AgyEnvelope: Decodable {
+            let status: String?
+            let error: String?
+            let response: String?
+        }
+
+        func inspect(_ data: Data) -> String? {
+            if let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: data) {
+                if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
+                    if let err = env.error, !err.isEmpty { return err }
+                    if let resp = env.response, !resp.isEmpty { return resp }
+                    return "Erro no Antigravity"
+                }
+            }
+            let str = String(data: data, encoding: .utf8) ?? ""
+            if let start = str.firstIndex(of: "{"),
+               let end = str.lastIndex(of: "}") {
+                let sub = String(str[start...end])
+                if let subData = sub.data(using: .utf8),
+                   let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: subData) {
+                    if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
+                        if let err = env.error, !err.isEmpty { return err }
+                        if let resp = env.response, !resp.isEmpty { return resp }
+                        return "Erro no Antigravity"
+                    }
+                }
+            }
+            return nil
+        }
+
+        return inspect(outData) ?? inspect(errData)
     }
 }

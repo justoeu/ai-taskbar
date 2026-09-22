@@ -98,9 +98,17 @@ public final class GeminiProvider: UsageProvider {
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
         // Attempt decoding as Antigravity /usage JSON
-        if let agy = try? SharedCoders.decoder.decode(AntigravityUsageResponse.self, from: data),
-           agy.command?.name == "usage" || (agy.command?.data?.groups != nil && !(agy.command?.data?.groups?.isEmpty ?? true)) {
-            return .gemini(agy.toSnapshot())
+        if let agy = try? SharedCoders.decoder.decode(AntigravityUsageResponse.self, from: data) {
+            if agy.status == "ERROR" {
+                let err = agy.error ?? agy.response ?? "Erro no Antigravity"
+                if err == "context canceled" {
+                    throw AppError.io("Operação cancelada ou tempo limite esgotado pelo Antigravity.")
+                }
+                throw AppError.io("agy: \(err)")
+            }
+            if agy.command?.name == "usage" || (agy.command?.data?.groups != nil && !(agy.command?.data?.groups?.isEmpty ?? true)) {
+                return .gemini(agy.toSnapshot())
+            }
         }
 
         let parsed: GeminiModelsResponse

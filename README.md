@@ -349,62 +349,13 @@ Clicking any row in the status window opens the provider's official status page 
 - **Service Status & Health Panel:** Dedicated panel tracking upstream outages, maintenance, and incident history across all providers with links to official status pages (including Google AI Studio and status.x.ai).
 - **Settings redesign:** Clear visual active/enabled indicators with green checkmarks and distinct styling for active providers.
 
-### v0.12 — xAI billing, reorderable cards, full-header expand
+### v0.19.0 — Codex credits quantity, self-correcting baseline
 
-- **Eighth provider — xAI (Grok) via Management API.** Prepaid balance + monthly spend vs soft limit from `management-api.x.ai` (management key + team ID). Inference host `api.x.ai` is rejected by the host allow-list. Settings UI labels the fields as management key / team ID with localized help. Dashboard link points at the console usage page.
-- **Reorder vendor cards** with ↑ / ↓ on each card header. Order is stored in `UserDefaults` (`vendor_order`) on this Mac; rotating menu-bar mode follows the same order. (Drag-and-drop is unreliable inside `MenuBarExtra` windows on macOS, so buttons are the supported path.)
-- **Click anywhere on the leading header** (chevron + name + plan + flexible space) to expand/collapse. Dashboard, reorder, and refresh remain separate trailing controls.
+- **Codex credits as a quantity:** Parse and display OpenAI credits as a bare quantity rather than fabricating currency symbols. Progress bar reflects locally observed peak baseline from `CreditBaselineStore`.
+- **Self-correcting credit baseline:** Fall-drop heuristics avoid mistaking natural usage for grant expiration; recalibrate baseline option surfaced via context menu.
+- **Structured message ranges:** Separate `approx_local_messages` and `approx_cloud_messages` preserved for credit-funded accounts without hardcoded strings.
 
-### v0.2 — Gemini, calmer cadence, honest countdown, no more Keychain prompts
-
-- **Sixth provider — Google Gemini.** Uses `GET /v1beta/models` as an authenticated heartbeat (Generative Language API has no public quota REST endpoint). Auth via `x-goog-api-key` header, never `?key=` query string. Host allow-listed to `generativelanguage.googleapis.com`. `GeminiConfig.validate` is strict on the API-version segment — `base_url` must be exactly `/v1`, `/v1beta`, or `/v1alpha` (or a sub-path of one). A typo like `/v1xxx` is rejected at config-load with an NSLog warning, instead of producing a silent 404 at first fetch. A future Google rename (`models` → `availableModels`) lands as `AppError.schema` + red row, not as a silently green "no models visible".
-- **Default refresh cadence raised from 150 s → 300 s (5 min).** A conservative starting point for undocumented usage endpoints; individual vendors can still impose longer or account-wide 429 windows. Floor is still 15 s; override via `[ui] refresh_interval_seconds = …`.
-- **Forward countdown in the popover header.** "Próx. em 4:59" replaces the old "atualizado há …" — anchored on `UsageStore.lastScheduledTickAt`, which is stamped by `RefreshScheduler.markScheduledTick()` immediately before every cycle. When the scheduler is in the 60 s post-429 back-off the label switches to "Aguardando rate-limit…"; while a fetch is in flight it says "Atualizando…". Pre-computed `@Published` aggregates (`isAnyVendorLoading`, `hasRateLimitedVendor`) keep the per-second TimelineView reading flat properties instead of re-scanning the vendor array; localized strings are memoized at type init.
-- **Rate-limit back-off.** When any vendor's most recent refresh ended in HTTP 429, `RefreshScheduler` adds `rateLimitBackoff` (60 s) to the next sleep. Stays applied while at least one vendor keeps 429-ing; clears automatically when responses go green. `UsageStore.hasRateLimitedVendor` detects both `.failed(429, _)` AND stale-`.ok` outcomes whose cached `lastError.status == 429` (CachedFetch hides single 429s as `.ok(stale)` whenever any payload is cached).
-- **Per-provider exponential cooldown.** A vendor that keeps returning 429 is skipped for 5, 10, 20, 40, then at most 60 minutes. Manual refresh respects the same deadline, so repeated clicks cannot turn a temporary throttle into a longer one; providers that are not rate-limited continue refreshing.
-- **Cache TTL automatically derived from the cadence** — `max(15, refresh_interval_seconds − 5)`. Popover opens between scheduled refreshes still serve from cache, but the scheduled tick at T=interval always finds an expired entry (`age ≈ interval > ttl`) and goes straight to the network without needing `forceRefresh: true`. The 5-second margin absorbs Task.sleep jitter.
-- **Keychain write no longer triggers the macOS password prompt.** `KeychainCredentialReader.writeBack` passes `kSecUseAuthenticationUIFail` (the deprecated key — the modern `LAContext.interactionNotAllowed` doesn't work for plain generic-password items without a `SecAccessControl`) and treats `errSecInteractionNotAllowed` as best-effort: logs a prompt to use the in-app Authorize button and returns. The renewed credentials are mirrored to an in-memory `_pendingUpdate`; the next `read()` reconciles against the on-disk copy by `expiresAtMs` (so an external rotation via Claude Code CLI wins automatically when it lands). Menu-bar app (LSUIElement) no longer freezes behind an invisible SecurityAgent dialog after every `make app` rebuild.
-
-### v0.1.0 — initial release
-
-**Core**
-- 5 LLM providers — Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), Kimi (Moonshot)
-- OAuth auto-refresh for Anthropic + OpenAI using their official `client_id`s
-- Per-vendor caches with 150-second TTL (matched to the v0.1 default refresh interval) and 7-day stale fallback
-
-**UI**
-- SwiftUI `MenuBarExtra` with accordion popover (locked providers stay collapsed)
-- 24-hour sparkline with dashed threshold lines (warning + critical), current-value annotation, and peak marker
-- Color-coded gauge in the menu bar (rotating mode optional)
-- Per-model cost breakdown (today / last 7 days side-by-side)
-- About panel with version + GitHub Releases update checker; on Developer ID-signed builds it also credits the developer, read live from the binary's signing certificate (ad-hoc builds omit the line)
-
-**i18n** — 3 languages out of the box (`en`, `pt-BR`, `es`) with `[ui] language = ...` config override
-
-**Security**
-- macOS Keychain reader with single-pass query for the common single-account case; auto-discovers the live entry via freshest-token-wins whenever entries are readable, and requires `keychain_account` before changing an ambiguous all-blocked multi-account ACL
-- `~/.codex/auth.json` write-back with atomic `0o600` chmod **before** rename
-- All cache/config files chmod `0o600`, support dir `0o700`
-- OpenAI cache strips PII (`user_id`/`account_id`/`email`)
-- `KimiConfig.base_url` host allow-listed (SSRF defense)
-- TOCTOU symlink refusal on cache dirs
-- Optional TLS pinning via TOFU SPKI hashes
-
-**Cost tracking**
-- Reads `~/.claude/projects/*/*.jsonl` (Claude Code sessions) — byte prefilter rejects ~78% of lines without JSON parse (measured on the largest local transcript: 22.541 of 28.870 lines; the ratio depends on how tool-heavy your sessions are)
-- Reads `~/.codex/sessions/**/rollout-*.jsonl` (Codex CLI transcripts) — per-turn `token_count` events give a real input/output/cached split, attributed to the model named by the enclosing `turn_context`
-- Falls back to `~/.codex/logs_2.sqlite` (regex `model=`/`total_usage_tokens=`) only when the rollout scan prices nothing — current Codex builds stopped emitting that field, and the two sources describe the same turns, so they're never summed
-- Pricing table for Anthropic + OpenAI models, used by the local Claude/Codex scanners (longest-prefix matching tolerates date- and deployment-suffixed variants such as `claude-opus-5-thinking` or `gpt-5.6-sol`). Gemini/Kimi/OpenRouter/Z.AI surface cost or balance straight from each vendor's API, so they don't use this table.
-- Per-model breakdown for today **and** last 7 days
-
-**Build / distribution**
-- Universal binary (`arm64 + x86_64`) via `make app-universal`
-- DMG packaging via `make dmg-universal`
-- Developer ID signing + notarization targets ready (`make release`)
-- GitHub Actions release workflow (`.github/workflows/release.yml`) auto-builds per tag
-
-**Validation**
-- `make validate` runs **160 runtime assertions** + 6-stage gate (build → validate runner → swift-test + coverage → bundle → smoke launch → permission audit). Coverage floor on `AiTaskbarCore` + `AiTaskbarProviders` enforced at ≥ 90%.
+For older releases, see [CHANGELOG.md](CHANGELOG.md) or [GitHub Releases](https://github.com/justoeu/ai-taskbar/releases).
 
 ## How it works
 

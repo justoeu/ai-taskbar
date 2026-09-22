@@ -28,7 +28,19 @@ import AiTaskbarCore
 public struct ZAIEnvelope: Decodable {
     public let code: Int?
     public let msg: String?
-    public let data: ZAIMonitorData
+    public let success: Bool?
+    public let data: ZAIMonitorData?
+
+    enum CodingKeys: String, CodingKey {
+        case code, msg, success, data
+    }
+
+    public init(code: Int? = nil, msg: String? = nil, success: Bool? = nil, data: ZAIMonitorData? = nil) {
+        self.code = code
+        self.msg = msg
+        self.success = success
+        self.data = data
+    }
 }
 
 public struct ZAIMonitorData: Decodable {
@@ -116,6 +128,17 @@ extension ZAILimitEntry {
 
 extension ZAIEnvelope {
     public func toSnapshot(configTier: String?) -> ZAISnapshot {
+        guard let data = self.data else {
+            let level = configTier
+            let planLabel: String? = level.map { "GLM \($0.capitalized)" }
+            return ZAISnapshot(
+                planLabel: planLabel,
+                session: nil,
+                weekly: nil,
+                mcp: nil,
+                topModels: nil
+            )
+        }
         let level = data.level ?? configTier
         let planLabel: String? = level.map { "GLM \($0.capitalized)" }
 

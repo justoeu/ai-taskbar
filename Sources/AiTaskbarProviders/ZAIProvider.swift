@@ -53,11 +53,31 @@ public final class ZAIProvider: UsageProvider {
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
+        let parsed: ZAIEnvelope
         do {
-            let parsed = try SharedCoders.decoder.decode(ZAIEnvelope.self, from: data)
-            return .zai(parsed.toSnapshot(configTier: configTier))
+            parsed = try SharedCoders.decoder.decode(ZAIEnvelope.self, from: data)
         } catch {
             throw AppError.schema("zai usage decode: \(error)")
         }
+
+        if let code = parsed.code, code != 200 {
+            let rawMsg = parsed.msg ?? "Z.AI error (\(code))"
+            let msg = rawMsg.contains("不存在coding plan")
+                ? "\(rawMsg) (Conta Z.AI sem plano de coding ativo)"
+                : rawMsg
+            throw AppError.http(status: code, body: msg)
+        }
+        if let success = parsed.success, !success {
+            let rawMsg = parsed.msg ?? "Z.AI request unsuccessful"
+            let msg = rawMsg.contains("不存在coding plan")
+                ? "\(rawMsg) (Conta Z.AI sem plano de coding ativo)"
+                : rawMsg
+            throw AppError.http(status: parsed.code ?? 500, body: msg)
+        }
+        guard parsed.data != nil else {
+            let detail = parsed.msg.map { ": \($0)" } ?? ""
+            throw AppError.schema("Resposta da Z.AI sem dados de quota\(detail)")
+        }
+        return .zai(parsed.toSnapshot(configTier: configTier))
     }
 }

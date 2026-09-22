@@ -171,6 +171,13 @@ section("Wire types: Antigravity Gemini fixture") {
     let snap = VendorSnapshot.gemini(s)
     expect(snap.windows.count == 4, "Antigravity exposes 4 quota windows")
     expect(abs(snap.maxUtilization - 16.344) < 0.01, "Antigravity maxUtilization matches peak")
+
+    let errParsed = try SharedCoders.decoder.decode(
+        AntigravityUsageResponse.self,
+        from: Data(#"{"conversation_id":"","status":"ERROR","response":"","error":"context canceled"}"#.utf8)
+    )
+    expect(errParsed.status == "ERROR", "Antigravity error status decoded")
+    expect(errParsed.error == "context canceled", "Antigravity error message decoded")
 }
 
 section("Wire types: DeepSeek fixture") {
@@ -741,6 +748,18 @@ section("Wire types: Z.AI fixture") {
            "Z.AI top models sorted desc by usage")
     expect(Int((s.topModels?[0].percent ?? 0).rounded()) == 50, "Z.AI top model share (20/40)")
     expect(s.topModels?[0].rawUsage == 20, "Z.AI top model raw usage")
+
+    let errEnv = try SharedCoders.decoder.decode(
+        ZAIEnvelope.self,
+        from: Data(#"{"code":500,"msg":"当前用户不存在coding plan","success":false}"#.utf8)
+    )
+    expect(errEnv.code == 500, "Z.AI error code decoded")
+    expect(errEnv.msg == "当前用户不存在coding plan", "Z.AI error msg decoded")
+    expect(errEnv.success == false, "Z.AI success flag decoded")
+    expect(errEnv.data == nil, "Z.AI data is nil in error response")
+    let errSnap = errEnv.toSnapshot(configTier: "lite")
+    expect(errSnap.planLabel == "GLM Lite", "Z.AI fallback plan label preserved")
+    expect(errSnap.session == nil, "Z.AI session nil when data is nil")
 }
 
 section("DiskCache TTL semantics") {

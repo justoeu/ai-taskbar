@@ -458,6 +458,102 @@ struct GeminiProviderTests {
 
         try? FileManager.default.removeItem(at: scriptDir)
     }
+
+    @Test("ProcessAntigravityExecutor parses context canceled into clean Portuguese message")
+    func process_executor_context_canceled_parsed_cleanly() async throws {
+        let scriptDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-script-\(UUID().uuidString)")
+        try Paths.ensureDir(scriptDir)
+        let scriptPath = scriptDir.appendingPathComponent("agy_canceled").path
+        let scriptContent = #"""
+        #!/bin/sh
+        echo '{"conversation_id":"","status":"ERROR","response":"","error":"context canceled"}'
+        exit 1
+        """#
+        try scriptContent.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
+
+        let exec = ProcessAntigravityExecutor(customPath: scriptPath)
+        do {
+            _ = try await exec.fetchUsageJSON()
+            Issue.record("expected io error")
+        } catch let err as AppError {
+            if case .io(let msg) = err {
+                expectTrue(msg.contains("Operação cancelada ou tempo limite esgotado"))
+                expectFalse(msg.contains("conversation_id"))
+                expectFalse(msg.contains("status"))
+            } else {
+                Issue.record("expected io error, got \(err)")
+            }
+        }
+
+        try? FileManager.default.removeItem(at: scriptDir)
+    }
+
+    @Test("ProcessAntigravityExecutor maps UNAVAILABLE to 503")
+    func process_executor_unavailable_parsed_as_503() async throws {
+        let scriptDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-script-\(UUID().uuidString)")
+        try Paths.ensureDir(scriptDir)
+        let scriptPath = scriptDir.appendingPathComponent("agy_unavail").path
+        let scriptContent = #"""
+        #!/bin/sh
+        echo '{"conversation_id":"","status":"ERROR","response":"","error":"UNAVAILABLE: high load"}'
+        exit 1
+        """#
+        try scriptContent.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
+
+        let exec = ProcessAntigravityExecutor(customPath: scriptPath)
+        do {
+            _ = try await exec.fetchUsageJSON()
+            Issue.record("expected 503 error")
+        } catch let err as AppError {
+            if case .http(let status, let body) = err {
+                #expect(status == 503)
+                expectTrue(body.contains("temporariamente indisponível"))
+            } else {
+                Issue.record("expected 503 error, got \(err)")
+            }
+        }
+
+        try? FileManager.default.removeItem(at: scriptDir)
+    }
+
+    @Test("GeminiProvider handles Antigravity ERROR status cleanly")
+    func gemini_provider_antigravity_status_error_handling() async throws {
+        let errJson = #"{"conversation_id":"","status":"ERROR","response":"","error":"quota exceeded"}"#
+        let mock = MockAntigravityExecutor(
+            installed: true,
+            data: Data(errJson.utf8)
+        )
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_GEMINI_ERR",
+            inlineKey: nil,
+            vendorName: "Gemini"
+        )
+        let provider = GeminiProvider(
+            credentials: creds,
+            cache: cache,
+            http: http,
+            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta")!,
+            antigravity: mock,
+            preferAntigravity: true
+        )
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected throw on ERROR status")
+        } catch let err as AppError {
+            if case .io(let msg) = err {
+                #expect(msg == "agy: quota exceeded")
+            } else {
+                Issue.record("expected AppError.io, got \(err)")
+            }
+        }
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+    }
 }
 
 private struct MockAntigravityExecutor: AntigravityExecuting, Sendable {
