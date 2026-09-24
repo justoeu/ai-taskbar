@@ -7,9 +7,9 @@
       "title": "Daily check cadence, persistence, and dismiss logic in UpdateChecker",
       "slice": "Cadence interval, last check timestamp in UserDefaults, dismiss logic, and visibility flags in UpdateChecker",
       "worktree": 1,
-      "status": "OPEN",
-      "tests_added": 0,
-      "red_green": false,
+      "status": "DONE",
+      "tests_added": 6,
+      "red_green": true,
       "immutability": false,
       "depends_on": []
     },
