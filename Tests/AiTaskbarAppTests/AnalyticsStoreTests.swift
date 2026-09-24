@@ -14,6 +14,15 @@ struct AnalyticsStoreTests {
         #expect(!store.compareWithPrevious)
         #expect(store.snapshot == nil)
         #expect(!store.isLoading)
+        expectFalse(store.isRefreshing)
+    }
+
+    @Test("force refresh triggers isRefreshing")
+    func store_force_refresh() {
+        let store = AnalyticsStore()
+        expectFalse(store.isRefreshing)
+        store.refresh(force: true)
+        expectTrue(store.isRefreshing)
     }
 
     @Test("refresh aggregates inputs into published snapshot")
@@ -60,5 +69,37 @@ struct AnalyticsStoreTests {
 
         store.timeframe = .weekly
         #expect(store.snapshot?.totalCostUSD == 70.0)
+    }
+
+    @Test("syncVendorOrder defaults to true and respects persistence")
+    func store_sync_order_behavior() {
+        let testDefaults = UserDefaults(suiteName: "AnalyticsStoreTests-\(UUID().uuidString)")!
+        let store = AnalyticsStore(defaults: testDefaults)
+        expectTrue(store.syncVendorOrder)
+
+        store.syncVendorOrder = false
+        expectFalse(store.syncVendorOrder)
+        expectFalse(testDefaults.bool(forKey: "sync_vendor_order"))
+
+        store.targetVendor = .anthropic
+        #expect(store.targetVendor == .anthropic)
+    }
+
+    @Test("analyticsOrder reorders independently when sync is false")
+    func store_analytics_order_reorder() {
+        let testDefaults = UserDefaults(suiteName: "AnalyticsStoreTests-\(UUID().uuidString)")!
+        let store = AnalyticsStore(defaults: testDefaults)
+        let enabled: [VendorId] = [.anthropic, .openai, .gemini]
+
+        store.analyticsOrder = enabled
+        #expect(store.displayIndex(of: .anthropic) == 0)
+        #expect(store.displayIndex(of: .openai) == 1)
+
+        store.moveVendorDown(.anthropic, enabled: enabled)
+        #expect(store.analyticsOrder == [.openai, .anthropic, .gemini])
+        #expect(store.displayIndex(of: .anthropic) == 1)
+
+        store.moveVendorUp(.anthropic, enabled: enabled)
+        #expect(store.analyticsOrder == [.anthropic, .openai, .gemini])
     }
 }

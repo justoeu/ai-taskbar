@@ -12,33 +12,45 @@ public struct MenuBarLabelView: View {
     }
 
     public var body: some View {
-        HStack(spacing: 4) {
-            switch mode {
-            case .icon:
-                iconForMaxPercent
-            case .iconAndPercent:
-                iconForMaxPercent
-                let percent = store.maxUtilization
-                if percent > 0 {
-                    Text("\(Int(percent.rounded()))%")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(SeverityColor.tint(forPercent: percent,
-                                                            thresholds: store.thresholds))
-                }
-            case .rotating:
-                rotatingContent
-            }
+        HStack(spacing: 0) {
+            defaultModeView
+            StatusItemButtonFinder()
+                .frame(width: 0, height: 0)
         }
         .task(id: mode) {
             guard mode == .rotating else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 if Task.isCancelled { break }
-                // Follow popover display order (user drag-reorder).
                 let n = store.sortedVendors.count
                 guard n > 0 else { continue }
                 rotateIndex = (rotateIndex + 1) % n
             }
+        }
+    }
+
+    @ViewBuilder
+    private var defaultModeView: some View {
+        switch mode {
+        case .icon:
+            iconForMaxPercent
+        case .iconAndPercent:
+            iconForMaxPercent
+            let percent = store.maxUtilization
+            if percent > 0 {
+                let isFull = percent >= store.thresholds.warning || percent >= 100
+                Text("\(Int(percent.rounded()))%")
+                    .font(.system(size: 15.0, weight: .bold, design: .monospaced))
+                    .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent,
+                                                                            thresholds: store.thresholds))
+                if isFull {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 13.0, weight: .bold))
+                        .foregroundStyle((percent >= store.thresholds.critical || percent >= 100) ? Color.red : Color.orange)
+                }
+            }
+        case .rotating:
+            rotatingContent
         }
     }
 
@@ -57,12 +69,18 @@ public struct MenuBarLabelView: View {
         } else {
             let vm = rotating[rotateIndex % rotating.count]
             let percent = vm.state.outcome?.snapshot.maxUtilization ?? 0
+            let isFull = percent >= store.thresholds.warning || percent >= 100
             Image(systemName: symbolName(for: percent))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
             Text("\(shortLabel(for: vm.vendorId)) \(Int(percent.rounded()))%")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
+                .font(.system(size: 14.0, weight: .bold, design: .monospaced))
+                .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
+            if isFull {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 13.0, weight: .bold))
+                    .foregroundStyle((percent >= store.thresholds.critical || percent >= 100) ? Color.red : Color.orange)
+            }
         }
     }
 

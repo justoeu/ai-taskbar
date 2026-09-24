@@ -59,6 +59,12 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     @Published public private(set) var rateLimitRetryAt: Date?
     private var consecutiveRateLimits: Int = 0
 
+    /// True when this vendor is unconfigured / disabled (no credentials).
+    public var isDisabled: Bool {
+        if case .failed(let err, _) = state, err.isDisabled { return true }
+        return false
+    }
+
     /// Whether this vendor's card is expanded (open) in the popover. This is
     /// the single source of truth for BOTH the section chevron UI and the
     /// menu-bar `maxUtilization` filter: a collapsed (closed) card is excluded

@@ -40,13 +40,13 @@ public struct VendorAnalyticsCardView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption.weight(.bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.secondary)
                             .frame(width: 12)
 
-                        Circle()
-                            .fill(vendorColor)
-                            .frame(width: 9, height: 9)
+                        VendorIconView(vendorId: summary.vendor, size: 16)
+                            .foregroundStyle(vendorColor)
+                            .frame(width: 16, height: 16)
 
                         Text(summary.vendor.displayName)
                             .font(.headline)
@@ -54,7 +54,7 @@ public struct VendorAnalyticsCardView: View {
 
                         if let plan = summary.planLabel, !plan.isEmpty {
                             Text(plan)
-                                .font(.caption2.weight(.medium))
+                                .font(.caption.weight(.medium))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(Capsule().fill(Color.secondary.opacity(0.15)))
@@ -63,12 +63,12 @@ public struct VendorAnalyticsCardView: View {
 
                         Spacer()
 
-                        VStack(alignment: .trailing, spacing: 1) {
+                        VStack(alignment: .trailing, spacing: 2) {
                             Text(AnalyticsMoneyFormatter.format(summary.totalCostUSD))
-                                .font(.subheadline.weight(.semibold).monospacedDigit())
+                                .font(.headline.monospacedDigit())
                             if summary.totalUsagePercent > 0 {
                                 Text("\(Int(summary.totalUsagePercent))% quota")
-                                    .font(.caption2)
+                                    .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -106,15 +106,15 @@ public struct VendorAnalyticsCardView: View {
 
             // Accordion Content
             if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     // Peak Day highlight
                     if let peak = summary.peakDay {
                         HStack(spacing: 6) {
                             Text(AnalyticsFormatters.peakDayText(peak))
-                                .font(.caption.weight(.medium))
+                                .font(.callout.weight(.medium))
                                 .foregroundStyle(.orange)
                         }
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 9)
                         .padding(.vertical, 4)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -122,11 +122,33 @@ public struct VendorAnalyticsCardView: View {
                         )
                     }
 
+                    // Lifetime usage (e.g. OpenRouter accumulated account usage)
+                    if let lifetime = summary.lifetimeCostUSD, lifetime > 0 {
+                        HStack {
+                            Text(L10n.localizedString("analytics_lifetime_usage"))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(AnalyticsMoneyFormatter.format(lifetime))
+                                .font(.callout.monospacedDigit().weight(.semibold))
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.secondary.opacity(0.08))
+                        )
+                    }
+
                     // Session Stats & Delta
                     HStack(spacing: 12) {
                         if summary.sessionCount > 0 {
-                            Label("\(summary.sessionCount) \(L10n.localizedString("analytics_sessions"))", systemImage: "macwindow")
-                                .font(.caption2)
+                            let sessionLabel = summary.sessionCount == 1
+                                ? "1 \(L10n.localizedString("analytics_session_single"))"
+                                : "\(summary.sessionCount) \(L10n.localizedString("analytics_sessions"))"
+                            Label(sessionLabel, systemImage: "macwindow")
+                                .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
 
@@ -135,7 +157,7 @@ public struct VendorAnalyticsCardView: View {
                                 Image(systemName: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
                                 Text(String(format: "%+.1f%%", delta))
                             }
-                            .font(.caption2.weight(.semibold).monospacedDigit())
+                            .font(.caption.weight(.semibold).monospacedDigit())
                             .foregroundStyle(delta >= 0 ? Color.red : Color.green)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -148,34 +170,66 @@ public struct VendorAnalyticsCardView: View {
 
                     // Model Breakdown
                     if !summary.costByModel.isEmpty {
-                        VStack(spacing: 6) {
+                        VStack(spacing: 7) {
                             ForEach(summary.costByModel.sorted(by: { $0.value > $1.value }), id: \.key) { model, cost in
                                 let proportion = summary.totalCostUSD > 0 ? (cost / summary.totalCostUSD) : 0
-                                VStack(spacing: 2) {
+                                VStack(spacing: 3) {
                                     HStack {
                                         Text(model)
-                                            .font(.caption)
+                                            .font(.callout.weight(.medium))
                                             .lineLimit(1)
                                         Spacer()
                                         Text(AnalyticsMoneyFormatter.format(cost))
-                                            .font(.caption.monospacedDigit())
+                                            .font(.callout.monospacedDigit().weight(.medium))
                                             .foregroundStyle(.secondary)
                                     }
                                     GeometryReader { geo in
                                         ZStack(alignment: .leading) {
                                             Capsule()
                                                 .fill(Color.secondary.opacity(0.12))
-                                                .frame(height: 4)
+                                                .frame(height: 5)
                                             Capsule()
-                                                .fill(vendorColor.opacity(0.8))
-                                                .frame(width: max(4, geo.size.width * CGFloat(proportion)), height: 4)
+                                                .fill(vendorColor.opacity(0.85))
+                                                .frame(width: max(5, geo.size.width * CGFloat(proportion)), height: 5)
                                         }
                                     }
-                                    .frame(height: 4)
+                                    .frame(height: 5)
                                 }
                             }
                         }
-                        .padding(.top, 2)
+                        .padding(.top, 4)
+                    } else if summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.callout)
+                                .foregroundStyle(Color.accentColor)
+                            Text(L10n.localizedString("analytics_subscription_quota_hint"))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 2)
+                    }
+
+                    // Empty state when there is no usage data
+                    let hasNoData = summary.costByModel.isEmpty
+                        && summary.sessionCount == 0
+                        && summary.peakDay == nil
+                        && (summary.lifetimeCostUSD == nil || summary.lifetimeCostUSD == 0)
+                        && summary.totalCostUSD <= 0.0001
+                        && summary.totalUsagePercent <= 0.0001
+
+                    if hasNoData {
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Text(L10n.localizedString("analytics_vendor_no_recent_usage"))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 2)
                     }
                 }
             }

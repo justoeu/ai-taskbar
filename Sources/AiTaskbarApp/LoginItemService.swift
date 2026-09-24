@@ -11,7 +11,8 @@ public final class LoginItemService: ObservableObject {
     @Published public private(set) var isRegistered: Bool
 
     public init() {
-        self.isRegistered = Self.currentStatus() == .enabled
+        self.isRegistered = false
+        refresh()
     }
 
     public static func currentStatus() -> SMAppService.Status {
@@ -55,6 +56,11 @@ public final class LoginItemService: ObservableObject {
     }
 
     public func refresh() {
-        isRegistered = SMAppService.mainApp.status == .enabled
+        Task.detached(priority: .utility) {
+            let enabled = SMAppService.mainApp.status == .enabled
+            await MainActor.run { [weak self] in
+                self?.isRegistered = enabled
+            }
+        }
     }
 }

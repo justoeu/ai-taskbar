@@ -320,6 +320,7 @@
 "analytics_empty_data" = "No consumption recorded in this timeframe.";
 "analytics_busiest_day" = "Busiest day";
 "analytics_sessions" = "active sessions";
+"analytics_session_single" = "active session";
 "timeframe_daily" = "Today";
 "timeframe_weekly" = "Week";
 "timeframe_monthly" = "Month";
@@ -342,6 +343,14 @@
 "compare_prev_month_1" = "Previous month";
 "compare_prev_month_2" = "2 months ago";
 "vs_previous_period_fmt" = "%@ vs. previous";
-
-
+"pin_to_menu_bar_help" = "Pin to menu bar";
+"more_details" = "+ details";
+"more_details_help" = "View detailed charts and consumption metrics for this LLM";
+"sync_vendor_order" = "Sync LLM order";
+"sync_vendor_order_help" = "When enabled, the LLM cards on this screen follow the order of the home screen. When disabled, you can reorder models here independently using the up/down arrows on each card.";
+"pin_to_menubar_title" = "Pin to menu bar";
+"pin_to_menubar_desc" = "Show this model's icon and usage in the macOS menu bar";
+"analytics_lifetime_usage" = "Lifetime usage";
+"analytics_vendor_no_recent_usage" = "LLM has no usage recently or in the last month";
+"analytics_subscription_quota_hint" = "Usage covered by subscription quota with no marginal per-token cost.";
 

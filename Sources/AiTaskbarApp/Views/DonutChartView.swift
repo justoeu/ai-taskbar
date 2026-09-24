@@ -50,41 +50,100 @@ public struct DonutChartView<CenterContent: View>: View {
     public let slices: [DonutSlice]
     public let lineWidth: CGFloat
     public let emptyRingColor: Color
+    @Binding public var hoveredId: String?
     public let centerView: () -> CenterContent
+
+    @State private var internalHoveredId: String?
 
     public init(
         slices: [DonutSlice],
         lineWidth: CGFloat = 16,
         emptyRingColor: Color = Color.secondary.opacity(0.15),
+        hoveredId: Binding<String?> = .constant(nil),
         @ViewBuilder centerView: @escaping () -> CenterContent
     ) {
         self.slices = slices
         self.lineWidth = lineWidth
         self.emptyRingColor = emptyRingColor
+        self._hoveredId = hoveredId
         self.centerView = centerView
     }
 
-    public var body: some View {
-        ZStack {
-            // Background ring
-            Circle()
-                .stroke(emptyRingColor, lineWidth: lineWidth)
+    private var activeHoveredId: String? {
+        hoveredId ?? internalHoveredId
+    }
 
-            // Segments
+    public var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            let radius = (size - lineWidth) / 2
             let segments = DonutSegmentMath.compute(values: slices.map(\.value))
-            if !segments.isEmpty {
-                ForEach(Array(zip(slices.indices, segments)), id: \.0) { index, segment in
-                    let slice = slices[index]
-                    DonutArcShape(
-                        startAngle: .degrees(segment.startAngleDegrees - 90),
-                        endAngle: .degrees(segment.endAngleDegrees - 90)
-                    )
-                    .stroke(slice.color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+
+            ZStack {
+                // Background ring
+                Circle()
+                    .stroke(emptyRingColor, lineWidth: lineWidth)
+                    .frame(width: radius * 2, height: radius * 2)
+
+                // Segments
+                if !segments.isEmpty {
+                    ForEach(Array(zip(slices.indices, segments)), id: \.0) { index, segment in
+                        let slice = slices[index]
+                        let isHovered = activeHoveredId == slice.id
+
+                        DonutArcShape(
+                            startAngle: .degrees(segment.startAngleDegrees - 90),
+                            endAngle: .degrees(segment.endAngleDegrees - 90)
+                        )
+                        .stroke(
+                            slice.color,
+                            style: StrokeStyle(lineWidth: isHovered ? lineWidth + 4 : lineWidth, lineCap: .butt)
+                        )
+                        .scaleEffect(isHovered ? 1.07 : 1.0)
+                        .shadow(color: slice.color.opacity(isHovered ? 0.5 : 0), radius: 5, x: 0, y: 0)
+                        .opacity(activeHoveredId == nil || isHovered ? 1.0 : 0.3)
+                        .zIndex(isHovered ? 10 : 1)
+                        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+                    }
+                }
+
+                // Center content
+                centerView()
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .contentShape(Circle())
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let location):
+                    let dx = location.x - center.x
+                    let dy = location.y - center.y
+                    let dist = sqrt(dx * dx + dy * dy)
+                    if dist >= (radius - lineWidth * 1.2) && dist <= (radius + lineWidth * 1.2) {
+                        var deg = atan2(dy, dx) * 180.0 / .pi + 90.0
+                        if deg < 0 { deg += 360.0 }
+                        deg = deg.truncatingRemainder(dividingBy: 360.0)
+
+                        if let idx = segments.firstIndex(where: { deg >= $0.startAngleDegrees && deg < $0.endAngleDegrees }) {
+                            let sid = slices[idx].id
+                            if activeHoveredId != sid {
+                                hoveredId = sid
+                                internalHoveredId = sid
+                            }
+                        }
+                    } else {
+                        if activeHoveredId != nil {
+                            hoveredId = nil
+                            internalHoveredId = nil
+                        }
+                    }
+                case .ended:
+                    if activeHoveredId != nil {
+                        hoveredId = nil
+                        internalHoveredId = nil
+                    }
                 }
             }
-
-            // Center content
-            centerView()
         }
         .aspectRatio(1, contentMode: .fit)
     }

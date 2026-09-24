@@ -10,6 +10,7 @@ struct AnalyticsViewTests {
     @Test("AnalyticsMoneyFormatter formats standard currency values")
     func money_formatter() {
         #expect(AnalyticsMoneyFormatter.format(0) == "$0.00")
+        #expect(AnalyticsMoneyFormatter.format(0.0025) == "< $0.01")
         #expect(AnalyticsMoneyFormatter.format(14.5) == "$14.50")
         #expect(AnalyticsMoneyFormatter.format(1345.67) == "$1,345.67")
         #expect(AnalyticsMoneyFormatter.formatCompact(14500) == "$14.5K")

@@ -14,7 +14,10 @@ public enum AnalyticsMoneyFormatter {
     }()
 
     public static func format(_ value: Double) -> String {
-        standardFormatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
+        if value > 0 && value < 0.01 {
+            return "< $0.01"
+        }
+        return standardFormatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
     }
 
     public static func formatCompact(_ value: Double) -> String {

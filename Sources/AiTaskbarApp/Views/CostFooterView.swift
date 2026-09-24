@@ -36,8 +36,8 @@ public struct CostFooterView: View {
                         partialKey: "today_cost_partial_fmt",
                         unavailableKey: "today_cost_unavailable"),
                           systemImage: "calendar")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
                     Label(Self.costText(
                         amount: estimate.usdLast7Days,
                         availability: Self.costAvailability(
@@ -47,12 +47,12 @@ public struct CostFooterView: View {
                         partialKey: "weekly_cost_partial_fmt",
                         unavailableKey: "weekly_cost_unavailable"),
                           systemImage: "chart.bar")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
                     Spacer()
                     if estimate.isApproximate {
                         L10n.text("approximate_short")
-                            .font(.subheadline)
+                            .font(.callout)
                             .foregroundStyle(.tertiary)
                             .help(estimate.note ?? L10n.localizedString("approximate_help"))
                     }
@@ -136,10 +136,10 @@ public struct CostFooterView: View {
                 // corresponding `$X (Y%) / $Z (W%)` value pairs below.
                 HStack(spacing: 4) {
                     Image(systemName: "cpu")
-                        .font(.subheadline)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                     L10n.text("models_label")
-                        .font(.subheadline)
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(.secondary)
                     // Inline spinner while a recompute is in flight, so the
                     // user sees "we're refreshing" even though the previous
@@ -147,12 +147,12 @@ public struct CostFooterView: View {
                     if cost.isLoading {
                         ProgressView()
                             .controlSize(.mini)
-                            .scaleEffect(0.55)
+                            .scaleEffect(0.6)
                             .frame(width: 12, height: 12)
                     }
                     Spacer(minLength: 6)
                     L10n.text("models_columns_header")
-                        .font(.subheadline)
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(.tertiary)
                 }
                 ForEach(rows) { row in
@@ -187,10 +187,10 @@ public struct CostFooterView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left.forwardslash.chevron.right")
-                        .font(.subheadline)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                     L10n.text("opencode_label")
-                        .font(.subheadline)
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 6)
                 }
@@ -198,21 +198,21 @@ public struct CostFooterView: View {
                     let usd7d = scan.costLast7DaysByModel[model] ?? 0
                     HStack(spacing: 0) {
                         Text("•  ")
-                            .font(.subheadline)
+                            .font(.callout)
                             .foregroundStyle(.tertiary)
                         Text(Self.shortModelName(model))
-                            .font(.subheadline.monospaced())
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer(minLength: 6)
                         if usd7d > 0 {
                             Text(String(format: "$%.2f", usd7d))
-                                .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.primary)
                         } else if let usage = scan.last7DaysByModel[model] {
                             Text(Self.compactTokens(usage))
-                                .font(.subheadline.monospacedDigit())
+                                .font(.system(size: 12, design: .monospaced))
                                 .foregroundStyle(.tertiary)
                         }
                     }
@@ -250,11 +250,11 @@ public struct CostFooterView: View {
         let weekPct  = total7d > 0    ? Int((row.usd7d   / total7d   * 100).rounded()) : 0
         HStack(spacing: 0) {
             Text("•  ")
-                .font(.subheadline)
+                .font(.callout)
                 .foregroundStyle(.tertiary)
             Text(Self.shortModelName(row.name))
-                .font(.subheadline.monospaced())
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundStyle(.primary)
                 // The model id comes from a transcript we don't control, so
                 // its length and content are untrusted: a 500-character id or
                 // one containing a newline would otherwise stretch or wrap the
@@ -264,37 +264,37 @@ public struct CostFooterView: View {
             Spacer(minLength: 6)
             if row.todayIsUnpriced {
                 L10n.text("price_unavailable_short")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
             } else if row.usdToday > 0 {
                 Text(String(format: "$%.2f", row.usdToday))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.primary)
                 Text(String(format: " (%d%%)", todayPct))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(.secondary)
             } else {
                 Text("—")
-                    .font(.subheadline.monospacedDigit())
+                    .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
             Text(" / ")
-                .font(.subheadline.monospacedDigit())
+                .font(.system(size: 12.5, design: .monospaced))
                 .foregroundStyle(.tertiary)
             if row.weekIsUnpriced {
                 L10n.text("price_unavailable_short")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
             } else if row.usd7d > 0 {
                 Text(String(format: "$%.2f", row.usd7d))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.primary)
                 Text(String(format: " (%d%%)", weekPct))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(.secondary)
             } else {
                 Text("—")
-                    .font(.subheadline.monospacedDigit())
+                    .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
         }

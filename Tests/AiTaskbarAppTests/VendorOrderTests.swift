@@ -1,10 +1,31 @@
 import Testing
 import Foundation
+import AppKit
 @testable import AiTaskbarApp
 @testable import AiTaskbarCore
 
 @Suite("VendorOrder")
 struct VendorOrderTests {
+    @Test("all vendor icons load as valid NSImage")
+    @MainActor
+    func vendor_icons_load() {
+        for v in VendorId.allCases {
+            let img = VendorIconAssets.image(for: v)
+            #expect(img != nil, "Image for \(v) must not be nil")
+            if let img, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                var visiblePixels = 0
+                for y in 0..<rep.pixelsHigh {
+                    for x in 0..<rep.pixelsWide {
+                        if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.1 {
+                            visiblePixels += 1
+                        }
+                    }
+                }
+                #expect(visiblePixels > 50, "Vendor \(v) must have visible pixels, got \(visiblePixels)")
+            }
+        }
+    }
+
     @Test("empty preferred → configured first, then alpha")
     func default_configured_first_alpha() {
         let entries: [(VendorId, Bool)] = [
@@ -109,5 +130,23 @@ struct VendorOrderTests {
         suite.set(["xai", "not-a-vendor", "kimi"], forKey: VendorOrder.defaultsKey)
         let loaded = VendorOrder.load(from: suite)
         #expect(loaded == [.xai, .kimi])
+    }
+
+    @Test("UsageStore pin and toggle pinned vendors")
+    @MainActor
+    func usage_store_pin_vendors() {
+        let name = "ai-taskbar.pinned.test.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        defer { suite.removePersistentDomain(forName: name) }
+
+        let store = UsageStore(vendors: [], primary: nil)
+        #expect(!store.isPinned(.anthropic))
+
+        store.togglePinned(.anthropic, defaults: suite)
+        #expect(store.isPinned(.anthropic))
+        #expect(suite.stringArray(forKey: UsageStore.pinnedDefaultsKey) == ["anthropic"])
+
+        store.togglePinned(.anthropic, defaults: suite)
+        #expect(!store.isPinned(.anthropic))
     }
 }

@@ -54,6 +54,33 @@ public final class UsageStore: ObservableObject {
     /// User-preferred card order (empty = automatic configured-first sort).
     private var preferredOrder: [VendorId]
 
+    public static let pinnedDefaultsKey = "pinned_menu_bar_vendors"
+
+    /// Set of vendors pinned to the macOS menu bar.
+    @Published public private(set) var pinnedVendorIds: Set<VendorId> = []
+
+    /// Transient vendor focused and scrolled to when clicking a pinned menu bar item.
+    @Published public var focusedVendor: VendorId?
+
+    /// Whether the popover / main MenuBarExtra window is currently presented.
+    /// Not @Published so transitions do not invalidate SwiftUI views.
+    public var isPopoverPresented: Bool = false
+
+    public func focusVendor(_ id: VendorId) {
+        focusedVendor = id
+        if let vm = vendorVM(id), !vm.isExpanded {
+            vm.isExpanded = true
+        }
+    }
+
+    /// Safely retrieves and clears transient `focusedVendor` so subsequent popover opens
+    /// do not reuse a stale focus target.
+    public func consumeFocusedVendor() -> VendorId? {
+        let v = focusedVendor
+        focusedVendor = nil
+        return v
+    }
+
     public init(vendors: [VendorViewModel],
                 primary: VendorId?,
                 thresholds: ThresholdsConfig = .init(),
@@ -64,6 +91,9 @@ public final class UsageStore: ObservableObject {
         self.thresholds = thresholds
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.preferredOrder = preferredOrder
+        let savedPinned = (UserDefaults.standard.stringArray(forKey: Self.pinnedDefaultsKey) ?? [])
+            .compactMap(VendorId.init(rawValue:))
+        self.pinnedVendorIds = Set(savedPinned)
         wireUpAggregates()
     }
 
@@ -128,8 +158,7 @@ public final class UsageStore: ObservableObject {
     /// True iff the vendor is in the no-credentials `.failed(.disabled)`
     /// state. Without a custom order, such vendors sink to the bottom.
     private static func isUnconfigured(_ vm: VendorViewModel) -> Bool {
-        if case .failed(let err, _) = vm.state, err.isDisabled { return true }
-        return false
+        vm.isDisabled
     }
 
     // MARK: - Public surface used by views
@@ -180,6 +209,20 @@ public final class UsageStore: ObservableObject {
     }
 
     public var displayCount: Int { sortedVendors.count }
+
+    public func isPinned(_ id: VendorId) -> Bool {
+        pinnedVendorIds.contains(id)
+    }
+
+    public func togglePinned(_ id: VendorId, defaults: UserDefaults = .standard) {
+        if pinnedVendorIds.contains(id) {
+            pinnedVendorIds.remove(id)
+        } else {
+            pinnedVendorIds.insert(id)
+        }
+        let rawList = pinnedVendorIds.map(\.rawValue)
+        defaults.set(rawList, forKey: Self.pinnedDefaultsKey)
+    }
 
     public func refreshAll(forceRefresh: Bool = false) {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
