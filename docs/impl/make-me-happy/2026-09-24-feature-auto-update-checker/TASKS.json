@@ -31,9 +31,9 @@
       "title": "Top banner UI in PopoverContentView and localization",
       "slice": "PopoverContentView banner presentation with available/downloading/downloaded states, dismiss button, and L10n strings",
       "worktree": 3,
-      "status": "OPEN",
-      "tests_added": 0,
-      "red_green": false,
+      "status": "DONE",
+      "tests_added": 1,
+      "red_green": true,
       "immutability": false,
       "depends_on": [
         "T-001"
