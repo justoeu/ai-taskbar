@@ -18,9 +18,9 @@
       "title": "Periodic update check lifecycle in RefreshScheduler & App bootstrap",
       "slice": "Scheduler lifecycle loop for update checks and wiring into AppEnvironment",
       "worktree": 2,
-      "status": "OPEN",
-      "tests_added": 0,
-      "red_green": false,
+      "status": "DONE",
+      "tests_added": 1,
+      "red_green": true,
       "immutability": false,
       "depends_on": [
         "T-001"
