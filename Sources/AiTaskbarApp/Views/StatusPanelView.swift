@@ -26,7 +26,7 @@ public struct StatusPanelView: View {
             Divider()
             footer
         }
-        .frame(width: 400, height: 520)
+        .frame(width: 420, height: 540)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(.regularMaterial)
@@ -94,14 +94,27 @@ public struct StatusPanelView: View {
     }
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            L10n.text("service_status_legend")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            L10n.text("service_status_scope_note")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                L10n.text("service_status_legend")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                L10n.text("service_status_scope_note")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack {
+                Spacer()
+                Button(action: onClose) {
+                    Label(L10n.localizedString("back"), systemImage: "chevron.backward")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .keyboardShortcut(.defaultAction)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)

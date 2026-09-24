@@ -283,6 +283,14 @@ extension GrokBillingResponse {
             )
         }()
 
+        let prepaidUsedUSD: Double? = {
+            if let used = cfg.onDemandUsed?.usd, used > 0 { return used }
+            if let pct = cfg.creditUsagePercent, let balance = prepaidUSD, pct > 0 {
+                return (balance * pct) / 100.0
+            }
+            return nil
+        }()
+
         return XAISnapshot(
             planLabel: planLabel ?? "SuperGrok",
             weekly: weeklyWindow,
@@ -291,7 +299,7 @@ extension GrokBillingResponse {
             prepaidUSD: prepaidUSD,
             spentUSD: nil,
             spendingLimitUSD: nil,
-            prepaidUsedUSD: nil,
+            prepaidUsedUSD: prepaidUsedUSD,
             billingCycleLabel: nil,
             disclaimer: disclaimer ?? Self.defaultDisclaimer
         )

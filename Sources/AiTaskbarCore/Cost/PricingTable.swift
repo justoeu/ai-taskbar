@@ -59,6 +59,9 @@ public enum PricingTable {
         // Fable/Mythos 5.0 legacy logs.
         "claude-fable-5":        ModelPricing(input: 10, output: 50, cacheRead: 1.0, cacheCreate: 12.5, cacheCreate1h: 20),
         "claude-mythos-5":       ModelPricing(input: 10, output: 50, cacheRead: 1.0, cacheCreate: 12.5, cacheCreate1h: 20),
+        // Opus 5.5
+        "claude-opus-5-5":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
+        "claude-opus-5.5":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
         // Opus 5 — same $5 in / $25 out tier as Opus 4.8 (verified against the
         // claude-api skill's cached model table, 2026-07-24). Listed before the
         // 4.x block because it shares no prefix with them: "claude-opus-5" can
@@ -143,6 +146,94 @@ public enum PricingTable {
         "gpt-5-mini":      ModelPricing(input: 0.25, output: 2,    cacheRead: 0.025),
         "gpt-5":           ModelPricing(input: 1.25, output: 10,   cacheRead: 0.125),
     ]
+
+    /// xAI — Grok family. Consumed by local scanners and Opencode attribution.
+    /// Prices in USD per 1M tokens as of 2026-09-21.
+    public static let xai: [String: ModelPricing] = [
+        // Grok 4.7 — Flagship frontier model with reasoning effort levels.
+        "grok-4.7":           ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        "grok-4.7-thinking":  ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        "grok-4.7-code":      ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        // Grok 4.x / Grok 4
+        "grok-4.6":           ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        "grok-4":             ModelPricing(input: 2.0, output: 6.0, cacheRead: 0.50),
+        // Grok 2 line
+        "grok-2":             ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.50),
+        "grok-2-mini":        ModelPricing(input: 0.20, output: 1.0, cacheRead: 0.05),
+        "grok-beta":          ModelPricing(input: 5.0, output: 15.0),
+    ]
+
+    /// Google Gemini family. Consumed by Opencode and local scanners.
+    /// Prices in USD per 1M tokens based on Google Cloud official pricing.
+    public static let gemini: [String: ModelPricing] = [
+        // Gemini 3.x
+        "gemini-3.8-flash":   ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
+        "gemini-3-flash":     ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
+        "gemini-3-pro":       ModelPricing(input: 1.25, output: 5.00, cacheRead: 0.3125),
+        "gemini-3":           ModelPricing(input: 0.15, output: 0.60, cacheRead: 0.0375),
+        // Gemini 2.5 Pro (Prompt <= 128k: $1.25 in / $5.00 out; > 128k: $2.50 in / $10.00 out)
+        "gemini-2.5-pro":     ModelPricing(input: 1.25, output: 5.00, cacheRead: 0.3125,
+                                           longContextThreshold: 128_000,
+                                           longContextInputMultiplier: 2.0,
+                                           longContextOutputMultiplier: 2.0),
+        // Gemini 2.5 Flash
+        "gemini-2.5-flash":   ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
+        // Gemini 1.5 Pro
+        "gemini-1.5-pro":     ModelPricing(input: 1.25, output: 5.00, cacheRead: 0.3125,
+                                           longContextThreshold: 128_000,
+                                           longContextInputMultiplier: 2.0,
+                                           longContextOutputMultiplier: 2.0),
+        // Gemini 1.5 Flash
+        "gemini-1.5-flash":   ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
+    ]
+
+    /// Z.AI / Zhipu — GLM family. Consumed by Opencode and local scanners.
+    /// Prices in USD per 1M tokens as of 2026-09.
+    public static let zai: [String: ModelPricing] = [
+        "glm-5.3":         ModelPricing(input: 1.40, output: 4.40, cacheRead: 0.26),
+        "glm-5.2":         ModelPricing(input: 1.40, output: 4.40, cacheRead: 0.26),
+        "glm-5.1":         ModelPricing(input: 1.40, output: 4.40, cacheRead: 0.26),
+        "glm-5":           ModelPricing(input: 1.00, output: 3.20, cacheRead: 0.20),
+        "glm-4.7":         ModelPricing(input: 0.60, output: 2.20, cacheRead: 0.11),
+        "glm-4.6":         ModelPricing(input: 0.60, output: 2.20, cacheRead: 0.11),
+        "glm-4.5":         ModelPricing(input: 0.60, output: 2.20, cacheRead: 0.11),
+        "glm-4":           ModelPricing(input: 0.60, output: 2.20, cacheRead: 0.11),
+        // GLM Flash family
+        "glm-5.3-flashx":  ModelPricing(input: 0.37, output: 1.25, cacheRead: 0.075),
+        "glm-5.3-flash":   ModelPricing(input: 0.15, output: 0.50, cacheRead: 0.03),
+        "glm-5-flash":     ModelPricing(input: 0.0, output: 0.0, cacheRead: 0.0),
+        "glm-4.7-flash":   ModelPricing(input: 0.05, output: 0.15, cacheRead: 0.01),
+        "glm-4.5-flash":   ModelPricing(input: 0.02, output: 0.08, cacheRead: 0.005),
+        "glm-4-flashx":    ModelPricing(input: 0.015, output: 0.015, cacheRead: 0.003),
+        "glm-4-flash":     ModelPricing(input: 0.0, output: 0.0, cacheRead: 0.0),
+        "glm-flash":       ModelPricing(input: 0.0, output: 0.0, cacheRead: 0.0),
+    ]
+
+    /// Moonshot / Kimi family. Consumed by Opencode and local scanners.
+    /// Prices in USD per 1M tokens based on Moonshot official pricing (converted from CNY).
+    public static let kimi: [String: ModelPricing] = [
+        "kimi-k2.5":          ModelPricing(input: 2.00, output: 4.00, cacheRead: 0.20),
+        "kimi-k2":            ModelPricing(input: 2.00, output: 4.00, cacheRead: 0.20),
+        "kimi-k1.5":          ModelPricing(input: 1.65, output: 3.30, cacheRead: 0.15),
+        "kimi":               ModelPricing(input: 1.65, output: 3.30, cacheRead: 0.15),
+        "moonshot-v1-128k":   ModelPricing(input: 8.25, output: 8.25, cacheRead: 0.80),
+        "moonshot-v1-32k":    ModelPricing(input: 3.30, output: 3.30, cacheRead: 0.30),
+        "moonshot-v1-8k":     ModelPricing(input: 1.65, output: 1.65, cacheRead: 0.15),
+        "moonshot-v1-auto":   ModelPricing(input: 1.65, output: 1.65, cacheRead: 0.15),
+        "moonshot-v1":        ModelPricing(input: 1.65, output: 1.65, cacheRead: 0.15),
+    ]
+
+    public static func table(for vendor: VendorId) -> [String: ModelPricing] {
+        switch vendor {
+        case .anthropic:  return PricingTable.anthropic
+        case .openai:     return PricingTable.openai
+        case .xai:        return PricingTable.xai
+        case .gemini:     return PricingTable.gemini
+        case .zai:        return PricingTable.zai
+        case .kimi:       return PricingTable.kimi
+        default:          return [:]
+        }
+    }
 
     public static func lookup(_ model: String, table: [String: ModelPricing]) -> ModelPricing? {
         if let exact = table[model] { return exact }

@@ -309,3 +309,48 @@
 // Grok / xAI
 "xai_grok_disclaimer" = "To monitor Grok, Grok must be installed and authenticated.";
 
+// Analytics & Consumption Overview
+"analytics_toolbar_button" = "Consumption Overview & Charts";
+"analytics_title" = "Consumption & Analytics";
+"analytics_subtitle" = "Consolidated overview across all LLMs";
+"analytics_distribution_title" = "Usage & Cost Distribution";
+"analytics_usage" = "Usage";
+"analytics_usage_share" = "Usage Share";
+"analytics_by_llm_title" = "Breakdown by LLM";
+"analytics_empty_data" = "No consumption recorded in this timeframe.";
+"analytics_busiest_day" = "Busiest day";
+"analytics_sessions" = "active sessions";
+"analytics_session_single" = "active session";
+"timeframe_daily" = "Today";
+"timeframe_weekly" = "Week";
+"timeframe_monthly" = "Month";
+"compare_previous_period" = "Compare with previous period";
+
+"quit_confirm_title" = "Are you sure you want to quit AI Taskbar?";
+"quit_confirm_message" = "Continuous menu bar quota monitoring will be stopped.";
+"quit_confirm_button" = "Quit App";
+"quit_app" = "Quit App";
+"back" = "Back";
+"analytics_usage_distribution_title" = "Usage Share (% Quota)";
+"analytics_cost_distribution_title" = "Cost Consumption (USD)";
+"compare_target_label" = "Compare with:";
+"compare_prev_week_1" = "Previous week";
+"compare_prev_week_2" = "2 weeks ago";
+"compare_prev_week_3" = "3 weeks ago";
+"compare_prev_week_4" = "4 weeks ago";
+"compare_prev_day_1" = "Yesterday";
+"compare_prev_day_7" = "7 days ago";
+"compare_prev_month_1" = "Previous month";
+"compare_prev_month_2" = "2 months ago";
+"vs_previous_period_fmt" = "%@ vs. previous";
+"pin_to_menu_bar_help" = "Pin to menu bar";
+"more_details" = "+ details";
+"more_details_help" = "View detailed charts and consumption metrics for this LLM";
+"sync_vendor_order" = "Sync LLM order";
+"sync_vendor_order_help" = "When enabled, the LLM cards on this screen follow the order of the home screen. When disabled, you can reorder models here independently using the up/down arrows on each card.";
+"pin_to_menubar_title" = "Pin to menu bar";
+"pin_to_menubar_desc" = "Show this model's icon and usage in the macOS menu bar";
+"analytics_lifetime_usage" = "Lifetime usage";
+"analytics_vendor_no_recent_usage" = "LLM has no usage recently or in the last month";
+"analytics_subscription_quota_hint" = "Usage covered by subscription quota with no marginal per-token cost.";
+

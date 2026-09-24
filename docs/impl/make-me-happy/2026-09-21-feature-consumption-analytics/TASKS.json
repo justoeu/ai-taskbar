@@ -1,0 +1,83 @@
+{
+  "kind": "feature",
+  "spec": "docs/SDD-consumption-analytics-and-grok-pricing.md",
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "Add Grok 4.7 and Gemini model pricing to PricingTable",
+      "slice": "Core pricing tables for xAI Grok and Google Gemini families",
+      "worktree": 1,
+      "status": "DONE",
+      "tests_added": 4,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": []
+    },
+    {
+      "id": "T-002",
+      "title": "Define Analytics domain models and expand UsageHistoryStore to 90-day retention",
+      "slice": "Core analytics models and timeframe-aware history queries",
+      "worktree": 1,
+      "status": "DONE",
+      "tests_added": 6,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": ["T-001"]
+    },
+    {
+      "id": "T-003",
+      "title": "Implement AnalyticsAggregator and OpencodeScanner Gemini support",
+      "slice": "Data aggregation across sessions, opencode db, usage history and peak-day identification",
+      "worktree": 2,
+      "status": "DONE",
+      "tests_added": 6,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": ["T-002"]
+    },
+    {
+      "id": "T-004",
+      "title": "Implement AnalyticsStore observable state manager",
+      "slice": "Reactive state management and refresh coordination for analytics UI",
+      "worktree": 2,
+      "status": "DONE",
+      "tests_added": 3,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": ["T-003"]
+    },
+    {
+      "id": "T-005",
+      "title": "Create DonutChartView for macOS 13+ and AnalyticsTimeframePicker",
+      "slice": "Pure SwiftUI vector donut chart and period selector components",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 3,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": ["T-002"]
+    },
+    {
+      "id": "T-006",
+      "title": "Create VendorAnalyticsCardView and full AnalyticsView dashboard",
+      "slice": "Dual donut charts, peak day record with flame icon, and per-model breakdown cards",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 2,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": ["T-004", "T-005"]
+    },
+    {
+      "id": "T-007",
+      "title": "Reorder popover toolbar, add quit confirmation to AboutView and localization",
+      "slice": "Popover top-right toolbar reordering, footer cleanup, About quit alert and i18n",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 1,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": ["T-006"]
+    }
+  ]
+}

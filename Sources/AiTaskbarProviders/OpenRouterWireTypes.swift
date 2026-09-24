@@ -180,13 +180,16 @@ public struct OpenRouterCachedPayload: Codable, Sendable {
             }
         }
 
+        let totalUsage = credits.data.total_usage ?? key.data.usage
+
         return OpenRouterSnapshot(
             planLabel: planLabel,
             balance: balanceWindow,
             daily: daily,
             weekly: weekly,
             monthly: monthly,
-            topModels: topModels
+            topModels: topModels,
+            totalUsageUSD: totalUsage
         )
     }
 

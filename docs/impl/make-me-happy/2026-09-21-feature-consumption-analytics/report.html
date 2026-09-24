@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ai-taskbar · make-me-happy</title>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "dark" });
+</script>
+<style>
+  :root { --bg:#0b1220; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --border:#374151; --ok:#22c55e; --bad:#ef4444; --accent:#38bdf8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding:1.25rem 2rem; border-bottom:1px solid var(--border); display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+  h1 { margin:0; font-size:1.25rem; }
+  .pill { border:1px solid var(--border); border-radius:999px; padding:.2rem .7rem; font-size:.85rem; }
+  .pill.ok { border-color: var(--ok); color: var(--ok); }
+  .pill.bad { border-color: var(--bad); color: var(--bad); }
+  nav { display:flex; gap:.5rem; padding: .75rem 2rem; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  nav button { background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:.35rem .8rem; cursor:pointer; }
+  nav button[aria-selected="true"] { color:var(--text); border-color:var(--accent); }
+  main { padding:1.5rem 2rem 3rem; max-width:1100px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:1rem 1.2rem; margin: .8rem 0; }
+  table { width:100%; border-collapse: collapse; }
+  th, td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid var(--border); font-size:.9rem; }
+  pre, .md { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size:.85rem; }
+  .muted { color: var(--muted); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns:1fr; } }
+  .panel { display:none; }
+  .panel.active { display:block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>make-me-happy</h1>
+  <span class="pill">App <strong>ai-taskbar</strong></span>
+  <span class="pill">Branch <code>feature/consumption-analytics</code></span>
+  <span class="pill">feature</span>
+  <span class="pill ok">Score <strong>10</strong> / 10</span>
+  <span class="pill ok">Coverage <strong>91.54</strong>% (piso 90)</span>
+</header>
+<nav>
+  <button data-tab="sdd" aria-selected="true">sdd</button>
+  <button data-tab="impl" aria-selected="false">impl</button>
+  <button data-tab="fluxo" aria-selected="false">fluxo</button>
+  <button data-tab="payloads" aria-selected="false">payloads</button>
+  <button data-tab="testes" aria-selected="false">testes</button>
+  <button data-tab="review" aria-selected="false">review</button>
+  <button data-tab="score" aria-selected="false">score</button>
+</nav>
+<main>
+  <section class="panel active" id="sdd">
+    <div class="card"><h2>SDD / spec</h2>
+      <p class="muted">docs/SDD-consumption-analytics-and-grok-pricing.md</p>
+      <div class="md"># Spec Summary — Consumption Analytics, Grok 4.7 Pricing and UI Refinements
+
+## 1. Goal
+Provide a comprehensive analytics dashboard within the AI Taskbar menu-bar popover, offering cross-LLM consumption percentages, dollar costs, timeframe comparisons (Daily, Weekly, Monthly), peak usage day detection with a flame icon (`🔥`), sessions count, and per-model cost breakdowns. Expand pricing to include Grok 4.7 and Gemini models, reorganize popover toolbar icons, and relocate application exit to AboutView behind a confirmation prompt.
+
+## 2. Actors &amp; Components
+- **UsageHistoryStore**: Provides 90-day historical time-series data of vendor quota percentages.
+- **Scanners (CostEstimator &amp; OpencodeScanner)**: Parse local Claude and Codex sessions as well as Opencode SQLite database turns to attribute token counts and financial costs.
+- **PricingTable**: Maps model identifiers to token pricing for OpenAI, Anthropic, xAI (Grok 4.7), Gemini, and Z.AI.
+- **AnalyticsAggregator &amp; AnalyticsStore**: Aggregates multi-source metrics into snapshot representations (`GlobalAnalyticsSnapshot`, `VendorAnalyticsSummary`).
+- **AnalyticsView &amp; DonutChartView**: Renders vector-based dual donut charts (macOS 13+ compatible) and per-vendor summary cards.
+- **PopoverContentView &amp; AboutView**: Reordered toolbar actions and modal quit confirmation.
+
+## 3. Contracts &amp; Wire Types
+- Preserves all frozen vendor wire types without alteration.
+- Introduces new value types: `AnalyticsTimeframe`, `VendorAnalyticsSummary`, `PeakDayRecord`, `GlobalAnalyticsSnapshot`, `VendorShare`.
+- Pure SwiftUI drawing (`Path`, `StrokeStyle`) for macOS 13 compatibility (avoiding macOS 14+ `SectorMark`).
+
+## 4. Out of Scope
+- Background system daemons.
+- Remote telemetry / cloud metrics synchronization (all computations remain strictly local).
+- Third-party chart library dependencies.
+</div>
+    </div>
+  </section>
+  <section class="panel" id="impl">
+    <div class="card"><h2>O que foi implementado</h2>
+      <table>
+        <thead><tr><th>id</th><th>task</th><th>status</th><th>tests</th><th>red→green</th><th>immut.</th><th>wt</th></tr></thead>
+        <tbody><tr>
+  <td><code>T-001</code></td>
+  <td>Add Grok 4.7 and Gemini model pricing to PricingTable</td>
+  <td>DONE</td>
+  <td>4</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>1</td>
+</tr><tr>
+  <td><code>T-002</code></td>
+  <td>Define Analytics domain models and expand UsageHistoryStore to 90-day retention</td>
+  <td>DONE</td>
+  <td>6</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>1</td>
+</tr><tr>
+  <td><code>T-003</code></td>
+  <td>Implement AnalyticsAggregator and OpencodeScanner Gemini support</td>
+  <td>DONE</td>
+  <td>6</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>2</td>
+</tr><tr>
+  <td><code>T-004</code></td>
+  <td>Implement AnalyticsStore observable state manager</td>
+  <td>DONE</td>
+  <td>3</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>2</td>
+</tr><tr>
+  <td><code>T-005</code></td>
+  <td>Create DonutChartView for macOS 13+ and AnalyticsTimeframePicker</td>
+  <td>DONE</td>
+  <td>3</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>3</td>
+</tr><tr>
+  <td><code>T-006</code></td>
+  <td>Create VendorAnalyticsCardView and full AnalyticsView dashboard</td>
+  <td>DONE</td>
+  <td>2</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>3</td>
+</tr><tr>
+  <td><code>T-007</code></td>
+  <td>Reorder popover toolbar, add quit confirmation to AboutView and localization</td>
+  <td>DONE</td>
+  <td>1</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>3</td>
+</tr></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="panel" id="fluxo">
+    <div class="card"><h2>Fluxo e impacto</h2>
+      <pre class="mermaid">flowchart TD
+    subgraph Data Sources
+        UHS[UsageHistoryStore 90 days]
+        CSS[ClaudeSessionScanner]
+        CXS[CodexSessionScanner]
+        OCS[OpencodeScanner SQLite opencode.db]
+        VSS[VendorSnapshots Active Quotas]
+    end
+
+    subgraph Core Logic
+        PT[PricingTable xAI Grok 4.7 & Gemini]
+        AA[AnalyticsAggregator]
+        UHS --> AA
+        CSS --> AA
+        CXS --> AA
+        OCS --> AA
+        VSS --> AA
+        PT --> AA
+        AA --> GAS[GlobalAnalyticsSnapshot]
+        AA --> VAS[VendorAnalyticsSummary per LLM]
+        AA --> PDR[PeakDayRecord flame icon]
+    end
+
+    subgraph State Management
+        AST[AnalyticsStore ObservableObject]
+        GAS --> AST
+        VAS --> AST
+        PDR --> AST
+    end
+
+    subgraph Presentation
+        TB[Top Toolbar: Refresh -> Status -> Analytics -> About]
+        AV[AnalyticsView]
+        DC1[Donut Chart: % Usage Share]
+        DC2[Donut Chart: Total Cost USD + Legend]
+        VAC[Vendor Cards: Peak Day + Sessions + Model Breakdown]
+        ABV[AboutView: Fechar App with Confirmation Alert]
+
+        TB -->|Open Analytics| AV
+        TB -->|Open About| ABV
+        AST --> AV
+        AV --> DC1
+        AV --> DC2
+        AV --> VAC
+    end
+</pre>
+    </div>
+  </section>
+  <section class="panel" id="payloads">
+    <h2>Payloads de teste</h2>
+    <p class="muted">Nenhum payload no spec.</p>
+  </section>
+  <section class="panel" id="testes">
+    <div class="card">
+      <h2>Resultado dos testes</h2>
+      <p>cmd: <code>make test</code> — PASS</p>
+      <p>imutabilidade: green — PricingTable, UsageHistoryStore, AnalyticsAggregator, AnalyticsStore, DonutChart, AnalyticsView</p>
+      <p>cobertura: 91.54% via llvm-cov — piso 90% ok</p>
+      <pre>Test run with 766 tests in 100 suites passed after 47.866 seconds with 3 known issues. Line coverage: 91.54% &gt;= floor 90%.</pre>
+    </div>
+  </section>
+  <section class="panel" id="review">
+    <div class="card"><h2>Standards</h2><div class="md"># Standards Review
+
+**Commit Range:** `96ef7a9...HEAD` (branch `feature/consumption-analytics`)  
+**Standards Sources:** `AGENTS.md`, `catalogs/fowler-smells.md`
+
+## 1. Documented Standards Compliance (AGENTS.md)
+- **Swift 6 Concurrency:** `AnalyticsStore` is strictly annotated `@MainActor`. All domain models (`AnalyticsTimeframe`, `PeakDayRecord`, `VendorAnalyticsSummary`, `VendorShare`, `GlobalAnalyticsSnapshot`) conform to `Sendable` and `Hashable`/`Identifiable`.
+- **Credits Separation:** Codex credits invariants are strictly preserved. Neither `PricingTable.xai` nor `PricingTable.gemini` touches credit logic. Monetary estimations are token-based.
+- **Testing Conventions:** Tests use Swift Testing (`@Test`, `#expect`), atomic assertions, and no vacuous booleans.
+- **Localization:** All user-facing strings in `AnalyticsView`, `VendorAnalyticsCardView`, and `AboutView` are extracted to `Localizable.strings` (`en`, `pt-BR`, `es`).
+- **macOS 13+ Compatibility:** Vector donut chart implemented via native SwiftUI `Path.addArc` rather than iOS 17 / macOS 14 `SectorMark`.
+
+## 2. Fowler Smells Evaluation
+- **Mysterious Name:** None. Domain types and UI components have clean, explicit names.
+- **Duplicated Code:** Formatters for currencies and date strings extracted into `AnalyticsFormatters`.
+- **Feature Envy / Data Clumps:** Grouped into cohesive snapshots (`GlobalAnalyticsSnapshot`, `VendorAnalyticsSummary`).
+- **Speculative Generality:** Zero unnecessary abstractions; solely implements requested SDD features.
+
+VERDICT: APPROVE
+</div></div>
+    <div class="card"><h2>Spec</h2><div class="md"># Spec Review
+
+**Commit Range:** `96ef7a9...HEAD` (branch `feature/consumption-analytics`)  
+**Spec Document:** `docs/SDD-consumption-analytics-and-grok-pricing.md`
+
+## 1. Requirements Coverage
+- **Grok 4.7 Pricing:** Implemented in `PricingTable.xai` ($2.00 input, $0.50 cache, $6.00 output per Mtok).
+- **Gemini Model Pricing:** Implemented in `PricingTable.gemini` (Flash $0.075/$0.30; Pro $1.25/$5.00 with tiered pricing) and wired into `CostEstimator.opencodeProviders`.
+- **Consumption Analytics Overview:** Implemented `AnalyticsView` with dual donut charts:
+  - Left donut: Percentage usage share per provider with interactive segments.
+  - Right donut: Total dollar consumption matching the visual reference layout.
+- **Timeframe &amp; Delta:** Daily, Weekly, and Monthly periods with comparison against previous period.
+- **Peak Day with Flame Icon:** `🔥` flame indicator for the highest usage day in the selected timeframe.
+- **Toolbar Reordering:** Top-right popover toolbar ordered `Refresh` → `Status` → `Analytics` → `About`.
+- **Exit Moved to About with Confirmation Dialog:** Footer quit button removed; &quot;Fechar App&quot; button added in `AboutView` with modal confirmation alert (&quot;Deseja realmente fechar o app?&quot;).
+
+## 2. Scope Creep Check
+- No unauthorized external dependencies added.
+- No deviation from the SDD requirements.
+
+VERDICT: APPROVE
+</div></div>
+    <div class="card"><h2>Correctness</h2><div class="md"># Correctness Review
+
+**Commit Range:** `96ef7a9...HEAD` (branch `feature/consumption-analytics`)
+
+## 1. Implementation Verification
+Every task (T-001 through T-007) was fully implemented and verified against the working tree:
+- **T-001:** `PricingTable.xai` and `PricingTable.gemini` pricing models implemented.
+- **T-002:** `AnalyticsModels.swift` created and `UsageHistoryStore` 90-day retention verified.
+- **T-003:** `AnalyticsAggregator` multi-source processing and peak day detection verified.
+- **T-004:** `AnalyticsStore` `@MainActor` state manager verified.
+- **T-005:** `DonutChartView` geometry and `AnalyticsTimeframePicker` verified.
+- **T-006:** `VendorAnalyticsCardView` and `AnalyticsView` dashboard verified.
+- **T-007:** Popover header icon order (`Refresh` → `Status` → `Analytics` → `About`) and About confirmation alert verified.
+
+## 2. Red→Green Tests
+All 7 tasks have verified red→green cycles with 25 new unit tests added:
+- `CostTests`: 4 tests
+- `AnalyticsModelsTests`: 6 tests
+- `AnalyticsAggregatorTests`: 6 tests
+- `CostEstimatorLoadingTests`: 1 test
+- `AnalyticsStoreTests`: 3 tests
+- `DonutChartTests`: 3 tests
+- `AnalyticsViewTests`: 2 tests
+
+## 3. Immutability &amp; Regressions
+All 766 tests across 100 suites passed cleanly with 0 failures (`immutability.json: green`).
+
+## 4. Slice Merges &amp; Boundary Discipline
+All 3 slices merged without git merge conflicts, and temporary worktrees were cleanly removed.
+
+## 5. Coverage
+Line coverage on `AiTaskbarCore` + `AiTaskbarProviders` is 91.54%, exceeding the mandatory 90% floor.
+
+VERDICT: APPROVE
+</div></div>
+  </section>
+  <section class="panel" id="score">
+    <div class="card">
+      <h2>Score 10 / 10 — pode fechar</h2>
+      <p class="muted">91.54% &gt;= 90%</p>
+      <table>
+        <thead><tr><th>gate</th><th></th><th>detalhe</th></tr></thead>
+        <tbody><tr>
+  <td>tasks</td>
+  <td>✓</td>
+  <td>7 DONE</td>
+</tr><tr>
+  <td>red-green</td>
+  <td>✓</td>
+  <td>each DONE has tests_added&gt;=1 and red_green</td>
+</tr><tr>
+  <td>immutability</td>
+  <td>✓</td>
+  <td>PricingTable, UsageHistoryStore, AnalyticsAggregator, AnalyticsStore, DonutChart, AnalyticsView</td>
+</tr><tr>
+  <td>review</td>
+  <td>✓</td>
+  <td>standards=APPROVE spec=APPROVE correctness=APPROVE</td>
+</tr><tr>
+  <td>worktrees</td>
+  <td>✓</td>
+  <td>3/3 merged+removed</td>
+</tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script>
+  const buttons = [...document.querySelectorAll('nav button')];
+  const panels = [...document.querySelectorAll('.panel')];
+  buttons.forEach((b) => b.addEventListener('click', () => {
+    buttons.forEach((x) => x.setAttribute('aria-selected', x === b ? 'true' : 'false'));
+    panels.forEach((p) => p.classList.toggle('active', p.id === b.dataset.tab));
+  }));
+</script>
+</body>
+</html>

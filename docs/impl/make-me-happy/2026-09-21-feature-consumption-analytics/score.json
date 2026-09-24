@@ -1,0 +1,41 @@
+{
+  "score": 10,
+  "max": 10,
+  "coverage": {
+    "pct": 91.54,
+    "floor": 90,
+    "floor_min": 90,
+    "requested": 90,
+    "tool": "llvm-cov",
+    "ok": true,
+    "detail": "91.54% >= 90%"
+  },
+  "closable": true,
+  "gates": [
+    {
+      "id": "tasks",
+      "ok": true,
+      "detail": "7 DONE"
+    },
+    {
+      "id": "red-green",
+      "ok": true,
+      "detail": "each DONE has tests_added>=1 and red_green"
+    },
+    {
+      "id": "immutability",
+      "ok": true,
+      "detail": "PricingTable, UsageHistoryStore, AnalyticsAggregator, AnalyticsStore, DonutChart, AnalyticsView"
+    },
+    {
+      "id": "review",
+      "ok": true,
+      "detail": "standards=APPROVE spec=APPROVE correctness=APPROVE"
+    },
+    {
+      "id": "worktrees",
+      "ok": true,
+      "detail": "3/3 merged+removed"
+    }
+  ]
+}

@@ -12,24 +12,28 @@ public final class RefreshScheduler: ObservableObject {
     public static let rateLimitBackoff: TimeInterval = 60
     private weak var store: UsageStore?
     private weak var statusStore: ServiceStatusStore?
+    private weak var costEstimator: CostEstimator?
     private var refreshLoop: Task<Void, Never>?
     private var statusRefreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
 
     public convenience init(store: UsageStore,
                             statusStore: ServiceStatusStore? = nil,
+                            costEstimator: CostEstimator? = nil,
                             interval: TimeInterval = 300) {
-        self.init(store: store, statusStore: statusStore, interval: interval,
+        self.init(store: store, statusStore: statusStore, costEstimator: costEstimator, interval: interval,
                   minimumInterval: 15, minimumStatusInterval: 300)
     }
 
     init(store: UsageStore,
          statusStore: ServiceStatusStore?,
+         costEstimator: CostEstimator? = nil,
          interval: TimeInterval,
          minimumInterval: TimeInterval,
          minimumStatusInterval: TimeInterval) {
         self.store = store
         self.statusStore = statusStore
+        self.costEstimator = costEstimator
         // Floor at 15 s. Below this the undocumented vendor endpoints
         // (Anthropic, Codex, Z.AI) start returning 429 aggressively.
         self.interval = max(minimumInterval, interval)
@@ -70,6 +74,7 @@ public final class RefreshScheduler: ObservableObject {
             // inside a fresh cache window, don't burn a network call.
             self.store?.markScheduledTick()
             self.store?.refreshAll(forceRefresh: false)
+            self.costEstimator?.refresh()
             while !Task.isCancelled {
                 // Sleep the configured interval first. While we sleep, the
                 // previous cycle's async per-vendor Tasks complete and
@@ -107,6 +112,7 @@ public final class RefreshScheduler: ObservableObject {
                 }
                 self.store?.markScheduledTick()
                 self.store?.refreshAll(forceRefresh: false)
+                self.costEstimator?.refresh()
             }
         }
     }

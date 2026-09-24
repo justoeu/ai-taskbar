@@ -5,6 +5,7 @@ import AiTaskbarCore
 public struct PopoverContentView: View {
     private enum Overlay: Equatable {
         case status
+        case analytics
         case about
         case settings
     }
@@ -13,6 +14,7 @@ public struct PopoverContentView: View {
     @EnvironmentObject var statusStore: ServiceStatusStore
     @EnvironmentObject var loginItem: LoginItemService
     @EnvironmentObject var cost: CostEstimator
+    @EnvironmentObject var analyticsStore: AnalyticsStore
     @EnvironmentObject var configWatcher: ConfigWatcher
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -40,22 +42,63 @@ public struct PopoverContentView: View {
                     configChangedBanner
                     Divider()
                 }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if store.sortedVendors.isEmpty {
-                            emptyState
-                        } else {
-                            // Reorder with ↑/↓ on each card. Drag-and-drop does
-                            // not work reliably inside MenuBarExtra windows.
-                            ForEach(store.sortedVendors) { vm in
-                                VendorSectionView(vm: vm,
-                                                  thresholds: store.thresholds,
-                                                  cost: cost)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if store.sortedVendors.isEmpty {
+                                emptyState
+                            } else {
+                                // Reorder with ↑/↓ on each card. Drag-and-drop does
+                                // not work reliably inside MenuBarExtra windows.
+                                ForEach(store.sortedVendors) { vm in
+                                    VendorSectionView(
+                                        vm: vm,
+                                        thresholds: store.thresholds,
+                                        cost: cost,
+                                        onOpenAnalytics: { vendorId in
+                                            analyticsStore.targetVendor = vendorId
+                                            overlay = .analytics
+                                        }
+                                    )
+                                    .id(vm.vendorId)
+                                }
+                            }
+                        }
+                        .padding(12)
+                        .animation(.easeInOut(duration: 0.15), value: store.sortedVendors.map(\.id))
+                    }
+                    .onChange(of: store.focusedVendor) { target in
+                        guard let target else { return }
+                        overlay = nil
+                        if let vm = store.vendorVM(target), !vm.isExpanded {
+                            vm.isExpanded = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                proxy.scrollTo(target, anchor: .top)
                             }
                         }
                     }
-                    .padding(12)
-                    .animation(.easeInOut(duration: 0.15), value: store.sortedVendors.map(\.id))
+                    .onAppear {
+                        store.isPopoverPresented = true
+                        if let focused = store.consumeFocusedVendor() {
+                            overlay = nil
+                            if let vm = store.vendorVM(focused), !vm.isExpanded {
+                                vm.isExpanded = true
+                            }
+                            if focused != store.sortedVendors.first?.vendorId {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        proxy.scrollTo(focused, anchor: .top)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .onDisappear {
+                        store.isPopoverPresented = false
+                        PinnedStatusItemManager.shared.clearLastFocusedPinnedVendor()
+                    }
                 }
                 Divider()
                 footerBar
@@ -75,6 +118,11 @@ public struct PopoverContentView: View {
                 case .status:
                     StatusPanelView { dismissOverlay(restoreStatusFocus: true) }
                         .environmentObject(statusStore)
+                        .transition(overlayTransition)
+                case .analytics:
+                    AnalyticsView { self.overlay = nil }
+                        .environmentObject(analyticsStore)
+                        .environmentObject(store)
                         .transition(overlayTransition)
                 case .about:
                     AboutView { self.overlay = nil }
@@ -112,6 +160,16 @@ public struct PopoverContentView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                // 1. Refresh
+                Button {
+                    store.refreshAll(forceRefresh: true)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.localizedString("refresh_all_help"))
+
+                // 2. Status
                 if !statusStore.rows.isEmpty {
                     Button {
                         overlay = .status
@@ -140,6 +198,18 @@ public struct PopoverContentView: View {
                     .accessibilityValue(statusAccessibilityValue)
                     .accessibilityHint(L10n.localizedString("service_status_ax_hint"))
                 }
+
+                // 3. Analytics
+                Button {
+                    analyticsStore.targetVendor = nil
+                    overlay = .analytics
+                } label: {
+                    Image(systemName: "chart.pie.fill")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.localizedString("analytics_toolbar_button"))
+
+                // 4. About
                 Button {
                     overlay = .about
                 } label: {
@@ -147,13 +217,6 @@ public struct PopoverContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .help(L10n.localizedString("about_help"))
-                Button {
-                    store.refreshAll(forceRefresh: true)
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .help(L10n.localizedString("refresh_all_help"))
             }
             HStack(spacing: 4) {
                 Image(systemName: "info.circle")
@@ -173,13 +236,6 @@ public struct PopoverContentView: View {
 
     private var footerBar: some View {
         HStack(spacing: 12) {
-            Button {
-                overlay = .settings
-            } label: {
-                Label(L10n.localizedString("settings"), systemImage: "gearshape")
-            }
-            .buttonStyle(.borderless)
-            .help(L10n.localizedString("settings_help"))
             Toggle(isOn: Binding(
                 get: { loginItem.isRegistered },
                 set: { _ in loginItem.toggle() }
@@ -189,13 +245,16 @@ public struct PopoverContentView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .help(loginItem.statusDescription)
+
             Spacer()
-            Button(role: .destructive) {
-                onQuit()
+
+            Button {
+                overlay = .settings
             } label: {
-                Label(L10n.localizedString("quit"), systemImage: "power")
+                Label(L10n.localizedString("settings"), systemImage: "gearshape")
             }
             .buttonStyle(.borderless)
+            .help(L10n.localizedString("settings_help"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

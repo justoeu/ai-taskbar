@@ -1,0 +1,5 @@
+{
+  "cmd": "make test",
+  "ok": true,
+  "log": "Test run with 766 tests in 100 suites passed after 47.866 seconds with 3 known issues. Line coverage: 91.54% >= floor 90%."
+}

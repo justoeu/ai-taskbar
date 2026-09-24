@@ -5,12 +5,13 @@ import Foundation
 /// `price(totals:table:)` implementations. Centralizing them removes the
 /// copy-paste maintenance hazard (a tweak to one would silently desync the
 /// Claude vs Codex totals).
-enum CostAggregator {
+public enum CostAggregator {
     /// Accumulates a per-model `ModelUsage` sample into a totals bucket,
     /// mutating the existing entry if the model has been seen before.
-    static func add(_ u: ModelUsage,
-                    into bucket: inout [String: ModelUsage],
-                    model: String) {
+    public static func add(_ u: ModelUsage,
+                           into bucket: inout [String: ModelUsage],
+                           model: String) {
+        guard !model.isEmpty && !model.hasPrefix("<") else { return }
         var existing = bucket[model] ?? ModelUsage()
         existing.inputTokens = saturatingAdd(existing.inputTokens, u.inputTokens)
         existing.outputTokens = saturatingAdd(existing.outputTokens, u.outputTokens)
@@ -34,7 +35,7 @@ enum CostAggregator {
     /// which is visible and diagnosable, while a dead app is neither.
     /// Wrapping (`&+`) would be worse than either — it silently produces a
     /// small or negative total from a huge one.
-    static func saturatingAdd(_ a: Int, _ b: Int) -> Int {
+    public static func saturatingAdd(_ a: Int, _ b: Int) -> Int {
         let (sum, overflow) = a.addingReportingOverflow(b)
         guard overflow else { return sum }
         return b > 0 ? Int.max : Int.min
@@ -42,11 +43,12 @@ enum CostAggregator {
 
     /// Converts per-model token totals into USD via the supplied pricing
     /// table. Returns the grand total plus a per-model dollar breakdown.
-    static func price(totals: [String: ModelUsage],
-                      table: [String: ModelPricing]) -> (Double, [String: Double]) {
+    public static func price(totals: [String: ModelUsage],
+                             table: [String: ModelPricing]) -> (Double, [String: Double]) {
         var total = 0.0
         var byModel: [String: Double] = [:]
         for (model, usage) in totals {
+            guard !model.isEmpty && !model.hasPrefix("<") else { continue }
             // Discovery must not depend on pricing-table freshness. Keeping a
             // zero-dollar row means a newly released model remains visible in
             // the UI while the scanner's note explains that its turns are not

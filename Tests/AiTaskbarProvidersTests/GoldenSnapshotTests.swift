@@ -100,6 +100,7 @@ struct GoldenSnapshotTests {
         let gptShare = snap.topModels?.first(where: { $0.model == "openai/gpt-4.1" })
         #expect(Int((gptShare?.percent ?? 0).rounded()) == 47, "3.20 / 6.80 ≈ 47%")
         #expect(gptShare?.rawUsage == 3.20)
+        #expect(snap.totalUsageUSD == 2.50)
     }
 
     // MARK: - Z.AI

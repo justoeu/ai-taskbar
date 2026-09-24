@@ -1,0 +1,42 @@
+{
+  "prefix": "mmh",
+  "count": 3,
+  "into": "feature/consumption-analytics",
+  "base": "feature/consumption-analytics",
+  "head": "96ef7a98dab2c22d80a0fd8926dcc37717289a73",
+  "gitignore_appended": true,
+  "gitignore_path": "/Users/justoeu/Developer/Workspace/ai-taskbar/.gitignore",
+  "baseline_green": true,
+  "slices": [
+    {
+      "index": 1,
+      "branch": "mmh/slice-1",
+      "dir": "/Users/justoeu/Developer/Workspace/ai-taskbar/.worktrees/mmh-1",
+      "base": "feature/consumption-analytics",
+      "head": "96ef7a98dab2c22d80a0fd8926dcc37717289a73",
+      "merged": true,
+      "removed": true,
+      "merged_into": "feature/consumption-analytics"
+    },
+    {
+      "index": 2,
+      "branch": "mmh/slice-2",
+      "dir": "/Users/justoeu/Developer/Workspace/ai-taskbar/.worktrees/mmh-2",
+      "base": "feature/consumption-analytics",
+      "head": "96ef7a98dab2c22d80a0fd8926dcc37717289a73",
+      "merged": true,
+      "removed": true,
+      "merged_into": "feature/consumption-analytics"
+    },
+    {
+      "index": 3,
+      "branch": "mmh/slice-3",
+      "dir": "/Users/justoeu/Developer/Workspace/ai-taskbar/.worktrees/mmh-3",
+      "base": "feature/consumption-analytics",
+      "head": "96ef7a98dab2c22d80a0fd8926dcc37717289a73",
+      "merged": true,
+      "removed": true,
+      "merged_into": "feature/consumption-analytics"
+    }
+  ]
+}

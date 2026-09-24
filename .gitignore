@@ -43,3 +43,5 @@ graphify-out/
 
 # Atlas generated documentation
 docs/atlas/
+.worktrees/
+.scannerwork/

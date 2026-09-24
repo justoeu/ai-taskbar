@@ -205,6 +205,76 @@ struct CostTests {
         #expect(total == 0)
         #expect(breakdown["future-model"] == 0)
     }
+
+    @Test("Grok 4.7 has explicit pricing at $2/$6 with $0.50 cache read")
+    func lookup_grok47() {
+        let m = PricingTable.lookup("grok-4.7", table: PricingTable.xai)
+        #expect(m?.inputPer1M == 2.0)
+        #expect(m?.outputPer1M == 6.0)
+        #expect(m?.cacheReadPer1M == 0.50)
+    }
+
+    @Test("Grok 4.7 thinking and code variants resolve to the 4.7 tier")
+    func lookup_grok47_variants() {
+        let thinking = PricingTable.lookup("grok-4.7-thinking", table: PricingTable.xai)
+        #expect(thinking?.inputPer1M == 2.0)
+        #expect(thinking?.outputPer1M == 6.0)
+        let code = PricingTable.lookup("grok-4.7-code", table: PricingTable.xai)
+        #expect(code?.inputPer1M == 2.0)
+        #expect(code?.outputPer1M == 6.0)
+    }
+
+    @Test("Gemini 2.5 Flash has explicit pricing at $0.075/$0.30")
+    func lookup_gemini25_flash() {
+        let m = PricingTable.lookup("gemini-2.5-flash", table: PricingTable.gemini)
+        #expect(m?.inputPer1M == 0.075)
+        #expect(m?.outputPer1M == 0.30)
+        #expect(m?.cacheReadPer1M == 0.01875)
+    }
+
+    @Test("Gemini 2.5 Pro has 128k long-context threshold and multipliers")
+    func lookup_gemini25_pro() {
+        let m = PricingTable.lookup("gemini-2.5-pro", table: PricingTable.gemini)
+        #expect(m?.inputPer1M == 1.25)
+        #expect(m?.outputPer1M == 5.00)
+        #expect(m?.cacheReadPer1M == 0.3125)
+        #expect(m?.longContextThresholdTokens == 128_000)
+        #expect(m?.longContextInputMultiplier == 2.0)
+        #expect(m?.longContextOutputMultiplier == 2.0)
+    }
+
+    @Test("Opus 5.5 has explicit pricing at $5/$25 tier")
+    func lookup_opus55() {
+        let hyphenated = PricingTable.lookup("claude-opus-5-5", table: PricingTable.anthropic)
+        #expect(hyphenated?.inputPer1M == 5.0)
+        #expect(hyphenated?.outputPer1M == 25.0)
+        #expect(hyphenated?.cacheReadPer1M == 0.5)
+        let dotted = PricingTable.lookup("claude-opus-5.5", table: PricingTable.anthropic)
+        #expect(dotted?.inputPer1M == 5.0)
+        #expect(dotted?.outputPer1M == 25.0)
+    }
+
+    @Test("GLM Flash models have expected pricing tiers")
+    func lookup_glm_flash() {
+        let flash53 = PricingTable.lookup("glm-5.3-flash", table: PricingTable.zai)
+        #expect(flash53?.inputPer1M == 0.15)
+        #expect(flash53?.outputPer1M == 0.50)
+        let flash4 = PricingTable.lookup("glm-4-flash", table: PricingTable.zai)
+        #expect(flash4?.inputPer1M == 0.0)
+        #expect(flash4?.outputPer1M == 0.0)
+    }
+
+    @Test("Kimi models have expected pricing and table resolution")
+    func lookup_kimi() {
+        let k15 = PricingTable.lookup("kimi-k1.5", table: PricingTable.kimi)
+        #expect(k15?.inputPer1M == 1.65)
+        #expect(k15?.outputPer1M == 3.30)
+        let auto = PricingTable.lookup("moonshot-v1-auto", table: PricingTable.kimi)
+        #expect(auto?.inputPer1M == 1.65)
+        #expect(auto?.outputPer1M == 1.65)
+        let table = PricingTable.table(for: .kimi)
+        #expect(table["kimi-k1.5"] != nil)
+    }
 }
 
 @Suite("CostEstimate / ModelUsage")

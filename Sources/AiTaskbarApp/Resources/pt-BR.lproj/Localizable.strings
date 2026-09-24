@@ -307,3 +307,48 @@
 
 // Grok / xAI
 "xai_grok_disclaimer" = "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.";
+
+// Analytics & Visão Geral de Consumo
+"analytics_toolbar_button" = "Visão Geral de Consumo e Gráficos";
+"analytics_title" = "Consumo & Métricas";
+"analytics_subtitle" = "Visão consolidada entre todos os LLMs";
+"analytics_distribution_title" = "Distribuição de Consumo e Custos";
+"analytics_usage" = "Uso";
+"analytics_usage_share" = "Fatia de Uso";
+"analytics_by_llm_title" = "Consumo por LLM";
+"analytics_empty_data" = "Nenhum consumo registrado no período.";
+"analytics_busiest_day" = "Dia mais movimentado";
+"analytics_sessions" = "sessões ativas";
+"analytics_session_single" = "sessão ativa";
+"timeframe_daily" = "Hoje";
+"timeframe_weekly" = "Semana";
+"timeframe_monthly" = "Mês";
+"compare_previous_period" = "Comparar com período anterior";
+
+"quit_confirm_title" = "Deseja realmente fechar o AI Taskbar?";
+"quit_confirm_message" = "O monitoramento contínuo das quotas na barra de menu será interrompido.";
+"quit_confirm_button" = "Fechar App";
+"quit_app" = "Fechar App";
+"back" = "Voltar";
+"analytics_usage_distribution_title" = "Fatia de Uso (% Quota)";
+"analytics_cost_distribution_title" = "Consumo em Dólares (USD)";
+"compare_target_label" = "Comparar com:";
+"compare_prev_week_1" = "Semana anterior";
+"compare_prev_week_2" = "Há 2 semanas";
+"compare_prev_week_3" = "Há 3 semanas";
+"compare_prev_week_4" = "Há 4 semanas";
+"compare_prev_day_1" = "Ontem";
+"compare_prev_day_7" = "Há 7 dias";
+"compare_prev_month_1" = "Mês anterior";
+"compare_prev_month_2" = "Há 2 meses";
+"vs_previous_period_fmt" = "%@ vs. anterior";
+"pin_to_menu_bar_help" = "Fixar na barra de menus";
+"more_details" = "+ detalhes";
+"more_details_help" = "Ver gráficos e métricas de consumo deste LLM";
+"sync_vendor_order" = "Sincronizar ordenação dos LLMs";
+"sync_vendor_order_help" = "Quando ativado, os cartões de LLM nesta tela seguem a mesma ordem da tela inicial. Quando desativado, você pode reorganizar os modelos aqui de forma independente usando as setas para cima/baixo em cada cartão.";
+"pin_to_menubar_title" = "Fixar na barra de menus";
+"pin_to_menubar_desc" = "Exibe o ícone e consumo semanal/atual na barra do macOS";
+"analytics_lifetime_usage" = "Total de uso já acumulado";
+"analytics_vendor_no_recent_usage" = "LLM sem uso nos últimos tempos ou no último mês";
+"analytics_subscription_quota_hint" = "Uso coberto pela franquia da assinatura, sem cobrança marginal por token.";

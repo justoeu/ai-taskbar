@@ -62,4 +62,16 @@ struct VendorIdTests {
             #expect(back == v)
         }
     }
+
+    @Test("symbolName covers every vendor with distinct SF Symbol")
+    func symbolName_covers_every_vendor() {
+        #expect(VendorId.anthropic.symbolName == "asterisk")
+        #expect(VendorId.openai.symbolName == "chevron.left.forwardslash.chevron.right")
+        #expect(VendorId.gemini.symbolName == "sparkle")
+        #expect(VendorId.zai.symbolName == "z.square")
+        #expect(VendorId.kimi.symbolName == "k.square")
+        #expect(VendorId.openrouter.symbolName == "arrow.triangle.branch")
+        #expect(VendorId.deepseek.symbolName == "fish.fill")
+        #expect(VendorId.xai.symbolName == "xmark")
+    }
 }

@@ -218,6 +218,8 @@ public enum ClaudeSessionScanner {
             }
             guard let msg = parsed.message,
                   let model = msg.model,
+                  !model.isEmpty,
+                  !model.hasPrefix("<"),
                   let usage = msg.usage
             else { continue }
 

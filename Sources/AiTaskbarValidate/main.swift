@@ -171,6 +171,13 @@ section("Wire types: Antigravity Gemini fixture") {
     let snap = VendorSnapshot.gemini(s)
     expect(snap.windows.count == 4, "Antigravity exposes 4 quota windows")
     expect(abs(snap.maxUtilization - 16.344) < 0.01, "Antigravity maxUtilization matches peak")
+
+    let errParsed = try SharedCoders.decoder.decode(
+        AntigravityUsageResponse.self,
+        from: Data(#"{"conversation_id":"","status":"ERROR","response":"","error":"context canceled"}"#.utf8)
+    )
+    expect(errParsed.status == "ERROR", "Antigravity error status decoded")
+    expect(errParsed.error == "context canceled", "Antigravity error message decoded")
 }
 
 section("Wire types: DeepSeek fixture") {
@@ -741,6 +748,18 @@ section("Wire types: Z.AI fixture") {
            "Z.AI top models sorted desc by usage")
     expect(Int((s.topModels?[0].percent ?? 0).rounded()) == 50, "Z.AI top model share (20/40)")
     expect(s.topModels?[0].rawUsage == 20, "Z.AI top model raw usage")
+
+    let errEnv = try SharedCoders.decoder.decode(
+        ZAIEnvelope.self,
+        from: Data(#"{"code":500,"msg":"当前用户不存在coding plan","success":false}"#.utf8)
+    )
+    expect(errEnv.code == 500, "Z.AI error code decoded")
+    expect(errEnv.msg == "当前用户不存在coding plan", "Z.AI error msg decoded")
+    expect(errEnv.success == false, "Z.AI success flag decoded")
+    expect(errEnv.data == nil, "Z.AI data is nil in error response")
+    let errSnap = errEnv.toSnapshot(configTier: "lite")
+    expect(errSnap.planLabel == "GLM Lite", "Z.AI fallback plan label preserved")
+    expect(errSnap.session == nil, "Z.AI session nil when data is nil")
 }
 
 section("DiskCache TTL semantics") {
@@ -972,8 +991,51 @@ section("PricingTable lookup") {
     expect(prefix != nil, "prefix match finds gpt-5-codex")
     let longest = PricingTable.lookup("gpt-5.4-mini-2026-05", table: PricingTable.openai)
     expect(longest?.inputPer1M == 0.75, "longest-prefix wins (gpt-5.4-mini, not gpt-5/gpt-5.4)")
+    let grok47 = PricingTable.lookup("grok-4.7", table: PricingTable.xai)
+    expect(grok47?.inputPer1M == 2.0, "Grok 4.7 input price ($2/MTok)")
+    expect(grok47?.outputPer1M == 6.0, "Grok 4.7 output price ($6/MTok)")
+    expect(grok47?.cacheReadPer1M == 0.50, "Grok 4.7 cache-read price ($0.50/MTok)")
+    let grok47Thinking = PricingTable.lookup("grok-4.7-thinking", table: PricingTable.xai)
+    expect(grok47Thinking?.inputPer1M == 2.0, "Grok 4.7 thinking resolves via prefix/exact")
+    let geminiFlash = PricingTable.lookup("gemini-2.5-flash", table: PricingTable.gemini)
+    expect(geminiFlash?.inputPer1M == 0.075, "Gemini 2.5 Flash input price ($0.075/MTok)")
+    expect(geminiFlash?.outputPer1M == 0.30, "Gemini 2.5 Flash output price ($0.30/MTok)")
+    let geminiPro = PricingTable.lookup("gemini-2.5-pro", table: PricingTable.gemini)
+    expect(geminiPro?.inputPer1M == 1.25, "Gemini 2.5 Pro input price ($1.25/MTok)")
+    expect(geminiPro?.longContextThresholdTokens == 128_000, "Gemini 2.5 Pro long-context threshold 128k")
+    let glm53 = PricingTable.lookup("glm-5.3", table: PricingTable.zai)
+    expect(glm53?.inputPer1M == 1.40, "GLM-5.3 input price ($1.40/MTok)")
+    expect(glm53?.outputPer1M == 4.40, "GLM-5.3 output price ($4.40/MTok)")
+    expect(glm53?.cacheReadPer1M == 0.26, "GLM-5.3 cache-read price ($0.26/MTok)")
+    let glmFlash = PricingTable.lookup("glm-5.3-flash", table: PricingTable.zai)
+    expect(glmFlash?.inputPer1M == 0.15, "GLM-5.3 Flash input price ($0.15/MTok)")
+    let glm4Flash = PricingTable.lookup("glm-4-flash", table: PricingTable.zai)
+    expect(glm4Flash?.inputPer1M == 0.0, "GLM-4 Flash free tier ($0/MTok)")
+    let opus55 = PricingTable.lookup("claude-opus-5-5", table: PricingTable.anthropic)
+    expect(opus55?.inputPer1M == 5, "Opus 5.5 input price ($5/MTok)")
+    let opus55Dot = PricingTable.lookup("claude-opus-5.5", table: PricingTable.anthropic)
+    expect(opus55Dot?.inputPer1M == 5, "Opus 5.5 dotted format input price ($5/MTok)")
+    let kimiK15 = PricingTable.lookup("kimi-k1.5", table: PricingTable.kimi)
+    expect(kimiK15?.inputPer1M == 1.65, "Kimi k1.5 input price ($1.65/MTok)")
+    let moonshotAuto = PricingTable.lookup("moonshot-v1-auto", table: PricingTable.kimi)
+    expect(moonshotAuto?.inputPer1M == 1.65, "Moonshot v1 auto input price ($1.65/MTok)")
+    let kimiTable = PricingTable.table(for: .kimi)
+    expect(kimiTable["kimi-k1.5"] != nil, "table(for: .kimi) resolves Kimi pricing table")
+    let glmTable = PricingTable.table(for: .zai)
+    expect(glmTable["glm-5.3"] != nil, "table(for: .zai) resolves GLM pricing table")
     let unknown = PricingTable.lookup("totally-made-up-model", table: PricingTable.anthropic)
     expect(unknown == nil, "unknown model returns nil")
+}
+
+section("VendorId SF Symbols") {
+    expect(VendorId.anthropic.symbolName == "asterisk", "Anthropic Claude uses asterisk")
+    expect(VendorId.gemini.symbolName == "sparkle", "Gemini Antigravity uses sparkle")
+    expect(VendorId.openai.symbolName == "chevron.left.forwardslash.chevron.right", "OpenAI Codex uses code symbol")
+    expect(VendorId.zai.symbolName == "z.square", "Z.ai uses z.square")
+    expect(VendorId.kimi.symbolName == "k.square", "Kimi uses k.square")
+    expect(VendorId.openrouter.symbolName == "arrow.triangle.branch", "OpenRouter uses branch")
+    expect(VendorId.deepseek.symbolName == "fish.fill", "DeepSeek uses fish.fill (whale)")
+    expect(VendorId.xai.symbolName == "xmark", "xAI Grok uses xmark")
 }
 
 section("S5: OpenAI cache strips PII") {

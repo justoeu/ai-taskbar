@@ -9,10 +9,11 @@ struct AiTaskbarApp: App {
     @StateObject private var statusStore: ServiceStatusStore
     @StateObject private var scheduler: RefreshScheduler
     @StateObject private var loginItem = LoginItemService()
-    @StateObject private var cost = CostEstimator()
+    @StateObject private var cost: CostEstimator
     @StateObject private var updates: UpdateChecker
     @StateObject private var configWatcher: ConfigWatcher
     @StateObject private var settingsViewModel: SettingsViewModel
+    @StateObject private var analyticsStore: AnalyticsStore
     private let env: AppEnvironment
 
     init() {
@@ -59,18 +60,25 @@ struct AiTaskbarApp: App {
             vendorIds: enabledStatusIds,
             providers: env.makeStatusProviders(for: enabledStatusIds)
         )
+        let costEstimator = CostEstimator()
+        costEstimator.refresh()
+        _cost = StateObject(wrappedValue: costEstimator)
         let scheduler = RefreshScheduler(store: store,
                                          statusStore: statusStore,
+                                         costEstimator: costEstimator,
                                          interval: env.config.ui.refreshIntervalSeconds)
         // Kick off the refresh + compact loops from launch so usage starts
         // accumulating without requiring the user to open the popover first.
         scheduler.start()
+        let analyticsStore = AnalyticsStore(usageStore: store, costEstimator: costEstimator)
+        _analyticsStore = StateObject(wrappedValue: analyticsStore)
         _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(
             config: env.config, configLoader: env.configLoader))
         self.env = env
         _store = StateObject(wrappedValue: store)
         _statusStore = StateObject(wrappedValue: statusStore)
         _scheduler = StateObject(wrappedValue: scheduler)
+        PinnedStatusItemManager.shared.configure(store: store)
     }
 
     var body: some Scene {
@@ -82,17 +90,11 @@ struct AiTaskbarApp: App {
             .environmentObject(statusStore)
             .environmentObject(loginItem)
             .environmentObject(cost)
+            .environmentObject(analyticsStore)
             .environmentObject(updates)
             .environmentObject(configWatcher)
             .environmentObject(settingsViewModel)
             .frame(width: 420, height: 540)
-            .onAppear {
-                // Scheduler is already running from init (see above).
-                // These two are cheap on subsequent opens (idempotent /
-                // debounced) and let the popover show fresh data on first view.
-                loginItem.refresh()
-                cost.refresh()
-            }
         } label: {
             MenuBarLabelView(store: store, mode: env.config.ui.menuBarMode)
         }

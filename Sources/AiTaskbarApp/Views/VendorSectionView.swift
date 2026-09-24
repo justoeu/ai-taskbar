@@ -13,6 +13,7 @@ public struct VendorSectionView: View {
     /// per-vendor section body from re-rendering every ≥60 s when the
     /// shared `CostEstimator` flips `isLoading` / `byVendor`.
     public let cost: CostEstimator
+    public let onOpenAnalytics: ((VendorId) -> Void)?
 
     /// Tracks an in-progress CLI re-login triggered by `reloginAffordance`.
     /// Flips true on click, back to false once the vendor recovers
@@ -31,16 +32,17 @@ public struct VendorSectionView: View {
 
     public init(vm: VendorViewModel,
                 thresholds: ThresholdsConfig,
-                cost: CostEstimator) {
+                cost: CostEstimator,
+                onOpenAnalytics: ((VendorId) -> Void)? = nil) {
         self.vm = vm
         self.thresholds = thresholds
         self.cost = cost
+        self.onOpenAnalytics = onOpenAnalytics
     }
 
     /// True when this vendor is "disabled" (no credentials).
     private var isDisabled: Bool {
-        if case .failed(let err, _) = vm.state, err.isDisabled { return true }
-        return false
+        vm.isDisabled
     }
 
     private var effectiveExpanded: Bool {
@@ -58,6 +60,10 @@ public struct VendorSectionView: View {
                     SparklineView(samples: vm.history, thresholds: thresholds)
                 }
                 CostFooterView(vendorId: vm.vendorId, cost: cost)
+                pinToMenuBarSlice
+                if onOpenAnalytics != nil {
+                    moreDetailsButton
+                }
             } else if isDisabled {
                 disabledHint
             }
@@ -98,27 +104,59 @@ public struct VendorSectionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .help(L10n.localizedString("locked_help"))
             } else {
-                Button {
-                    // Source of truth lives on the VM; the didSet there
-                    // persists to UserDefaults and the menu-bar aggregate
-                    // recomputes so a collapsed card drops out of the %.
-                    vm.isExpanded.toggle()
-                } label: {
-                    HStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    Button {
+                        vm.isExpanded.toggle()
+                    } label: {
                         Image(systemName: effectiveExpanded ? "chevron.down" : "chevron.right")
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(.secondary)
                             .frame(width: 14, height: 28, alignment: .center)
-                        headerTitle(state: state)
-                        Spacer(minLength: 0)
+                            .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .help(L10n.localizedString(
+                        effectiveExpanded ? "collapse_fmt" : "expand_fmt",
+                        vm.vendorId.displayName))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            VendorIconView(vendorId: vm.vendorId, size: 14)
+                                .foregroundStyle(.secondary)
+
+                            Text(vm.vendorId.displayName)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    vm.isExpanded.toggle()
+                                }
+
+                            if store.isPinned(vm.vendorId) {
+                                Image(systemName: "pin.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.accentColor)
+                                    .help(L10n.localizedString("pin_to_menu_bar_help"))
+                            }
+                        }
+                        if let plan = state.outcome?.snapshot.planLabel {
+                            Text(plan)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    vm.isExpanded.toggle()
+                                }
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            vm.isExpanded.toggle()
+                        }
                 }
-                .buttonStyle(.plain)
-                .help(L10n.localizedString(
-                    effectiveExpanded ? "collapse_fmt" : "expand_fmt",
-                    vm.vendorId.displayName))
+                .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
             }
             if let url = vm.vendorId.dashboardURL {
                 Button {
@@ -194,6 +232,54 @@ public struct VendorSectionView: View {
             .help(L10n.localizedString("move_vendor_down_help"))
         }
         .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private var pinToMenuBarSlice: some View {
+        HStack(spacing: 9) {
+            Image(systemName: store.isPinned(vm.vendorId) ? "pin.fill" : "pin")
+                .font(.system(size: 13))
+                .foregroundStyle(store.isPinned(vm.vendorId) ? Color.accentColor : Color.secondary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.localizedString("pin_to_menubar_title"))
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(L10n.localizedString("pin_to_menubar_desc"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            Toggle("", isOn: Binding(
+                get: { store.isPinned(vm.vendorId) },
+                set: { _ in store.togglePinned(vm.vendorId) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .labelsHidden()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
+    @ViewBuilder
+    private var moreDetailsButton: some View {
+        HStack {
+            Spacer()
+            MoreDetailsLinkView(
+                vendorId: vm.vendorId,
+                onOpenAnalytics: onOpenAnalytics
+            )
+        }
+        .padding(.top, 4)
     }
 
     @ViewBuilder
@@ -651,3 +737,51 @@ public struct VendorSectionView: View {
         }
     }
 }
+
+private struct MoreDetailsLinkView: View {
+    let vendorId: VendorId
+    let onOpenAnalytics: ((VendorId) -> Void)?
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        Button {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+            onOpenAnalytics?(vendorId)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chart.pie.fill")
+                    .font(.caption)
+                Text(L10n.localizedString("more_details"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .underline(isHovered)
+            }
+            .foregroundStyle(Color.accentColor)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { inside in
+            if inside {
+                if !isHovered {
+                    isHovered = true
+                    NSCursor.pointingHand.push()
+                }
+            } else {
+                if isHovered {
+                    isHovered = false
+                    NSCursor.pop()
+                }
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .help(L10n.localizedString("more_details_help"))
+    }
+}
+

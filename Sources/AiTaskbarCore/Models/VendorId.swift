@@ -25,6 +25,20 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Canonical SF Symbol name representing each vendor in the UI and menu bar.
+    public var symbolName: String {
+        switch self {
+        case .anthropic:  return "asterisk"
+        case .openai:     return "chevron.left.forwardslash.chevron.right"
+        case .zai:        return "z.square"
+        case .openrouter: return "arrow.triangle.branch"
+        case .kimi:       return "k.square"
+        case .gemini:     return "sparkle"
+        case .deepseek:   return "fish.fill"
+        case .xai:        return "xmark"
+        }
+    }
+
     /// Official dashboard URL for billing/usage. Opens via NSWorkspace when
     /// the user clicks on the section header.
     public var dashboardURL: URL? {

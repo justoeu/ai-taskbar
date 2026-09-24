@@ -80,12 +80,14 @@ public struct AntigravityUsageResponse: Decodable, Sendable {
     public let conversationId: String?
     public let status: String?
     public let response: String?
+    public let error: String?
     public let command: AntigravityCommand?
 
     enum CodingKeys: String, CodingKey {
         case conversationId = "conversation_id"
         case status
         case response
+        case error
         case command
     }
 }

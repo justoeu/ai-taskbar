@@ -117,4 +117,89 @@ struct ZAIProviderTests {
         try? FileManager.default.removeItem(at: tmpCacheDir)
         StubURLProtocol.reset()
     }
+
+    @Test("missing coding plan response throws HTTP 500 with helpful explanation")
+    func zai_missing_coding_plan_throws_http_500() async throws {
+        StubURLProtocol.handler = { _ in
+            .init(data: Data(#"{"code":500,"msg":"当前用户不存在coding plan","success":false}"#.utf8))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .zai, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_ZAI_NO_PLAN",
+            inlineKey: "k",
+            vendorName: "Z.AI"
+        )
+        let provider = ZAIProvider(credentials: creds, cache: cache, http: http)
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected throw")
+        } catch let err as AppError {
+            if case .http(let status, let body) = err {
+                #expect(status == 500)
+                expectTrue(body.contains("当前用户不存在coding plan"))
+                expectTrue(body.contains("Conta Z.AI sem plano de coding ativo"))
+            } else {
+                Issue.record("expected AppError.http(500), got \(err)")
+            }
+        } catch {
+            Issue.record("expected AppError")
+        }
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
+    }
+
+    @Test("unsuccessful envelope with 401 bubbles up as unauthorized")
+    func zai_unsuccessful_401_bubbles_up() async throws {
+        StubURLProtocol.handler = { _ in
+            .init(data: Data(#"{"code":401,"msg":"Invalid token","success":false}"#.utf8))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .zai, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_ZAI_UNAUTH",
+            inlineKey: "k",
+            vendorName: "Z.AI"
+        )
+        let provider = ZAIProvider(credentials: creds, cache: cache, http: http)
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected throw")
+        } catch let err as AppError {
+            expectTrue(err.isUnauthorized)
+        } catch {
+            Issue.record("expected AppError")
+        }
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
+    }
+
+    @Test("code 200 without data throws schema mismatch")
+    func zai_envelope_without_data_throws_schema() async throws {
+        StubURLProtocol.handler = { _ in
+            .init(data: Data(#"{"code":200,"msg":"ok","success":true}"#.utf8))
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let cache = DiskCache(vendor: .zai, baseDir: tmpCacheDir)
+        let creds = EnvOrConfigCredentialReader(
+            envVarName: "_UNSET_ZAI_NO_DATA",
+            inlineKey: "k",
+            vendorName: "Z.AI"
+        )
+        let provider = ZAIProvider(credentials: creds, cache: cache, http: http)
+        do {
+            _ = try await provider.fetchUsage(forceRefresh: true)
+            Issue.record("expected throw")
+        } catch let err as AppError {
+            if case .schema(let msg) = err {
+                expectTrue(msg.contains("sem dados"))
+            } else {
+                Issue.record("expected AppError.schema, got \(err)")
+            }
+        } catch {
+            Issue.record("expected AppError")
+        }
+        try? FileManager.default.removeItem(at: tmpCacheDir)
+        StubURLProtocol.reset()
+    }
 }
