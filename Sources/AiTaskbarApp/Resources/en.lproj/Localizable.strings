@@ -353,4 +353,9 @@
 "analytics_lifetime_usage" = "Lifetime usage";
 "analytics_vendor_no_recent_usage" = "LLM has no usage recently or in the last month";
 "analytics_subscription_quota_hint" = "Usage covered by subscription quota with no marginal per-token cost.";
-
+"update_banner_available_fmt" = "New version %@ available";
+"update_banner_button" = "Update";
+"update_banner_downloading" = "Downloading update…";
+"update_banner_ready" = "Update downloaded";
+"update_banner_open" = "Open DMG";
+"update_banner_dismiss" = "Dismiss";
