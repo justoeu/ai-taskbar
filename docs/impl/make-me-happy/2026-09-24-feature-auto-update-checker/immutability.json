@@ -1,0 +1,17 @@
+{
+  "suite": [
+    "UpdateCheckerAssetTests#arm64_prefers_arch_specific",
+    "UpdateCheckerAssetTests#intel_takes_universal",
+    "UpdateCheckerAssetTests#single_dmg_release",
+    "UpdateCheckerAssetTests#intel_rejects_arm64_only",
+    "UpdateCheckerAssetTests#no_dmg_assets",
+    "UpdateCheckerAssetTests#download_host_allowlist",
+    "UpdateBannerTests#localization_keys_exist"
+  ],
+  "green": true,
+  "tasks_covered": [
+    "T-001",
+    "T-002",
+    "T-003"
+  ]
+}

@@ -10,7 +10,7 @@
       "status": "DONE",
       "tests_added": 6,
       "red_green": true,
-      "immutability": false,
+      "immutability": true,
       "depends_on": []
     },
     {
@@ -21,7 +21,7 @@
       "status": "DONE",
       "tests_added": 1,
       "red_green": true,
-      "immutability": false,
+      "immutability": true,
       "depends_on": [
         "T-001"
       ]
@@ -34,7 +34,7 @@
       "status": "DONE",
       "tests_added": 1,
       "red_green": true,
-      "immutability": false,
+      "immutability": true,
       "depends_on": [
         "T-001"
       ]
