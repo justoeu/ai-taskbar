@@ -13,27 +13,32 @@ public final class RefreshScheduler: ObservableObject {
     private weak var store: UsageStore?
     private weak var statusStore: ServiceStatusStore?
     private weak var costEstimator: CostEstimator?
+    private weak var updates: UpdateChecker?
     private var refreshLoop: Task<Void, Never>?
     private var statusRefreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
+    private var updateCheckLoop: Task<Void, Never>?
 
     public convenience init(store: UsageStore,
                             statusStore: ServiceStatusStore? = nil,
                             costEstimator: CostEstimator? = nil,
+                            updates: UpdateChecker? = nil,
                             interval: TimeInterval = 300) {
-        self.init(store: store, statusStore: statusStore, costEstimator: costEstimator, interval: interval,
+        self.init(store: store, statusStore: statusStore, costEstimator: costEstimator, updates: updates, interval: interval,
                   minimumInterval: 15, minimumStatusInterval: 300)
     }
 
     init(store: UsageStore,
          statusStore: ServiceStatusStore?,
          costEstimator: CostEstimator? = nil,
+         updates: UpdateChecker? = nil,
          interval: TimeInterval,
          minimumInterval: TimeInterval,
          minimumStatusInterval: TimeInterval) {
         self.store = store
         self.statusStore = statusStore
         self.costEstimator = costEstimator
+        self.updates = updates
         // Floor at 15 s. Below this the undocumented vendor endpoints
         // (Anthropic, Codex, Z.AI) start returning 429 aggressively.
         self.interval = max(minimumInterval, interval)
@@ -46,6 +51,7 @@ public final class RefreshScheduler: ObservableObject {
         startRefreshLoop()
         startStatusRefreshLoop()
         startCompactLoop()
+        startUpdateCheckLoop()
     }
 
     /// A separate cadence prevents usage 429 back-off or a hung credential
@@ -137,18 +143,34 @@ public final class RefreshScheduler: ObservableObject {
         }
     }
 
+    private func startUpdateCheckLoop() {
+        guard updateCheckLoop == nil, updates != nil else { return }
+        updateCheckLoop = Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.updates?.checkIfNeeded()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(86_400))
+                if Task.isCancelled { break }
+                self.updates?.checkIfNeeded()
+            }
+        }
+    }
+
     public func stop() {
         refreshLoop?.cancel()
         statusRefreshLoop?.cancel()
         compactLoop?.cancel()
+        updateCheckLoop?.cancel()
         refreshLoop = nil
         statusRefreshLoop = nil
         compactLoop = nil
+        updateCheckLoop = nil
     }
 
     deinit {
         refreshLoop?.cancel()
         statusRefreshLoop?.cancel()
         compactLoop?.cancel()
+        updateCheckLoop?.cancel()
     }
 }
