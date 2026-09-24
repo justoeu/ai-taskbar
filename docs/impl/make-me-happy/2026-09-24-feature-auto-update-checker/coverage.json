@@ -1,0 +1,6 @@
+{
+  "pct": 91.53,
+  "tool": "llvm-cov",
+  "report": "scripts/coverage.sh",
+  "floor": 90
+}

@@ -1,0 +1,41 @@
+{
+  "score": 10,
+  "max": 10,
+  "coverage": {
+    "pct": 91.53,
+    "floor": 90,
+    "floor_min": 90,
+    "requested": 90,
+    "tool": "llvm-cov",
+    "ok": true,
+    "detail": "91.53% >= 90%"
+  },
+  "closable": true,
+  "gates": [
+    {
+      "id": "tasks",
+      "ok": true,
+      "detail": "3 DONE"
+    },
+    {
+      "id": "red-green",
+      "ok": true,
+      "detail": "each DONE has tests_added>=1 and red_green"
+    },
+    {
+      "id": "immutability",
+      "ok": true,
+      "detail": "UpdateCheckerAssetTests#arm64_prefers_arch_specific, UpdateCheckerAssetTests#intel_takes_universal, UpdateCheckerAssetTests#single_dmg_release, UpdateCheckerAssetTests#intel_rejects_arm64_only, UpdateCheckerAssetTests#no_dmg_assets, UpdateCheckerAssetTests#download_host_allowlist, UpdateBannerTests#localization_keys_exist"
+    },
+    {
+      "id": "review",
+      "ok": true,
+      "detail": "standards=APPROVE spec=APPROVE correctness=APPROVE"
+    },
+    {
+      "id": "worktrees",
+      "ok": true,
+      "detail": "3/3 merged+removed"
+    }
+  ]
+}

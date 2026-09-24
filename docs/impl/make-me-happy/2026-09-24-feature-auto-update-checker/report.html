@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ai-taskbar · make-me-happy</title>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "dark" });
+</script>
+<style>
+  :root { --bg:#0b1220; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --border:#374151; --ok:#22c55e; --bad:#ef4444; --accent:#38bdf8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding:1.25rem 2rem; border-bottom:1px solid var(--border); display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+  h1 { margin:0; font-size:1.25rem; }
+  .pill { border:1px solid var(--border); border-radius:999px; padding:.2rem .7rem; font-size:.85rem; }
+  .pill.ok { border-color: var(--ok); color: var(--ok); }
+  .pill.bad { border-color: var(--bad); color: var(--bad); }
+  nav { display:flex; gap:.5rem; padding: .75rem 2rem; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  nav button { background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:.35rem .8rem; cursor:pointer; }
+  nav button[aria-selected="true"] { color:var(--text); border-color:var(--accent); }
+  main { padding:1.5rem 2rem 3rem; max-width:1100px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:1rem 1.2rem; margin: .8rem 0; }
+  table { width:100%; border-collapse: collapse; }
+  th, td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid var(--border); font-size:.9rem; }
+  pre, .md { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size:.85rem; }
+  .muted { color: var(--muted); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns:1fr; } }
+  .panel { display:none; }
+  .panel.active { display:block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>make-me-happy</h1>
+  <span class="pill">App <strong>ai-taskbar</strong></span>
+  <span class="pill">Branch <code>feature/auto-update-checker</code></span>
+  <span class="pill">feature</span>
+  <span class="pill ok">Score <strong>10</strong> / 10</span>
+  <span class="pill ok">Coverage <strong>91.53</strong>% (piso 90)</span>
+</header>
+<nav>
+  <button data-tab="sdd" aria-selected="true">sdd</button>
+  <button data-tab="impl" aria-selected="false">impl</button>
+  <button data-tab="fluxo" aria-selected="false">fluxo</button>
+  <button data-tab="payloads" aria-selected="false">payloads</button>
+  <button data-tab="testes" aria-selected="false">testes</button>
+  <button data-tab="review" aria-selected="false">review</button>
+  <button data-tab="score" aria-selected="false">score</button>
+</nav>
+<main>
+  <section class="panel active" id="sdd">
+    <div class="card"><h2>SDD / spec</h2>
+      <p class="muted">docs/SDD-auto-update-checker.md</p>
+      <div class="md"># Spec Summary — Checagem Automática Diária de Versões e Banner de Atualização
+
+**Kind:** feature  
+**Goal:** Permitir que o AI Taskbar verifique periodicamente (1 vez ao dia / 24h) novas versões publicadas no GitHub Releases em background e exiba um banner elegante no topo do popover com botão de atualização rápida e download seguro via `.dmg` com validação de hash SHA-256.
+
+## Atores
+- Usuário do AI Taskbar (interage com o banner de atualização).
+- `RefreshScheduler` / `UpdateChecker` (agenda a cada 24h e gerencia estados).
+- GitHub Releases API (`api.github.com/repos/justoeu/ai-taskbar/releases/latest`).
+
+## Contratos
+- `UserDefaults` keys: `ai_taskbar_last_update_check_at` e `ai_taskbar_dismissed_update_tag`.
+- `UpdateChecker.checkIfNeeded(force:)`, `UpdateChecker.dismissCurrentUpdate()`, `isUpdateBannerVisible`.
+- Banner visual em `PopoverContentView.swift` com estados: Disponível, Baixando, Concluído e Dispensar.
+
+## Fora de Escopo
+- Auto-substituição do binário sem aprovação ou confirmação do usuário (sem helper de root / Sparkle).
+- Reinício forçado do app.
+</div>
+    </div>
+  </section>
+  <section class="panel" id="impl">
+    <div class="card"><h2>O que foi implementado</h2>
+      <table>
+        <thead><tr><th>id</th><th>task</th><th>status</th><th>tests</th><th>red→green</th><th>immut.</th><th>wt</th></tr></thead>
+        <tbody><tr>
+  <td><code>T-001</code></td>
+  <td>Daily check cadence, persistence, and dismiss logic in UpdateChecker</td>
+  <td>DONE</td>
+  <td>6</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>1</td>
+</tr><tr>
+  <td><code>T-002</code></td>
+  <td>Periodic update check lifecycle in RefreshScheduler &amp; App bootstrap</td>
+  <td>DONE</td>
+  <td>1</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>2</td>
+</tr><tr>
+  <td><code>T-003</code></td>
+  <td>Top banner UI in PopoverContentView and localization</td>
+  <td>DONE</td>
+  <td>1</td>
+  <td>yes</td>
+  <td>yes</td>
+  <td>3</td>
+</tr></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="panel" id="fluxo">
+    <div class="card"><h2>Fluxo e impacto</h2>
+      <pre class="mermaid">flowchart TD
+    AppLaunch["App Launch / RefreshScheduler.start()"] --> CheckIfNeeded["UpdateChecker.checkIfNeeded(force: false)"]
+    CheckIfNeeded --> IsEnabled{"config.updates.enabled?"}
+    IsEnabled -- No --> Idle["Status: idle (no-op)"]
+    IsEnabled -- Yes --> CheckCooldown{"Elapsed >= 24h or first run?"}
+    CheckCooldown -- No --> SleepLoop["Wait for next 24h cycle"]
+    CheckCooldown -- Yes --> FetchGitHub["GET /repos/.../releases/latest"]
+    FetchGitHub --> CompareSemver{"Semver.isNewer(release.tag, current)?"}
+    CompareSemver -- No --> UpToDate["Status: upToDate"]
+    CompareSemver -- Yes --> UpdateAvail["Status: updateAvailable(release)"]
+    UpdateAvail --> CheckDismissed{"release.tag == dismissedTag?"}
+    CheckDismissed -- Yes --> HideBanner["Banner hidden"]
+    CheckDismissed -- No --> ShowBanner["Show Top Banner in Popover"]
+    ShowBanner --> UserAction{"User Action"}
+    UserAction -- "Click 'Atualizar'" --> DownloadDMG["Download DMG + Verify SHA-256"]
+    UserAction -- "Click 'xmark'" --> Dismiss["dismissCurrentUpdate() -> Hide Banner"]
+    DownloadDMG --> ProgressState["Status: downloading(progress)"]
+    ProgressState --> CompleteState["Status: downloaded(localURL) -> Reveal in Finder"]
+</pre>
+    </div>
+  </section>
+  <section class="panel" id="payloads">
+    <h2>Payloads de teste</h2>
+    <p class="muted">Nenhum payload no spec.</p>
+  </section>
+  <section class="panel" id="testes">
+    <div class="card">
+      <h2>Resultado dos testes</h2>
+      <p>cmd: <code>make test</code> — n/a</p>
+      <p>imutabilidade: green — UpdateCheckerAssetTests#arm64_prefers_arch_specific, UpdateCheckerAssetTests#intel_takes_universal, UpdateCheckerAssetTests#single_dmg_release, UpdateCheckerAssetTests#intel_rejects_arm64_only, UpdateCheckerAssetTests#no_dmg_assets, UpdateCheckerAssetTests#download_host_allowlist, UpdateBannerTests#localization_keys_exist</p>
+      <p>cobertura: 91.53% via llvm-cov — piso 90% ok</p>
+      <pre></pre>
+    </div>
+  </section>
+  <section class="panel" id="review">
+    <div class="card"><h2>Standards</h2><div class="md"># Standards Review
+
+## Findings
+- **Swift Concurrency &amp; Actor Isolation:**
+  - `UpdateChecker` maintains `@MainActor` isolation for all UI state properties (`status`, `dismissedTag`).
+  - Constants (`cadenceInterval`, `lastCheckKey`, `dismissedTagKey`) are explicitly marked `nonisolated public static let` to prevent actor hops and satisfy strict concurrency.
+  - In `RefreshScheduler`, `updateCheckLoop` is weak-referenced (`[weak self]`) and properly cancelled in `stop()` and `deinit`, avoiding retain cycles.
+  - In `RefreshScheduler`, `updates` is held as `private weak var updates: UpdateChecker?`, matching `store` and `statusStore`.
+- **Localization:**
+  - All new user-facing strings are extracted to `Localizable.strings` across all three supported locales (`en`, `pt-BR`, `es`). No hardcoded English strings in view bodies.
+- **Clean Architecture &amp; Fowler Smells:**
+  - Zero Shotgun Surgery: changes cleanly divided into UpdateChecker, RefreshScheduler, and PopoverContentView.
+  - Zero Speculative Generality: implemented exactly the 24h cadence, banner presentation, and dismiss functionality specified in the SDD.
+
+VERDICT: APPROVE
+</div></div>
+    <div class="card"><h2>Spec</h2><div class="md"># Spec Review
+
+## Requirements Verification against `docs/SDD-auto-update-checker.md`:
+1. **Cadence &amp; Persistence (SDD §3.1):**
+   - 24-hour cadence interval (`86_400`s) defined and enforced: MATCH.
+   - Persistence key `ai_taskbar_last_update_check_at` stored in `UserDefaults`: MATCH.
+   - `checkIfNeeded(force:)` skips within 24h, executes when overdue or forced: MATCH.
+   - Initial check triggered on startup via `RefreshScheduler.start()`: MATCH.
+2. **Popover Banner UI (SDD §3.2):**
+   - Banner displayed below headerBar in `PopoverContentView`: MATCH.
+   - Shows version tag (`update_banner_available_fmt`), &quot;Atualizar&quot; button (`update_banner_button`), and dismiss button (`xmark` / `update_banner_dismiss`): MATCH.
+   - Supports downloading and downloaded states with progress and open actions: MATCH.
+   - Dismissed tag persisted under `ai_taskbar_dismissed_update_tag` until newer release tag is detected: MATCH.
+3. **Download Safety (SDD §3.3):**
+   - Leverages existing `UpdateChecker.download(release)` with host allowlist and SHA-256 integrity: MATCH.
+4. **Localization (SDD §3.4):**
+   - Keys added across `en`, `pt-BR`, and `es`: MATCH.
+5. **Scope Discipline:**
+   - No out-of-scope code added.
+
+VERDICT: APPROVE
+</div></div>
+    <div class="card"><h2>Correctness</h2><div class="md"># Correctness Review
+
+## Questions Answered:
+1. **Was every DONE task implemented?**
+   Yes. All three tasks (T-001, T-002, T-003) are fully implemented and verified in the merged tree.
+2. **Does each DONE task have a real red→green test?**
+   Yes.
+   - `T-001`: 6 tests in `UpdateCheckerCadenceTests` covering 24h cadence, persistence, bypass with force, and dismiss state.
+   - `T-002`: 1 test in `RefreshSchedulerTests` asserting scheduler triggers check on start.
+   - `T-003`: 1 test in `UpdateBannerTests` verifying complete localization across `en`, `pt-BR`, and `es`.
+3. **Are immutability tests present and green?**
+   Yes. `immutability.json` records 7 passing tests including existing DMG asset selection and download host allowlist tests.
+4. **Did worktree slices stay inside their files?**
+   Yes. Slice 1 modified `UpdateChecker.swift`, Slice 2 modified `RefreshScheduler.swift` and `AiTaskbarApp.swift`, Slice 3 modified `PopoverContentView.swift` and `Localizable.strings`. Zero overlapping conflicts during merge.
+5. **Is coverage.json present with pct &gt;= floor?**
+   Yes. `coverage.json` reports 91.53% (floor: 90%).
+
+VERDICT: APPROVE
+</div></div>
+  </section>
+  <section class="panel" id="score">
+    <div class="card">
+      <h2>Score 10 / 10 — pode fechar</h2>
+      <p class="muted">91.53% &gt;= 90%</p>
+      <table>
+        <thead><tr><th>gate</th><th></th><th>detalhe</th></tr></thead>
+        <tbody><tr>
+  <td>tasks</td>
+  <td>✓</td>
+  <td>3 DONE</td>
+</tr><tr>
+  <td>red-green</td>
+  <td>✓</td>
+  <td>each DONE has tests_added&gt;=1 and red_green</td>
+</tr><tr>
+  <td>immutability</td>
+  <td>✓</td>
+  <td>UpdateCheckerAssetTests#arm64_prefers_arch_specific, UpdateCheckerAssetTests#intel_takes_universal, UpdateCheckerAssetTests#single_dmg_release, UpdateCheckerAssetTests#intel_rejects_arm64_only, UpdateCheckerAssetTests#no_dmg_assets, UpdateCheckerAssetTests#download_host_allowlist, UpdateBannerTests#localization_keys_exist</td>
+</tr><tr>
+  <td>review</td>
+  <td>✓</td>
+  <td>standards=APPROVE spec=APPROVE correctness=APPROVE</td>
+</tr><tr>
+  <td>worktrees</td>
+  <td>✓</td>
+  <td>3/3 merged+removed</td>
+</tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script>
+  const buttons = [...document.querySelectorAll('nav button')];
+  const panels = [...document.querySelectorAll('.panel')];
+  buttons.forEach((b) => b.addEventListener('click', () => {
+    buttons.forEach((x) => x.setAttribute('aria-selected', x === b ? 'true' : 'false'));
+    panels.forEach((p) => p.classList.toggle('active', p.id === b.dataset.tab));
+  }));
+</script>
+</body>
+</html>
