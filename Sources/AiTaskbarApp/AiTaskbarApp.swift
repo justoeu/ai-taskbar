@@ -18,7 +18,8 @@ struct AiTaskbarApp: App {
 
     init() {
         let env = AppEnvironment.live()
-        _updates = StateObject(wrappedValue: UpdateChecker(config: env.config.updates))
+        let updates = UpdateChecker(config: env.config.updates)
+        _updates = StateObject(wrappedValue: updates)
         let watcherPath = (try? Paths.configFile())
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent("ai-taskbar-config.toml")
@@ -66,6 +67,7 @@ struct AiTaskbarApp: App {
         let scheduler = RefreshScheduler(store: store,
                                          statusStore: statusStore,
                                          costEstimator: costEstimator,
+                                         updates: updates,
                                          interval: env.config.ui.refreshIntervalSeconds)
         // Kick off the refresh + compact loops from launch so usage starts
         // accumulating without requiring the user to open the popover first.
