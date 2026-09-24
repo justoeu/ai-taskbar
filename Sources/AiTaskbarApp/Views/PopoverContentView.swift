@@ -17,6 +17,7 @@ public struct PopoverContentView: View {
     @EnvironmentObject var analyticsStore: AnalyticsStore
     @EnvironmentObject var configWatcher: ConfigWatcher
     @EnvironmentObject var settingsViewModel: SettingsViewModel
+    @EnvironmentObject var updates: UpdateChecker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var overlay: Overlay?
     @FocusState private var statusButtonFocused: Bool
@@ -40,6 +41,10 @@ public struct PopoverContentView: View {
                 Divider()
                 if configWatcher.configChanged || settingsViewModel.didSaveSuccessfully {
                     configChangedBanner
+                    Divider()
+                }
+                if updates.isUpdateBannerVisible {
+                    updateAvailableBanner
                     Divider()
                 }
                 ScrollViewReader { proxy in
@@ -292,6 +297,73 @@ public struct PopoverContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Color.yellow.opacity(0.12))
+    }
+
+    @ViewBuilder
+    private var updateAvailableBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(Color.accentColor)
+
+            switch updates.status {
+            case .updateAvailable(let release):
+                Text(String(format: L10n.localizedString("update_banner_available_fmt"), release.tag))
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Button {
+                    updates.download(release)
+                } label: {
+                    L10n.text("update_banner_button")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button {
+                    updates.dismissCurrentUpdate()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.localizedString("update_banner_dismiss"))
+
+            case .downloading(let progress, _):
+                L10n.text("update_banner_downloading")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                ProgressView(value: progress > 0 ? progress : nil)
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: 80)
+                Spacer(minLength: 4)
+
+            case .downloaded(let localURL, _):
+                L10n.text("update_banner_ready")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([localURL])
+                } label: {
+                    L10n.text("update_banner_open")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button {
+                    updates.dismissCurrentUpdate()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.localizedString("update_banner_dismiss"))
+
+            default:
+                EmptyView()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.accentColor.opacity(0.12))
     }
 
     private var emptyState: some View {

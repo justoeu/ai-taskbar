@@ -352,3 +352,9 @@
 "analytics_lifetime_usage" = "Total de uso ya acumulado";
 "analytics_vendor_no_recent_usage" = "LLM sin uso en los últimos tiempos o en el último mes";
 "analytics_subscription_quota_hint" = "Uso cubierto por la cuota de suscripción, sin costo marginal por token.";
+"update_banner_available_fmt" = "Nueva versión %@ disponible";
+"update_banner_button" = "Actualizar";
+"update_banner_downloading" = "Descargando actualización…";
+"update_banner_ready" = "Actualización descargada";
+"update_banner_open" = "Abrir DMG";
+"update_banner_dismiss" = "Descartar";
