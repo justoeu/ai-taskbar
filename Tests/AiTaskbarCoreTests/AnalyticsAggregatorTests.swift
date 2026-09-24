@@ -116,6 +116,14 @@ struct AnalyticsAggregatorTests {
         #expect(peak != nil)
         #expect(peak?.utilizationPercent == 85.0)
         expectTrue(peak?.isHistoricalPeak ?? false)
+
+        // Zero utilization samples must produce nil
+        let zeroSamples = [
+            UsageHistoryStore.Sample(at: day1.timeIntervalSince1970, max: 0.0),
+            UsageHistoryStore.Sample(at: today.timeIntervalSince1970, max: 0.0)
+        ]
+        let zeroPeak = AnalyticsAggregator.computePeakDay(from: zeroSamples, now: today)
+        #expect(zeroPeak == nil)
     }
 
     @Test("delta comparison calculates percent change")

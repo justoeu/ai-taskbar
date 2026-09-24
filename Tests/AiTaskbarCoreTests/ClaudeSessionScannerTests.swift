@@ -58,6 +58,37 @@ struct ClaudeSessionScannerTests {
         #expect(unparseable == 0)
     }
 
+    @Test("synthetic and bracketed pseudo-models are ignored")
+    func synthetic_models_ignored() {
+        let now = Date(timeIntervalSince1970: 1_764_000_000)
+        let cal = Calendar(identifier: .gregorian)
+        let startOfToday = cal.startOfDay(for: now)
+        let sevenDaysAgo = startOfToday.addingTimeInterval(-7 * 86_400)
+        let todayISO = ISO8601DateFormatter().string(from: startOfToday.addingTimeInterval(3_600))
+
+        let lines = [
+            Self.assistantLine(timestamp: todayISO, model: "<synthetic>", input: 500, output: 250),
+            Self.assistantLine(timestamp: todayISO, model: "<unknown>", input: 300, output: 100),
+            Self.assistantLine(timestamp: todayISO, model: "claude-sonnet-4-5", input: 800, output: 400),
+        ]
+        let data = Data((lines.joined(separator: "\n") + "\n").utf8)
+
+        var today: [String: ModelUsage] = [:]
+        var week: [String: ModelUsage] = [:]
+        var unparseable = 0
+        ClaudeSessionScanner.scan(data: data,
+                                  startOfToday: startOfToday,
+                                  sevenDaysAgo: sevenDaysAgo,
+                                  totalsToday: &today,
+                                  totalsLast7: &week,
+                                  unparseableTimestamps: &unparseable)
+
+        #expect(today["<synthetic>"] == nil)
+        #expect(today["<unknown>"] == nil)
+        #expect(today["claude-sonnet-4-5"]?.inputTokens == 800)
+        #expect(week["<synthetic>"] == nil)
+    }
+
     @Test("missing/invalid timestamp counts into both buckets and is flagged")
     func missing_timestamp_falls_back_and_counts() {
         let now = Date(timeIntervalSince1970: 1_764_000_000)

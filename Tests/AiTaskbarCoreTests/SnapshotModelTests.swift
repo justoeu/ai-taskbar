@@ -79,6 +79,45 @@ struct SnapshotModelTests {
         let back = try JSONDecoder().decode(VendorSnapshot.self, from: data)
         #expect(back == snap)
     }
+
+    @Test("menuBarDisplayPercentages resolves weekly and current across vendors")
+    func menu_bar_display_percentages_across_vendors() {
+        let wSession = UsageWindow(label: "Session", utilizationPercent: 42)
+        let wWeek = UsageWindow(label: "Weekly", utilizationPercent: 78)
+        let wMonth = UsageWindow(label: "Monthly", utilizationPercent: 65)
+
+        let anthropic = VendorSnapshot.anthropic(.init(session: wSession, weekly: wWeek))
+        #expect(anthropic.menuBarDisplayPercentages.weekly == 78)
+        #expect(anthropic.menuBarDisplayPercentages.current == 42)
+
+        let openai = VendorSnapshot.openai(.init(primary: wSession, secondary: wWeek))
+        #expect(openai.menuBarDisplayPercentages.weekly == 78)
+        #expect(openai.menuBarDisplayPercentages.current == 42)
+
+        let gemini = VendorSnapshot.gemini(.init(fiveHour: wSession, weekly: wWeek))
+        #expect(gemini.menuBarDisplayPercentages.weekly == 78)
+        #expect(gemini.menuBarDisplayPercentages.current == 42)
+
+        let zai = VendorSnapshot.zai(.init(session: wSession, weekly: wWeek))
+        #expect(zai.menuBarDisplayPercentages.weekly == 78)
+        #expect(zai.menuBarDisplayPercentages.current == 42)
+
+        let or = VendorSnapshot.openrouter(.init(daily: wSession, weekly: wWeek))
+        #expect(or.menuBarDisplayPercentages.weekly == 78)
+        #expect(or.menuBarDisplayPercentages.current == 42)
+
+        let xai = VendorSnapshot.xai(.init(weekly: wWeek, monthly: wMonth))
+        #expect(xai.menuBarDisplayPercentages.weekly == nil)
+        #expect(xai.menuBarDisplayPercentages.current == 78)
+
+        let kimi = VendorSnapshot.kimi(.init(balance: wSession))
+        #expect(kimi.menuBarDisplayPercentages.weekly == nil)
+        #expect(kimi.menuBarDisplayPercentages.current == 42)
+
+        let deepseek = VendorSnapshot.deepseek(.init(balance: wSession))
+        #expect(deepseek.menuBarDisplayPercentages.weekly == nil)
+        #expect(deepseek.menuBarDisplayPercentages.current == 42)
+    }
 }
 
 @Suite("FetchOutcome")

@@ -33,6 +33,7 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
     public let costByModel: [String: Double]
     public let usageHistory: [UsageHistoryStore.Sample]
     public let deltaPreviousPeriodPercent: Double?
+    public let lifetimeCostUSD: Double?
 
     public init(vendor: VendorId,
                 planLabel: String? = nil,
@@ -42,7 +43,8 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
                 peakDay: PeakDayRecord? = nil,
                 costByModel: [String: Double] = [:],
                 usageHistory: [UsageHistoryStore.Sample] = [],
-                deltaPreviousPeriodPercent: Double? = nil) {
+                deltaPreviousPeriodPercent: Double? = nil,
+                lifetimeCostUSD: Double? = nil) {
         self.vendor = vendor
         self.planLabel = planLabel
         self.totalCostUSD = totalCostUSD
@@ -52,6 +54,7 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
         self.costByModel = costByModel
         self.usageHistory = usageHistory
         self.deltaPreviousPeriodPercent = deltaPreviousPeriodPercent
+        self.lifetimeCostUSD = lifetimeCostUSD
     }
 }
 

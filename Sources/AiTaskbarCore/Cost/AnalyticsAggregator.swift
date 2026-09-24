@@ -29,7 +29,7 @@ public enum AnalyticsAggregator {
             dayMaxes[day] = max(dayMaxes[day, default: 0], s.max)
         }
 
-        guard let best = dayMaxes.max(by: { $0.value < $1.value }) else { return nil }
+        guard let best = dayMaxes.max(by: { $0.value < $1.value }), best.value > 0.001 else { return nil }
         return PeakDayRecord(
             date: best.key,
             costUSD: 0,
@@ -108,9 +108,13 @@ public enum AnalyticsAggregator {
             let historyMax = history.map { $0.max }.max() ?? 0
             let usagePct = snapshot?.maxUtilization ?? historyMax
 
-            // Approximate session count from model totals or snapshot
+            // Session count from local activity counters, model totals, or snapshot
             var sessionCount = 0
-            if let totals = estimate?.totalsByModel {
+            if vendor == .gemini {
+                sessionCount = SessionCounters.antigravityCount(since: Date(timeIntervalSince1970: currentStart))
+            } else if vendor == .xai {
+                sessionCount = SessionCounters.grokCount(since: Date(timeIntervalSince1970: currentStart))
+            } else if let totals = estimate?.totalsByModel {
                 for usage in totals.values where usage.inputTokens > 0 {
                     sessionCount += 1
                 }
@@ -137,7 +141,8 @@ public enum AnalyticsAggregator {
                 peakDay: peakDay,
                 costByModel: modelBreakdown,
                 usageHistory: history,
-                deltaPreviousPeriodPercent: deltaPercent
+                deltaPreviousPeriodPercent: deltaPercent,
+                lifetimeCostUSD: snapshot?.lifetimeCostUSD
             )
             vendorSummaries.append(summary)
         }

@@ -70,6 +70,39 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
     public var maxUtilization: Double {
         windows.map(\.utilizationPercent).max() ?? 0
     }
+
+    /// Weekly and current utilization percentages for menu-bar dual display.
+    /// `weekly`: 7-day quota utilization, if tracked by the vendor.
+    /// `current`: session / 5h / daily / balance utilization.
+    public var menuBarDisplayPercentages: (weekly: Double?, current: Double) {
+        switch self {
+        case .anthropic(let s):
+            return (s.weekly?.utilizationPercent, s.session?.utilizationPercent ?? maxUtilization)
+        case .openai(let s):
+            // OpenAI primary = session (5h), secondary = weekly (7d)
+            return (s.secondary?.utilizationPercent, s.primary?.utilizationPercent ?? maxUtilization)
+        case .gemini(let s):
+            return (s.weekly?.utilizationPercent, s.fiveHour?.utilizationPercent ?? maxUtilization)
+        case .zai(let s):
+            return (s.weekly?.utilizationPercent, s.session?.utilizationPercent ?? maxUtilization)
+        case .openrouter(let s):
+            return (s.weekly?.utilizationPercent, s.daily?.utilizationPercent ?? maxUtilization)
+        case .xai(let s):
+            return (nil, s.weekly?.utilizationPercent ?? maxUtilization)
+        case .kimi, .deepseek:
+            return (nil, maxUtilization)
+        }
+    }
+
+    /// Lifetime accumulated usage in USD if reported by the vendor (e.g. OpenRouter).
+    public var lifetimeCostUSD: Double? {
+        switch self {
+        case .openrouter(let s):
+            return s.totalUsageUSD
+        default:
+            return nil
+        }
+    }
 }
 
 // MARK: - Per-vendor snapshots
@@ -454,19 +487,22 @@ public struct OpenRouterSnapshot: Sendable, Equatable, Codable {
     public let weekly: UsageWindow?
     public let monthly: UsageWindow?
     public let topModels: [ModelShare]?
+    public let totalUsageUSD: Double?
 
     public init(planLabel: String? = nil,
                 balance: UsageWindow? = nil,
                 daily: UsageWindow? = nil,
                 weekly: UsageWindow? = nil,
                 monthly: UsageWindow? = nil,
-                topModels: [ModelShare]? = nil) {
+                topModels: [ModelShare]? = nil,
+                totalUsageUSD: Double? = nil) {
         self.planLabel = planLabel
         self.balance = balance
         self.daily = daily
         self.weekly = weekly
         self.monthly = monthly
         self.topModels = topModels
+        self.totalUsageUSD = totalUsageUSD
     }
 }
 
