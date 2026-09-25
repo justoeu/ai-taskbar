@@ -1,0 +1,13 @@
+{
+  "app": "ai-taskbar",
+  "branch": "feature/auto-update-checker",
+  "head": "1456728",
+  "kind": "feature",
+  "loop": "full",
+  "worktree_n": 3,
+  "spec": "docs/SDD-auto-update-checker.md",
+  "spec_status": "confirmed",
+  "coverage_floor": 90,
+  "status": "closed",
+  "test_cmd": "make test"
+}

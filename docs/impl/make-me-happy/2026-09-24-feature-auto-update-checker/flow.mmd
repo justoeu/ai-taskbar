@@ -1,0 +1,18 @@
+flowchart TD
+    AppLaunch["App Launch / RefreshScheduler.start()"] --> CheckIfNeeded["UpdateChecker.checkIfNeeded(force: false)"]
+    CheckIfNeeded --> IsEnabled{"config.updates.enabled?"}
+    IsEnabled -- No --> Idle["Status: idle (no-op)"]
+    IsEnabled -- Yes --> CheckCooldown{"Elapsed >= 24h or first run?"}
+    CheckCooldown -- No --> SleepLoop["Wait for next 24h cycle"]
+    CheckCooldown -- Yes --> FetchGitHub["GET /repos/.../releases/latest"]
+    FetchGitHub --> CompareSemver{"Semver.isNewer(release.tag, current)?"}
+    CompareSemver -- No --> UpToDate["Status: upToDate"]
+    CompareSemver -- Yes --> UpdateAvail["Status: updateAvailable(release)"]
+    UpdateAvail --> CheckDismissed{"release.tag == dismissedTag?"}
+    CheckDismissed -- Yes --> HideBanner["Banner hidden"]
+    CheckDismissed -- No --> ShowBanner["Show Top Banner in Popover"]
+    ShowBanner --> UserAction{"User Action"}
+    UserAction -- "Click 'Atualizar'" --> DownloadDMG["Download DMG + Verify SHA-256"]
+    UserAction -- "Click 'xmark'" --> Dismiss["dismissCurrentUpdate() -> Hide Banner"]
+    DownloadDMG --> ProgressState["Status: downloading(progress)"]
+    ProgressState --> CompleteState["Status: downloaded(localURL) -> Reveal in Finder"]

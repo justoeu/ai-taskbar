@@ -1,0 +1,42 @@
+{
+  "prefix": "mmh",
+  "count": 3,
+  "into": "feature/auto-update-checker",
+  "base": "feature/auto-update-checker",
+  "head": "f4ca66798e6cbadb21cee79fcdb8c9ce9ec76641",
+  "gitignore_appended": false,
+  "gitignore_path": "/Users/justoeu/Developer/Workspace/ai-taskbar/.gitignore",
+  "baseline_green": null,
+  "slices": [
+    {
+      "index": 1,
+      "branch": "mmh/slice-1",
+      "dir": "/Users/justoeu/Developer/Workspace/ai-taskbar/.worktrees/mmh-1",
+      "base": "feature/auto-update-checker",
+      "head": "f4ca66798e6cbadb21cee79fcdb8c9ce9ec76641",
+      "merged": true,
+      "removed": true,
+      "merged_into": "feature/auto-update-checker"
+    },
+    {
+      "index": 2,
+      "branch": "mmh/slice-2",
+      "dir": "/Users/justoeu/Developer/Workspace/ai-taskbar/.worktrees/mmh-2",
+      "base": "feature/auto-update-checker",
+      "head": "f4ca66798e6cbadb21cee79fcdb8c9ce9ec76641",
+      "merged": true,
+      "removed": true,
+      "merged_into": "feature/auto-update-checker"
+    },
+    {
+      "index": 3,
+      "branch": "mmh/slice-3",
+      "dir": "/Users/justoeu/Developer/Workspace/ai-taskbar/.worktrees/mmh-3",
+      "base": "feature/auto-update-checker",
+      "head": "f4ca66798e6cbadb21cee79fcdb8c9ce9ec76641",
+      "merged": true,
+      "removed": true,
+      "merged_into": "feature/auto-update-checker"
+    }
+  ]
+}

@@ -49,22 +49,73 @@ public final class UpdateChecker: ObservableObject {
         "github-releases.githubusercontent.com",
     ]
 
+    nonisolated public static let cadenceInterval: TimeInterval = 86_400 // 24 hours
+    nonisolated public static let lastCheckKey: String = "ai_taskbar_last_update_check_at"
+    nonisolated public static let dismissedTagKey: String = "ai_taskbar_dismissed_update_tag"
+
     @Published public private(set) var status: Status = .idle
+    @Published public private(set) var dismissedTag: String?
 
     public let config: UpdatesConfig
     public let currentVersion: String
+    public let userDefaults: UserDefaults
     private let http: HTTPClient
 
     public init(config: UpdatesConfig,
                 currentVersion: String? = nil,
-                http: HTTPClient = .init()) {
+                http: HTTPClient = .init(),
+                userDefaults: UserDefaults = .standard) {
         self.config = config
         self.currentVersion = currentVersion ?? Self.bundleVersion()
         self.http = http
+        self.userDefaults = userDefaults
+        self.dismissedTag = userDefaults.string(forKey: Self.dismissedTagKey)
     }
 
     public static func bundleVersion() -> String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0.0-dev"
+    }
+
+    public var lastCheckDate: Date? {
+        let ts = userDefaults.double(forKey: Self.lastCheckKey)
+        guard ts > 0 else { return nil }
+        return Date(timeIntervalSince1970: ts)
+    }
+
+    private func recordCheckDate(_ date: Date = Date()) {
+        userDefaults.set(date.timeIntervalSince1970, forKey: Self.lastCheckKey)
+    }
+
+    public var isUpdateBannerVisible: Bool {
+        switch status {
+        case .updateAvailable(let release),
+             .downloading(_, let release),
+             .downloaded(_, let release):
+            return dismissedTag != release.tag
+        case .idle, .checking, .upToDate, .failed:
+            return false
+        }
+    }
+
+    public func dismissCurrentUpdate() {
+        switch status {
+        case .updateAvailable(let release),
+             .downloading(_, let release),
+             .downloaded(_, let release):
+            dismissedTag = release.tag
+            userDefaults.set(release.tag, forKey: Self.dismissedTagKey)
+        case .idle, .checking, .upToDate, .failed:
+            break
+        }
+    }
+
+    public func checkIfNeeded(force: Bool = false) {
+        guard config.enabled else { return }
+        if status.isBusy { return }
+        if !force, let last = lastCheckDate, Date().timeIntervalSince(last) < Self.cadenceInterval {
+            return
+        }
+        check()
     }
 
     // MARK: - Check
@@ -78,6 +129,7 @@ public final class UpdateChecker: ObservableObject {
             status = .failed(message: L10n.localizedString("updates_bad_repo"))
             return
         }
+        recordCheckDate()
         status = .checking
         Task { [weak self] in
             guard let self else { return }
@@ -269,6 +321,12 @@ public final class UpdateChecker: ObservableObject {
         guard let s else { return nil }
         return ISO8601Parsing.parse(s)
     }
+
+    #if DEBUG
+    internal func setMockStatusForTesting(_ mockStatus: Status) {
+        self.status = mockStatus
+    }
+    #endif
 }
 
 // MARK: - Wire types for GitHub Releases v3

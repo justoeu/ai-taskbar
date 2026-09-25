@@ -1,0 +1,43 @@
+{
+  "kind": "feature",
+  "spec": "docs/SDD-auto-update-checker.md",
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "Daily check cadence, persistence, and dismiss logic in UpdateChecker",
+      "slice": "Cadence interval, last check timestamp in UserDefaults, dismiss logic, and visibility flags in UpdateChecker",
+      "worktree": 1,
+      "status": "DONE",
+      "tests_added": 6,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": []
+    },
+    {
+      "id": "T-002",
+      "title": "Periodic update check lifecycle in RefreshScheduler & App bootstrap",
+      "slice": "Scheduler lifecycle loop for update checks and wiring into AppEnvironment",
+      "worktree": 2,
+      "status": "DONE",
+      "tests_added": 1,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": [
+        "T-001"
+      ]
+    },
+    {
+      "id": "T-003",
+      "title": "Top banner UI in PopoverContentView and localization",
+      "slice": "PopoverContentView banner presentation with available/downloading/downloaded states, dismiss button, and L10n strings",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 1,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": [
+        "T-001"
+      ]
+    }
+  ]
+}
