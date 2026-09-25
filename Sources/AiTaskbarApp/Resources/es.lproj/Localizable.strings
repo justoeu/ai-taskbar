@@ -358,3 +358,10 @@
 "update_banner_ready" = "Actualización descargada";
 "update_banner_open" = "Abrir DMG";
 "update_banner_dismiss" = "Descartar";
+
+// Tooltips de los elementos fijados en la barra de menús
+"tooltip_daily_reset_fmt" = "Diario: falta %@";
+"tooltip_weekly_reset_fmt" = "Semanal: falta %@";
+"tooltip_daily_reset_waiting" = "Diario: esperando actualización";
+"tooltip_weekly_reset_waiting" = "Semanal: esperando actualización";
+"time_less_than_minute" = "menos de 1 minuto";

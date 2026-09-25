@@ -94,6 +94,28 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         }
     }
 
+    /// Quota windows tracked for menu-bar dual display and reset countdowns.
+    /// `dailyOrSession`: session / 5h / daily window, if tracked by the vendor.
+    /// `weekly`: 7-day quota window, if tracked by the vendor.
+    public var menuBarResetWindows: (dailyOrSession: UsageWindow?, weekly: UsageWindow?) {
+        switch self {
+        case .anthropic(let s):
+            return (s.session, s.weekly)
+        case .openai(let s):
+            return (s.primary, s.secondary)
+        case .gemini(let s):
+            return (s.fiveHour, s.weekly)
+        case .zai(let s):
+            return (s.session, s.weekly)
+        case .openrouter(let s):
+            return (s.daily, s.weekly)
+        case .xai(let s):
+            return (nil, s.weekly)
+        case .kimi, .deepseek:
+            return (nil, nil)
+        }
+    }
+
     /// Lifetime accumulated usage in USD if reported by the vendor (e.g. OpenRouter).
     public var lifetimeCostUSD: Double? {
         switch self {

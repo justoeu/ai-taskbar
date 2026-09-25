@@ -26,6 +26,7 @@ final class FinderTrackingView: NSView {
         while let c = current {
             if let btn = c as? NSStatusBarButton {
                 MainStatusItemHolder.shared.mainButton = btn
+                btn.toolTip = L10n.localizedString("app_name")
                 btn.sendAction(on: [.leftMouseDown])
                 return
             }
@@ -33,6 +34,7 @@ final class FinderTrackingView: NSView {
         }
         if let btn = window?.contentView as? NSStatusBarButton {
             MainStatusItemHolder.shared.mainButton = btn
+            btn.toolTip = L10n.localizedString("app_name")
             btn.sendAction(on: [.leftMouseDown])
         }
     }
@@ -139,6 +141,13 @@ public final class PinnedStatusItemManager: ObservableObject {
             }
             .store(in: &cancellables)
 
+        Timer.publish(every: 30, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.refreshTooltips()
+            }
+            .store(in: &cancellables)
+
         syncStatusItems(pinnedIds: store.pinnedVendorIds)
     }
 
@@ -204,7 +213,27 @@ public final class PinnedStatusItemManager: ObservableObject {
         button.target = self
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseDown])
-        button.toolTip = "\(vm.vendorId.displayName): \(Int(current.rounded()))%"
+        button.toolTip = MenuBarTooltipBuilder.buildTooltip(
+            vendorId: vm.vendorId,
+            snapshot: vm.state.outcome?.snapshot,
+            currentPercent: current
+        )
+    }
+
+    public func refreshTooltips() {
+        guard let store else { return }
+        let now = Date()
+        for (vid, item) in statusItems {
+            guard let button = item.button, let vm = store.vendorVM(vid) else { continue }
+            let current = vm.state.outcome?.snapshot.menuBarDisplayPercentages.current
+                ?? vm.state.outcome?.snapshot.maxUtilization ?? 0
+            button.toolTip = MenuBarTooltipBuilder.buildTooltip(
+                vendorId: vid,
+                snapshot: vm.state.outcome?.snapshot,
+                currentPercent: current,
+                now: now
+            )
+        }
     }
 
     public private(set) var lastFocusedPinnedVendor: VendorId?

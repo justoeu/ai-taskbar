@@ -117,6 +117,24 @@ struct SnapshotModelTests {
         let deepseek = VendorSnapshot.deepseek(.init(balance: wSession))
         #expect(deepseek.menuBarDisplayPercentages.weekly == nil)
         #expect(deepseek.menuBarDisplayPercentages.current == 42)
+
+        // Reset windows resolution
+        #expect(anthropic.menuBarResetWindows.dailyOrSession == wSession)
+        #expect(anthropic.menuBarResetWindows.weekly == wWeek)
+        #expect(openai.menuBarResetWindows.dailyOrSession == wSession)
+        #expect(openai.menuBarResetWindows.weekly == wWeek)
+        #expect(gemini.menuBarResetWindows.dailyOrSession == wSession)
+        #expect(gemini.menuBarResetWindows.weekly == wWeek)
+        #expect(zai.menuBarResetWindows.dailyOrSession == wSession)
+        #expect(zai.menuBarResetWindows.weekly == wWeek)
+        #expect(or.menuBarResetWindows.dailyOrSession == wSession)
+        #expect(or.menuBarResetWindows.weekly == wWeek)
+        #expect(xai.menuBarResetWindows.dailyOrSession == nil)
+        #expect(xai.menuBarResetWindows.weekly == wWeek)
+        #expect(kimi.menuBarResetWindows.dailyOrSession == nil)
+        #expect(kimi.menuBarResetWindows.weekly == nil)
+        #expect(deepseek.menuBarResetWindows.dailyOrSession == nil)
+        #expect(deepseek.menuBarResetWindows.weekly == nil)
     }
 }
 

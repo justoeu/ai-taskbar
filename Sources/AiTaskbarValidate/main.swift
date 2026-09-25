@@ -352,6 +352,8 @@ section("UsageWindow / VendorSnapshot helpers") {
     expect(snap.windows.count == 2, "windows omits nil opus/scoped/credits")
     expect(snap.maxUtilization == 47, "maxUtilization picks max across windows")
     expect(snap.planLabel == "Claude Max 5x", "planLabel propagates")
+    expect(snap.menuBarResetWindows.dailyOrSession == session, "menuBarResetWindows dailyOrSession")
+    expect(snap.menuBarResetWindows.weekly == weekly, "menuBarResetWindows weekly")
 }
 
 section("Service status domain") {
