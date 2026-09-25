@@ -33,7 +33,7 @@ public enum L10n {
     /// but the app stays alive) if nothing matches.
     private static let resourceBundle: Bundle = {
         let bundleName = "ai-taskbar_AiTaskbarApp.bundle"
-        let candidates: [URL?] = [
+        var candidates: [URL?] = [
             // Packaged .app: SwiftPM resource bundle copied to
             // Contents/Resources/ by `make app` / `make app-universal`.
             Bundle.main.resourceURL?.appendingPathComponent(bundleName),
@@ -41,6 +41,15 @@ public enum L10n {
             // bundle is the sibling of the executable.
             Bundle.main.bundleURL.appendingPathComponent(bundleName),
         ]
+        // Test runner or build output fallback: locate in .build
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 { root.deleteLastPathComponent() }
+        candidates.append(root.appendingPathComponent(".build/arm64-apple-macosx/debug/\(bundleName)"))
+        candidates.append(root.appendingPathComponent(".build/debug/\(bundleName)"))
+        candidates.append(root.appendingPathComponent(".build/arm64-apple-macosx/release/\(bundleName)"))
+        candidates.append(root.appendingPathComponent(".build/release/\(bundleName)"))
+        candidates.append(root.appendingPathComponent(".build/x86_64-apple-macosx/debug/\(bundleName)"))
+        candidates.append(root.appendingPathComponent(".build/x86_64-apple-macosx/release/\(bundleName)"))
         for url in candidates {
             if let url, let b = Bundle(url: url) { return b }
         }

@@ -357,7 +357,7 @@ public enum Fixtures {
         "principal_id": "test-principal",
         "team_id": "test-team",
         "refresh_token": "test-refresh-token",
-        "expires_at": "2026-09-25T07:41:03.836710Z",
+        "expires_at": "2029-09-25T07:41:03.836710Z",
         "oidc_issuer": "https://auth.x.ai",
         "oidc_client_id": "test-client-id"
       }

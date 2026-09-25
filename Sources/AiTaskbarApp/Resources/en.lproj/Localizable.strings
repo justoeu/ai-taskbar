@@ -359,3 +359,10 @@
 "update_banner_ready" = "Update downloaded";
 "update_banner_open" = "Open DMG";
 "update_banner_dismiss" = "Dismiss";
+
+// Pinned menu bar item tooltips
+"tooltip_daily_reset_fmt" = "Daily: %@ left";
+"tooltip_weekly_reset_fmt" = "Weekly: %@ left";
+"tooltip_daily_reset_waiting" = "Daily: awaiting refresh";
+"tooltip_weekly_reset_waiting" = "Weekly: awaiting refresh";
+"time_less_than_minute" = "less than 1 minute";
