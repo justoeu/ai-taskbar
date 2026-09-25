@@ -26,25 +26,14 @@ public struct AnalyticsView: View {
             Divider()
             syncOrderBar
             Divider()
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 16) {
-                        timeframeSection
-                        usageDonutSection
-                        costDonutSection
-                        vendorCardsSection(proxy: proxy)
-                    }
-                    .padding(14)
+            ScrollView {
+                VStack(spacing: 16) {
+                    timeframeSection
+                    usageDonutSection
+                    costDonutSection
+                    vendorCardsSection
                 }
-                .onAppear {
-                    scrollToTarget(proxy: proxy)
-                }
-                .onChange(of: analyticsStore.targetVendor) { _ in
-                    scrollToTarget(proxy: proxy)
-                }
-                .onChange(of: analyticsStore.snapshot) { _ in
-                    scrollToTarget(proxy: proxy)
-                }
+                .padding(14)
             }
             Divider()
             footer
@@ -66,18 +55,6 @@ public struct AnalyticsView: View {
             }
         }
         .onExitCommand(perform: close)
-    }
-
-    private func scrollToTarget(proxy: ScrollViewProxy) {
-        guard let target = analyticsStore.targetVendor else { return }
-        for delay in [0.01, 0.05, 0.15, 0.30, 0.50, 0.70] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                proxy.scrollTo(target, anchor: .center)
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    proxy.scrollTo(target, anchor: .center)
-                }
-            }
-        }
     }
 
     private static let timeFormatter: DateFormatter = {
@@ -399,7 +376,7 @@ public struct AnalyticsView: View {
         }
     }
 
-    private func vendorCardsSection(proxy: ScrollViewProxy) -> some View {
+    private var vendorCardsSection: some View {
         let summaries = sortedSummaries
 
         return VStack(alignment: .leading, spacing: 10) {

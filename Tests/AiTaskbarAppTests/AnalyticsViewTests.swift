@@ -64,4 +64,24 @@ struct AnalyticsViewTests {
         )
         #expect(offset == 2)
     }
+
+    @Test("CenterTrackingNSView scrolls enclosing NSScrollView")
+    func center_tracking_scroll() async throws {
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 400, height: 500))
+        let docView = FlippedView(frame: NSRect(x: 0, y: 0, width: 400, height: 2000))
+        scrollView.documentView = docView
+
+        let targetView = CenterTrackingNSView(frame: NSRect(x: 0, y: 1000, width: 400, height: 100))
+        docView.addSubview(targetView)
+
+        #expect(targetView.enclosingScrollView === scrollView)
+        targetView.triggerCenterScroll()
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+        #expect(scrollView.contentView.bounds.origin.y > 500)
+    }
+}
+
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }

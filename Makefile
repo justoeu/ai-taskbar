@@ -81,7 +81,7 @@ app: icon
 	-cp -R .build/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_DIR)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $(BUNDLE_ID)" $(APP_DIR)/Contents/Info.plist
-	codesign --force --deep --sign "$(APP_SIGN_IDENTITY)" $(APP_DIR)
+	codesign --force --deep --timestamp=none --sign "$(APP_SIGN_IDENTITY)" $(APP_DIR)
 	@echo "Built $(APP_DIR) (host-arch, bundle=$(BUNDLE_ID), sign=$(APP_SIGN_IDENTITY))"
 	@file $(APP_DIR)/Contents/MacOS/ai-taskbar
 
@@ -109,7 +109,7 @@ app-universal: icon
 	-cp -R .build/arm64-apple-macosx/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_DIR)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $(BUNDLE_ID)" $(APP_DIR)/Contents/Info.plist
-	codesign --force --deep --sign "$(APP_SIGN_IDENTITY)" $(APP_DIR)
+	codesign --force --deep --timestamp=none --sign "$(APP_SIGN_IDENTITY)" $(APP_DIR)
 	@echo "==> Built $(APP_DIR) (universal, bundle=$(BUNDLE_ID), sign=$(APP_SIGN_IDENTITY))"
 	@file $(APP_DIR)/Contents/MacOS/ai-taskbar
 	@lipo -archs $(APP_DIR)/Contents/MacOS/ai-taskbar
