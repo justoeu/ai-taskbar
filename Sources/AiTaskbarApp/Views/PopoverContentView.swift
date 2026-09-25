@@ -130,8 +130,11 @@ public struct PopoverContentView: View {
                         .environmentObject(store)
                         .transition(overlayTransition)
                 case .about:
-                    AboutView { self.overlay = nil }
-                        .transition(overlayTransition)
+                    AboutView(
+                        onDone: { self.overlay = nil },
+                        onQuit: onQuit
+                    )
+                    .transition(overlayTransition)
                 case .settings:
                     SettingsView { self.overlay = nil }
                         .environmentObject(settingsViewModel)

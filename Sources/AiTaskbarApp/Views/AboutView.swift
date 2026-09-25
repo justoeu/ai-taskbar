@@ -4,11 +4,17 @@ import AiTaskbarCore
 
 public struct AboutView: View {
     public let onDone: () -> Void
+    public let onQuit: () -> Void
     @EnvironmentObject var updates: UpdateChecker
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showQuitConfirmation = false
 
-    public init(onDone: @escaping () -> Void) {
+    public init(
+        onDone: @escaping () -> Void,
+        onQuit: @escaping () -> Void = { NSApplication.shared.terminate(nil) }
+    ) {
         self.onDone = onDone
+        self.onQuit = onQuit
     }
 
     /// Read once from the binary's own code signature (Developer ID leaf
@@ -27,6 +33,39 @@ public struct AboutView: View {
     }
 
     public var body: some View {
+        ZStack {
+            mainContent
+                .disabled(showQuitConfirmation)
+                .allowsHitTesting(!showQuitConfirmation)
+                .accessibilityHidden(showQuitConfirmation)
+
+            if showQuitConfirmation {
+                quitConfirmationOverlay
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+        .frame(width: 400, height: 540)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.regularMaterial)
+                .shadow(radius: 20)
+        )
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: showQuitConfirmation)
+        .onExitCommand {
+            if showQuitConfirmation {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                    showQuitConfirmation = false
+                }
+            } else {
+                onDone()
+            }
+        }
+        .onDisappear {
+            showQuitConfirmation = false
+        }
+    }
+
+    private var mainContent: some View {
         VStack(alignment: .center, spacing: 12) {
             Image(systemName: "gauge.with.dots.needle.67percent")
                 .font(.system(size: 52))
@@ -89,25 +128,15 @@ public struct AboutView: View {
 
             HStack(spacing: 12) {
                 Button(role: .destructive) {
-                    showQuitConfirmation = true
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                        showQuitConfirmation = true
+                    }
                 } label: {
                     Label(L10n.localizedString("quit_app"), systemImage: "power")
                 }
                 .buttonStyle(.bordered)
                 .tint(.red)
                 .controlSize(.regular)
-                .confirmationDialog(
-                    L10n.localizedString("quit_confirm_title"),
-                    isPresented: $showQuitConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button(L10n.localizedString("quit_confirm_button"), role: .destructive) {
-                        NSApplication.shared.terminate(nil)
-                    }
-                    Button(L10n.localizedString("cancel"), role: .cancel) {}
-                } message: {
-                    Text(L10n.localizedString("quit_confirm_message"))
-                }
 
                 Spacer()
 
@@ -123,12 +152,73 @@ public struct AboutView: View {
             .padding(.bottom, 4)
         }
         .padding(18)
-        .frame(width: 400, height: 540)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.regularMaterial)
-                .shadow(radius: 20)
-        )
+    }
+
+    private var quitConfirmationOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .onTapGesture {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                        showQuitConfirmation = false
+                    }
+                }
+
+            VStack(spacing: 16) {
+                Image(systemName: "power.circle.fill")
+                    .font(.system(size: 38))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.red)
+
+                VStack(spacing: 6) {
+                    Text(L10n.localizedString("quit_confirm_title"))
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(L10n.localizedString("quit_confirm_message"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                            showQuitConfirmation = false
+                        }
+                    } label: {
+                        Text(L10n.localizedString("cancel"))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .keyboardShortcut(.cancelAction)
+
+                    Button(role: .destructive) {
+                        onQuit()
+                    } label: {
+                        Text(L10n.localizedString("quit_confirm_button"))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .controlSize(.regular)
+                }
+            }
+            .padding(20)
+            .frame(width: 310)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor))
+                    .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+            )
+        }
     }
 
     @ViewBuilder
