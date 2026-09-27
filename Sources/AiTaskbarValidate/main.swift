@@ -720,8 +720,8 @@ section("Wire types: OpenRouter fixture (combined)") {
     let combined = OpenRouterCachedPayload(credits: credits, key: key, activity: activity)
     let s = combined.toSnapshot()
     expect(s.planLabel == "OpenRouter: primary", "OpenRouter plan label")
-    expect(Int((s.balance?.utilizationPercent ?? 0).rounded()) == 25,
-           "OpenRouter balance utilization 25% of $10")
+    expect(s.balance?.utilizationPercent == 0,
+           "OpenRouter balance utilization 0% for prepaid balance")
     expect(s.topModels?.map(\.model) == ["openai/gpt-4.1", "anthropic/claude-sonnet-4.6", "google/gemini-2.5-flash"],
            "OpenRouter topModels from activity data")
     // Round-trip through OpenRouterCachedPayload (P3)

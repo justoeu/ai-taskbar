@@ -42,7 +42,7 @@ struct OpenRouterProviderTests {
             return
         }
         #expect(snap.planLabel == "OpenRouter: primary")
-        #expect(Int((snap.balance?.utilizationPercent ?? 0).rounded()) == 25)
+        #expect(snap.balance?.utilizationPercent == 0)
         #expect(Int((snap.monthly?.utilizationPercent ?? 0).rounded()) == 25)
         #expect(snap.topModels?.map(\.model) == ["openai/gpt-4.1", "anthropic/claude-sonnet-4.6", "google/gemini-2.5-flash"])
         try? FileManager.default.removeItem(at: tmpCacheDir)

@@ -4,6 +4,9 @@ import AiTaskbarCore
 
 public struct VendorAnalyticsCardView: View {
     public let summary: VendorAnalyticsSummary
+    public let timeframe: AnalyticsTimeframe
+    public let compareWithPrevious: Bool
+    public let comparisonOffset: Int
     public let canMoveUp: Bool
     public let canMoveDown: Bool
     public let onMoveUp: (() -> Void)?
@@ -13,12 +16,18 @@ public struct VendorAnalyticsCardView: View {
 
     public init(
         summary: VendorAnalyticsSummary,
+        timeframe: AnalyticsTimeframe = .daily,
+        compareWithPrevious: Bool = false,
+        comparisonOffset: Int = 1,
         canMoveUp: Bool = false,
         canMoveDown: Bool = false,
         onMoveUp: (() -> Void)? = nil,
         onMoveDown: (() -> Void)? = nil
     ) {
         self.summary = summary
+        self.timeframe = timeframe
+        self.compareWithPrevious = compareWithPrevious
+        self.comparisonOffset = comparisonOffset
         self.canMoveUp = canMoveUp
         self.canMoveDown = canMoveDown
         self.onMoveUp = onMoveUp
@@ -27,6 +36,29 @@ public struct VendorAnalyticsCardView: View {
 
     private var vendorColor: Color {
         AnalyticsFormatters.vendorColor(for: summary.vendor)
+    }
+
+    private var comparisonLabel: String {
+        switch timeframe {
+        case .daily:
+            if comparisonOffset == 1 {
+                return L10n.localizedString("compare_vs_prev_day_1")
+            } else {
+                return String(format: L10n.localizedString("compare_vs_prev_day_fmt"), comparisonOffset)
+            }
+        case .weekly:
+            if comparisonOffset == 1 {
+                return L10n.localizedString("compare_vs_prev_week_1")
+            } else {
+                return String(format: L10n.localizedString("compare_vs_prev_week_fmt"), comparisonOffset)
+            }
+        case .monthly:
+            if comparisonOffset == 1 {
+                return L10n.localizedString("compare_vs_prev_month_1")
+            } else {
+                return String(format: L10n.localizedString("compare_vs_prev_month_fmt"), comparisonOffset)
+            }
+        }
     }
 
     public var body: some View {
@@ -152,19 +184,36 @@ public struct VendorAnalyticsCardView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        if let delta = summary.deltaPreviousPeriodPercent {
-                            HStack(spacing: 2) {
-                                Image(systemName: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
-                                Text(String(format: "%+.1f%%", delta))
+                        if compareWithPrevious {
+                            if let delta = summary.deltaPreviousPeriodPercent {
+                                HStack(spacing: 3) {
+                                    Image(systemName: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                    Text(String(format: "%+.1f%% %@", delta, comparisonLabel))
+                                }
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(delta >= 0 ? Color.red : Color.green)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill((delta >= 0 ? Color.red : Color.green).opacity(0.12))
+                                )
+                                .help(L10n.localizedString("analytics_delta_quota_help"))
+                            } else {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                    Text(String(format: "%@ (%@)", L10n.localizedString("analytics_insufficient_history_short"), comparisonLabel))
+                                }
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.secondary.opacity(0.10))
+                                )
+                                .help(L10n.localizedString("analytics_insufficient_history_help"))
                             }
-                            .font(.caption.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(delta >= 0 ? Color.red : Color.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule()
-                                    .fill((delta >= 0 ? Color.red : Color.green).opacity(0.12))
-                            )
                         }
                     }
 
@@ -198,7 +247,7 @@ public struct VendorAnalyticsCardView: View {
                             }
                         }
                         .padding(.top, 4)
-                    } else if summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
+                    } else if !summary.vendor.isPrepaidOnly && summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.callout)

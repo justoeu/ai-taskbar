@@ -124,6 +124,25 @@ struct AnalyticsAggregatorTests {
         ]
         let zeroPeak = AnalyticsAggregator.computePeakDay(from: zeroSamples, now: today)
         #expect(zeroPeak == nil)
+
+        // Flatline multi-day samples (e.g. constant 93.47% without usage) must produce nil
+        let flatlineSamples = [
+            UsageHistoryStore.Sample(at: day1.timeIntervalSince1970, max: 93.47),
+            UsageHistoryStore.Sample(at: day2.timeIntervalSince1970, max: 93.47),
+            UsageHistoryStore.Sample(at: today.timeIntervalSince1970, max: 93.47)
+        ]
+        let flatPeak = AnalyticsAggregator.computePeakDay(from: flatlineSamples, now: today)
+        #expect(flatPeak == nil)
+
+        // Equal peak on multiple days picks the latest day deterministically
+        let tieSamples = [
+            UsageHistoryStore.Sample(at: day1.timeIntervalSince1970, max: 80.0),
+            UsageHistoryStore.Sample(at: day2.timeIntervalSince1970, max: 80.0),
+            UsageHistoryStore.Sample(at: today.timeIntervalSince1970, max: 20.0)
+        ]
+        let tiePeak = AnalyticsAggregator.computePeakDay(from: tieSamples, now: today)
+        #expect(tiePeak != nil)
+        #expect(tiePeak?.date == day2)
     }
 
     @Test("delta comparison calculates percent change")
