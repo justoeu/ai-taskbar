@@ -341,6 +341,15 @@
 "compare_prev_day_7" = "Há 7 dias";
 "compare_prev_month_1" = "Mês anterior";
 "compare_prev_month_2" = "Há 2 meses";
+"compare_vs_prev_week_1" = "vs. semana anterior";
+"compare_vs_prev_week_fmt" = "vs. %d semanas atrás";
+"compare_vs_prev_day_1" = "vs. ontem";
+"compare_vs_prev_day_fmt" = "vs. %d dias atrás";
+"compare_vs_prev_month_1" = "vs. mês anterior";
+"compare_vs_prev_month_fmt" = "vs. %d meses atrás";
+"analytics_delta_quota_help" = "Variação na média de utilização de quota em relação ao período anterior selecionado.";
+"analytics_insufficient_history_short" = "Sem dados anteriores";
+"analytics_insufficient_history_help" = "Ainda não há dados suficientes gravados no histórico para o período comparativo selecionado.";
 "vs_previous_period_fmt" = "%@ vs. anterior";
 "pin_to_menu_bar_help" = "Fixar na barra de menus";
 "more_details" = "+ detalhes";

@@ -398,6 +398,9 @@ public struct AnalyticsView: View {
 
                     VendorAnalyticsCardView(
                         summary: summary,
+                        timeframe: analyticsStore.timeframe,
+                        compareWithPrevious: analyticsStore.compareWithPrevious,
+                        comparisonOffset: analyticsStore.comparisonOffset,
                         canMoveUp: canUp,
                         canMoveDown: canDown,
                         onMoveUp: {

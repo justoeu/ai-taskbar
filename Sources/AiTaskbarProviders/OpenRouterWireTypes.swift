@@ -110,13 +110,13 @@ public struct OpenRouterCachedPayload: Codable, Sendable {
     public func toSnapshot() -> OpenRouterSnapshot {
         let total = credits.data.total_credits
         let used  = credits.data.total_usage ?? 0
-        let pctOfBudget: Double
+        let available = (total != nil) ? max(0, total! - used) : nil
         let detail: String
-        if let total, total > 0 {
-            pctOfBudget = min(used / total * 100, 100)
+        if let available, let total {
+            detail = String(format: "$%.2f available ($%.2f used / $%.2f total)", available, used, total)
+        } else if let total {
             detail = String(format: "$%.2f used / $%.2f total", used, total)
         } else {
-            pctOfBudget = 0
             detail = total == nil
                 ? "balance unknown"
                 : String(format: "$%.2f used", used)
@@ -124,7 +124,7 @@ public struct OpenRouterCachedPayload: Codable, Sendable {
 
         let balanceWindow = UsageWindow(
             label: "Balance",
-            utilizationPercent: pctOfBudget,
+            utilizationPercent: 0,
             resetsAt: nil,
             detail: detail
         )

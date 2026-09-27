@@ -341,6 +341,15 @@
 "compare_prev_day_7" = "Hace 7 días";
 "compare_prev_month_1" = "Mes anterior";
 "compare_prev_month_2" = "Hace 2 meses";
+"compare_vs_prev_week_1" = "vs. semana anterior";
+"compare_vs_prev_week_fmt" = "vs. hace %d semanas";
+"compare_vs_prev_day_1" = "vs. ayer";
+"compare_vs_prev_day_fmt" = "vs. hace %d días";
+"compare_vs_prev_month_1" = "vs. mes anterior";
+"compare_vs_prev_month_fmt" = "vs. hace %d meses";
+"analytics_delta_quota_help" = "Variación en la utilización promedio de cuota en comparación con el período anterior seleccionado.";
+"analytics_insufficient_history_short" = "Sin datos previos";
+"analytics_insufficient_history_help" = "Aún no hay suficientes datos registrados en el historial para el período comparativo seleccionado.";
 "vs_previous_period_fmt" = "%@ vs. anterior";
 "pin_to_menu_bar_help" = "Fijar en la barra de menús";
 "more_details" = "+ detalles";

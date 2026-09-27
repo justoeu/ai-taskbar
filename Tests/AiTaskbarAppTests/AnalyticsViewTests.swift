@@ -36,12 +36,18 @@ struct AnalyticsViewTests {
         var movedDown = false
         let card = VendorAnalyticsCardView(
             summary: summary,
+            timeframe: .weekly,
+            compareWithPrevious: true,
+            comparisonOffset: 2,
             canMoveUp: true,
             canMoveDown: false,
             onMoveUp: { movedUp = true },
             onMoveDown: { movedDown = true }
         )
         #expect(card.canMoveUp)
+        #expect(card.timeframe == .weekly)
+        #expect(card.compareWithPrevious)
+        #expect(card.comparisonOffset == 2)
         card.onMoveUp?()
         #expect(movedUp)
         card.onMoveDown?()

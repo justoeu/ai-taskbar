@@ -342,6 +342,15 @@
 "compare_prev_day_7" = "7 days ago";
 "compare_prev_month_1" = "Previous month";
 "compare_prev_month_2" = "2 months ago";
+"compare_vs_prev_week_1" = "vs. previous week";
+"compare_vs_prev_week_fmt" = "vs. %d weeks ago";
+"compare_vs_prev_day_1" = "vs. yesterday";
+"compare_vs_prev_day_fmt" = "vs. %d days ago";
+"compare_vs_prev_month_1" = "vs. previous month";
+"compare_vs_prev_month_fmt" = "vs. %d months ago";
+"analytics_delta_quota_help" = "Change in average quota utilization compared to the selected previous period.";
+"analytics_insufficient_history_short" = "No prior data";
+"analytics_insufficient_history_help" = "Not enough historical data recorded yet for the selected comparison period.";
 "vs_previous_period_fmt" = "%@ vs. previous";
 "pin_to_menu_bar_help" = "Pin to menu bar";
 "more_details" = "+ details";

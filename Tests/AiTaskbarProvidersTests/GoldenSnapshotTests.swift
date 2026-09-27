@@ -87,8 +87,9 @@ struct GoldenSnapshotTests {
         let snap = OpenRouterCachedPayload(credits: credits, key: key, activity: activity).toSnapshot()
 
         #expect(snap.planLabel == "OpenRouter: primary")
-        // total_credits=10, total_usage=2.50 → 25%.
-        #expect(Int((snap.balance?.utilizationPercent ?? 0).rounded()) == 25)
+        // prepaid available balance carries 0% quota utilization
+        #expect(snap.balance?.utilizationPercent == 0)
+        #expect(snap.balance?.detail == "$7.50 available ($2.50 used / $10.00 total)")
         // key.usage=2.50 / key.limit=10 → 25%.
         #expect(Int((snap.monthly?.utilizationPercent ?? 0).rounded()) == 25)
         // model aggregation from activity: 3.20 + 2.10 + 1.50 = 6.80 total

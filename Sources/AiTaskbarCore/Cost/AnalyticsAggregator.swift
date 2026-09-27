@@ -29,7 +29,23 @@ public enum AnalyticsAggregator {
             dayMaxes[day] = max(dayMaxes[day, default: 0], s.max)
         }
 
-        guard let best = dayMaxes.max(by: { $0.value < $1.value }), best.value > 0.001 else { return nil }
+        guard !dayMaxes.isEmpty else { return nil }
+        let values = Array(dayMaxes.values)
+        guard let maxVal = values.max(), maxVal > 0.5 else { return nil }
+
+        // If all days have essentially the same value (variance < 0.1),
+        // it is a static flatline rather than an active usage peak.
+        if dayMaxes.count > 1, let minVal = values.min(), maxVal - minVal < 0.1 {
+            return nil
+        }
+
+        guard let best = dayMaxes.max(by: { a, b in
+            if a.value != b.value {
+                return a.value < b.value
+            }
+            return a.key < b.key
+        }) else { return nil }
+
         return PeakDayRecord(
             date: best.key,
             costUSD: 0,

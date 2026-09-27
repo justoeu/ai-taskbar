@@ -54,6 +54,17 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Vendors that operate strictly on prepaid/pay-per-token credits with no
+    /// subscription franchise or unmetered tier.
+    public var isPrepaidOnly: Bool {
+        switch self {
+        case .openrouter, .deepseek, .kimi:
+            return true
+        case .anthropic, .openai, .gemini, .zai, .xai:
+            return false
+        }
+    }
+
     /// Shell command the user can run to re-authenticate when the vendor's
     /// token is rejected with a 401. Returns nil for API-key vendors (a 401
     /// there means the key is wrong — the fix is editing config, not a CLI
