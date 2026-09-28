@@ -115,7 +115,18 @@ public struct PinnedStatusBadgeView: View {
 public final class PinnedStatusItemManager: ObservableObject {
     public static let shared = PinnedStatusItemManager()
 
+    public struct SpaceCheckResult: Equatable, Sendable {
+        public let allowed: Bool
+        public let reason: String?
+
+        public static let allowedResult = SpaceCheckResult(allowed: true, reason: nil)
+        public static func denied(reason: String) -> SpaceCheckResult {
+            SpaceCheckResult(allowed: false, reason: reason)
+        }
+    }
+
     private var statusItems: [VendorId: NSStatusItem] = [:]
+    private var currentOrderedPinned: [VendorId] = []
     private var cancellables: Set<AnyCancellable> = []
     private weak var store: UsageStore?
 
@@ -127,8 +138,15 @@ public final class PinnedStatusItemManager: ObservableObject {
 
         store.$pinnedVendorIds
             .receive(on: RunLoop.main)
-            .sink { [weak self] pinned in
-                self?.syncStatusItems(pinnedIds: pinned)
+            .sink { [weak self] _ in
+                self?.syncStatusItems()
+            }
+            .store(in: &cancellables)
+
+        store.$sortedVendors
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.syncStatusItems()
             }
             .store(in: &cancellables)
 
@@ -136,8 +154,7 @@ public final class PinnedStatusItemManager: ObservableObject {
         Publishers.MergeMany(stateStreams)
             .throttle(for: .milliseconds(100), scheduler: RunLoop.main, latest: true)
             .sink { [weak self] _ in
-                guard let self, let store = self.store else { return }
-                self.syncStatusItems(pinnedIds: store.pinnedVendorIds)
+                self?.syncStatusItems()
             }
             .store(in: &cancellables)
 
@@ -148,29 +165,128 @@ public final class PinnedStatusItemManager: ObservableObject {
             }
             .store(in: &cancellables)
 
-        syncStatusItems(pinnedIds: store.pinnedVendorIds)
+        syncStatusItems()
     }
 
-    private func syncStatusItems(pinnedIds: Set<VendorId>) {
+    public func syncStatusItems() {
         guard let store else { return }
 
-        // Remove unpinned items
-        for (vid, item) in statusItems where !pinnedIds.contains(vid) {
-            NSStatusBar.system.removeStatusItem(item)
-            statusItems.removeValue(forKey: vid)
+        let ordered = store.sortedVendors.map(\.vendorId).filter { store.isPinned($0) }
+        let leftovers = store.pinnedVendorIds.subtracting(ordered)
+        let desiredOrderedPinned = ordered + leftovers.sorted(by: { $0.rawValue < $1.rawValue })
+
+        if desiredOrderedPinned == currentOrderedPinned {
+            // Vendors and order unchanged. Update buttons and tooltips in place.
+            for vid in desiredOrderedPinned {
+                guard let item = statusItems[vid], let vm = store.vendorVM(vid) else { continue }
+                updateButton(for: item, vm: vm, store: store)
+            }
+            return
         }
 
-        // Add or update pinned items
-        for vid in pinnedIds {
-            guard let vm = store.vendorVM(vid) else { continue }
-            let item = statusItems[vid] ?? {
-                let newItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-                statusItems[vid] = newItem
-                return newItem
-            }()
+        // Ordered set changed. Clean up existing status items.
+        for (_, item) in statusItems {
+            NSStatusBar.system.removeStatusItem(item)
+        }
+        statusItems.removeAll()
 
+        // macOS WindowServer inserts new status items to the LEFT of existing items.
+        // To achieve visual order: [Vendor 0] [Vendor 1] [Vendor 2] [Main Button] (left to right),
+        // we must create them in REVERSE order: Vendor 2 first, then 1, then 0.
+        for vid in desiredOrderedPinned.reversed() {
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            statusItems[vid] = item
+        }
+
+        for vid in desiredOrderedPinned {
+            guard let item = statusItems[vid], let vm = store.vendorVM(vid) else { continue }
             updateButton(for: item, vm: vm, store: store)
         }
+
+        currentOrderedPinned = desiredOrderedPinned
+
+        if let focused = lastFocusedPinnedVendor, !desiredOrderedPinned.contains(focused) {
+            lastFocusedPinnedVendor = nil
+        }
+    }
+
+    public func canAddPinnedStatusItem(currentPinnedCount: Int? = nil) -> SpaceCheckResult {
+        let count = currentPinnedCount ?? store?.pinnedVendorIds.count ?? 0
+        let absoluteMax = 5
+        if count >= absoluteMax {
+            return .denied(reason: L10n.localizedString("pin_limit_count_message"))
+        }
+
+        let mainBtn = MainStatusItemHolder.shared.mainButton ?? findMainStatusBarButton()
+        guard let mainWin = mainBtn?.window, let screen = mainWin.screen ?? NSScreen.main ?? NSScreen.screens.first else {
+            return .allowedResult
+        }
+
+        var currentFrames: [CGRect] = []
+        if let btnFrame = mainBtn?.window?.frame {
+            currentFrames.append(btnFrame)
+        }
+        for item in statusItems.values {
+            if let f = item.button?.window?.frame {
+                currentFrames.append(f)
+            }
+        }
+
+        return Self.evaluateSpace(
+            screen: screen,
+            currentFrames: currentFrames
+        )
+    }
+
+    public static func evaluateSpace(
+        screen: NSScreen,
+        currentFrames: [CGRect],
+        estimatedItemWidth: CGFloat = 72.0
+    ) -> SpaceCheckResult {
+        let validFrames = currentFrames.filter { $0.origin.x > 0 }
+        guard let minX = validFrames.map(\.origin.x).min() else {
+            return .allowedResult
+        }
+
+        let notchEdge: CGFloat?
+        if #available(macOS 12.0, *), let rightArea = screen.auxiliaryTopRightArea {
+            notchEdge = rightArea.origin.x
+        } else {
+            notchEdge = nil
+        }
+
+        return evaluateSpaceMath(
+            minX: minX,
+            estimatedItemWidth: estimatedItemWidth,
+            notchRightEdge: notchEdge,
+            safeNotchMargin: 30.0,
+            screenVisibleOriginX: screen.visibleFrame.origin.x,
+            screenWidth: screen.frame.width
+        )
+    }
+
+    public static func evaluateSpaceMath(
+        minX: CGFloat,
+        estimatedItemWidth: CGFloat = 72.0,
+        notchRightEdge: CGFloat?,
+        safeNotchMargin: CGFloat = 30.0,
+        screenVisibleOriginX: CGFloat = 0.0,
+        screenWidth: CGFloat = 1800.0
+    ) -> SpaceCheckResult {
+        let projectedMinX = minX - estimatedItemWidth
+
+        if let notchRightEdge = notchRightEdge {
+            if projectedMinX < (notchRightEdge + safeNotchMargin) {
+                return .denied(reason: L10n.localizedString("pin_limit_notch_message"))
+            }
+        } else {
+            let leftBoundary = screenVisibleOriginX + max(350.0, screenWidth * 0.35)
+            if projectedMinX < leftBoundary {
+                return .denied(reason: L10n.localizedString("pin_limit_screen_message"))
+            }
+        }
+
+        return .allowedResult
     }
 
     private func updateButton(for item: NSStatusItem, vm: VendorViewModel, store: UsageStore) {
@@ -265,7 +381,7 @@ public final class PinnedStatusItemManager: ObservableObject {
     private func triggerStatusBarButton(_ button: NSStatusBarButton?) {
         guard let button else { return }
         if let target = button.target, let action = button.action {
-            NSApp.sendAction(action, to: target, from: button)
+            NSApplication.shared.sendAction(action, to: target, from: button)
         } else {
             button.performClick(nil)
         }
@@ -276,7 +392,7 @@ public final class PinnedStatusItemManager: ObservableObject {
             return cached
         }
         let pinnedButtons = Set(statusItems.values.compactMap(\.button))
-        for window in NSApp.windows {
+        for window in NSApplication.shared.windows {
             if let button = findButton(in: window.contentView, excluding: pinnedButtons) {
                 MainStatusItemHolder.shared.mainButton = button
                 button.sendAction(on: [.leftMouseDown])

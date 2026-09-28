@@ -374,3 +374,10 @@
 "tooltip_daily_reset_waiting" = "Diário: aguardando atualização";
 "tooltip_weekly_reset_waiting" = "Semanal: aguardando atualização";
 "time_less_than_minute" = "menos de 1 minuto";
+
+// Limites de fixação na barra de menus
+"pin_limit_reached_title" = "Limite da Barra de Menus";
+"pin_limit_notch_message" = "Espaço insuficiente na barra de menus para fixar outro modelo sem colidir com o entalhe da câmera do seu Mac. Desafixe outro modelo antes de adicionar este.";
+"pin_limit_screen_message" = "Espaço insuficiente na barra de menus para fixar outro modelo sem cobrir os menus de aplicativos. Desafixe outro modelo antes de adicionar este.";
+"pin_limit_count_message" = "Você atingiu o limite máximo de 5 modelos fixados na barra de menus. Desafixe outro modelo antes de adicionar este.";
+"pin_limit_reached_ok" = "Entendido";

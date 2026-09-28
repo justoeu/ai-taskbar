@@ -374,3 +374,10 @@
 "tooltip_daily_reset_waiting" = "Diario: esperando actualización";
 "tooltip_weekly_reset_waiting" = "Semanal: esperando actualización";
 "time_less_than_minute" = "menos de 1 minuto";
+
+// Límites de anclaje en la barra de menús
+"pin_limit_reached_title" = "Límite de la Barra de Menús";
+"pin_limit_notch_message" = "No hay suficiente espacio en la barra de menús para anclar otro modelo sin chocar con la muesca de la cámara de tu Mac. Desancla otro modelo primero.";
+"pin_limit_screen_message" = "No hay suficiente espacio en la barra de menús para anclar otro modelo sin cubrir los menús de aplicaciones. Desancla otro modelo primero.";
+"pin_limit_count_message" = "Has alcanzado el límite máximo de 5 modelos anclados en la barra de menús. Desancla otro modelo primero.";
+"pin_limit_reached_ok" = "Entendido";

@@ -109,9 +109,9 @@ public struct PopoverContentView: View {
                 footerBar
             }
 
-            .allowsHitTesting(overlay == nil)
-            .disabled(overlay != nil)
-            .accessibilityHidden(overlay != nil)
+            .allowsHitTesting(overlay == nil && store.pinLimitAlert == nil)
+            .disabled(overlay != nil || store.pinLimitAlert != nil)
+            .accessibilityHidden(overlay != nil || store.pinLimitAlert != nil)
 
             if let overlay {
                 Color.black.opacity(0.45)
@@ -141,9 +141,75 @@ public struct PopoverContentView: View {
                         .transition(overlayTransition)
                 }
             }
+
+            if let alertInfo = store.pinLimitAlert {
+                Color.black.opacity(0.45)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .onTapGesture {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                            store.pinLimitAlert = nil
+                        }
+                    }
+                    .accessibilityHidden(true)
+
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 36))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.orange)
+
+                    VStack(spacing: 6) {
+                        Text(alertInfo.title)
+                            .font(.headline)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(alertInfo.message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Button {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                            store.pinLimitAlert = nil
+                        }
+                    } label: {
+                        Text(L10n.localizedString("pin_limit_reached_ok"))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .keyboardShortcut(.defaultAction)
+                }
+                .padding(20)
+                .frame(width: 300)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(nsColor: .windowBackgroundColor))
+                        .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+                .transition(overlayTransition)
+                .zIndex(200)
+            }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: overlay)
-        .onExitCommand { overlay = nil }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: store.pinLimitAlert != nil)
+        .onExitCommand {
+            if store.pinLimitAlert != nil {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                    store.pinLimitAlert = nil
+                }
+            } else {
+                overlay = nil
+            }
+        }
     }
 
     private var headerBar: some View {
