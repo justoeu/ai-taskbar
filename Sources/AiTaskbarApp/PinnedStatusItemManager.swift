@@ -125,6 +125,7 @@ public final class PinnedStatusItemManager: ObservableObject {
         }
     }
 
+    private(set) var physicalItems: [NSStatusItem] = []
     private var statusItems: [VendorId: NSStatusItem] = [:]
     private var currentOrderedPinned: [VendorId] = []
     private var cancellables: Set<AnyCancellable> = []
@@ -175,39 +176,65 @@ public final class PinnedStatusItemManager: ObservableObject {
         let leftovers = store.pinnedVendorIds.subtracting(ordered)
         let desiredOrderedPinned = ordered + leftovers.sorted(by: { $0.rawValue < $1.rawValue })
 
-        if desiredOrderedPinned == currentOrderedPinned {
-            // Vendors and order unchanged. Update buttons and tooltips in place.
-            for vid in desiredOrderedPinned {
-                guard let item = statusItems[vid], let vm = store.vendorVM(vid) else { continue }
+        let desiredCount = desiredOrderedPinned.count
+        let currentCount = physicalItems.count
+
+        if desiredCount < currentCount {
+            // Unpinned: remove excess status items from the leftmost position.
+            // Items are anchored to the left of the main menu bar item.
+            // Removing the outer leftmost slots leaves existing slots adjacent to the main
+            // button untouched and avoids physical jumping or redrawing.
+            let excess = currentCount - desiredCount
+            for _ in 0..<excess {
+                let item = physicalItems.removeFirst()
+                NSStatusBar.system.removeStatusItem(item)
+            }
+        } else if desiredCount > currentCount {
+            // Pinned: create only the missing status items.
+            // macOS WindowServer inserts new status items to the LEFT of existing items.
+            // We insert each newly created item at the front (index 0).
+            let needed = desiredCount - currentCount
+            for _ in 0..<needed {
+                let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+                physicalItems.insert(item, at: 0)
+            }
+        }
+
+        // Align physical items left-to-right once window frames are established on screen.
+        let frames = physicalItems.compactMap { $0.button?.window?.frame }
+        if frames.count == physicalItems.count && frames.allSatisfy({ $0.origin.x > 0 }) {
+            physicalItems.sort { (a, b) in
+                (a.button?.window?.frame.origin.x ?? 0) < (b.button?.window?.frame.origin.x ?? 0)
+            }
+        }
+
+        // Update all status item views and mapping in-place without destroying NSStatusItem slots.
+        var newStatusItems: [VendorId: NSStatusItem] = [:]
+        for (index, vid) in desiredOrderedPinned.enumerated() {
+            guard index < physicalItems.count else { break }
+            let item = physicalItems[index]
+            newStatusItems[vid] = item
+            if let vm = store.vendorVM(vid) {
                 updateButton(for: item, vm: vm, store: store)
             }
-            return
         }
 
-        // Ordered set changed. Clean up existing status items.
-        for (_, item) in statusItems {
-            NSStatusBar.system.removeStatusItem(item)
-        }
-        statusItems.removeAll()
-
-        // macOS WindowServer inserts new status items to the LEFT of existing items.
-        // To achieve visual order: [Vendor 0] [Vendor 1] [Vendor 2] [Main Button] (left to right),
-        // we must create them in REVERSE order: Vendor 2 first, then 1, then 0.
-        for vid in desiredOrderedPinned.reversed() {
-            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-            statusItems[vid] = item
-        }
-
-        for vid in desiredOrderedPinned {
-            guard let item = statusItems[vid], let vm = store.vendorVM(vid) else { continue }
-            updateButton(for: item, vm: vm, store: store)
-        }
-
-        currentOrderedPinned = desiredOrderedPinned
+        self.statusItems = newStatusItems
+        self.currentOrderedPinned = desiredOrderedPinned
 
         if let focused = lastFocusedPinnedVendor, !desiredOrderedPinned.contains(focused) {
             lastFocusedPinnedVendor = nil
         }
+    }
+
+    public func removeAll() {
+        for item in physicalItems {
+            NSStatusBar.system.removeStatusItem(item)
+        }
+        physicalItems.removeAll()
+        statusItems.removeAll()
+        currentOrderedPinned.removeAll()
+        lastFocusedPinnedVendor = nil
     }
 
     public func canAddPinnedStatusItem(currentPinnedCount: Int? = nil) -> SpaceCheckResult {
@@ -304,6 +331,7 @@ public final class PinnedStatusItemManager: ObservableObject {
 
         if let existingHosting = button.subviews.first(where: { $0 is NSHostingView<PinnedStatusBadgeView> }) as? NSHostingView<PinnedStatusBadgeView> {
             existingHosting.rootView = badgeView
+            existingHosting.layoutSubtreeIfNeeded()
             let size = existingHosting.fittingSize
             let width = max(42, size.width + 6)
             if item.length != width {
