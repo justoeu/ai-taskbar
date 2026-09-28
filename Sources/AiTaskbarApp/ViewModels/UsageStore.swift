@@ -67,7 +67,10 @@ public final class UsageStore: ObservableObject {
         }
     }
 
-    /// Set of vendors pinned to the macOS menu bar.
+    /// Pinned vendors in explicit user insertion order.
+    @Published public private(set) var pinnedVendorOrder: [VendorId] = []
+
+    /// Set of vendors pinned to the macOS menu bar for O(1) membership lookup.
     @Published public private(set) var pinnedVendorIds: Set<VendorId> = []
 
     /// Alert presented when pinning an item exceeds available menu bar space or hard limits.
@@ -107,6 +110,7 @@ public final class UsageStore: ObservableObject {
         self.preferredOrder = preferredOrder
         let savedPinned = (UserDefaults.standard.stringArray(forKey: Self.pinnedDefaultsKey) ?? [])
             .compactMap(VendorId.init(rawValue:))
+        self.pinnedVendorOrder = savedPinned
         self.pinnedVendorIds = Set(savedPinned)
         wireUpAggregates()
     }
@@ -234,6 +238,7 @@ public final class UsageStore: ObservableObject {
     public func togglePinned(_ id: VendorId, defaults: UserDefaults = .standard) {
         if pinnedVendorIds.contains(id) {
             pinnedVendorIds.remove(id)
+            pinnedVendorOrder.removeAll(where: { $0 == id })
             persistPinned(defaults: defaults)
         } else {
             let spaceCheck = PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: pinnedVendorIds.count)
@@ -245,15 +250,15 @@ public final class UsageStore: ObservableObject {
                 return
             }
             pinnedVendorIds.insert(id)
+            if !pinnedVendorOrder.contains(id) {
+                pinnedVendorOrder.append(id)
+            }
             persistPinned(defaults: defaults)
         }
     }
 
     private func persistPinned(defaults: UserDefaults = .standard) {
-        let ordered = sortedVendors.map(\.vendorId).filter { pinnedVendorIds.contains($0) }
-        let leftovers = pinnedVendorIds.subtracting(ordered)
-        let rawList = (ordered + leftovers.sorted(by: { $0.rawValue < $1.rawValue })).map(\.rawValue)
-        defaults.set(rawList, forKey: Self.pinnedDefaultsKey)
+        defaults.set(pinnedVendorOrder.map(\.rawValue), forKey: Self.pinnedDefaultsKey)
     }
 
     public func refreshAll(forceRefresh: Bool = false) {
