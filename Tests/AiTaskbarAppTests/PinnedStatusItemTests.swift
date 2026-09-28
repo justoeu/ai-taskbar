@@ -94,8 +94,8 @@ struct PinnedStatusItemTests {
         #expect(res6.reason == L10n.localizedString("pin_limit_count_message"))
     }
 
-    @Test("togglePinned persists in sortedVendors order, not random hash set order")
-    func toggle_pinned_preserves_sorted_order() {
+    @Test("togglePinned persists in insertion order, and re-pinning appends to the end")
+    func toggle_pinned_preserves_insertion_order() {
         let name = "ai-taskbar.pinned.order.test.\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: name)!
         defer { suite.removePersistentDomain(forName: name) }
@@ -111,24 +111,24 @@ struct PinnedStatusItemTests {
             preferredOrder: [.anthropic, .openai, .openrouter, .gemini]
         )
 
-        // Pin in non-sequential order: openrouter, anthropic, openai
+        // Pin in custom activation order: openrouter, anthropic, openai
         store.togglePinned(.openrouter, defaults: suite)
         store.togglePinned(.anthropic, defaults: suite)
         store.togglePinned(.openai, defaults: suite)
 
-        // The persisted array must strictly follow sortedVendors order (.anthropic, .openai, .openrouter)
+        // The persisted array preserves the user's activation/insertion order
         let persisted = suite.stringArray(forKey: UsageStore.pinnedDefaultsKey) ?? []
-        #expect(persisted == ["anthropic", "openai", "openrouter"])
+        #expect(persisted == ["openrouter", "anthropic", "openai"])
 
-        // Unpin openai
-        store.togglePinned(.openai, defaults: suite)
+        // Unpin anthropic
+        store.togglePinned(.anthropic, defaults: suite)
         let afterUnpin = suite.stringArray(forKey: UsageStore.pinnedDefaultsKey) ?? []
-        #expect(afterUnpin == ["anthropic", "openrouter"])
+        #expect(afterUnpin == ["openrouter", "openai"])
 
-        // Re-pin openai: it must be restored between anthropic and openrouter!
-        store.togglePinned(.openai, defaults: suite)
+        // Re-pin anthropic: it must be appended to the END, not inserted in the middle!
+        store.togglePinned(.anthropic, defaults: suite)
         let afterRepin = suite.stringArray(forKey: UsageStore.pinnedDefaultsKey) ?? []
-        #expect(afterRepin == ["anthropic", "openai", "openrouter"])
+        #expect(afterRepin == ["openrouter", "openai", "anthropic"])
     }
 
     @Test("togglePinned blocks and triggers pinLimitAlert when cap is reached")
@@ -172,7 +172,7 @@ struct PinnedStatusItemTests {
         #expect(store.pinLimitAlert?.message == L10n.localizedString("pin_limit_count_message"))
     }
 
-    @Test("syncStatusItems reuses physical status item slots in place without destroying all items")
+    @Test("syncStatusItems retains untouched status items in place without destroying all items")
     func sync_status_items_slot_diffing_avoids_flicker() {
         let name = "ai-taskbar.pinned.flicker.test.\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: name)!
@@ -200,22 +200,25 @@ struct PinnedStatusItemTests {
         manager.syncStatusItems()
 
         #expect(manager.physicalItems.count == 2)
-        let secondItem = manager.physicalItems[1]
+        let anthropicItem = manager.statusItem(for: .anthropic)
+        #expect(anthropicItem != nil)
 
         // 2. Unpin OpenAI (down to 1 item)
         store.togglePinned(.openai, defaults: suite)
         manager.syncStatusItems()
 
         #expect(manager.physicalItems.count == 1)
-        // The slot adjacent to main button is retained in place without tearing down the whole bar!
-        #expect(manager.physicalItems[0] === secondItem)
+        // Anthropic item is retained in place without being recreated!
+        #expect(manager.statusItem(for: .anthropic) === anthropicItem)
+        #expect(manager.statusItem(for: .openai) == nil)
 
         // 3. Re-pin OpenAI (back to 2 items)
         store.togglePinned(.openai, defaults: suite)
         manager.syncStatusItems()
 
         #expect(manager.physicalItems.count == 2)
-        // secondItem is still retained in place at index 1!
-        #expect(manager.physicalItems[1] === secondItem)
+        // Anthropic item is STILL retained in place!
+        #expect(manager.statusItem(for: .anthropic) === anthropicItem)
+        #expect(manager.statusItem(for: .openai) != nil)
     }
 }

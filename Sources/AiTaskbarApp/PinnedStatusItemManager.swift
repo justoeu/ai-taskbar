@@ -125,9 +125,9 @@ public final class PinnedStatusItemManager: ObservableObject {
         }
     }
 
-    private(set) var physicalItems: [NSStatusItem] = []
-    private var statusItems: [VendorId: NSStatusItem] = [:]
-    private var currentOrderedPinned: [VendorId] = []
+    public private(set) var statusItems: [VendorId: NSStatusItem] = [:]
+    public var physicalItems: [NSStatusItem] { Array(statusItems.values) }
+    public private(set) var currentOrderedPinned: [VendorId] = []
     private var cancellables: Set<AnyCancellable> = []
     private weak var store: UsageStore?
 
@@ -137,7 +137,7 @@ public final class PinnedStatusItemManager: ObservableObject {
         self.store = store
         cancellables.removeAll()
 
-        store.$pinnedVendorIds
+        store.$pinnedVendorOrder
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.syncStatusItems()
@@ -172,69 +172,51 @@ public final class PinnedStatusItemManager: ObservableObject {
     public func syncStatusItems() {
         guard let store else { return }
 
-        let ordered = store.sortedVendors.map(\.vendorId).filter { store.isPinned($0) }
-        let leftovers = store.pinnedVendorIds.subtracting(ordered)
-        let desiredOrderedPinned = ordered + leftovers.sorted(by: { $0.rawValue < $1.rawValue })
+        let desiredOrder = store.pinnedVendorOrder
+        let desiredSet = Set(desiredOrder)
 
-        let desiredCount = desiredOrderedPinned.count
-        let currentCount = physicalItems.count
-
-        if desiredCount < currentCount {
-            // Unpinned: remove excess status items from the leftmost position.
-            // Items are anchored to the left of the main menu bar item.
-            // Removing the outer leftmost slots leaves existing slots adjacent to the main
-            // button untouched and avoids physical jumping or redrawing.
-            let excess = currentCount - desiredCount
-            for _ in 0..<excess {
-                let item = physicalItems.removeFirst()
-                NSStatusBar.system.removeStatusItem(item)
-            }
-        } else if desiredCount > currentCount {
-            // Pinned: create only the missing status items.
-            // macOS WindowServer inserts new status items to the LEFT of existing items.
-            // We insert each newly created item at the front (index 0).
-            let needed = desiredCount - currentCount
-            for _ in 0..<needed {
-                let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-                physicalItems.insert(item, at: 0)
-            }
+        // 1. Remove status items for vendors that were unpinned.
+        // Operating per-vendor leaves all other items intact without visual flicker or jumping.
+        for (vid, item) in statusItems where !desiredSet.contains(vid) {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItems.removeValue(forKey: vid)
         }
 
-        // Align physical items left-to-right once window frames are established on screen.
-        let frames = physicalItems.compactMap { $0.button?.window?.frame }
-        if frames.count == physicalItems.count && frames.allSatisfy({ $0.origin.x > 0 }) {
-            physicalItems.sort { (a, b) in
-                (a.button?.window?.frame.origin.x ?? 0) < (b.button?.window?.frame.origin.x ?? 0)
-            }
-        }
-
-        // Update all status item views and mapping in-place without destroying NSStatusItem slots.
-        var newStatusItems: [VendorId: NSStatusItem] = [:]
-        for (index, vid) in desiredOrderedPinned.enumerated() {
-            guard index < physicalItems.count else { break }
-            let item = physicalItems[index]
-            newStatusItems[vid] = item
+        // 2. Add status items for newly pinned vendors in order.
+        // In macOS AppKit, each newly created status item is naturally placed to the left of existing items.
+        for vid in desiredOrder where statusItems[vid] == nil {
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            statusItems[vid] = item
             if let vm = store.vendorVM(vid) {
                 updateButton(for: item, vm: vm, store: store)
             }
         }
 
-        self.statusItems = newStatusItems
-        self.currentOrderedPinned = desiredOrderedPinned
+        // 3. Update buttons for existing pinned items in-place.
+        for vid in desiredOrder {
+            if let item = statusItems[vid], let vm = store.vendorVM(vid) {
+                updateButton(for: item, vm: vm, store: store)
+            }
+        }
 
-        if let focused = lastFocusedPinnedVendor, !desiredOrderedPinned.contains(focused) {
+        self.currentOrderedPinned = desiredOrder
+
+        if let focused = lastFocusedPinnedVendor, !desiredSet.contains(focused) {
             lastFocusedPinnedVendor = nil
         }
     }
 
     public func removeAll() {
-        for item in physicalItems {
+        for item in statusItems.values {
             NSStatusBar.system.removeStatusItem(item)
         }
-        physicalItems.removeAll()
         statusItems.removeAll()
         currentOrderedPinned.removeAll()
         lastFocusedPinnedVendor = nil
+    }
+
+    public func statusItem(for vendorId: VendorId) -> NSStatusItem? {
+        statusItems[vendorId]
     }
 
     public func canAddPinnedStatusItem(currentPinnedCount: Int? = nil) -> SpaceCheckResult {
@@ -244,13 +226,36 @@ public final class PinnedStatusItemManager: ObservableObject {
             return .denied(reason: L10n.localizedString("pin_limit_count_message"))
         }
 
-        return .allowedResult
+        let mainBtn = MainStatusItemHolder.shared.mainButton ?? findMainStatusBarButton()
+        guard let mainWin = mainBtn?.window,
+              let screen = mainWin.screen ?? NSScreen.main ?? NSScreen.screens.first else {
+            return .allowedResult
+        }
+
+        var currentFrames: [CGRect] = []
+        if let btnFrame = mainBtn?.window?.frame, btnFrame.origin.x > 0 {
+            currentFrames.append(btnFrame)
+        }
+        for item in statusItems.values {
+            if let f = item.button?.window?.frame, f.origin.x > 0 {
+                currentFrames.append(f)
+            }
+        }
+
+        guard !currentFrames.isEmpty else {
+            return .allowedResult
+        }
+
+        return Self.evaluateSpace(
+            screen: screen,
+            currentFrames: currentFrames
+        )
     }
 
     public static func evaluateSpace(
         screen: NSScreen,
         currentFrames: [CGRect],
-        estimatedItemWidth: CGFloat = 72.0
+        estimatedItemWidth: CGFloat = 50.0
     ) -> SpaceCheckResult {
         let validFrames = currentFrames.filter { $0.origin.x > 0 }
         guard let minX = validFrames.map(\.origin.x).min() else {
@@ -268,7 +273,7 @@ public final class PinnedStatusItemManager: ObservableObject {
             minX: minX,
             estimatedItemWidth: estimatedItemWidth,
             notchRightEdge: notchEdge,
-            safeNotchMargin: 30.0,
+            safeNotchMargin: 8.0,
             screenVisibleOriginX: screen.visibleFrame.origin.x,
             screenWidth: screen.frame.width
         )
@@ -276,9 +281,9 @@ public final class PinnedStatusItemManager: ObservableObject {
 
     public static func evaluateSpaceMath(
         minX: CGFloat,
-        estimatedItemWidth: CGFloat = 72.0,
+        estimatedItemWidth: CGFloat = 50.0,
         notchRightEdge: CGFloat?,
-        safeNotchMargin: CGFloat = 30.0,
+        safeNotchMargin: CGFloat = 8.0,
         screenVisibleOriginX: CGFloat = 0.0,
         screenWidth: CGFloat = 1800.0
     ) -> SpaceCheckResult {
