@@ -56,8 +56,22 @@ public final class UsageStore: ObservableObject {
 
     public static let pinnedDefaultsKey = "pinned_menu_bar_vendors"
 
+    public struct PinLimitAlertInfo: Identifiable, Equatable, Sendable {
+        public let id = UUID()
+        public let title: String
+        public let message: String
+
+        public init(title: String, message: String) {
+            self.title = title
+            self.message = message
+        }
+    }
+
     /// Set of vendors pinned to the macOS menu bar.
     @Published public private(set) var pinnedVendorIds: Set<VendorId> = []
+
+    /// Alert presented when pinning an item exceeds available menu bar space or hard limits.
+    @Published public var pinLimitAlert: PinLimitAlertInfo?
 
     /// Transient vendor focused and scrolled to when clicking a pinned menu bar item.
     @Published public var focusedVendor: VendorId?
@@ -152,7 +166,10 @@ public final class UsageStore: ObservableObject {
         let newlySorted = ids.compactMap { byId[$0] }
         let sameOrder = newlySorted.count == sortedVendors.count
             && zip(newlySorted, sortedVendors).allSatisfy { $0.id == $1.id }
-        if !sameOrder { sortedVendors = newlySorted }
+        if !sameOrder {
+            sortedVendors = newlySorted
+            persistPinned()
+        }
     }
 
     /// True iff the vendor is in the no-credentials `.failed(.disabled)`
@@ -217,10 +234,25 @@ public final class UsageStore: ObservableObject {
     public func togglePinned(_ id: VendorId, defaults: UserDefaults = .standard) {
         if pinnedVendorIds.contains(id) {
             pinnedVendorIds.remove(id)
+            persistPinned(defaults: defaults)
         } else {
+            let spaceCheck = PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: pinnedVendorIds.count)
+            guard spaceCheck.allowed else {
+                pinLimitAlert = PinLimitAlertInfo(
+                    title: L10n.localizedString("pin_limit_reached_title"),
+                    message: spaceCheck.reason ?? L10n.localizedString("pin_limit_screen_message")
+                )
+                return
+            }
             pinnedVendorIds.insert(id)
+            persistPinned(defaults: defaults)
         }
-        let rawList = pinnedVendorIds.map(\.rawValue)
+    }
+
+    private func persistPinned(defaults: UserDefaults = .standard) {
+        let ordered = sortedVendors.map(\.vendorId).filter { pinnedVendorIds.contains($0) }
+        let leftovers = pinnedVendorIds.subtracting(ordered)
+        let rawList = (ordered + leftovers.sorted(by: { $0.rawValue < $1.rawValue })).map(\.rawValue)
         defaults.set(rawList, forKey: Self.pinnedDefaultsKey)
     }
 

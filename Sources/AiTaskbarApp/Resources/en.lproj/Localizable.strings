@@ -375,3 +375,10 @@
 "tooltip_daily_reset_waiting" = "Daily: awaiting refresh";
 "tooltip_weekly_reset_waiting" = "Weekly: awaiting refresh";
 "time_less_than_minute" = "less than 1 minute";
+
+// Menu bar pin limits
+"pin_limit_reached_title" = "Menu Bar Space Limit";
+"pin_limit_notch_message" = "Not enough space in the menu bar to pin another model without colliding with your Mac's camera notch. Unpin another model first.";
+"pin_limit_screen_message" = "Not enough space in the menu bar to pin another model without covering application menus. Unpin another model first.";
+"pin_limit_count_message" = "You have reached the maximum limit of 5 pinned models in the menu bar. Unpin another model first.";
+"pin_limit_reached_ok" = "Understood";
