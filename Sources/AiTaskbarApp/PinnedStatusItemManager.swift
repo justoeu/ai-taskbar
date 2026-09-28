@@ -244,25 +244,7 @@ public final class PinnedStatusItemManager: ObservableObject {
             return .denied(reason: L10n.localizedString("pin_limit_count_message"))
         }
 
-        let mainBtn = MainStatusItemHolder.shared.mainButton ?? findMainStatusBarButton()
-        guard let mainWin = mainBtn?.window, let screen = mainWin.screen ?? NSScreen.main ?? NSScreen.screens.first else {
-            return .allowedResult
-        }
-
-        var currentFrames: [CGRect] = []
-        if let btnFrame = mainBtn?.window?.frame {
-            currentFrames.append(btnFrame)
-        }
-        for item in statusItems.values {
-            if let f = item.button?.window?.frame {
-                currentFrames.append(f)
-            }
-        }
-
-        return Self.evaluateSpace(
-            screen: screen,
-            currentFrames: currentFrames
-        )
+        return .allowedResult
     }
 
     public static func evaluateSpace(
