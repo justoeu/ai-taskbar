@@ -171,4 +171,51 @@ struct PinnedStatusItemTests {
         #expect(store.pinLimitAlert?.title == L10n.localizedString("pin_limit_reached_title"))
         #expect(store.pinLimitAlert?.message == L10n.localizedString("pin_limit_count_message"))
     }
+
+    @Test("syncStatusItems reuses physical status item slots in place without destroying all items")
+    func sync_status_items_slot_diffing_avoids_flicker() {
+        let name = "ai-taskbar.pinned.flicker.test.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        defer { suite.removePersistentDomain(forName: name) }
+
+        let v1 = VendorViewModel(provider: MockUsageProvider(vendorId: .anthropic))
+        let v2 = VendorViewModel(provider: MockUsageProvider(vendorId: .openai))
+        let v3 = VendorViewModel(provider: MockUsageProvider(vendorId: .openrouter))
+
+        let store = UsageStore(
+            vendors: [v1, v2, v3],
+            primary: nil,
+            preferredOrder: [.anthropic, .openai, .openrouter]
+        )
+
+        let manager = PinnedStatusItemManager()
+        defer { manager.removeAll() }
+
+        manager.configure(store: store)
+        #expect(manager.physicalItems.count == 0)
+
+        // 1. Pin Anthropic and OpenAI (2 items)
+        store.togglePinned(.anthropic, defaults: suite)
+        store.togglePinned(.openai, defaults: suite)
+        manager.syncStatusItems()
+
+        #expect(manager.physicalItems.count == 2)
+        let secondItem = manager.physicalItems[1]
+
+        // 2. Unpin OpenAI (down to 1 item)
+        store.togglePinned(.openai, defaults: suite)
+        manager.syncStatusItems()
+
+        #expect(manager.physicalItems.count == 1)
+        // The slot adjacent to main button is retained in place without tearing down the whole bar!
+        #expect(manager.physicalItems[0] === secondItem)
+
+        // 3. Re-pin OpenAI (back to 2 items)
+        store.togglePinned(.openai, defaults: suite)
+        manager.syncStatusItems()
+
+        #expect(manager.physicalItems.count == 2)
+        // secondItem is still retained in place at index 1!
+        #expect(manager.physicalItems[1] === secondItem)
+    }
 }
