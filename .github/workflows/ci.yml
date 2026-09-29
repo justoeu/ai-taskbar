@@ -8,6 +8,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Build + test only: nothing here pushes, tags or creates releases, so the
+# token gets read access and no more, whatever the repo/org default is.
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: Build + validate
@@ -15,7 +20,7 @@ jobs:
     # Swift 5.10, which can't parse `swift-tools-version: 6.0`.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Shared with release.yml on purpose — see the comment in the action.
       # These two jobs used to choose independently and drifted a full two
@@ -30,14 +35,18 @@ jobs:
 
       - name: Doc mirror + assert sanity
         # These live in scripts/validate.sh, which CI does not run end to end.
-        # Without them a diverged AGENTS.md or a vacuous #expect only gets
-        # caught on whichever machine happens to run validate next.
+        # Without them a diverged AGENTS.md, a vacuous #expect or a trapping
+        # Int(...) in a wire type only gets caught on whichever machine
+        # happens to run validate next.
         run: |
           cmp -s CLAUDE.md AGENTS.md || { echo "CLAUDE.md and AGENTS.md diverged — run: cp CLAUDE.md AGENTS.md"; exit 1; }
-          if grep -rnE '#expect\((.*== *(true|false)\)|.*\?\? *(true|false)\)|.*== *Optional\()' Tests/; then
-            echo "vacuous #expect form(s) — use expectTrue/expectFalse (AiTaskbarTestSupport)"; exit 1
-          fi
-          echo "OK"
+          # Same script validate.sh runs (vacuous #expect/#require, bare Int
+          # in *WireTypes.swift, Localizable.strings 64-bit specifiers +
+          # duplicate keys + en/pt-BR/es parity, and 64-bit signed specifiers
+          # in inline String(format:) literals), preceded by its planted-input
+          # self-test.
+          scripts/source-ratchet-selftest.sh
+          scripts/check-source-ratchets.sh
 
       - name: Warnings ratchet
         # `2>&1` is load-bearing: SwiftPM writes compiler diagnostics to

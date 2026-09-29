@@ -52,4 +52,14 @@ struct UpdateCheckerAssetTests {
         #expect(!UpdateChecker.isAllowedDownloadURL(
             URL(string: "http://objects.githubusercontent.com/a.dmg")!))
     }
+
+    /// SEC-MAE-001: the allow-list compared the host only, so an allowed
+    /// host on a non-standard port passed.
+    @Test("DMG download allow-list rejects an allowed host on a non-443 port")
+    func download_host_allowlist_rejects_port() {
+        #expect(!UpdateChecker.isAllowedDownloadURL(
+            URL(string: "https://github.com:8443/o/r/releases/download/v1/a.dmg")!))
+        #expect(UpdateChecker.isAllowedDownloadURL(
+            URL(string: "https://github.com:443/o/r/releases/download/v1/a.dmg")!))
+    }
 }

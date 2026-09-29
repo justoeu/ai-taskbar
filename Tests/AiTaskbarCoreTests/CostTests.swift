@@ -159,6 +159,28 @@ struct CostTests {
         #expect(m?.inputPer1M == 0.75)
     }
 
+    /// Synthetic table with nested prefixes, so the match order is pinned
+    /// independently of the real price list (PERF-FLU-003).
+    static let nestedPrefixTable: [String: ModelPricing] = [
+        "m":        ModelPricing(input: 1, output: 1),
+        "m-1":      ModelPricing(input: 2, output: 2),
+        "m-1-mini": ModelPricing(input: 3, output: 3),
+        "n-1":      ModelPricing(input: 4, output: 4),
+    ]
+
+    @Test("prefix lookup picks the longest key at every nesting level",
+          arguments: [("m-1-mini-x", 3.0), ("m-1-x", 2.0), ("m-x", 1.0), ("n-1-x", 4.0), ("m-1", 2.0)])
+    func lookup_nested_prefix_order(model: String, expectedInput: Double) {
+        let m = PricingTable.lookup(model, table: Self.nestedPrefixTable)
+        #expect(m?.inputPer1M == expectedInput)
+    }
+
+    @Test("prefix lookup returns nil when no key prefixes the model")
+    func lookup_no_prefix_is_nil() {
+        let m = PricingTable.lookup("x-1", table: Self.nestedPrefixTable)
+        expectTrue(m == nil)
+    }
+
     @Test("lookup returns nil on miss")
     func lookup_nil_on_miss() {
         let m = PricingTable.lookup("nonexistent-model", table: PricingTable.openai)

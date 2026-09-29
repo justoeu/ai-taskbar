@@ -267,9 +267,13 @@ public enum PricingTable {
         // "claude-opus-4-8-thinking"); with overlapping keys ("gpt-5", "gpt-5.4",
         // "gpt-5.4-mini") a first-match scan is nondeterministic because
         // dictionary order is undefined. Pick the most specific (longest) key.
-        return table
-            .filter { model.hasPrefix($0.key) }
-            .max { $0.key.count < $1.key.count }?
-            .value
+        // Two distinct matching keys are both prefixes of `model`, so they
+        // never tie on length. Single pass, no intermediate dictionary.
+        var best: (length: Int, pricing: ModelPricing)?
+        for (key, pricing) in table where model.hasPrefix(key) {
+            let length = key.count
+            if length > (best?.length ?? -1) { best = (length, pricing) }
+        }
+        return best?.pricing
     }
 }

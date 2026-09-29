@@ -9,6 +9,9 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
     case toml(String)
     case disabled(String)
     case other(String)
+    /// A setup state the user resolves (install / sign in to a CLI). Carries
+    /// structure so the App renders it in the user's language.
+    case guidance(VendorGuidance)
 
     public var description: String {
         switch self {
@@ -20,6 +23,7 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
         case .toml(let m):            return "toml: \(m)"
         case .disabled(let m):        return "disabled: \(m)"
         case .other(let m):           return m
+        case .guidance(let g):        return "guidance: \(g.diagnostic)"
         }
     }
 
@@ -37,18 +41,25 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
 
     /// True when retrying might help (network or server transient).
     public var isTransient: Bool {
+        if case .transport = self { return true }
+        guard let s = httpStatus else { return false }
+        return s == 408 || s == 429 || (500...599).contains(s)
+    }
+
+    /// The HTTP status the error carries or is equivalent to: the real one
+    /// for `.http`, `VendorGuidance.httpStatus` for `.guidance`, else nil.
+    public var httpStatus: Int? {
         switch self {
-        case .transport:                  return true
-        case .http(let s, _):             return s == 408 || s == 429 || (500...599).contains(s)
-        default:                          return false
+        case .http(let s, _):   return s
+        case .guidance(let g):  return g.httpStatus
+        default:                return nil
         }
     }
 
     /// True only when the vendor responded with HTTP 429 (Too Many Requests).
     /// Scheduler uses this to extend the next sleep — see RefreshScheduler.
     public var isRateLimited: Bool {
-        if case .http(let s, _) = self, s == 429 { return true }
-        return false
+        httpStatus == 429
     }
 
     /// True only when the vendor responded with HTTP 401 (Unauthorized). Used
@@ -56,8 +67,7 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
     /// generic red error — a 401 on an OAuth vendor (Codex/Claude) means the
     /// access token expired and a fresh login is the recovery, not a retry.
     public var isUnauthorized: Bool {
-        if case .http(let s, _) = self, s == 401 { return true }
-        return false
+        httpStatus == 401
     }
 
     /// Wraps any error into an `AppError`, passing through if it's already one.

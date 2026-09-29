@@ -17,9 +17,17 @@ public protocol AntigravityExecuting: Sendable {
 /// Production implementation that locates and invokes `agy` via `Process`.
 public struct ProcessAntigravityExecutor: AntigravityExecuting {
     public let customPath: String?
+    /// Wall-clock budget for one `agy` run.
+    public let timeout: TimeInterval
+    /// Largest stdout accepted from `agy`; more is rejected, not parsed.
+    public let maximumOutputBytes: Int
 
-    public init(customPath: String? = nil) {
+    public init(customPath: String? = nil,
+                timeout: TimeInterval = 35,
+                maximumOutputBytes: Int = 4 * 1024 * 1024) {
         self.customPath = customPath
+        self.timeout = timeout
+        self.maximumOutputBytes = maximumOutputBytes
     }
 
     /// Resolves the URL to the `agy` binary. Checks customPath, then standard
@@ -54,20 +62,8 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
 
     public func fetchUsageJSON() async throws -> Data {
         guard let exe = resolvedExecutableURL else {
-            throw AppError.credentials(
-                "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado. O executável 'agy' não foi encontrado."
-            )
+            throw AppError.guidance(.antigravityNotFound)
         }
-
-        let process = Process()
-        process.executableURL = exe
-        process.arguments = ["--output-format", "json", "--print", "/usage"]
-        process.standardInput = FileHandle.nullDevice
-
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
 
         // Ensure PATH includes the directories where agy and its tools live
         var env = ProcessInfo.processInfo.environment
@@ -75,76 +71,77 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
         let currentPath = env["PATH"] ?? ""
         let extraPaths = "\(homePath)/.local/bin:/opt/homebrew/bin:/usr/local/bin"
         env["PATH"] = currentPath.isEmpty ? extraPaths : "\(extraPaths):\(currentPath)"
-        process.environment = env
 
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let timedOut = OSAllocatedUnfairLock(initialState: false)
-                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
-                timer.schedule(deadline: .now() + 35)
-                timer.setEventHandler {
-                    timedOut.withLock { $0 = true }
-                    if process.isRunning {
-                        process.terminate()
+        // BoundedProcess drains stdout and stderr concurrently (no two-pipe
+        // deadlock), caps both, and escalates SIGTERM to SIGKILL. The
+        // cancellation handler kills the child when the refresh is cancelled.
+        let options = BoundedProcess.Options(environment: env,
+                                             stderrBytes: Self.stderrBytes,
+                                             maximumStdoutBytes: maximumOutputBytes,
+                                             cancellation: BoundedProcess.Cancellation())
+        let timeout = self.timeout
+        let outcome: BoundedProcess.Outcome = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        continuation.resume(returning: try BoundedProcess.run(
+                            executable: exe,
+                            arguments: ["--output-format", "json", "--print", "/usage"],
+                            timeout: timeout,
+                            options: options))
+                    } catch is CancellationError {
+                        continuation.resume(throwing: CancellationError())
+                    } catch {
+                        continuation.resume(throwing: AppError.io("Failed to run agy: \(error.localizedDescription)"))
                     }
                 }
-                timer.resume()
-
-                do {
-                    try process.run()
-                } catch {
-                    timer.cancel()
-                    continuation.resume(throwing: AppError.io("Failed to run agy: \(error.localizedDescription)"))
-                    return
-                }
-
-                let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                timer.cancel()
-
-                if timedOut.withLock({ $0 }) {
-                    continuation.resume(throwing: AppError.io("Tempo limite esgotado ao consultar o Antigravity (agy). Tente novamente."))
-                    return
-                }
-
-                let errStr = String(data: errData, encoding: .utf8) ?? ""
-                let outStr = String(data: outData, encoding: .utf8) ?? ""
-
-                // Extract clean error message from structured agy JSON if available
-                let structuredError = Self.extractStructuredError(outData: outData, errData: errData)
-
-                if process.terminationStatus != 0 || structuredError != nil {
-                    let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
-                    if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
-                        continuation.resume(throwing: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal para fazer login."))
-                    } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
-                        continuation.resume(throwing: AppError.http(status: 503, body: "Serviço do Google Antigravity temporariamente indisponível. Tente novamente."))
-                    } else if let structured = structuredError {
-                        if structured == "context canceled" {
-                            continuation.resume(throwing: AppError.io("Operação cancelada ou tempo limite esgotado pelo Antigravity."))
-                        } else {
-                            continuation.resume(throwing: AppError.io("agy: \(structured)"))
-                        }
-                    } else {
-                        let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
-                            : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
-                        let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
-                        continuation.resume(throwing: AppError.io("agy falhou (código \(process.terminationStatus)): \(clean)"))
-                    }
-                    return
-                }
-
-                if outStr.contains("not logged in") || outStr.contains("error getting token source") {
-                    continuation.resume(throwing: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal para fazer login."))
-                    return
-                }
-
-                continuation.resume(returning: outData)
             }
+        } onCancel: {
+            options.cancellation?.cancel()
         }
+        if outcome.cancelled { throw CancellationError() }
+        return try classify(outcome)
+    }
+
+    /// stderr is only mined for an error message; keep its head, drop the rest.
+    static let stderrBytes = 64 * 1024
+
+    private func classify(_ outcome: BoundedProcess.Outcome) throws -> Data {
+        if outcome.stdoutExceeded {
+            throw AppError.io("agy output exceeds \(maximumOutputBytes) bytes")
+        }
+        if outcome.timedOut || !outcome.drained {
+            throw AppError.guidance(.antigravityTimedOut)
+        }
+        let outData = outcome.stdout
+        let errData = outcome.stderr
+        let errStr = String(data: errData, encoding: .utf8) ?? ""
+        let outStr = String(data: outData, encoding: .utf8) ?? ""
+
+        // Extract clean error message from structured agy JSON if available
+        let structuredError = Self.extractStructuredError(outData: outData, errData: errData)
+
+        if outcome.status != 0 || outcome.terminationReason != .exit || structuredError != nil {
+            let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
+            if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
+                throw AppError.guidance(.antigravityNotAuthenticated)
+            } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
+                throw AppError.guidance(.antigravityUnavailable)
+            } else if let structured = structuredError {
+                throw AntigravityReportedError.appError(for: structured)
+            }
+            let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
+                : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
+            let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
+            throw AppError.io("agy failed (exit \(outcome.status)): \(clean)")
+        }
+
+        if outStr.contains("not logged in") || outStr.contains("error getting token source") {
+            throw AppError.guidance(.antigravityNotAuthenticated)
+        }
+        return outData
     }
 
     private static func extractStructuredError(outData: Data, errData: Data) -> String? {
@@ -154,13 +151,15 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
             let response: String?
         }
 
+        func reported(_ env: AgyEnvelope) -> String? {
+            AntigravityReportedError.reported(status: env.status, error: env.error,
+                                              response: env.response)
+        }
+
         func inspect(_ data: Data) -> String? {
-            if let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: data) {
-                if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
-                    if let err = env.error, !err.isEmpty { return err }
-                    if let resp = env.response, !resp.isEmpty { return resp }
-                    return "Erro no Antigravity"
-                }
+            if let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: data),
+               let message = reported(env) {
+                return message
             }
             let str = String(data: data, encoding: .utf8) ?? ""
             if let start = str.firstIndex(of: "{"),
@@ -168,16 +167,41 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                 let sub = String(str[start...end])
                 if let subData = sub.data(using: .utf8),
                    let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: subData) {
-                    if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
-                        if let err = env.error, !err.isEmpty { return err }
-                        if let resp = env.response, !resp.isEmpty { return resp }
-                        return "Erro no Antigravity"
-                    }
+                    return reported(env)
                 }
             }
             return nil
         }
 
         return inspect(outData) ?? inspect(errData)
+    }
+}
+
+/// The one mapping for an error `agy` reports in its JSON envelope, shared by
+/// the live run (`ProcessAntigravityExecutor`) and the cached-payload decode
+/// (`GeminiProvider`) so the two cannot drift (DUP-MAE-003).
+enum AntigravityReportedError {
+    /// The one "is this envelope an agy error" rule, for the live run and the
+    /// cached decode alike (BUG-MAE-010): `status == "ERROR"`, or a non-empty
+    /// `error` whatever the status. nil when the envelope reports no error.
+    static func reported(status: String?, error: String?, response: String?) -> String? {
+        guard status == "ERROR" || !(error ?? "").isEmpty else { return nil }
+        return message(error: error, response: response)
+    }
+
+    /// `error` when non-empty, else `response` when non-empty, else a
+    /// generic message.
+    static func message(error: String?, response: String?) -> String {
+        if let error, !error.isEmpty { return error }
+        if let response, !response.isEmpty { return response }
+        return "agy reported an error"
+    }
+
+    /// `context canceled` is guidance (the run was interrupted, retry);
+    /// anything else is an I/O error carrying agy's own words.
+    static func appError(for message: String) -> AppError {
+        message == "context canceled"
+            ? .guidance(.antigravityCanceled)
+            : .io("agy: \(message)")
     }
 }

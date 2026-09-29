@@ -6,16 +6,13 @@
 "about_help" = "Acerca de AI Taskbar";
 "refresh_all_help" = "Actualizar todos los proveedores";
 // El RelativeDateTimeFormatter ya produce "hace X" / "en X" — aquí solo prefijamos el verbo.
-"updated_ago_fmt" = "actualizado %@";
 // Cuenta regresiva hasta el próximo refresh programado. %@ es "4:59" (MM:SS).
 "next_refresh_in_fmt" = "Próx. en %@";
 "refreshing_now" = "Actualizando…";
 // Mostrado durante el back-off de 60 s tras un 429 — indica que estamos
 // esperando a propósito, en lugar de dejar el contador congelado en 0:00.
 "rate_limit_waiting" = "Esperando rate-limit…";
-"config" = "Configuración";
 "open_at_login" = "Abrir al iniciar sesión";
-"quit" = "Salir";
 "config_changed_banner" = "Configuración modificada — reinicia para aplicar.";
 "relaunch" = "Reiniciar";
 "dismiss" = "Descartar";
@@ -66,7 +63,6 @@
 "today_cost_unavailable" = "Hoy: precio no disponible";
 "weekly_cost_unavailable" = "7d: precio no disponible";
 "price_unavailable_short" = "precio no disponible";
-"extra_usage_fmt" = "Uso extra: $%.2f";
 "balance_fmt" = "Saldo: $%.2f";
 "voucher_fmt" = "Voucher: $%.2f";
 "cash_fmt" = "Efectivo: $%.2f";
@@ -77,7 +73,8 @@
 "notif_heavy_usage" = "Uso intenso.";
 "notif_resets_fmt" = "%@ Se reinicia %@.";
 "notif_discreet_title" = "AI Taskbar";
-"notif_discreet_body_fmt" = "Una ventana monitoreada cruzó %d%%.";
+"notif_discreet_body_fmt" = "Una ventana monitoreada cruzó %ld%%.";
+"notif_title_fmt" = "%@ — %@ al %ld%%";
 
 // About panel
 "about_description" = "Monitorea el uso de LLM de Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM) y Kimi (Moonshot) — desde la barra de menú.";
@@ -88,8 +85,6 @@
 "about_built_with" = "Construido con SwiftUI · Licencia MIT";
 // %@ = nombre extraído del certificado Developer ID que firmó el binario.
 "about_developer_fmt" = "Desarrollado por %@";
-"open_config_toml" = "Abrir config.toml";
-"done" = "Hecho";
 
 // History / sparkline
 "building_history" = "Construyendo historial…";
@@ -111,11 +106,14 @@
 "updates_disabled" = "Las verificaciones están desactivadas en config (`[updates] enabled = false`).";
 "updates_bad_repo" = "Define `[updates] owner_repo = \"tuusuario/ai-taskbar\"` en config para activar.";
 "updates_no_stable" = "Solo hay un pre-release; define `include_prereleases = true` para considerarlo.";
+"updates_no_release" = "No se encontró ninguna versión publicada para este repositorio.";
 "updates_no_asset" = "La versión existe pero no tiene un .dmg adjunto.";
+"updates_no_checksum" = "La versión no tiene checksum para este .dmg, así que no se puede verificar. Descárgalo desde la página de la versión.";
+"updates_signature_invalid" = "La app descargada no está firmada por el mismo desarrollador que esta. La descarga se eliminó.";
+"updates_quarantine_failed" = "No se pudo marcar la descarga para la verificación de Gatekeeper. La descarga se eliminó.";
 
 // Model breakdown
 "models_label" = "Modelos";
-"models_tooltip_header" = "Modelos usados hoy:";
 "models_columns_header" = "hoy / últimos 7 días";
 
 // About — cost data source
@@ -131,9 +129,7 @@
 "settings_notifications" = "Notificaciones";
 "settings_updates" = "Actualizaciones";
 "settings_security" = "Seguridad";
-"settings_vendors" = "Proveedores";
 "settings_enabled" = "Habilitado";
-"settings_primary_vendor" = "Proveedor primario";
 "settings_menu_bar_mode" = "Visualización en barra";
 "settings_mb_icon_only" = "Solo icono";
 "settings_mb_icon_and_percent" = "Icono + porcentaje";
@@ -149,7 +145,6 @@
 "settings_updates_enabled" = "Buscar actualizaciones";
 "settings_updates_prereleases" = "Incluir pre-lanzamientos";
 "settings_pin_hosts" = "Hosts con pin (uno por línea)";
-"settings_pin_hosts_hint" = "TLS SPKI pinning, Trust-On-First-Use. Los pines para los hosts conocidos ya vienen en el binario.";
 "settings_pin_audit_only" = "Solo auditar (registrar divergencias, no bloquear)";
 "settings_pin_audit_help" = "Cuando ESTÁ ACTIVO, las divergencias de pin TLS se registran pero se permite la conexión. Útil para diagnosticar rotación de pin. Deja DESACTIVADO en uso normal.";
 "settings_keychain_account" = "Cuenta del Llavero";
@@ -196,7 +191,6 @@
 "settings_api_key_env_help" = "Nombre de la variable de entorno que contiene la clave de API (ej.: ZAI_API_KEY). Expórtala antes de abrir la app, o usa la clave inline arriba como fallback.";
 "settings_plan_tier_help" = "Tier de la suscripción Z.AI. Define el límite de uso usado para calcular el porcentaje. Elige el que corresponde a tu cuenta.";
 "settings_base_url_help" = "Endpoint de la API del proveedor. Usa la variante .cn para Moonshot región China; si no, deja el predeterminado.";
-"settings_primary_vendor_help" = "Proveedor cuyo porcentaje se muestra directo en el icono de la barra (modo icono+porcentaje).";
 "settings_menu_bar_mode_help" = "Cómo se ve el item de la barra: solo icono, icono con porcentaje del proveedor primario, o rotativo entre todos los proveedores habilitados.";
 "settings_refresh_interval_help" = "Con qué frecuencia la app consulta cada proveedor habilitado. Por defecto 300s (5m). Mínimo 15s — intervalos menores aumentan el consumo de cuota de la API.";
 "settings_language_help" = "Fuerza el idioma de la UI independientemente del idioma del sistema. Por defecto sigue al sistema.";
@@ -207,7 +201,6 @@
 "settings_updates_enabled_help" = "Verifica periódicamente el repo por nuevos lanzamientos y avisa cuando hay uno disponible.";
 "settings_updates_prereleases_help" = "Incluye tags beta / rc al buscar actualizaciones. Deja apagado excepto si quieres builds de punta.";
 "settings_pin_hosts_help" = "Hosts adicionales para pin TLS (uno por línea). Los pines de los hosts conocidos ya vienen en el binario — deja vacío a menos que tengas un endpoint privado.";
-"reorder_vendors_help" = "Usa las flechas arriba/abajo en la tarjeta para reordenar. El orden se guarda en este Mac.";
 "move_vendor_up_help" = "Mover esta tarjeta arriba";
 "move_vendor_down_help" = "Mover esta tarjeta abajo";
 "settings_notifications_unavailable_tahoe" = "Deshabilitado en macOS 26 (Tahoe) — el handshake XPC de usernotifications crashea binarios compilados contra SDKs antiguos. Se rehabilitará cuando el pipeline de release recompile en un runner Tahoe.";
@@ -216,7 +209,7 @@
 // Estado público de los servicios
 "service_status_help" = "Estado de los servicios";
 "service_status_ax_label" = "Estado de los servicios";
-"service_status_ax_value_fmt" = "%d afectados, %d desconocidos, %d fuentes automáticas";
+"service_status_ax_value_fmt" = "%ld afectados, %ld desconocidos, %ld fuentes automáticas";
 "service_status_ax_hint" = "Abre el estado público de los servicios de las últimas seis horas.";
 "service_status_title" = "Estado de los servicios";
 "service_status_last_six_hours" = "Últimas 6 horas";
@@ -255,7 +248,7 @@
 "service_status_expand" = "Mostrar detalles de incidentes";
 "service_status_collapse" = "Ocultar detalles de incidentes";
 "service_status_components_fmt" = "Componentes: %@";
-"service_status_duration_fmt" = "%dh %dmin";
+"service_status_duration_fmt" = "%ldh %ldmin";
 "service_status_open_incident" = "Abrir incidente";
 "service_status_open_page" = "Abrir página oficial de estado";
 "service_status_timeline_ax_fmt" = "Cronología de seis horas: %@";
@@ -269,7 +262,7 @@
 "reset_confirm_title" = "¿Usar un reset de límite?";
 "reset_confirm_button" = "Confirmar reset";
 "reset_cancel" = "Cancelar";
-"reset_confirm_message" = "Cuenta: %@\nResets disponibles: %d\nEsta acción consume un reset ganado. Los reintentos usan la misma clave y no consumen un segundo crédito para ella.";
+"reset_confirm_message" = "Cuenta: %@\nResets disponibles: %ld\nEsta acción consume un reset ganado. Los reintentos usan la misma clave y no consumen un segundo crédito para ella.";
 "reset_done" = "Reset confirmado. Actualizando uso…";
 "reset_done_refresh_pending" = "Reset confirmado, pero todavía no se pudo actualizar el uso.";
 "reset_nothing" = "OpenAI indica que no hay un límite elegible para reset.";
@@ -288,8 +281,8 @@
 "credits_balance_fmt" = "Créditos: %@";
 "credits_remaining_fmt" = "%@ de %@ restantes";
 "credits_unlimited" = "Créditos ilimitados";
-"credits_local_msgs_fmt" = "≈ %d–%d mensajes locales con créditos";
-"credits_cloud_msgs_fmt" = "≈ %d–%d mensajes en la nube con créditos";
+"credits_local_msgs_fmt" = "≈ %ld–%ld mensajes locales con créditos";
+"credits_cloud_msgs_fmt" = "≈ %ld–%ld mensajes en la nube con créditos";
 "credits_funding_now" = "Ventana del plan agotada — consumiendo créditos";
 "credits_recalibrate" = "Recalibrar barra de créditos";
 "credits_exhausted" = "Créditos agotados";
@@ -300,6 +293,10 @@
 "gemini_antigravity_settings_hint" = "El monitoreo de cuotas de Gemini requiere Antigravity instalado y autenticado (`agy`). Sin él, solo se puede verificar el estado de la clave API.";
 "gemini_antigravity_not_installed" = "Antigravity no encontrado — para monitorear Gemini, instale y autentique Antigravity (`agy`).";
 "gemini_antigravity_not_logged_in" = "Antigravity no autenticado — ejecute 'agy' en Terminal para iniciar sesión.";
+"guidance_antigravity_required" = "Para monitorear Gemini, instale y autentique Antigravity (`agy`) o defina GEMINI_API_KEY para verificar la clave API.";
+"guidance_antigravity_unavailable" = "Google Antigravity no está disponible temporalmente. Inténtelo de nuevo más tarde.";
+"guidance_antigravity_timed_out" = "Antigravity (`agy`) no respondió a tiempo. Inténtelo de nuevo.";
+"guidance_antigravity_canceled" = "Antigravity canceló la solicitud o se agotó el tiempo de espera.";
 "settings_gemini_agy_path" = "Ruta del ejecutable agy (Antigravity)";
 "settings_gemini_agy_path_help" = "Ruta absoluta al ejecutable 'agy' de Google Antigravity. Dejar en blanco para detección automática en ubicaciones estándar (~/.local/bin/agy, Homebrew, etc.).";
 "settings_gemini_advanced" = "Google AI Studio (Fallback de Clave de API)";
@@ -307,19 +304,22 @@
 
 // Grok / xAI
 "xai_grok_disclaimer" = "Para monitorear Grok, es necesario tener Grok instalado y autenticado.";
+"guidance_grok_cli_required" = "Para monitorear Grok, instale y autentique Grok CLI (`grok login`) o configure la Management Key y el Team ID de xAI en console.x.ai.";
 
 // Analytics & Resumen de Consumo
 "analytics_toolbar_button" = "Resumen de Consumo y Gráficos";
 "analytics_title" = "Consumo y Métricas";
 "analytics_subtitle" = "Visión consolidada entre todos los LLMs";
-"analytics_distribution_title" = "Distribución de Consumo y Costos";
 "analytics_usage" = "Uso";
-"analytics_usage_share" = "Cuota de Uso";
 "analytics_by_llm_title" = "Consumo por LLM";
 "analytics_empty_data" = "No hay consumo registrado en este período.";
 "analytics_busiest_day" = "Día con mayor uso";
+"analytics_quota_percent_fmt" = "%ld%% de la cuota";
 "analytics_sessions" = "sesiones activas";
 "analytics_session_single" = "sesión activa";
+"analytics_models" = "modelos usados";
+"analytics_model_single" = "modelo usado";
+"analytics_cost_7d_only" = "El costo solo se registra para los últimos 7 días. Elige Semana para verlo.";
 "timeframe_daily" = "Hoy";
 "timeframe_weekly" = "Semana";
 "timeframe_monthly" = "Mes";
@@ -332,7 +332,6 @@
 "back" = "Volver";
 "analytics_usage_distribution_title" = "Cuota de Uso (% Cuota)";
 "analytics_cost_distribution_title" = "Consumo en Dólares (USD)";
-"compare_target_label" = "Comparar con:";
 "compare_prev_week_1" = "Semana anterior";
 "compare_prev_week_2" = "Hace 2 semanas";
 "compare_prev_week_3" = "Hace 3 semanas";
@@ -342,15 +341,14 @@
 "compare_prev_month_1" = "Mes anterior";
 "compare_prev_month_2" = "Hace 2 meses";
 "compare_vs_prev_week_1" = "vs. semana anterior";
-"compare_vs_prev_week_fmt" = "vs. hace %d semanas";
+"compare_vs_prev_week_fmt" = "vs. hace %ld semanas";
 "compare_vs_prev_day_1" = "vs. ayer";
-"compare_vs_prev_day_fmt" = "vs. hace %d días";
+"compare_vs_prev_day_fmt" = "vs. hace %ld días";
 "compare_vs_prev_month_1" = "vs. mes anterior";
-"compare_vs_prev_month_fmt" = "vs. hace %d meses";
+"compare_vs_prev_month_fmt" = "vs. hace %ld meses";
 "analytics_delta_quota_help" = "Variación en la utilización promedio de cuota en comparación con el período anterior seleccionado.";
 "analytics_insufficient_history_short" = "Sin datos previos";
 "analytics_insufficient_history_help" = "Aún no hay suficientes datos registrados en el historial para el período comparativo seleccionado.";
-"vs_previous_period_fmt" = "%@ vs. anterior";
 "pin_to_menu_bar_help" = "Fijar en la barra de menús";
 "more_details" = "+ detalles";
 "more_details_help" = "Ver gráficos y métricas de consumo de este LLM";

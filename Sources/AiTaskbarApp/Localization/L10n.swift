@@ -70,8 +70,8 @@ public enum L10n {
     /// every `localizedString` call (50–200 calls/s with the popover open).
     /// The cache is keyed by the current `languageOverride` value — language
     /// changes require a relaunch anyway, so the steady-state is O(1).
-    nonisolated(unsafe) private static var cachedBundle: Bundle?
-    nonisolated(unsafe) private static var cachedBundleLanguage: String?
+    private static var cachedBundle: Bundle?
+    private static var cachedBundleLanguage: String?
 
     public static var bundle: Bundle {
         if let cached = cachedBundle, cachedBundleLanguage == languageOverride {

@@ -84,7 +84,7 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         var titleStarts = Set<String>()
         var unique: [ServiceIncident] = []
         for incident in mapped {
-            let pair = "\(normalized(incident.title))|\(Int64(incident.startedAt.timeIntervalSince1970))"
+            let pair = "\(normalized(incident.title))|\(Int64(saturating: incident.startedAt.timeIntervalSince1970))"
             guard !ids.contains(incident.id), !titleStarts.contains(pair) else { continue }
             ids.insert(incident.id)
             titleStarts.insert(pair)
@@ -268,7 +268,7 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         }
         let id = plainText(item.guid ?? "", limit: 200)
             ?? safeSourceURL(item.link)?.absoluteString
-            ?? "\(normalized(title))-\(Int64(startedAt.timeIntervalSince1970))"
+            ?? "\(normalized(title))-\(Int64(saturating: startedAt.timeIntervalSince1970))"
 
         return ServiceIncident(
             id: id,

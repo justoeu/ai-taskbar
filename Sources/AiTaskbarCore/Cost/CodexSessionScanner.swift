@@ -39,8 +39,12 @@ import Foundation
 ///    `droppedEmptyUsage` counts them rather than letting them vanish.
 ///  - Summing every `last_token_usage` across a file reproduces the file's
 ///    final `total_token_usage`, so per-turn deltas can be bucketed by
-///    timestamp without double counting. (Using `total_token_usage` instead
-///    would count the running total once per event.) Held on all 20 files
+///    timestamp without double counting — once repeated events are dropped:
+///    Codex re-emits a `token_count` whose `total_token_usage` did not move
+///    (1,459 of 23,996 events in a 7-day sample, +6% if billed), so an event
+///    whose running total equals the previous event's is skipped. (Billing
+///    `total_token_usage` itself would count the running total once per
+///    event; it is only compared.) Held on all 20 files
 ///    with data, including forked/resumed sessions, which do not replay turns
 ///    — for the three fields we bill. Codex folds the all-zero-split events
 ///    above into its running `total_tokens` while contributing nothing to the
@@ -64,7 +68,8 @@ public enum CodexSessionScanner {
     /// alone would silently hand the display to the dead sqlite scanner the
     /// moment OpenAI ships a model id we don't price yet.
     internal static func estimateDetailed(now: Date = .init(),
-                                          sessionsDir: URL? = nil)
+                                          sessionsDir: URL? = nil,
+                                          memo: ScanMemo = CodexSessionScanner.memo)
     -> (estimate: CostEstimate, sawUsage: Bool) {
         let sessions = sessionsDir ?? Paths.defaultCodexSessions()
         // `FileManager.enumerator` returns a NON-nil enumerator that yields
@@ -89,9 +94,9 @@ public enum CodexSessionScanner {
                                  note: "Could not enumerate ~/.codex/sessions."), false)
         }
 
-        let cal = Calendar.current
-        let startOfToday = cal.startOfDay(for: now)
-        let sevenDaysAgo = startOfToday.addingTimeInterval(-7 * 86_400)
+        let window = CostWindow(now: now)
+        let startOfToday = window.startOfToday
+        let sevenDaysAgo = window.startOfLast7Days
 
         var totalsToday: [String: ModelUsage] = [:]
         var totalsLast7: [String: ModelUsage] = [:]
@@ -150,7 +155,8 @@ public enum CodexSessionScanner {
                                                  today: fileToday, week: fileWeek))
             }
         }
-        memo.retain(paths: seenPaths)
+        // See ClaudeSessionScanner: never prune to a cancelled walk's partial set.
+        if !Task.isCancelled { memo.retain(paths: seenPaths) }
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.openai)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.openai)
@@ -255,11 +261,31 @@ public enum CodexSessionScanner {
 
             struct Info: Decodable {
                 let last_token_usage: Usage?
+                /// Session running total. Only compared with the previous
+                /// event's, never billed. Decoded leniently: a malformed total
+                /// (a fractional or string field) only removes the dedup
+                /// signal, so the event is kept like one without a total. It
+                /// must not turn the billed line into a decode failure
+                /// (BUG-MAE-004). `last_token_usage` stays strict.
+                let total_token_usage: Usage?
 
-                struct Usage: Decodable {
+                private enum CodingKeys: String, CodingKey {
+                    case last_token_usage, total_token_usage
+                }
+
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    last_token_usage = try c.decodeIfPresent(Usage.self, forKey: .last_token_usage)
+                    // Best-effort by design (see above): nil = no dedup signal.
+                    total_token_usage = try? c.decodeIfPresent(Usage.self, forKey: .total_token_usage)
+                }
+
+                struct Usage: Decodable, Equatable {
                     let input_tokens: Int?
                     let cached_input_tokens: Int?
                     let output_tokens: Int?
+                    let reasoning_output_tokens: Int?
+                    let total_tokens: Int?
                 }
             }
         }
@@ -285,6 +311,7 @@ public enum CodexSessionScanner {
         loss: inout ScanLoss
     ) {
         var currentModel: String?
+        var previousTotal: RolloutLine.Payload.Info.Usage?
         var pending: [(usage: ModelUsage, timestamp: Date?)] = []
         var undated = 0
 
@@ -363,6 +390,15 @@ public enum CodexSessionScanner {
             guard payload.type == "token_count",
                   let last = payload.info?.last_token_usage
             else { continue }
+
+            // Codex re-emits a `token_count` whose running total did not move,
+            // repeating the previous turn's `last_token_usage`. Billing it
+            // again over-reported a real week by ~6% (BUG-ART-005). An
+            // unchanged total means no new tokens, so the event is skipped;
+            // an event without a total carries no such signal and is kept.
+            let total = payload.info?.total_token_usage
+            if let total, total == previousTotal { continue }
+            if let total { previousTotal = total }
 
             // Clamp BOTH ends. `min` alone caps the ceiling and leaves the
             // floor open, which is not a theoretical gap: a line declaring

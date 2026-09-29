@@ -26,10 +26,11 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
 - **Plan label** ("Claude Max 20x", "ChatGPT Plus", "GLM Lite")
 - **Per-window utilization** with color thresholds (green → yellow → red) — for Claude this includes the 5-hour session, 7-day weekly, any **per-model weekly windows** (e.g. Fable), and a **usage-credits** meter (shown with the money spent/limit, e.g. `R$556.68 / R$600.00`). Model windows are parsed generically from the API's `limits[]`, so a newly-launched model appears without an app update.
 - **Reset countdown** ("resets 4 hrs, 12 min"; once the reset passes it shows "reset due — awaiting auto-refresh…" instead of counting back up)
-- **24-hour sparkline** with dashed threshold lines, current value, and peak marker
-- **Daily + 7-day cost estimates** computed locally from your CLI logs
+- **24-hour sparkline** with dashed threshold lines, current value, and peak marker (one sample per live network reading; cached or stale replays are not re-plotted)
+- **Daily + 7-day cost estimates** computed locally from your CLI logs (7 days = today plus the six previous local days, the same window for every source)
 - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
 - **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
+- **Consumption & Analytics view** — usage share and cost share across LLMs for Today / Week / Month. Cost covers only what the local scanners keep (today and the last 7 days), so **Month shows usage but no cost** rather than relabelling the 7-day figure, and never calls a vendor idle ("no recent usage") for lack of a cost it cannot see. Today and Week, including sessions and the "vs previous period" delta, use the same local calendar days as the cost (today since midnight; today plus the six previous days). OpenRouter's 30-day activity and xAI's billing-cycle spend stay on their own cards, which name those windows, and are never counted as 7-day cost. Vendors without a session counter show the number of models used, not "sessions"
 - **Service health & status monitor** — Live popover panel monitoring upstream operational status, active incidents, and scheduled maintenance across providers (Claude, OpenAI, Gemini, Grok, DeepSeek, Kimi, OpenRouter) with direct links to official status pages
 - **Click the card header** (chevron + name + empty space) to expand/collapse; dashboard / reorder / refresh stay on the trailing buttons
 - **Reorder cards** with ↑ / ↓ on each header (order saved on this Mac)
@@ -80,7 +81,11 @@ The app runs on macOS 13+ (Ventura). Building the app requires Swift 6.2+; Comma
 
 ### Option 3 — Check for updates from inside the app
 
-Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly, compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
+Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly (or the release list when `include_prereleases = true`, picking the newest non-draft by SemVer precedence, so `beta10` beats `beta9`), compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
+
+The app also checks on its own, once per calendar day — at launch if it has not checked today, and at the start of each new day while running (or 24 h after the last check, whichever comes first). It only reports what it finds; nothing is downloaded without your click. An invalid `owner_repo` counts as that day's attempt (About shows the error), so it is retried the next day, not every minute. `[updates] enabled = false` turns this off.
+
+The download only follows redirects to GitHub's release hosts. Before the DMG is shown, the app checks it against the release's `checksums-*.txt` (a release without one is refused), confirms the app inside is signed by the same Developer ID team as the installed app, and marks the file with `com.apple.quarantine` so Gatekeeper checks it when you open it. If any step fails, the download is deleted.
 
 ## Setup per provider
 
@@ -276,7 +281,7 @@ AI Taskbar supports two modes for xAI:
      - **Subscription tier:** Identifies active tier (e.g. `SuperGrok Heavy`).
      - **Weekly quota window:** Current utilization percentage (e.g. `3% used`) and reset time.
      - **Prepaid balance:** Available balance (e.g. `$40.00 available`).
-     - **Disclaimer:** An in-card informational notice reminds you that Grok CLI must remain installed and logged in: *"Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado."*
+     - **Disclaimer:** An in-card informational notice reminds you, in the app's language, that Grok CLI must remain installed and logged in (e.g. *"To monitor Grok, Grok must be installed and authenticated."*).
    - **Setup:** Simply install the Grok CLI and run `grok login` in Terminal. No manual API keys or team IDs needed in `config.toml`.
    - **Recovery / 401:** If the token expires or is missing, the card displays a **Re-login** button that executes `grok login`.
 
@@ -294,7 +299,7 @@ AI Taskbar supports two modes for xAI:
 AI Taskbar supports two monitoring paths for Google Gemini:
 
 1. **Antigravity CLI mode (default & recommended):**
-   - **How it works:** AI Taskbar executes the local Antigravity CLI in the background (`agy --output-format json --print "/usage"`) with a safe 15-second budget and closed standard input.
+   - **How it works:** AI Taskbar executes the local Antigravity CLI in the background (`agy --output-format json --print "/usage"`) with a 35-second budget, closed standard input, stdout capped at 4 MiB (a larger answer is rejected, not parsed) and stderr truncated to 64 KiB.
    - **Binary auto-detection:** Automatically discovers `agy` in standard install paths:
      - `~/.local/bin/agy`
      - `/opt/homebrew/bin/agy`
@@ -305,7 +310,7 @@ AI Taskbar supports two monitoring paths for Google Gemini:
      - **Gemini (5h):** Session quota window utilization and remaining fraction.
      - **Gemini (Weekly):** Weekly quota window utilization and reset countdown.
      - **Third-party models (5h & Weekly):** Tracks secondary quotas for third-party models accessed through Antigravity (e.g. Claude).
-     - **Disclaimer:** When Antigravity is unauthenticated or missing, the card shows a clear notice: *"Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."*
+     - **Disclaimer:** When Antigravity is unauthenticated or missing, the card shows a clear notice in the app's language (e.g. *"To monitor Gemini quotas, Antigravity must be installed and authenticated."*). A quota bucket that `agy` reports without a `remaining_fraction` draws no bar rather than being shown as 100% remaining.
    - **Setup:** Install the Antigravity CLI and log in by running `agy` in Terminal.
    - **Recovery / 401:** If the session is unauthenticated, clicking the **Re-login** button runs `agy` in Terminal to re-authenticate.
 
@@ -409,6 +414,8 @@ The **`RefreshScheduler`** fires every `refresh_interval_seconds` (default 300s 
 
 If any vendor's last refresh ended in HTTP 429, the scheduler adds **`RefreshScheduler.rateLimitBackoff` = 60 s** to the next sleep. The back-off is read via `UsageStore.hasRateLimitedVendor` between cycles and stays applied for as long as at least one vendor keeps returning 429 — once they clear, the cadence drops back to the configured interval automatically. During the back-off the popover countdown shows "Aguardando rate-limit…" (anchored on `UsageStore.isInRateLimitBackoff`) so the header never silently freezes at 0:00. Independently, each `VendorViewModel` tracks consecutive 429s and refuses new network work until its own 5/10/20/40/60-minute cooldown expires; this keeps a throttled provider from blocking normal refreshes for the others.
 
+Every usage window's percentage is sanitized when it is built and again when it is read back from the cache: NaN becomes 0 and the value is clamped to 0–1000%, so a vendor reporting overuse still shows above 100% but a corrupt or hostile number cannot reach the bars or the menu-bar gauge.
+
 The per-vendor `DiskCache` TTL is wired to `max(15, refresh_interval_seconds − 5)` in `AppEnvironment`. The 5 s margin means a scheduled tick at T=interval always sees an expired cache (`age ≈ interval > ttl`), so the scheduler doesn't need `forceRefresh: true` to defeat the cache. Popover opens between scheduled refreshes still serve from cache.
 
 ## Configuration
@@ -436,7 +443,7 @@ notify_at = [90, 100]                # percent thresholds that trigger a notific
 [updates]
 # enabled = true
 # owner_repo = "justoeu/ai-taskbar"  # GitHub <owner>/<repo>
-# include_prereleases = false
+# include_prereleases = false        # true: also offer the newest beta/rc
 
 [security]
 # pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com", "management-api.x.ai"]
@@ -486,12 +493,15 @@ api_key_env = "DEEPSEEK_API_KEY"
 enabled = true
 prefer_grok_cli = true          # default true: reads ~/.grok/auth.json for SuperGrok Heavy quota
 # grok_auth_path = "/Users/you/.grok/auth.json"
+# grok_base_url = "https://cli-chat-proxy.grok.com"   # host-allowlisted; anything else falls back
 # Management API fallback (if prefer_grok_cli = false):
 # api_key_env = "XAI_MANAGEMENT_KEY"
 # api_key = "xai-..."
 # team_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 # base_url = "https://management-api.x.ai"
 ```
+
+Each `notify_at` threshold notifies once per usage window. A notification that macOS failed to deliver is retried on the next refresh; one that failed while notifications were turned off for the app is sent on a later refresh once you allow them again.
 
 ## Where data lives
 
@@ -525,6 +535,7 @@ the same item. No telemetry, no remote logging.
 - Optional **TLS pinning** with Trust-On-First-Use SPKI hashes for paranoid setups.
 - Hardened-runtime entitlements ready for Developer ID signing (see [`Resources/entitlements.plist`](Resources/entitlements.plist)).
 - TOCTOU symlink refusal on cache + support directories.
+- Credential, config and cache writes (`AtomicFileWrite`) refuse a symlinked destination file: the write fails and both the link and its target are left untouched. For a symlinked `config.toml` this means new vendor sections are not appended on launch (the refusal is logged) and Settings cannot save; edit the link's target by hand.
 - All audit findings from a 5-agent code review are tracked and addressed; see `CLAUDE.md` for the policy.
 
 ## Build from source
@@ -635,8 +646,9 @@ git checkout v0.16.1 && make publish && git checkout main
 
 It then builds, signs and notarizes **two DMGs** —
 `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon, smaller) and the universal
-`ai-taskbar-X.Y.Z.dmg` — uploads both plus a `checksums-X.Y.Z.txt`, and flips
-the release from draft to published. The in-app update checker picks the DMG
+`ai-taskbar-X.Y.Z.dmg` — uploads both plus a `checksums-X.Y.Z.txt`, checks that the release now lists
+all three (`make release-assets-check`), and only then flips the release from
+draft to published. The in-app update checker picks the DMG
 matching the user's architecture (drafts are invisible to it, so users never
 see an asset-less release).
 

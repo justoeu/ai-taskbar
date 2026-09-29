@@ -54,7 +54,7 @@ extension GeminiModelsResponse {
                                         resetsAt: nil,
                                         detail: "API key valid (no models visible)"),
                     modelCount: 0,
-                    disclaimer: "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
+                    disclaimer: .antigravityRequired
                 )
             }
         } else {
@@ -68,7 +68,7 @@ extension GeminiModelsResponse {
                                 resetsAt: nil,
                                 detail: detail),
             modelCount: count,
-            disclaimer: "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
+            disclaimer: .antigravityRequired
         )
     }
 }
@@ -127,13 +127,11 @@ public struct AntigravityBucket: Decodable, Sendable {
 }
 
 extension AntigravityUsageResponse {
-    public func toSnapshot(disclaimer: String? = nil) -> GeminiSnapshot {
+    public func toSnapshot() -> GeminiSnapshot {
         var fiveHour: UsageWindow?
         var weekly: UsageWindow?
         var thirdParty5Hour: UsageWindow?
         var thirdPartyWeekly: UsageWindow?
-
-        let resolvedDisclaimer = disclaimer ?? "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
 
         if let groups = command?.data?.groups {
             for group in groups {
@@ -147,11 +145,18 @@ extension AntigravityUsageResponse {
                     let is5h = bWin == "5h" || bId.contains("5h")
                     let isWeekly = bWin == "weekly" || bId.contains("weekly")
 
-                    let rem = bucket.remainingFraction ?? 1.0
-                    let consumedFraction = max(0.0, min(1.0, 1.0 - rem))
+                    // A bucket with no fraction is UNKNOWN, not full: a
+                    // proto3 encoder omits a zero double, so the `?? 1.0`
+                    // default could paint an exhausted bucket as 0% used.
+                    // No number, no bar (same rule as Codex credits).
+                    guard let rawRem = bucket.remainingFraction else { continue }
+                    // Clamp once: the detail line and the consumed fraction
+                    // must agree, and an unclamped 1e300 trapped in `Int(_:)`.
+                    let rem = rawRem.isNaN ? 1.0 : max(0.0, min(1.0, rawRem))
+                    let consumedFraction = 1.0 - rem
                     let util = consumedFraction * 100.0
                     let resetsAt = bucket.resetTime.flatMap(ISO8601Parsing.parse)
-                    let remPercentInt = Int((rem * 100.0).rounded())
+                    let remPercentInt = Int(saturating: (rem * 100.0).rounded())
                     let detail = "\(remPercentInt)% remaining"
 
                     if isGemini {
@@ -191,7 +196,7 @@ extension AntigravityUsageResponse {
             weekly: weekly,
             thirdParty5Hour: thirdParty5Hour,
             thirdPartyWeekly: thirdPartyWeekly,
-            disclaimer: resolvedDisclaimer,
+            disclaimer: .antigravityRequired,
             isAntigravityActive: true
         )
     }

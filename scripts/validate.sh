@@ -103,28 +103,20 @@ if ! cmp -s CLAUDE.md AGENTS.md; then
 fi
 ok "CLAUDE.md ≡ AGENTS.md"
 
-# The former mixed Swift 6.3.2 / standalone Testing 0.99.0 stack
-# mis-evaluated Bool sub-expressions. These forms all PASSED when false —
-# verified by running them, not by reading the macro:
-#
-#   #expect(false == true)                    #expect(opt ?? false)
-#   #expect(opt == Optional(false))           #expect(opt.map { !$0 } ?? false)
-#
-# and `#expect(!(opt ?? true))` is inverted outright: it FAILS where plain
-# Swift evaluates the same expression to true. An assert written any of these
-# ways defends nothing. Use expectTrue/expectFalse from AiTaskbarTestSupport,
-# which take a plain Bool parameter so the condition is evaluated as ordinary
-# Swift before the macro sees it. Bare `#expect(flag)` / `#expect(!flag)` on a
-# non-optional Bool is fine, as are non-Bool comparisons.
-vacuous_re='#expect\((.*== *(true|false)\)|.*\?\? *(true|false)\)|.*== *Optional\()'
-# `|| true` is load-bearing under `set -o pipefail`: grep exits 1 when it finds
-# nothing, which is the PASSING case here and would otherwise abort the script.
-vacuous=$(grep -rnE "$vacuous_re" Tests/ 2>/dev/null | wc -l | tr -d ' ' || true)
-if [ "${vacuous:-0}" -gt 0 ]; then
-    grep -rnE "$vacuous_re" Tests/ | head -5 || true
-    fail "$vacuous vacuous #expect form(s) — use expectTrue/expectFalse (AiTaskbarTestSupport)"
+# Vacuous-#expect ratchet + trapping Double->Int ratchet for *WireTypes.swift +
+# 64-bit %ld / unique-key / en-pt-BR-es parity ratchet for Localizable.strings +
+# 64-bit %ld ratchet for inline String(format: "...") literals in Sources/.
+# All live in one script shared with ci.yml so the two cannot drift, and the
+# self-test runs first: it plants every form each check must reject or accept
+# in a scratch tree, so a regex that silently stopped matching fails here
+# instead of reporting a clean tree. See the scripts for the rationale.
+if ! selftest_out=$(scripts/source-ratchet-selftest.sh 2>&1); then
+    echo "$selftest_out"
+    fail "source-ratchet self-test failed — the gate itself is broken"
 fi
-ok "no vacuous #expect forms"
+ok "source-ratchet self-test (planted forms caught, allowed forms pass)"
+scripts/check-source-ratchets.sh \
+    || fail "source ratchet — use expectTrue/expectFalse / Int(saturating:) / Int(checkedTruncating:) / %ld"
 
 # Warnings ratchet.
 #

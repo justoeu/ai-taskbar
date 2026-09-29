@@ -87,4 +87,32 @@ struct AnalyticsModelsTests {
         #expect(inRange.first?.max == 20)
         #expect(inRange.last?.max == 30)
     }
+
+    // MARK: - "No recent usage" needs a cost source (BUG-MAE-002)
+
+    @Test("Month (no cost source) never claims a vendor had no recent usage")
+    func month_without_cost_source_is_not_idle() {
+        // A pay-per-token vendor on Month: cost 0 and no models by
+        // construction, no quota window, no peak, no lifetime figure.
+        let summary = VendorAnalyticsSummary(
+            vendor: .anthropic, totalCostUSD: 0, totalUsagePercent: 0,
+            isCostAvailable: false)
+        #expect(!summary.showsNoRecentUsage)
+    }
+
+    @Test("Day/Week with a cost source and nothing spent or used is idle")
+    func idle_with_cost_source_shows_no_recent_usage() {
+        let summary = VendorAnalyticsSummary(
+            vendor: .anthropic, totalCostUSD: 0, totalUsagePercent: 0,
+            isCostAvailable: true)
+        #expect(summary.showsNoRecentUsage)
+    }
+
+    @Test("a vendor with cost in the timeframe is not idle")
+    func cost_in_timeframe_is_not_idle() {
+        let summary = VendorAnalyticsSummary(
+            vendor: .anthropic, totalCostUSD: 3, totalUsagePercent: 0,
+            costByModel: ["claude-opus-5-5": 3])
+        #expect(!summary.showsNoRecentUsage)
+    }
 }

@@ -11,12 +11,13 @@ struct CodexSessionScannerTests {
                          input: Int,
                          cached: Int,
                          output: Int,
-                         reasoning: Int = 0) -> String {
+                         reasoning: Int = 0,
+                         runningTotal: Int? = nil) -> String {
         let ctx = """
         {"timestamp":"\(timestamp)","type":"turn_context","payload":{"model":"\(model)","reasoning_effort":"high"}}
         """
         let tc = """
-        {"timestamp":"\(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":\(input),"cached_input_tokens":\(cached),"output_tokens":\(output),"reasoning_output_tokens":\(reasoning),"total_tokens":\(input + output)},"last_token_usage":{"input_tokens":\(input),"cached_input_tokens":\(cached),"output_tokens":\(output),"reasoning_output_tokens":\(reasoning),"total_tokens":\(input + output)}}}}
+        {"timestamp":"\(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":\(input),"cached_input_tokens":\(cached),"output_tokens":\(output),"reasoning_output_tokens":\(reasoning),"total_tokens":\(runningTotal ?? (input + output))},"last_token_usage":{"input_tokens":\(input),"cached_input_tokens":\(cached),"output_tokens":\(output),"reasoning_output_tokens":\(reasoning),"total_tokens":\(input + output)}}}}
         """
         return ctx + "\n" + tc + "\n"
     }
@@ -307,10 +308,79 @@ struct CodexSessionScannerTests {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let ts = iso.string(from: now)
-        let jsonl = rollout(model: "gpt-5.5", timestamp: ts, input: Int.max, cached: 0, output: 0)
-            + rollout(model: "gpt-5.5", timestamp: ts, input: Int.max, cached: 0, output: 0)
+        // Distinct running totals: two genuine turns, not one event repeated.
+        let jsonl = rollout(model: "gpt-5.5", timestamp: ts, input: Int.max, cached: 0, output: 0,
+                            runningTotal: 1)
+            + rollout(model: "gpt-5.5", timestamp: ts, input: Int.max, cached: 0, output: 0,
+                      runningTotal: 2)
         let result = scan(jsonl, now: now)
         #expect(result.today["gpt-5.5"]?.inputTokens == Int.max)
+    }
+
+    /// BUG-ART-005. Codex re-emits a `token_count` whose `total_token_usage`
+    /// did not move (and whose `last_token_usage` repeats the previous turn).
+    /// Billing each one counted the same turn twice: +6% on a real week.
+    @Test("a repeated token_count with an unchanged running total is billed once")
+    func repeated_token_count_is_billed_once() {
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let turn = rollout(model: "gpt-5.5", timestamp: iso.string(from: now),
+                           input: 1000, cached: 400, output: 100, runningTotal: 1100)
+        let repeatedEvent = String(turn.split(separator: "\n")[1]) + "\n"
+        let result = scan(turn + repeatedEvent, now: now)
+        #expect(result.today["gpt-5.5"]?.inputTokens == 600)
+        #expect(result.today["gpt-5.5"]?.cacheReadTokens == 400)
+        #expect(result.today["gpt-5.5"]?.outputTokens == 100)
+    }
+
+    /// The dedup keys on the running total, not on the per-turn numbers: two
+    /// genuine turns that happen to be the same size advance the total and
+    /// must both be billed.
+    @Test("an identical turn that advances the running total is billed again")
+    func same_last_with_advanced_total_is_billed() {
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let ts = iso.string(from: now)
+        let jsonl = rollout(model: "gpt-5.5", timestamp: ts,
+                            input: 1000, cached: 0, output: 100, runningTotal: 1100)
+            + rollout(model: "gpt-5.5", timestamp: ts,
+                      input: 1000, cached: 0, output: 100, runningTotal: 2200)
+        let result = scan(jsonl, now: now)
+        #expect(result.today["gpt-5.5"]?.inputTokens == 2000)
+        #expect(result.today["gpt-5.5"]?.outputTokens == 200)
+    }
+
+    /// Events without `total_token_usage` carry no signal to dedup on, so
+    /// they keep being billed individually (the pre-existing behaviour).
+    @Test("token_count events without a running total are never deduped")
+    func events_without_total_are_not_deduped() {
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let ts = iso.string(from: now)
+        let ctx = #"{"timestamp":"\#(ts)","type":"turn_context","payload":{"model":"gpt-5.5"}}"#
+        let tc = #"{"timestamp":"\#(ts)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":500,"cached_input_tokens":0,"output_tokens":50}}}}"#
+        let result = scan([ctx, tc, tc].joined(separator: "\n") + "\n", now: now)
+        #expect(result.today["gpt-5.5"]?.inputTokens == 1000)
+    }
+
+    /// BUG-MAE-004: `total_token_usage` is only a dedup signal, never billed,
+    /// yet it was decoded with the same strict `Int` fields as the billed
+    /// `last_token_usage`. A fractional or string running total turned the
+    /// whole token_count line into a decode failure and its turn vanished.
+    @Test("a malformed running total does not drop the billed turn")
+    func malformed_total_keeps_billed_turn() {
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let ts = iso.string(from: now)
+        let ctx = #"{"timestamp":"\#(ts)","type":"turn_context","payload":{"model":"gpt-5.5"}}"#
+        let tc = #"{"timestamp":"\#(ts)","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000.5,"total_tokens":"n/a"},"last_token_usage":{"input_tokens":500,"cached_input_tokens":0,"output_tokens":50}}}}"#
+        let result = scan([ctx, tc].joined(separator: "\n") + "\n", now: now)
+        #expect(result.loss.decodeFailures == 0)
+        #expect(result.today["gpt-5.5"]?.inputTokens == 500)
     }
 
     /// Regression: a line that clears the byte prefilter but fails to decode
@@ -408,6 +478,59 @@ struct CodexSessionScannerEstimateTests {
         #expect(est.usdLast7Days >= est.usdToday)
         #expect(est.modelBreakdownToday["gpt-5.6-sol"] != nil)
         #expect(est.isApproximate)
+    }
+
+    /// BUG-ART-006: the same "today + six previous local days" window as the
+    /// Claude and opencode scanners; `startOfToday - 7 * 86_400` kept eight.
+    @Test("the 7-day window starts at local midnight six days before today")
+    func seven_day_window_boundary() throws {
+        let cal = Calendar.current
+        let now = try #require(cal.date(from: DateComponents(year: 2026, month: 3, day: 18, hour: 12)))
+        let windowStart = try #require(cal.date(byAdding: .day, value: -6,
+                                                to: cal.startOfDay(for: now)))
+        let iso = ISO8601DateFormatter()
+        func turn(at date: Date, input: Int) -> String {
+            let ts = iso.string(from: date)
+            return """
+            {"timestamp":"\(ts)","type":"turn_context","payload":{"model":"gpt-5.5"}}
+            {"timestamp":"\(ts)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":\(input),"cached_input_tokens":0,"output_tokens":0}}}}
+
+            """
+        }
+        let inside = turn(at: windowStart.addingTimeInterval(1), input: 1_000_000)
+        let outside = turn(at: windowStart.addingTimeInterval(-1), input: 2_000_000)
+        let both = try makeTree(files: [inside, outside])
+        let insideOnly = try makeTree(files: [inside])
+        defer {
+            try? FileManager.default.removeItem(at: both)
+            try? FileManager.default.removeItem(at: insideOnly)
+        }
+        let est = CodexSessionScanner.estimateDetailed(now: now, sessionsDir: both, memo: ScanMemo()).estimate
+        let reference = CodexSessionScanner.estimateDetailed(now: now, sessionsDir: insideOnly,
+                                                             memo: ScanMemo()).estimate
+        #expect(reference.usdLast7Days > 0)
+        #expect(est.usdLast7Days == reference.usdLast7Days)
+    }
+
+    /// LEAK-FAN-002: a cancelled walk must not prune the memo to the partial
+    /// set of files it reached.
+    @Test("a cancelled scan does not evict memo entries it never reached")
+    func cancelled_scan_keeps_memo() async throws {
+        let ts = ISO8601DateFormatter().string(from: Date())
+        let line = """
+        {"timestamp":"\(ts)","type":"turn_context","payload":{"model":"gpt-5.5"}}
+
+        """
+        let root = try makeTree(files: [line, line])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let memo = ScanMemo()
+        _ = CodexSessionScanner.estimateDetailed(sessionsDir: root, memo: memo)
+        #expect(memo.count == 2)
+        await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            _ = CodexSessionScanner.estimateDetailed(sessionsDir: root, memo: memo)
+        }.value
+        #expect(memo.count == 2)
     }
 
     @Test("estimate on a missing directory returns the no-directory note")

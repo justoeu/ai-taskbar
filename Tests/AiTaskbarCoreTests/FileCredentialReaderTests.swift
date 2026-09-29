@@ -139,6 +139,8 @@ struct FileCredentialReaderTests {
         } catch let err as AppError {
             if case .schema(let msg) = err {
                 #expect(msg.contains("tokens"))
+            } else {
+                Issue.record("expected .schema, got \(err)")
             }
         } catch {
             Issue.record("expected AppError")
@@ -159,6 +161,8 @@ struct FileCredentialReaderTests {
         } catch let err as AppError {
             if case .schema(let msg) = err {
                 #expect(msg.contains("access_token"))
+            } else {
+                Issue.record("expected .schema, got \(err)")
             }
         } catch {
             Issue.record("expected AppError")

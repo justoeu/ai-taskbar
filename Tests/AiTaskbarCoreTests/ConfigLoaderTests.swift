@@ -82,6 +82,31 @@ struct ConfigLoaderTests {
         try? FileManager.default.removeItem(at: tmp)
     }
 
+    /// BUG-MAE-008: an existing config.toml that cannot be read (here 0o000)
+    /// was treated as empty, so every default section was appended to "" and
+    /// the file was atomically replaced — the user's edits were gone. Only a
+    /// missing file may be skipped; any other read failure must throw.
+    @Test("ensureAllVendorSections throws on an unreadable config instead of rewriting it")
+    func ensure_unreadable_config_throws_and_keeps_file() throws {
+        let path = tempConfigPath()
+        let original = "[anthropic]\nenabled = false # user edit\n"
+        try original.write(to: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o000)],
+                                              ofItemAtPath: path.path)
+        defer { try? FileManager.default.removeItem(at: tmp) } // test cleanup
+        let loader = ConfigLoader(path: path)
+        var threwIO = false
+        do {
+            _ = try loader.ensureAllVendorSections()
+        } catch let err as AppError {
+            if case .io = err { threwIO = true }
+        }
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o600)],
+                                              ofItemAtPath: path.path)
+        #expect(threwIO)
+        #expect(try String(contentsOf: path, encoding: .utf8) == original)
+    }
+
     @Test("save + load round-trip preserves vendor flags")
     func save_load_round_trip() throws {
         let path = tempConfigPath()

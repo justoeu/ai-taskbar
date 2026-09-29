@@ -49,8 +49,9 @@ public enum JWT {
         case (.int(let i),    is Int64.Type):   return i as? T
         case (.int(let i),    is Double.Type):  return Double(i) as? T
         case (.double(let d), is Double.Type):  return d as? T
-        case (.double(let d), is Int.Type):     return Int(d) as? T
-        case (.double(let d), is Int64.Type):   return Int64(d) as? T
+        // A non-representable number (1e300) reads as an absent claim.
+        case (.double(let d), is Int.Type):     return Int(checkedTruncating: d) as? T
+        case (.double(let d), is Int64.Type):   return Int64(checkedTruncating: d) as? T
         case (.bool(let b),   is Bool.Type):    return b as? T
         default:                                 return nil
         }

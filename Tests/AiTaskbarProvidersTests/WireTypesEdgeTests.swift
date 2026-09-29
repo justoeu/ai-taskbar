@@ -310,10 +310,14 @@ struct WireTypesEdgeTests {
         #expect(snap.weekly == nil)
         #expect(snap.thirdParty5Hour == nil)
         #expect(snap.thirdPartyWeekly == nil)
-        #expect(snap.disclaimer != nil)
+        expectTrue(snap.disclaimer == .antigravityRequired)
     }
 
-    @Test("Antigravity bucket with nil remainingFraction defaults to 0% utilization")
+    // Deliberate behavior change (BUG-ART-009): this test used to pin the
+    // `?? 1.0` default, i.e. a bucket with no fraction read "100% remaining".
+    // A proto3 encoder omits a zero double, so a missing fraction may mean
+    // EXHAUSTED; unknown now draws no bar instead of guessing either way.
+    @Test("Antigravity bucket with nil remainingFraction produces no window")
     func antigravity_nil_remaining_fraction() throws {
         let body = #"""
         {
@@ -333,12 +337,9 @@ struct WireTypesEdgeTests {
         }
         """#
         let parsed = try JSONDecoder().decode(AntigravityUsageResponse.self, from: Data(body.utf8))
-        let snap = parsed.toSnapshot(disclaimer: "Custom Disclaimer")
+        let snap = parsed.toSnapshot()
         expectTrue(snap.isAntigravityActive)
-        #expect(snap.disclaimer == "Custom Disclaimer")
-        #expect(snap.fiveHour?.label == "Gemini (5h)")
-        #expect(snap.fiveHour?.utilizationPercent == 0)
-        #expect(snap.fiveHour?.detail == "100% remaining")
+        expectTrue(snap.fiveHour == nil)
     }
 
     @Test("Z.AI envelope with nil data produces fallback snapshot")

@@ -248,13 +248,11 @@ public struct GrokSettingsResponse: Decodable, Encodable, Sendable, Equatable {
 }
 
 extension GrokBillingResponse {
-    public static let defaultDisclaimer = "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado."
-
-    public func toSnapshot(planLabel: String? = nil, disclaimer: String? = nil) -> XAISnapshot {
+    public func toSnapshot(planLabel: String? = nil) -> XAISnapshot {
         guard let cfg = config else {
             return XAISnapshot(
                 planLabel: planLabel ?? "SuperGrok",
-                disclaimer: disclaimer ?? Self.defaultDisclaimer
+                disclaimer: .grokCLIRequired
             )
         }
 
@@ -283,12 +281,12 @@ extension GrokBillingResponse {
             )
         }()
 
+        // Only the reported on-demand spend. `creditUsagePercent` is the weekly
+        // subscription utilization and `prepaidBalance` is what REMAINS, so
+        // their product is not money spent; with no report there is no figure.
         let prepaidUsedUSD: Double? = {
-            if let used = cfg.onDemandUsed?.usd, used > 0 { return used }
-            if let pct = cfg.creditUsagePercent, let balance = prepaidUSD, pct > 0 {
-                return (balance * pct) / 100.0
-            }
-            return nil
+            guard let used = cfg.onDemandUsed?.usd, used > 0 else { return nil }
+            return used
         }()
 
         return XAISnapshot(
@@ -301,7 +299,7 @@ extension GrokBillingResponse {
             spendingLimitUSD: nil,
             prepaidUsedUSD: prepaidUsedUSD,
             billingCycleLabel: nil,
-            disclaimer: disclaimer ?? Self.defaultDisclaimer
+            disclaimer: .grokCLIRequired
         )
     }
 }
@@ -359,7 +357,7 @@ extension XAICachedPayload {
 
         var cycleLabel: String?
         if let y = preview?.billingCycle?.year, let m = preview?.billingCycle?.month {
-            cycleLabel = String(format: "%04d-%02d", y, m)
+            cycleLabel = String(format: "%04ld-%02ld", y, m)
         }
 
         let balanceWindow: UsageWindow? = {
@@ -402,7 +400,7 @@ extension XAICachedPayload {
             spendingLimitUSD: limitUSD,
             prepaidUsedUSD: prepaidUsedUSD,
             billingCycleLabel: cycleLabel,
-            disclaimer: GrokBillingResponse.defaultDisclaimer
+            disclaimer: .grokCLIRequired
         )
     }
 }

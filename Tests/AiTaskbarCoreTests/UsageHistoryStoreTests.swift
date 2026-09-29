@@ -12,6 +12,27 @@ struct UsageHistoryStoreTests {
         try Paths.ensureDir(tmp)
     }
 
+    /// CQ-AUR-003: a failing append used to vanish without trace. It stays
+    /// best-effort (no throw, no crash) but the failure is now observable.
+    @Test("append into an unwritable directory reports failure without crashing")
+    func append_unwritable_dir_reports_failure() throws {
+        let blocker = tmp.appendingPathComponent("not-a-dir")
+        try Data("x".utf8).write(to: blocker)
+        let store = UsageHistoryStore(vendor: .anthropic,
+                                      baseDir: blocker.appendingPathComponent("history"))
+        let ok = store.append(maxUtilization: 12)
+        #expect(!ok)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    @Test("append into a writable directory reports success")
+    func append_writable_dir_reports_success() {
+        let store = UsageHistoryStore(vendor: .anthropic, baseDir: tmp)
+        let ok = store.append(maxUtilization: 12)
+        #expect(ok)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
     @Test("append then load returns the same sample")
     func append_then_load_returns_sample() async throws {
         let store = UsageHistoryStore(vendor: .anthropic, baseDir: tmp)

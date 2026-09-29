@@ -98,12 +98,22 @@ public final class UsageStore: ObservableObject {
         return v
     }
 
+    /// Menu-bar space check consulted before pinning, given the current pin
+    /// count. Injected so the denied branch is testable without a live screen;
+    /// production uses `PinnedStatusItemManager.shared`.
+    public typealias PinSpaceCheck = @MainActor (Int) -> PinnedStatusItemManager.SpaceCheckResult
+    private let pinSpaceCheck: PinSpaceCheck
+
     public init(vendors: [VendorViewModel],
                 primary: VendorId?,
                 thresholds: ThresholdsConfig = .init(),
                 refreshIntervalSeconds: TimeInterval = 300,
-                preferredOrder: [VendorId] = VendorOrder.load()) {
+                preferredOrder: [VendorId] = VendorOrder.load(),
+                pinSpaceCheck: @escaping PinSpaceCheck = { count in
+                    PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: count)
+                }) {
         self.vendors = vendors
+        self.pinSpaceCheck = pinSpaceCheck
         self.primary = primary
         self.thresholds = thresholds
         self.refreshIntervalSeconds = refreshIntervalSeconds
@@ -191,17 +201,6 @@ public final class UsageStore: ObservableObject {
         vendors.first(where: { $0.vendorId == id })
     }
 
-    /// Place `id` immediately before `target` (or at the end when `target` is nil).
-    public func moveVendor(_ id: VendorId, before target: VendorId?) {
-        let current = sortedVendors.map(\.vendorId)
-        guard !current.isEmpty else { return }
-        let next = VendorOrder.moving(current, id: id, before: target)
-        guard next != current else { return }
-        preferredOrder = next
-        VendorOrder.save(preferredOrder)
-        applySortedOrder()
-    }
-
     /// Move one step toward the top of the popover list. No-op when already first.
     public func moveVendorUp(_ id: VendorId) {
         let current = sortedVendors.map(\.vendorId)
@@ -241,7 +240,7 @@ public final class UsageStore: ObservableObject {
             pinnedVendorOrder.removeAll(where: { $0 == id })
             persistPinned(defaults: defaults)
         } else {
-            let spaceCheck = PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: pinnedVendorIds.count)
+            let spaceCheck = pinSpaceCheck(pinnedVendorIds.count)
             guard spaceCheck.allowed else {
                 pinLimitAlert = PinLimitAlertInfo(
                     title: L10n.localizedString("pin_limit_reached_title"),
@@ -265,6 +264,29 @@ public final class UsageStore: ObservableObject {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
     }
 
+    /// Longest a fetch may stay in flight before a scheduled tick gives up on
+    /// it and restarts the vendor (RACE-MAE-001). Far beyond any legitimate
+    /// fetch (HTTP and `agy` budgets are well under a minute) and two default
+    /// intervals, so only a truly hung fetch is superseded.
+    public static let maxInFlightAge: TimeInterval = 600
+
+    /// Scheduled-tick fan-out: refreshes every vendor except those whose
+    /// previous fetch is still in flight. Skipping only the busy vendor keeps
+    /// single-flight per vendor without letting one hung fetch (e.g. a child
+    /// process that never exits) stall every other vendor (RACE-CRO-003).
+    /// A fetch in flight for `maxInFlightAge` or longer no longer counts as
+    /// busy: the refresh supersedes (cancels) it, so a hung vendor recovers
+    /// without a manual refresh. `now` is the scheduler's clock.
+    public func refreshIdleVendors(forceRefresh: Bool = false, now: Date = .now) {
+        for v in vendors {
+            if v.state.isLoading, let since = v.loadingSince,
+               now.timeIntervalSince(since) < Self.maxInFlightAge {
+                continue
+            }
+            v.refresh(forceRefresh: forceRefresh, now: now)
+        }
+    }
+
     /// Stamp the scheduler tick that's about to dispatch fetches. The view
     /// reads `lastScheduledTickAt` to anchor the countdown.
     public func markScheduledTick() {
@@ -285,10 +307,6 @@ public final class UsageStore: ObservableObject {
 
     public func refresh(vendor: VendorId, forceRefresh: Bool = true) {
         vendorVM(vendor)?.refresh(forceRefresh: forceRefresh)
-    }
-
-    public func compactAllHistory() {
-        for v in vendors { v.compactHistory() }
     }
 
     /// Schedules a history compaction off the MainActor. The history stores

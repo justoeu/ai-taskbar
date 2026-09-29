@@ -131,6 +131,31 @@ struct PinnedStatusItemTests {
         #expect(afterRepin == ["openrouter", "openai", "anthropic"])
     }
 
+    /// ARCH-ATL-005: the geometry-denied branch of `togglePinned` must be
+    /// reachable from a store-level test through the injected space check.
+    @Test("togglePinned honours an injected space check that denies")
+    func toggle_pinned_respects_denied_space_check() {
+        let name = "ai-taskbar.pinned.denied.test.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        defer { suite.removePersistentDomain(forName: name) }
+        var seenCounts: [Int] = []
+        let store = UsageStore(
+            vendors: [VendorViewModel(provider: MockUsageProvider(vendorId: .openai))],
+            primary: nil,
+            preferredOrder: [.openai],
+            pinSpaceCheck: { count in
+                seenCounts.append(count)
+                return .denied(reason: "no room next to the notch")
+            }
+        )
+        store.togglePinned(.openai, defaults: suite)
+        expectFalse(store.isPinned(.openai))
+        #expect(store.pinLimitAlert?.message == "no room next to the notch")
+        #expect(store.pinLimitAlert?.title == L10n.localizedString("pin_limit_reached_title"))
+        #expect(seenCounts == [0])
+        #expect(suite.stringArray(forKey: UsageStore.pinnedDefaultsKey) == nil)
+    }
+
     @Test("togglePinned blocks and triggers pinLimitAlert when cap is reached")
     func toggle_pinned_blocks_when_cap_reached() {
         let name = "ai-taskbar.pinned.cap.test.\(UUID().uuidString)"

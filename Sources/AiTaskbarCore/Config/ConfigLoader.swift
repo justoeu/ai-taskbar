@@ -253,7 +253,15 @@ public struct ConfigLoader: Sendable {
     @discardableResult
     public func ensureAllVendorSections() throws -> [String] {
         guard FileManager.default.fileExists(atPath: path.path) else { return [] }
-        let existing = (try? String(contentsOf: path, encoding: .utf8)) ?? ""
+        // A file that exists but cannot be read (permissions, encoding) must
+        // throw: treating it as "" would append every default section to
+        // nothing and atomically replace the user's config (BUG-MAE-008).
+        let existing: String
+        do {
+            existing = try String(contentsOf: path, encoding: .utf8)
+        } catch {
+            throw AppError.io("read config.toml for top-up: \(error)")
+        }
         var appended: [String] = []
         var addition = ""
 

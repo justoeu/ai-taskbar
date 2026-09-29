@@ -181,4 +181,148 @@ struct AnalyticsAggregatorTests {
         // Delta from 40 to 60 is +50%
         #expect(summary?.deltaPreviousPeriodPercent == 50.0)
     }
+
+    // MARK: - Month has no cost source (BUG-ART-003)
+
+    /// No `CostEstimate` carries a 30-day figure: the scanners keep today and
+    /// the last 7 days. The Month view must not relabel the 7-day number.
+    private static let weekOnlyEstimate = CostEstimate(
+        usdToday: 10,
+        usdLast7Days: 70,
+        modelBreakdownToday: ["claude-opus-5-5": 10],
+        modelBreakdownLast7Days: ["claude-opus-5-5": 70])
+
+    private static func monthly() -> GlobalAnalyticsSnapshot {
+        AnalyticsAggregator.aggregate(
+            timeframe: .monthly,
+            compareWithPrevious: false,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            estimates: [.anthropic: weekOnlyEstimate])
+    }
+
+    @Test("monthly total does not reuse the 7-day cost")
+    func monthly_total_not_weekly_cost() {
+        #expect(Self.monthly().totalCostUSD == 0)
+    }
+
+    @Test("monthly vendor cost does not reuse the 7-day cost")
+    func monthly_vendor_cost_not_weekly_cost() {
+        #expect(Self.monthly().vendorSummaries.first?.totalCostUSD == 0)
+    }
+
+    @Test("monthly model breakdown does not reuse the 7-day breakdown")
+    func monthly_breakdown_not_weekly_breakdown() {
+        #expect(Self.monthly().vendorSummaries.first?.costByModel == [:])
+    }
+
+    // MARK: - Model count is not a session count (BUG-ART-007)
+
+    /// Two models with tokens is two models, not two sessions. Only the
+    /// session counters (Gemini/xAI) may produce a session count.
+    @Test("models with tokens are not reported as sessions")
+    func models_are_not_sessions() {
+        let estimate = CostEstimate(
+            usdToday: 3, usdLast7Days: 3,
+            modelBreakdownToday: ["claude-opus-5-5": 2, "claude-sonnet-4-6": 1],
+            totalsByModel: [
+                "claude-opus-5-5": ModelUsage(inputTokens: 100),
+                "claude-sonnet-4-6": ModelUsage(inputTokens: 50)
+            ])
+        let snap = AnalyticsAggregator.aggregate(
+            timeframe: .daily, compareWithPrevious: false,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            estimates: [.anthropic: estimate])
+        #expect(snap.vendorSummaries.first?.sessionCount == 0)
+    }
+
+    @Test("models with cost in the window are reported as a model count")
+    func models_are_counted_as_models() {
+        let estimate = CostEstimate(
+            usdToday: 3, usdLast7Days: 3,
+            modelBreakdownToday: ["claude-opus-5-5": 2, "claude-sonnet-4-6": 1])
+        let snap = AnalyticsAggregator.aggregate(
+            timeframe: .daily, compareWithPrevious: false,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            estimates: [.anthropic: estimate])
+        #expect(snap.vendorSummaries.first?.modelCount == 2)
+    }
+
+    @Test("monthly snapshot is flagged as having no cost source")
+    func monthly_flags_cost_unavailable() {
+        let available = Self.monthly().isCostAvailable
+        #expect(!available)
+    }
+
+    @Test("monthly vendor summary is flagged as having no cost source")
+    func monthly_summary_flags_cost_unavailable() {
+        let flag = Self.monthly().vendorSummaries.first?.isCostAvailable
+        expectTrue(flag == false)
+    }
+
+    @Test("weekly snapshot keeps its 7-day cost source")
+    func weekly_cost_available() {
+        let snap = AnalyticsAggregator.aggregate(
+            timeframe: .weekly, compareWithPrevious: false,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            estimates: [.anthropic: Self.weekOnlyEstimate])
+        #expect(snap.isCostAvailable)
+        #expect(snap.totalCostUSD == 70)
+    }
+
+    // MARK: - Day/Week periods match CostWindow's calendar days (BUG-MAE-005)
+
+    private static let utcCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        return c
+    }()
+
+    /// 2023-11-14 12:00 UTC. `CostWindow` puts "last 7 days" at 2023-11-08
+    /// 00:00; a rolling 7 x 86_400 would start at 2023-11-07 12:00.
+    private static let noon = Date(timeIntervalSince1970: 1_699_963_200)
+
+    private static func weeklyDelta(probe: TimeInterval) -> Double? {
+        let nowTs = noon.timeIntervalSince1970
+        let history = [
+            UsageHistoryStore.Sample(at: probe, max: 10),
+            UsageHistoryStore.Sample(at: nowTs - 3_600, max: 20),
+        ]
+        let snap = AnalyticsAggregator.aggregate(
+            timeframe: .weekly, compareWithPrevious: true, comparisonOffset: 1,
+            now: noon, calendar: utcCalendar,
+            histories: [.anthropic: history])
+        return snap.vendorSummaries.first?.deltaPreviousPeriodPercent
+    }
+
+    @Test("a sample before the calendar week start belongs to the previous week")
+    func weekly_period_starts_at_cost_window_boundary() {
+        // One hour after the rolling start: inside a rolling week, outside the
+        // calendar week the 7-day cost comes from.
+        let probe = Self.noon.timeIntervalSince1970 - 7 * 86_400 + 3_600
+        // Calendar: current {20}, previous {10} -> +100 %.
+        #expect(Self.weeklyDelta(probe: probe) == 100)
+    }
+
+    @Test("a sample at the calendar week start belongs to the current week")
+    func weekly_period_includes_cost_window_start() {
+        let window = CostWindow(now: Self.noon, calendar: Self.utcCalendar)
+        // Both samples current, nothing previous -> no delta.
+        let delta = Self.weeklyDelta(probe: window.startOfLast7Days.timeIntervalSince1970)
+        expectTrue(delta == nil)
+    }
+
+    @Test("Day compares today since midnight with the previous calendar day")
+    func daily_period_starts_at_midnight() {
+        let nowTs = Self.noon.timeIntervalSince1970
+        // 23:00 yesterday: inside a rolling 24 h, but yesterday by the calendar.
+        let history = [
+            UsageHistoryStore.Sample(at: nowTs - 13 * 3_600, max: 10),
+            UsageHistoryStore.Sample(at: nowTs - 3_600, max: 30),
+        ]
+        let snap = AnalyticsAggregator.aggregate(
+            timeframe: .daily, compareWithPrevious: true, comparisonOffset: 1,
+            now: Self.noon, calendar: Self.utcCalendar,
+            histories: [.anthropic: history])
+        #expect(snap.vendorSummaries.first?.deltaPreviousPeriodPercent == 200)
+    }
 }

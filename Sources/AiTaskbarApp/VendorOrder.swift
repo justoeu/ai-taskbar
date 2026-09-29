@@ -49,30 +49,6 @@ public enum VendorOrder {
         return result
     }
 
-    public static func moving(_ order: [VendorId],
-                              fromOffsets: IndexSet,
-                              toOffset: Int) -> [VendorId] {
-        var copy = order
-        copy.move(fromOffsets: fromOffsets, toOffset: toOffset)
-        return copy
-    }
-
-    /// Move `id` so it sits immediately before `target`. If `target` is nil
-    /// or not in the list, append. No-op when `id == target` or `id` missing.
-    public static func moving(_ order: [VendorId],
-                              id: VendorId,
-                              before target: VendorId?) -> [VendorId] {
-        guard id != target, let from = order.firstIndex(of: id) else { return order }
-        var copy = order
-        copy.remove(at: from)
-        if let target, let to = copy.firstIndex(of: target) {
-            copy.insert(id, at: to)
-        } else {
-            copy.append(id)
-        }
-        return copy
-    }
-
     private static func defaultSorted(_ entries: [(id: VendorId, unconfigured: Bool)]) -> [VendorId] {
         entries.sorted { a, b in
             if a.unconfigured != b.unconfigured {

@@ -49,18 +49,6 @@ public final class SettingsViewModel: ObservableObject {
         saveError = nil
     }
 
-    /// Re-reads the on-disk config and replaces both `original` and `draft`.
-    /// Use after `applyChanges` lands so the form's "dirty" state correctly
-    /// resets.
-    public func reloadFromDisk() {
-        do {
-            let fresh = try configLoader.load()
-            draft = fresh
-        } catch {
-            saveError = "\(error)"
-        }
-    }
-
     /// Writes the diff between `draft` and `original` to disk via the
     /// comment-preserving surgical path. Throws on TOML errors so the form
     /// can surface them — does NOT clear `saveError` on partial failure.
@@ -103,7 +91,8 @@ public final class SettingsViewModel: ObservableObject {
     ///
     /// Designed to be exhaustive — forgetting to diff a new field silently
     /// breaks the Settings UI. If you add a field to a config struct, add
-    /// its diff case here.
+    /// its diff case here; `SettingsViewModelDiffTests` enforces this via
+    /// `Mirror` and fails until the new field is diffed and listed.
     static func diff(from old: AppConfig, to new: AppConfig) -> [ConfigChange] {
         var out: [ConfigChange] = []
 
@@ -262,6 +251,9 @@ public final class SettingsViewModel: ObservableObject {
         if old.gemini.agyPath != new.gemini.agyPath {
             out.append(.string(section: "gemini", key: "agy_path", value: new.gemini.agyPath))
         }
+        if old.gemini.preferAntigravity != new.gemini.preferAntigravity {
+            out.append(.bool(section: "gemini", key: "prefer_antigravity", value: new.gemini.preferAntigravity))
+        }
 
         // [deepseek]
         if old.deepseek.enabled != new.deepseek.enabled {
@@ -281,8 +273,14 @@ public final class SettingsViewModel: ObservableObject {
         if old.xai.enabled != new.xai.enabled {
             out.append(.bool(section: "xai", key: "enabled", value: new.xai.enabled))
         }
+        if old.xai.preferGrokCLI != new.xai.preferGrokCLI {
+            out.append(.bool(section: "xai", key: "prefer_grok_cli", value: new.xai.preferGrokCLI))
+        }
         if old.xai.grokAuthPath != new.xai.grokAuthPath {
             out.append(.string(section: "xai", key: "grok_auth_path", value: new.xai.grokAuthPath ?? ""))
+        }
+        if old.xai.grokBaseURL != new.xai.grokBaseURL {
+            out.append(.string(section: "xai", key: "grok_base_url", value: new.xai.grokBaseURL))
         }
         if old.xai.apiKeyEnv != new.xai.apiKeyEnv {
             out.append(.string(section: "xai", key: "api_key_env", value: new.xai.apiKeyEnv))

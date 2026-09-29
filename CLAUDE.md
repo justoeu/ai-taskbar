@@ -133,7 +133,12 @@ contract, not an implementation detail.
   site and the macro only ever sees a bare identifier. A non-optional
   `#expect(flag)` / `#expect(!flag)` is safe, and so are non-`Bool`
   comparisons (`#expect(3 == 4)` and `#expect(s == "b")` fail correctly).
-  `scripts/validate.sh` fails the build on any known-vacuous form.
+  `scripts/check-source-ratchets.sh` (run by both `validate.sh` and CI) fails
+  the build on any known-vacuous form in `#expect` or `#require`, including
+  ones with a message argument, `!=`, or split across lines; closure bodies
+  inside the arguments are exempt. `scripts/source-ratchet-selftest.sh` plants
+  every rejected and every allowed form and runs first, so a pattern that
+  stops matching fails the gate. Widen the self-test with the check.
 - For pure logic without I/O, you can still extend
   `Sources/AiTaskbarValidate/main.swift` — it runs faster than `swift test`
   for sanity checks and double-checks the `Testing` results.
@@ -260,6 +265,34 @@ cleanly on `[skip release]` heads.
 - The two DMG names are a contract with `UpdateChecker.pickDMGAsset`:
   `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon) and `ai-taskbar-X.Y.Z.dmg`
   (universal). Renaming either breaks in-app update downloads.
+- The in-app download **fails closed** without a matching line in the
+  release's `checksums-X.Y.Z.txt` (so `make publish` must keep uploading it;
+  `make release-assets-check` refuses to flip the draft unless the release
+  lists the checksums file and both DMGs),
+  requires the DMG's `.app` to be signed by the running app's Developer ID
+  team (skipped on ad-hoc builds), and sets `com.apple.quarantine` so
+  Gatekeeper assesses it. See `UpdateChecker.download` + `DMGVerifier.swift`.
+  The release JSON (2 MiB) and checksums file (64 KiB) are read with
+  `HTTPClient.sendBounded`; the checksums redirect and the DMG download's
+  redirect (`HTTPClient.download(_:allowRedirect:)`) are followed only to
+  `UpdateChecker.isAllowedDownloadURL` hosts on the default HTTPS port; a
+  refused redirect cancels the download before the target is requested.
+  `UpdateChecker` takes `env.http`
+  (no default client), so `pin_hosts` reaches it. `/releases/latest` never
+  returns a prerelease, so `include_prereleases = true` reads
+  `/releases?per_page=20` and picks the newest non-draft by `Semver` (SemVer
+  2.0 prerelease precedence; `beta10` > `beta9`).
+- The automatic update check runs **once per calendar day** — at launch if it
+  has not checked today, and at the start of each new day while running.
+  `UpdateChecker.isCheckDue` (no previous check, an earlier LOCAL day, or
+  >= 24 h) and `delayUntilNextCheck` (next local midnight or +24 h, whichever
+  first, clamped to 60 s...24 h) are pure over an injected `Calendar` + clock;
+  `RefreshScheduler` sleeps that delay and recomputes it after every round
+  from the stored last-check date. A fixed 24 h sleep after a skipped launch
+  check once delayed checks to ~48 h (UPDATE-SCHED-001). The 60 s floor lives
+  in the instance `delayUntilNextCheck()` only (not in the loop), and `check()`
+  records the attempt BEFORE validating `owner_repo`, so an invalid repo fails
+  once a day instead of waking the loop every minute (BUG-MAE-012).
 
 ### DMG release runbook (generating the signed DMG)
 
@@ -326,15 +359,28 @@ git checkout v0.16.1 && make publish && git checkout main
 | Release job fails on a tag that CI passed | `ci.yml` and `release.yml` selected Swift independently and drifted (6.2.4 vs 6.0) | both call `.github/actions/select-swift`, which requires >= 6.2 |
 | Universal DMG that is arm64-only | `make dmg` writes a host-arch app to `$(DMG)`, the universal name `UpdateChecker.pickDMGAsset` serves to Intel Macs | `universal-check` asserts x86_64 + arm64 and gates `release-universal` |
 | Release notes missing the actual feature | the changelog spans previous-tag..this-tag; a tag that never produced a release swallows everything before it | regenerate with `gh release edit <tag> --notes-file` over the right range |
+| A merged CI-action bump cuts a release | a Dependabot `github-actions` PR changes no shipped code, but without the marker its merge is an ordinary push to `main` | `.github/dependabot.yml` sets that ecosystem's commit prefix to `ci(deps) [skip release]`; keep the marker if you edit the prefix |
 
 **Doc-only commits pushed to `main` MUST carry `[skip release]`** — otherwise
 they trigger a redundant version bump (this is how an accidental extra
 `v0.10.1` got cut alongside `v0.10.0`).
 
+**Dependabot** (`.github/dependabot.yml`) watches two ecosystems weekly.
+`github-actions` bumps the SHA-pinned `uses:` lines and commits with the prefix
+`ci(deps) [skip release]`, so merging one never releases; removing that marker
+from the prefix would make every action bump cut a version. `swift` watches
+the SwiftPM graph (TOMLKit) with the plain prefix `deps`: a dependency bump
+changes shipped code, so it releases normally.
+
 ## Architecture (don't break these)
 
 - **`AiTaskbarCore`** — vendor-agnostic. Models, HTTP, Cache, Credentials,
   Config, Cost helpers, History, Util (JSONValue, SharedCoders).
+  `HTTPClient.send` / `sendDecoding` refuse a body larger than
+  `HTTPClient.defaultMaximumResponseBytes` (8 MiB) before buffering it or
+  writing it to `DiskCache`. The Gemini provider's `ProcessAntigravityExecutor`
+  runs `agy` with a 35 s budget, closed stdin, stdout capped at 4 MiB (a larger
+  answer is rejected, not parsed) and only the first 64 KiB of stderr kept.
 
 ### Cost scanners — token semantics differ per source, do not generalize
 
@@ -348,7 +394,19 @@ produces numbers that are wrong by multiples while looking plausible:
 | `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
 
 Both were established against real data, not documentation, and both are pinned
-by tests that fail if the other reading is applied. `OpencodeScanner` reads
+by tests that fail if the other reading is applied. `CodexSessionScanner` also
+skips a `token_count` event whose `total_token_usage` equals the previous
+event's: Codex re-emits the last turn's `last_token_usage` with an unchanged
+running total, and billing it again over-reported a real week by ~6%
+(BUG-ART-005). An event with no total carries no such signal and is kept.
+
+Every scanner (Claude, Codex rollouts and logs, opencode) and
+`AnalyticsAggregator` (Day and Week) take their windows from the one `CostWindow`: "today"
+starts at local midnight, and "last 7 days" is today plus the six previous
+local calendar days, built with `Calendar.date(byAdding:)` so DST does not
+shift it. Their figures are summed, so a scanner with its own cutoff (a
+rolling `now - 7 * 86_400`, or `startOfToday - 7 days`) disagrees with the
+others; do not reintroduce one. `OpencodeScanner` reads
 per-MESSAGE, never `session.model` — that column holds the last model a session
 used, so session-level attribution files every pre-switch token under the wrong
 model (measured: ~20M tokens on this machine).
@@ -358,6 +416,13 @@ vendor billed it and is never merged into that vendor's own totals: OpenAI
 traffic rides a subscription (zero marginal cost, so tokens are shown and
 dollars are not), and xAI's card already reports account-wide cycle spend from
 the Management API, so adding opencode's dollars there would double-count.
+
+`ClaudeSessionScanner` counts each API response once: Claude Code writes the
+same response to transcripts several times (same `message.id` + `requestId`,
+also across resumed/forked files), so lines are deduped by that pair across
+the whole window — memo replays included — keeping the largest
+`output_tokens`. Lines missing either id are counted individually. Summing
+every line measured ~1.9x too high.
 
 ### Claude fast mode is a per-request premium, not a separate model
 
@@ -490,8 +555,16 @@ that came out of fixing that:
   `refreshAll()` produces and to recompute the % when a card is toggled. The popover header runs a 1-Hz countdown
   anchored on `UsageStore.lastScheduledTickAt`; localized strings are
   memoized at type init. `DiskCache` TTL is set in `AppEnvironment` to
-  `max(15, refresh_interval_seconds − 5)` so the scheduled tick reliably
-  trips `freshPayload()` without needing `forceRefresh: true`.
+  `max(15, refresh_interval_seconds − 5)` so the scheduled tick trips
+  `freshPayload()` without needing `forceRefresh: true` — when the previous
+  fetch finished within ~5 s of dispatch (ticks are spaced from dispatch, so
+  a slower fetch can be served from cache once, then refetched). A scheduled
+  tick skips only vendors whose own fetch is still in flight; it never skips
+  the whole cycle, so one hung vendor cannot freeze the others. A fetch in
+  flight for `UsageStore.maxInFlightAge` (600 s) or longer is no longer
+  skipped: the next tick supersedes (cancels) it, so a hung vendor recovers
+  without a manual refresh. The age is measured on `RefreshScheduler`'s
+  injected clock, which tests advance with the scripted sleeper.
 - **`AiTaskbarValidate`** — runtime test runner, see "Validation policy".
 - **`AiTaskbarTesting`** — fixtures + StubURLProtocol, shared by tests +
   validate.
@@ -509,6 +582,32 @@ that came out of fixing that:
 - **TOML decoders must use `KeyedDecodingContainer.flexibleDouble` /
   `flexibleDoubleArray`** when expecting a `Double` field. TOML's `70`
   literal parses as `Int64`, not `Double`, and TOMLKit will not auto-cast.
+- **Never convert an external Double with a bare `Int(_:)` / `Int64(_:)`.**
+  It traps on NaN, infinity or out-of-range values, and vendor JSON,
+  credential files, JWT claims and persisted history can all carry `1e300`.
+  Use `Int(saturating:)` for display/ordering or `Int(checkedTruncating:)`
+  (nil = absent) for decoded fields — both in `Util/SafeNumeric.swift`.
+  Utilization is sanitized once by `UtilizationPercent.sanitized` (NaN → 0,
+  clamped to 0…1000 %) inside `UsageWindow`, `ModelShare` and
+  `UsageHistoryStore.Sample`, at init AND on decode. `validate.sh` rejects
+  bare integer conversions in `*WireTypes.swift` (point-free `Int.init`
+  included), via the same shared script and self-test.
+- **Integer format specifiers in `Localizable.strings` are `%ld`, never
+  `%d` / `%i`.** Every integer a call site formats is a Swift `Int` (64-bit);
+  `%d` reads 32 bits of it, so a discreet notification for an unclamped
+  `notify_at` of 5000000000 printed `705032704%` (BUG-MAE-015). Positional
+  forms are `%1$ld`. If an argument is ever genuinely `Int32`, widen it to
+  `Int` at the call site instead of carving out a `%d`. The same ratchet in
+  `scripts/check-source-ratchets.sh` requires en, pt-BR and es to carry the
+  identical key set and, per key, the identical specifier list (by argument
+  index, so a translation may reorder positional forms), and each key defined
+  once per file (`"done"` once carried two different pt-BR words, BUG-MAE-016).
+  The unsigned `%u` / `%o` / `%x` / `%X` need the 64-bit modifier too. Inline
+  `String(format: "...")` literals in `Sources/` are checked for `%d` / `%i`
+  the same way (`%04ld-%02ld`, not `%04d-%02d`); unsigned hex there stays
+  32-bit because it formats explicit `UInt8` / `UInt32` values. The self-test
+  plants each rejected form, a duplicate key, a missing key and a mismatched
+  specifier.
 - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
   cleanup, marker writes). If a credential write fails, the user must see it.
 - **Keychain reads AND writes** must run inside
@@ -594,7 +693,14 @@ that came out of fixing that:
 
 `~/Library/Application Support/ai-taskbar/config.toml`. Missing sections are
 auto-appended on launch by `ConfigLoader.ensureAllVendorSections`, preserving
-user edits. See `config.example.toml` for the full schema.
+user edits. See `config.example.toml` for the full schema. A **symlinked**
+`config.toml` (e.g. managed from a dotfiles repo) is read normally but never
+written: `AtomicFileWrite` refuses symlinked destinations, so the launch
+top-up is skipped and logged as an error (`AppEnvironment.topUpConfigSections`,
+never `try?`), and saving from Settings reports the failure. An existing
+`config.toml` that cannot be read (permissions, encoding) makes the top-up
+throw instead of rewriting the file from defaults; only a missing file is
+skipped.
 
 ## Known limitations / future work
 
@@ -619,7 +725,8 @@ user edits. See `config.example.toml` for the full schema.
   surface, and the pin is reproducible. Migration risk only — if it stops
   building on a future Swift, vendor the ~2k lines we use or hand-roll the
   small TOML subset `AppConfig` needs. Re-evaluate on Swift major; don't
-  swap preemptively.
+  swap preemptively. Dependabot's `swift` ecosystem watches it weekly; a PR
+  there is a prompt to re-evaluate, not an instruction to merge.
 - **`codex-auto-review` is priced by estimate.** Codex writes that model alias
   to its rollout logs for the automatic review pass, and OpenAI publishes no
   rate for it, so `PricingTable.openai` carries it at the Codex flagship tier

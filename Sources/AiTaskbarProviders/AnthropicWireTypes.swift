@@ -157,8 +157,13 @@ extension AnthropicUsageResponse {
         // *session* limit would otherwise be mislabeled "(7d)" AND could
         // collide with a weekly one on the `id: \.label` the UI keys rows by.
         // Dedupe by label as a belt-and-braces against a scoped entry
-        // duplicating a flat window (e.g. a scoped "Opus" vs `seven_day_opus`).
-        var seenScoped = Set<String>()
+        // duplicating a flat window (e.g. a scoped "Opus" vs `seven_day_opus`):
+        // the set is seeded with the flat labels actually emitted, so the flat
+        // window wins and `windows` never carries two rows with one label.
+        let session = window(five_hour, label: "Session (5h)")
+        let weekly = window(seven_day, label: "Weekly (7d)")
+        let opus = window(seven_day_opus, label: "Opus (7d)")
+        var seenScoped = Set([session, weekly, opus].compactMap { $0?.label })
         let scoped: [UsageWindow] = (limits ?? []).compactMap { limit in
             guard limit.kind == "weekly_scoped",
                   let name = limit.scope?.model?.display_name,
@@ -190,9 +195,9 @@ extension AnthropicUsageResponse {
 
         return AnthropicSnapshot(
             planLabel: planLabel,
-            session: window(five_hour, label: "Session (5h)"),
-            weekly:  window(seven_day, label: "Weekly (7d)"),
-            opus:    window(seven_day_opus, label: "Opus (7d)"),
+            session: session,
+            weekly:  weekly,
+            opus:    opus,
             scoped:  scoped,
             credits: credits
         )

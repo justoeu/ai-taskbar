@@ -64,18 +64,4 @@ struct GrokCredentialsTests {
             _ = try reader.read()
         }
     }
-
-    @Test("reads subscription tier display from settings_cache.json")
-    func reads_settings_cache_tier() throws {
-        defer { try? FileManager.default.removeItem(at: tmp) }
-        let file = tmp.appendingPathComponent("settings_cache.json")
-        let content = """
-        {
-          "payload": "{\\"settings\\":{\\"subscription_tier_display\\":\\"SuperGrok Heavy\\"}}"
-        }
-        """
-        try content.write(to: file, atomically: true, encoding: .utf8)
-        let tier = GrokLocalCache.readSubscriptionTierDisplay(at: file)
-        expectTrue(tier == "SuperGrok Heavy")
-    }
 }

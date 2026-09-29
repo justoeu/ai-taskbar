@@ -28,4 +28,11 @@ public extension UsageProvider {
     func authorizeCredentialsInteractively() throws -> Bool {
         throw AppError.credentials("Interactive credential authorization is not supported for \(displayName)")
     }
+
+    /// Async entry point for the Authorize button. The interactive call
+    /// blocks while a SecurityAgent dialog waits on the user, so it runs on a
+    /// plain GCD thread instead of the cooperative pool.
+    func authorizeCredentialsOffPool() async throws -> Bool {
+        try await OffPool.run { try self.authorizeCredentialsInteractively() }
+    }
 }

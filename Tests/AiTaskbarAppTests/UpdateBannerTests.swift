@@ -33,4 +33,33 @@ struct UpdateBannerTests {
             }
         }
     }
+
+    private static var repositoryRoot: URL {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<3 { root.deleteLastPathComponent() }
+        return root
+    }
+
+    @Test("the empty-release-list message is localized in every supported language")
+    func no_release_key_exists() throws {
+        for language in ["en", "pt-BR", "es"] {
+            let file = Self.repositoryRoot
+                .appendingPathComponent("Sources/AiTaskbarApp/Resources/\(language).lproj/Localizable.strings")
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            expectTrue(contents.contains("\"updates_no_release\" = "), "missing in \(language)")
+        }
+    }
+
+    /// ARCH-ATL-004: the composition root must hand UpdateChecker the
+    /// environment's client (pinned when `pin_hosts` is set), not a fresh one.
+    @Test("the app wires UpdateChecker to env.http")
+    func composition_root_injects_environment_http() throws {
+        let source = try String(
+            contentsOf: Self.repositoryRoot.appendingPathComponent("Sources/AiTaskbarApp/AiTaskbarApp.swift"),
+            encoding: .utf8)
+        let call = try #require(source.range(of: "UpdateChecker("))
+        let close = try #require(source[call.upperBound...].firstIndex(of: ")"))
+        let arguments = String(source[call.upperBound..<close])
+        expectTrue(arguments.contains("http: env.http"), "UpdateChecker(\(arguments))")
+    }
 }

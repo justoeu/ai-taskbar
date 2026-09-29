@@ -100,4 +100,47 @@ struct AppErrorTests {
         #expect(AppError.http(status: 500, body: "x") == AppError.http(status: 500, body: "x"))
         #expect(AppError.http(status: 500, body: "x") != AppError.http(status: 500, body: "y"))
     }
+
+    // MARK: guidance (CQ-AUR-001)
+
+    @Test("guidance keeps the 401 re-login semantics of agy not signed in")
+    func guidance_not_authenticated_is_unauthorized() {
+        #expect(AppError.guidance(.antigravityNotAuthenticated).isUnauthorized)
+    }
+
+    @Test("guidance unavailable is transient like the old 503")
+    func guidance_unavailable_is_transient() {
+        #expect(AppError.guidance(.antigravityUnavailable).isTransient)
+    }
+
+    @Test("setup guidance carries no HTTP status")
+    func guidance_setup_has_no_status() {
+        expectTrue(AppError.guidance(.grokCLIRequired).httpStatus == nil)
+    }
+
+    @Test("guidance is neither rate-limited nor unauthorized unless mapped")
+    func guidance_setup_is_not_unauthorized() {
+        #expect(!AppError.guidance(.antigravityRequired).isUnauthorized)
+        #expect(!AppError.guidance(.antigravityTimedOut).isRateLimited)
+    }
+
+    @Test("guidance description is an English diagnostic with a case prefix")
+    func guidance_description() {
+        #expect(AppError.guidance(.antigravityNotFound).description
+                == "guidance: the 'agy' executable was not found")
+    }
+
+    @Test("every guidance case has a non-empty diagnostic")
+    func guidance_diagnostics_non_empty() {
+        for g in VendorGuidance.allCases {
+            #expect(!g.diagnostic.isEmpty, "\(g)")
+        }
+    }
+
+    @Test("VendorDisclaimer round-trips through Codable by raw value")
+    func disclaimer_codable_round_trip() throws {
+        let data = try JSONEncoder().encode(VendorDisclaimer.grokCLIRequired)
+        #expect(String(decoding: data, as: UTF8.self) == "\"grokCLIRequired\"")
+        #expect(try JSONDecoder().decode(VendorDisclaimer.self, from: data) == .grokCLIRequired)
+    }
 }

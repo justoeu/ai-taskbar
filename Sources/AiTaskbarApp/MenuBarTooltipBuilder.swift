@@ -23,7 +23,7 @@ public enum MenuBarTooltipBuilder {
         locale: Locale = L10n.effectiveLocale
     ) -> String {
         guard let snapshot else {
-            return "\(vendorId.displayName): \(Int(currentPercent.rounded()))%"
+            return "\(vendorId.displayName): \(PercentText.format(currentPercent))"
         }
 
         let (dailyWindow, weeklyWindow) = snapshot.menuBarResetWindows
@@ -53,7 +53,7 @@ public enum MenuBarTooltipBuilder {
         }
 
         if lines.isEmpty {
-            return "\(vendorId.displayName): \(Int(currentPercent.rounded()))%"
+            return "\(vendorId.displayName): \(PercentText.format(currentPercent))"
         }
 
         return ([vendorId.displayName] + lines).joined(separator: "\n")

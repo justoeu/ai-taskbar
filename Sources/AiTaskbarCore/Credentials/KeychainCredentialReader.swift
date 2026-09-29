@@ -85,6 +85,10 @@ public final class KeychainCredentialReader: AnthropicCredentialReading, @unchec
         using authorize: (String, String?) throws -> KeychainAccessAuthorizer.Outcome,
         beforePendingPersistence: () -> Void = {}
     ) throws -> KeychainAccessAuthorizer.Outcome {
+        // The gate is held for the whole dialog on purpose (RACE-MAE-002):
+        // authorize → re-read → persist-pending must not interleave with a
+        // scheduled read or write-back re-binding the target. Blocked readers
+        // wait on GCD threads (`readOffPool`), never the cooperative pool.
         credentialMutationGate.lock()
         defer { credentialMutationGate.unlock() }
         let outcome = try authorize(service, preferredAccount ?? target?.account)

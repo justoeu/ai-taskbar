@@ -74,4 +74,20 @@ public enum CodeSignatureInfo {
     public static func currentDeveloperName() -> String? {
         signingCertificateCommonName().flatMap { developerName(fromCommonName: $0) }
     }
+
+    /// Validates the on-disk code at `url` against a code-signing
+    /// `requirement` string with the given validity `flags`. The single place
+    /// that builds `SecStaticCode` + `SecRequirement` (DUP-MAE-001).
+    /// Returns `errSecSuccess`, or the first failing status (path unreadable,
+    /// requirement unparseable, or signature invalid / not satisfying it).
+    public static func checkRequirement(of url: URL, requirement: String,
+                                        flags: SecCSFlags) -> OSStatus {
+        var code: SecStaticCode?
+        var status = SecStaticCodeCreateWithPath(url as CFURL, [], &code)
+        guard status == errSecSuccess, let code else { return status }
+        var compiled: SecRequirement?
+        status = SecRequirementCreateWithString(requirement as CFString, [], &compiled)
+        guard status == errSecSuccess, let compiled else { return status }
+        return SecStaticCodeCheckValidity(code, flags, compiled)
+    }
 }

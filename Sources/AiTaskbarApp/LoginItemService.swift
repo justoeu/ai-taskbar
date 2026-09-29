@@ -15,10 +15,6 @@ public final class LoginItemService: ObservableObject {
         refresh()
     }
 
-    public static func currentStatus() -> SMAppService.Status {
-        SMAppService.mainApp.status
-    }
-
     public var statusDescription: String {
         switch SMAppService.mainApp.status {
         case .enabled:        return "Enabled"

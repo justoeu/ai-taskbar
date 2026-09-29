@@ -25,6 +25,79 @@ import Foundation
 /// cache file that outlives an app version whose parsing rules may have
 /// changed, to save a cold start that happens once per launch.
 public final class ScanMemo: @unchecked Sendable {
+    /// One API response identified by a request key (Claude: message.id +
+    /// requestId). Kept un-aggregated because the same response can be
+    /// written to several files, and dedup has to happen across all of them.
+    ///
+    /// Stored compactly because the memo holds one per response in the window:
+    /// 35k on a heavy machine (1.1 GB of transcripts), ~15 MB resident with the
+    /// 15-field `ModelUsage` inline (LEAK-MAE-001). A Claude record fills only
+    /// five counts, with the fast subsets either zero or equal to them, so that
+    /// shape keeps five `Int`s and a flag (stride 144 -> 72 bytes, ~9 MB on the
+    /// same data). Any other shape keeps its exact value in `boxed`, so the
+    /// round trip is lossless whatever the producer.
+    public struct KeyedUsage: Sendable, Equatable {
+        public let model: String
+        public let inToday: Bool
+        public let inWeek: Bool
+        private let isFast: Bool
+        private let input: Int
+        private let output: Int
+        private let cacheRead: Int
+        private let cacheCreate: Int
+        private let cacheCreate1h: Int
+        private let boxed: Boxed?
+
+        private final class Boxed: Sendable {
+            let usage: ModelUsage
+            init(_ usage: ModelUsage) { self.usage = usage }
+        }
+
+        public init(model: String, usage: ModelUsage, inToday: Bool, inWeek: Bool) {
+            self.model = model
+            self.inToday = inToday
+            self.inWeek = inWeek
+            let isFast = usage.fastInputTokens != 0 || usage.fastOutputTokens != 0
+                || usage.fastCacheReadTokens != 0 || usage.fastCacheCreateTokens != 0
+                || usage.fastCacheCreate1hTokens != 0
+            self.isFast = isFast
+            self.input = usage.inputTokens
+            self.output = usage.outputTokens
+            self.cacheRead = usage.cacheReadTokens
+            self.cacheCreate = usage.cacheCreateTokens
+            self.cacheCreate1h = usage.cacheCreate1hTokens
+            let compact = Self.expand(input: input, output: output, cacheRead: cacheRead,
+                                      cacheCreate: cacheCreate, cacheCreate1h: cacheCreate1h,
+                                      isFast: isFast)
+            self.boxed = compact == usage ? nil : Boxed(usage)
+        }
+
+        public var usage: ModelUsage {
+            if let boxed { return boxed.usage }
+            return Self.expand(input: input, output: output, cacheRead: cacheRead,
+                               cacheCreate: cacheCreate, cacheCreate1h: cacheCreate1h,
+                               isFast: isFast)
+        }
+
+        public static func == (lhs: KeyedUsage, rhs: KeyedUsage) -> Bool {
+            lhs.model == rhs.model && lhs.inToday == rhs.inToday
+                && lhs.inWeek == rhs.inWeek && lhs.usage == rhs.usage
+        }
+
+        private static func expand(input: Int, output: Int, cacheRead: Int,
+                                   cacheCreate: Int, cacheCreate1h: Int,
+                                   isFast: Bool) -> ModelUsage {
+            ModelUsage(inputTokens: input, outputTokens: output,
+                       cacheReadTokens: cacheRead, cacheCreateTokens: cacheCreate,
+                       cacheCreate1hTokens: cacheCreate1h,
+                       fastInputTokens: isFast ? input : 0,
+                       fastOutputTokens: isFast ? output : 0,
+                       fastCacheReadTokens: isFast ? cacheRead : 0,
+                       fastCacheCreateTokens: isFast ? cacheCreate : 0,
+                       fastCacheCreate1hTokens: isFast ? cacheCreate1h : 0)
+        }
+    }
+
     /// What one file contributed, in the window it was scanned for.
     public struct Entry: Sendable {
         public let size: Int
@@ -34,14 +107,19 @@ public final class ScanMemo: @unchecked Sendable {
         public let computedForDay: Date
         public let today: [String: ModelUsage]
         public let week: [String: ModelUsage]
+        /// Keyed records, NOT folded into `today`/`week`, so the caller can
+        /// dedup them against other files before aggregating.
+        public let keyed: [String: KeyedUsage]
 
         public init(size: Int, mtime: Date, computedForDay: Date,
-                    today: [String: ModelUsage], week: [String: ModelUsage]) {
+                    today: [String: ModelUsage], week: [String: ModelUsage],
+                    keyed: [String: KeyedUsage] = [:]) {
             self.size = size
             self.mtime = mtime
             self.computedForDay = computedForDay
             self.today = today
             self.week = week
+            self.keyed = keyed
         }
     }
 

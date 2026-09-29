@@ -228,4 +228,197 @@ struct HTTPClientTests {
         #expect(StubURLProtocol.captured[0].url?.host == "example.com")
         StubURLProtocol.reset()
     }
+
+    @Test("bounded send follows a cross-origin redirect the caller allows")
+    func bounded_send_follows_allowed_redirect() async throws {
+        let cdn = URL(string: "https://cdn.example/file")!
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "cdn.example" { return .init(data: Data("ok".utf8)) }
+            return .init(status: 302, data: Data(), redirectURL: cdn)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let (data, _) = try await http.sendBounded(
+            URLRequest(url: URL(string: "https://example.com/file")!),
+            maximumResponseBytes: 64,
+            allowRedirect: { $0.host == "cdn.example" })
+        #expect(data == Data("ok".utf8))
+        StubURLProtocol.reset()
+    }
+
+    @Test("bounded send refuses a redirect the caller's predicate rejects")
+    func bounded_send_refuses_rejected_redirect() async {
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "attacker.example" {
+                Issue.record("redirect target must never be requested")
+                return .init(data: Data("leaked".utf8))
+            }
+            return .init(status: 302, data: Data(),
+                         redirectURL: URL(string: "https://attacker.example/x")!)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        await #expect(throws: AppError.self) {
+            _ = try await http.sendBounded(
+                URLRequest(url: URL(string: "https://example.com/file")!),
+                maximumResponseBytes: 64,
+                allowRedirect: { $0.host == "cdn.example" })
+        }
+        StubURLProtocol.reset()
+    }
+
+    // BP-REP-001 / LEAK-FAN-006: the vendor usage + OAuth path (`send`,
+    // `sendDecoding`, `fetchPayload`) must not buffer an arbitrarily large
+    // body. 9 MiB is over the 8 MiB default cap.
+    @Test("send rejects a body larger than the default cap")
+    func send_rejects_oversized_body() async {
+        let oversized = Data(repeating: 0x61, count: 9 * 1024 * 1024)
+        StubURLProtocol.handler = { _ in .init(data: oversized) }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        var message = ""
+        do {
+            let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/usage")!))
+            Issue.record("expected an oversize failure, got \(data.count) bytes")
+        } catch let error as AppError {
+            if case .transport(let m) = error { message = m }
+        } catch {
+            Issue.record("expected AppError, got \(error)")
+        }
+        #expect(message.contains("exceeds \(HTTPClient.defaultMaximumResponseBytes) bytes"))
+        StubURLProtocol.reset()
+    }
+
+    /// SEC-MAE-001: `download(_:allowRedirect:)` applies the caller's
+    /// redirect predicate before URLSession requests the Location.
+    @Test("download refuses a redirect its predicate rejects, before requesting the target")
+    func download_refuses_rejected_redirect() async {
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "attacker.example" {
+                Issue.record("redirect target must never be requested")
+                return .init(data: Data("leaked".utf8))
+            }
+            return .init(status: 302, data: Data(),
+                         redirectURL: URL(string: "https://attacker.example/x.dmg")!)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        await #expect(throws: AppError.transport("download redirect refused")) {
+            _ = try await http.download(
+                URLRequest(url: URL(string: "https://example.com/a.dmg")!),
+                allowRedirect: { $0.host == "cdn.example" })
+        }
+        #expect(StubURLProtocol.captured.count == 1)
+        StubURLProtocol.reset()
+    }
+
+    @Test("download follows a redirect its predicate accepts")
+    func download_follows_allowed_redirect() async throws {
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "cdn.example" { return .init(data: Data("dmg".utf8)) }
+            return .init(status: 302, data: Data(),
+                         redirectURL: URL(string: "https://cdn.example/a.dmg")!)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let (tmp, response) = try await http.download(
+            URLRequest(url: URL(string: "https://example.com/a.dmg")!),
+            allowRedirect: { $0.host == "cdn.example" })
+        defer { try? FileManager.default.removeItem(at: tmp) } // test cleanup
+        #expect(response.statusCode == 200)
+        #expect(try Data(contentsOf: tmp) == Data("dmg".utf8))
+        StubURLProtocol.reset()
+    }
+
+    /// PERF-MAE-002: the body is read in chunks, and the cap must stay exact
+    /// across a chunk boundary — `cap` bytes pass, `cap + 1` do not.
+    @Test("the response cap is exact across a read-chunk boundary")
+    func cap_is_exact_across_chunks() async throws {
+        let cap = 70_000
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let request = URLRequest(url: URL(string: "https://example.com/big")!)
+        StubURLProtocol.handler = { _ in .init(data: Data(repeating: 0x61, count: cap)) }
+        let (exact, _) = try await http.sendBounded(request, maximumResponseBytes: cap)
+        #expect(exact.count == cap)
+        StubURLProtocol.handler = { _ in .init(data: Data(repeating: 0x61, count: cap + 1)) }
+        await #expect(throws: AppError.transport("HTTP response exceeds \(cap) bytes")) {
+            _ = try await http.sendBounded(request, maximumResponseBytes: cap)
+        }
+        StubURLProtocol.reset()
+    }
+
+    @Test("sendDecoding inherits the default response cap")
+    func sendDecoding_rejects_oversized_body() async {
+        struct Out: Decodable { let n: Int }
+        let oversized = Data(repeating: 0x20, count: 9 * 1024 * 1024)
+        StubURLProtocol.handler = { _ in .init(data: oversized) }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        var transport = false
+        do {
+            _ = try await http.sendDecoding(URLRequest(url: URL(string: "https://example.com/u")!), as: Out.self)
+        } catch let error as AppError {
+            if case .transport = error { transport = true }
+        } catch {}
+        #expect(transport)
+        StubURLProtocol.reset()
+    }
+
+    @Test("the default cap is at least 50x the largest vendor fixture")
+    func default_cap_is_generous() {
+        let largest = [Fixtures.anthropicUsage200, Fixtures.openaiUsage200,
+                       Fixtures.statuspageIncidentsWindow200].map { $0.utf8.count }.max() ?? 0
+        #expect(HTTPClient.defaultMaximumResponseBytes >= 50 * largest)
+    }
+
+    @Test("send still returns a real vendor fixture verbatim")
+    func send_accepts_fixture() async throws {
+        let body = Data(Fixtures.anthropicUsage200.utf8)
+        StubURLProtocol.handler = { _ in .init(data: body) }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/usage")!))
+        #expect(data == body)
+        StubURLProtocol.reset()
+    }
+
+    // `send` keeps URLSession's default redirect handling; only
+    // `sendBounded` restricts origins.
+    @Test("send still follows a cross-origin redirect")
+    func send_follows_cross_origin_redirect() async throws {
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "api2.example" { return .init(data: Data("moved".utf8)) }
+            return .init(status: 302, data: Data(), redirectURL: URL(string: "https://api2.example/u")!)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/u")!))
+        #expect(data == Data("moved".utf8))
+        StubURLProtocol.reset()
+    }
+
+    // LEAK-FAN-004: a download whose response is rejected after URLSession
+    // already wrote the body must not leave that temp file behind.
+    @Test("download rejecting a non-HTTP response deletes the temp file")
+    func download_non_http_response_removes_temp() async throws {
+        let before = try urlSessionDownloadTemps()
+        let http = HTTPClient.stubbed(protocols: [NonHTTPResponseProtocol.self])
+        await #expect(throws: AppError.transport("non-HTTP download response")) {
+            _ = try await http.download(URLRequest(url: URL(string: "https://example.com/a.dmg")!))
+        }
+        #expect(try urlSessionDownloadTemps().subtracting(before) == [])
+    }
+}
+
+/// Answers with a plain `URLResponse` (not HTTP) and a body. Immutable.
+private final class NonHTTPResponseProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = URLResponse(url: request.url!, mimeType: nil,
+                                   expectedContentLength: 4, textEncodingName: nil)
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("body".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+/// URLSession names its download temp files `CFNetworkDownload_*.tmp`.
+private func urlSessionDownloadTemps() throws -> Set<String> {
+    let names = try FileManager.default.contentsOfDirectory(
+        atPath: FileManager.default.temporaryDirectory.path)
+    return Set(names.filter { $0.hasPrefix("CFNetworkDownload_") })
 }

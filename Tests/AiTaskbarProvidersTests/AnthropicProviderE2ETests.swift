@@ -16,6 +16,9 @@ private final class MockKeychainReader: AnthropicCredentialReading, @unchecked S
     var invalidateCalls = 0
     var readErrorAfterInvalidation: AppError?
     var nextReadAfterInvalidation: AnthropicCredentials?
+    /// `false` models a credential served by the `/usr/bin/security` read
+    /// fallback, which cannot be written back.
+    var canPersistCredentials = true
 
     init(initial: AnthropicCredentials) { self.nextRead = initial }
 
@@ -265,6 +268,72 @@ struct AnthropicProviderE2ETests {
         StubURLProtocol.reset()
     }
 
+    private func expiredCredentials() -> AnthropicCredentials {
+        AnthropicCredentials(
+            accessToken: "old",
+            refreshToken: "old.r",
+            expiresAtMs: Int64(Date().addingTimeInterval(-600).timeIntervalSince1970 * 1000),
+            subscriptionType: "pro",
+            rateLimitTier: nil
+        )
+    }
+
+    /// Counts OAuth token-endpoint hits and answers usage calls with a 200.
+    private func installCountingHandler() -> OAuthHitCounter {
+        let counter = OAuthHitCounter()
+        StubURLProtocol.handler = { req in
+            if req.url?.path.contains("oauth/token") == true {
+                counter.hits += 1
+                return .init(data: Fixtures.data(Fixtures.oauthRefresh200))
+            }
+            return .init(data: Fixtures.data(Fixtures.anthropicUsage200))
+        }
+        return counter
+    }
+
+    @Test("manage=true but non-persistable credential: expired token is NOT refreshed (TEST-ARG-002)")
+    func non_persistable_credential_is_never_rotated() async throws {
+        defer {
+            try? FileManager.default.removeItem(at: tmpCache)
+            StubURLProtocol.reset()
+        }
+        let counter = installCountingHandler()
+        let mock = MockKeychainReader(initial: expiredCredentials())
+        mock.canPersistCredentials = false
+        let provider = AnthropicProvider(
+            credentialReader: mock,
+            cache: DiskCache(vendor: .anthropic, baseDir: tmpCache),
+            http: .stubbed(protocols: [StubURLProtocol.self]),
+            manageOAuthRefresh: true)
+
+        _ = try await provider.fetchUsage(forceRefresh: true)
+
+        #expect(counter.hits == 0)
+        #expect(mock.writeBackCalls.isEmpty)
+        let auth = StubURLProtocol.captured.last?.value(forHTTPHeaderField: "Authorization")
+        #expect(auth == "Bearer old")
+    }
+
+    @Test("default init is read-only: expired token is NOT refreshed (TEST-ARG-008)")
+    func default_init_never_refreshes_expired_token() async throws {
+        defer {
+            try? FileManager.default.removeItem(at: tmpCache)
+            StubURLProtocol.reset()
+        }
+        let counter = installCountingHandler()
+        let mock = MockKeychainReader(initial: expiredCredentials())
+        // No `manageOAuthRefresh:` argument: the init default is under test.
+        let provider = AnthropicProvider(
+            credentialReader: mock,
+            cache: DiskCache(vendor: .anthropic, baseDir: tmpCache),
+            http: .stubbed(protocols: [StubURLProtocol.self]))
+
+        _ = try await provider.fetchUsage(forceRefresh: true)
+
+        #expect(counter.hits == 0)
+        #expect(mock.writeBackCalls.isEmpty)
+    }
+
     @Test("decode failure on malformed body raises AppError.schema")
     func decode_failure_on_malformed_body() async throws {
         StubURLProtocol.handler = { _ in
@@ -317,4 +386,10 @@ struct AnthropicProviderE2ETests {
         try? FileManager.default.removeItem(at: tmpCache)
         StubURLProtocol.reset()
     }
+}
+
+/// Mutated only from StubURLProtocol's handler, which the serialized suite
+/// runs one request at a time.
+private final class OAuthHitCounter: @unchecked Sendable {
+    var hits = 0
 }

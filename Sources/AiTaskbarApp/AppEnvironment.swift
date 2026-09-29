@@ -18,11 +18,7 @@ public final class AppEnvironment {
         do {
             let loader = try ConfigLoader()
             let cfg = try loader.load()
-            // Top up the user's file with any sections we added since they
-            // first ran the app (e.g. new vendors). Preserves their edits.
-            if let appended = try? loader.ensureAllVendorSections(), !appended.isEmpty {
-                AppLog.lifecycle.info("appended missing config sections: \(appended.joined(separator: ", "), privacy: .public)")
-            }
+            topUpConfigSections(loader)
             // Build HTTP client with TLS pinning if configured.
             // Fail closed: if pin_hosts is set but PinStore cannot open, do
             // not silently fall back to an unpinned client.
@@ -49,15 +45,46 @@ public final class AppEnvironment {
         }
     }
 
+    /// Tops up the user's file with any sections added since they first ran
+    /// the app (e.g. new vendors), preserving their edits. Best-effort: the
+    /// loaded config is already in memory, so a failed write must not stop
+    /// the launch — but it must not be silent either (CQ-MAE-007). A
+    /// symlinked `config.toml` is the common case: `AtomicFileWrite` refuses
+    /// to write through a symlink. Returns the failure for tests.
+    @discardableResult
+    static func topUpConfigSections(
+        _ loader: ConfigLoader,
+        onFailure: (Error) -> Void = logConfigTopUpFailure
+    ) -> Error? {
+        do {
+            let appended = try loader.ensureAllVendorSections()
+            if !appended.isEmpty {
+                AppLog.lifecycle.info("appended missing config sections: \(appended.joined(separator: ", "), privacy: .public)")
+            }
+            return nil
+        } catch {
+            onFailure(error)
+            return error
+        }
+    }
+
+    nonisolated static func logConfigTopUpFailure(_ error: Error) {
+        AppLog.lifecycle.error(
+            "could not append missing config sections (a symlinked config.toml is refused): \(String(describing: error), privacy: .public)")
+    }
+
     /// Build the set of providers indicated as enabled by the live config.
     /// Cache TTL is wired to `refresh_interval_seconds − 5 s` (floored at
     /// 15 s) so that:
     ///   1. Popover opens between scheduled refreshes still serve from
     ///      cache without a network round-trip.
-    ///   2. The scheduled tick at T=interval ALWAYS finds an expired
-    ///      cache (`age ≈ interval > ttl`), going straight to the network
-    ///      without needing `forceRefresh: true`. The 5-second margin
-    ///      absorbs Task.sleep jitter.
+    ///   2. The next scheduled tick finds an expired cache and goes to the
+    ///      network without `forceRefresh: true`, as long as the previous
+    ///      fetch finished within ~5 s of its dispatch. Ticks are spaced
+    ///      from dispatch, not completion, so a slower fetch wrote its entry
+    ///      later and that tick may serve it (at most one interval old) from
+    ///      cache; the following tick refetches. See
+    ///      `RefreshScheduler.dispatchScheduledTick`.
     public func makeProviders() -> [any UsageProvider] {
         let ttl = max(15, config.ui.refreshIntervalSeconds - 5)
         var out: [any UsageProvider] = []

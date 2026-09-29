@@ -56,6 +56,8 @@ struct FetchPayloadTests {
         } catch let err as AppError {
             if case .http(let status, _) = err {
                 #expect(status == 503)
+            } else {
+                Issue.record("expected .http, got \(err)")
             }
         } catch {
             Issue.record("expected AppError")

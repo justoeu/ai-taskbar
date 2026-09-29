@@ -207,10 +207,13 @@ extension OpenAIUsageResponse {
             guard let s = seconds, s > 0 else { return "\(prefix) (\(defaultSpan))" }
             let hours = s / 3600
             let days = s / 86_400
+            // A span no Int can hold is not a real window: use the default.
             if days >= 1 {
-                return "\(prefix) (\(Int(days.rounded()))d)"
+                guard let d = Int(checkedTruncating: days.rounded()) else { return "\(prefix) (\(defaultSpan))" }
+                return "\(prefix) (\(d)d)"
             } else {
-                return "\(prefix) (\(Int(hours.rounded()))h)"
+                guard let h = Int(checkedTruncating: hours.rounded()) else { return "\(prefix) (\(defaultSpan))" }
+                return "\(prefix) (\(h)h)"
             }
         }
     }

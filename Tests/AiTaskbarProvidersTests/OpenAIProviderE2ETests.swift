@@ -224,6 +224,34 @@ struct OpenAIProviderE2ETests {
         StubURLProtocol.reset()
     }
 
+    @Test("default init is read-only: expired JWT is NOT refreshed (TEST-ARG-008)")
+    func default_init_never_refreshes_expired_token() async throws {
+        defer {
+            try? FileManager.default.removeItem(at: tmpDir)
+            StubURLProtocol.reset()
+        }
+        var oauthHits = 0
+        StubURLProtocol.handler = { req in
+            if req.url?.path.contains("oauth/token") == true {
+                oauthHits += 1
+                return .init(data: Data(#"{"access_token":"new.acc","refresh_token":"new.ref","expires_in":3600}"#.utf8))
+            }
+            return .init(data: Fixtures.data(Fixtures.openaiUsage200))
+        }
+        let expiredToken = makeJWT(planType: "free", expiresIn: -100)
+        _ = try writeAuthJSON(idToken: expiredToken)
+        let creds = FileCredentialReader(path: tmpDir.appendingPathComponent("auth.json"))
+        // No `manageOAuthRefresh:` argument: the init default is under test.
+        let provider = OpenAIProvider(credentials: creds,
+                                      cache: DiskCache(vendor: .openai, baseDir: tmpDir),
+                                      http: .stubbed(protocols: [StubURLProtocol.self]))
+
+        _ = try await provider.fetchUsage(forceRefresh: true)
+
+        #expect(oauthHits == 0)
+        #expect(try creds.read().tokens.idToken == expiredToken)
+    }
+
     @Test("ChatGPT-Account-Id header is set when account_id present")
     func account_id_header_set_when_present() async throws {
         StubURLProtocol.handler = { _ in

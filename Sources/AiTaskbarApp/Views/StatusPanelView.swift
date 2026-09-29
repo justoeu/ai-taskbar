@@ -339,11 +339,11 @@ private struct StatusTimelineView: View {
         ]
         return order.compactMap { level in
             guard let seconds = durations[level], seconds >= 60 else { return nil }
-            let totalMinutes = Int(seconds / 60)
+            let parts = DurationParts.hoursMinutes(seconds)
             let duration = L10n.localizedString(
                 "service_status_duration_fmt",
-                totalMinutes / 60,
-                totalMinutes % 60
+                parts.hours,
+                parts.minutes
             )
             return "\(L10n.localizedString(ServiceStatusPresentation.levelKey(for: level))) \(duration)"
         }.joined(separator: ", ")
@@ -398,11 +398,11 @@ private struct IncidentDetailView: View {
 
     private var durationText: String {
         let end = incident.resolvedAt ?? .now
-        let totalMinutes = max(0, Int(end.timeIntervalSince(incident.startedAt) / 60))
+        let parts = DurationParts.hoursMinutes(end.timeIntervalSince(incident.startedAt))
         return L10n.localizedString(
             "service_status_duration_fmt",
-            totalMinutes / 60,
-            totalMinutes % 60
+            parts.hours,
+            parts.minutes
         )
     }
 }

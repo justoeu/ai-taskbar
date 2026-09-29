@@ -18,6 +18,14 @@ public enum ClaudeSessionScanner {
 
     public static func estimate(now: Date = .init(),
                                 projectsDir: URL? = nil) -> CostEstimate {
+        estimate(now: now, projectsDir: projectsDir, memo: memo)
+    }
+
+    /// Memo seam: tests pass their own `ScanMemo` so they can observe what a
+    /// scan keeps or evicts without racing other suites on the shared one.
+    internal static func estimate(now: Date,
+                                  projectsDir: URL?,
+                                  memo: ScanMemo) -> CostEstimate {
         let projects: URL = projectsDir ?? FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects")
@@ -45,14 +53,17 @@ public enum ClaudeSessionScanner {
                                 note: "Could not enumerate ~/.claude/projects.")
         }
 
-        let cal = Calendar.current
-        let startOfToday = cal.startOfDay(for: now)
-        let sevenDaysAgo = startOfToday.addingTimeInterval(-7 * 86_400)
+        let window = CostWindow(now: now)
+        let startOfToday = window.startOfToday
+        let sevenDaysAgo = window.startOfLast7Days
 
         var totalsToday: [String: ModelUsage] = [:]
         var totalsLast7: [String: ModelUsage] = [:]
         var filesScanned = 0
         var unparseableTimestamps = 0
+        // Responses keyed by (message.id, requestId), deduped across every
+        // file in the window — memo replays included — before aggregation.
+        var keyedAll: [String: ScanMemo.KeyedUsage] = [:]
 
         var seenPaths = Set<String>()
         for case let url as URL in walker {
@@ -85,6 +96,7 @@ public enum ClaudeSessionScanner {
                 for (model, usage) in hit.week {
                     CostAggregator.add(usage, into: &totalsLast7, model: model)
                 }
+                for (key, record) in hit.keyed { mergeKeyed(record, key: key, into: &keyedAll) }
                 continue
             }
 
@@ -93,12 +105,15 @@ public enum ClaudeSessionScanner {
             // memoized; merge into the running totals afterwards.
             var fileToday: [String: ModelUsage] = [:]
             var fileWeek: [String: ModelUsage] = [:]
-            scan(data: data,
-                 startOfToday: startOfToday,
-                 sevenDaysAgo: sevenDaysAgo,
-                 totalsToday: &fileToday,
-                 totalsLast7: &fileWeek,
-                 unparseableTimestamps: &unparseableTimestamps)
+            var fileKeyed: [String: ScanMemo.KeyedUsage] = [:]
+            scanLines(data: data,
+                      startOfToday: startOfToday,
+                      sevenDaysAgo: sevenDaysAgo,
+                      totalsToday: &fileToday,
+                      totalsLast7: &fileWeek,
+                      keyed: &fileKeyed,
+                      unparseableTimestamps: &unparseableTimestamps)
+            for (key, record) in fileKeyed { mergeKeyed(record, key: key, into: &keyedAll) }
             for (model, usage) in fileToday {
                 CostAggregator.add(usage, into: &totalsToday, model: model)
             }
@@ -109,11 +124,15 @@ public enum ClaudeSessionScanner {
                 memo.store(path: url.path,
                            entry: ScanMemo.Entry(size: size, mtime: mtime,
                                                  computedForDay: startOfToday,
-                                                 today: fileToday, week: fileWeek))
+                                                 today: fileToday, week: fileWeek,
+                                                 keyed: fileKeyed))
             }
         }
-        // Files that aged out of the window stop being tracked.
-        memo.retain(paths: seenPaths)
+        // Files that aged out of the window stop being tracked. Only after a
+        // complete walk: a cancelled one saw a partial set, and pruning to it
+        // would evict every file it had not reached yet (LEAK-FAN-002).
+        if !Task.isCancelled { memo.retain(paths: seenPaths) }
+        fold(keyedAll, totalsToday: &totalsToday, totalsLast7: &totalsLast7)
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.anthropic)
@@ -163,8 +182,10 @@ public enum ClaudeSessionScanner {
     /// actually need — `JSONDecoder` discards everything else cheaply.
     private struct AssistantLine: Decodable {
         let timestamp: String?
+        let requestId: String?
         let message: Message?
         struct Message: Decodable {
+            let id: String?
             let model: String?
             let usage: Usage?
             struct Usage: Decodable {
@@ -194,6 +215,45 @@ public enum ClaudeSessionScanner {
         sevenDaysAgo: Date,
         totalsToday: inout [String: ModelUsage],
         totalsLast7: inout [String: ModelUsage],
+        unparseableTimestamps: inout Int
+    ) {
+        var keyed: [String: ScanMemo.KeyedUsage] = [:]
+        scanLines(data: data, startOfToday: startOfToday, sevenDaysAgo: sevenDaysAgo,
+                  totalsToday: &totalsToday, totalsLast7: &totalsLast7,
+                  keyed: &keyed, unparseableTimestamps: &unparseableTimestamps)
+        fold(keyed, totalsToday: &totalsToday, totalsLast7: &totalsLast7)
+    }
+
+    /// Claude Code writes the same API response to a transcript more than
+    /// once (streaming / tool-use splits) and, for resumed or forked
+    /// sessions, into more than one file — same `message.id` + `requestId`.
+    /// One response is billed once, so keep one record per key: the one with
+    /// the largest `output_tokens` (later lines carry the final count), ties
+    /// going to the last seen.
+    internal static func mergeKeyed(_ record: ScanMemo.KeyedUsage, key: String,
+                                    into keyed: inout [String: ScanMemo.KeyedUsage]) {
+        if let kept = keyed[key], kept.usage.outputTokens > record.usage.outputTokens { return }
+        keyed[key] = record
+    }
+
+    private static func fold(_ keyed: [String: ScanMemo.KeyedUsage],
+                             totalsToday: inout [String: ModelUsage],
+                             totalsLast7: inout [String: ModelUsage]) {
+        for record in keyed.values {
+            if record.inToday { CostAggregator.add(record.usage, into: &totalsToday, model: record.model) }
+            if record.inWeek { CostAggregator.add(record.usage, into: &totalsLast7, model: record.model) }
+        }
+    }
+
+    /// Lines carrying both ids go to `keyed` (deduped); lines missing either
+    /// id have nothing to dedup on and are added to the totals directly.
+    private static func scanLines(
+        data: Data,
+        startOfToday: Date,
+        sevenDaysAgo: Date,
+        totalsToday: inout [String: ModelUsage],
+        totalsLast7: inout [String: ModelUsage],
+        keyed: inout [String: ScanMemo.KeyedUsage],
         unparseableTimestamps: inout Int
     ) {
         var offset = data.startIndex
@@ -257,15 +317,19 @@ public enum ClaudeSessionScanner {
             )
 
             let ts = parsed.timestamp.flatMap(ISO8601Parsing.parse)
-            if let ts {
-                if ts >= startOfToday { CostAggregator.add(modelUsage, into: &totalsToday, model: model) }
-                if ts >= sevenDaysAgo { CostAggregator.add(modelUsage, into: &totalsLast7, model: model) }
+            // Fail-safe: a missing/unparseable timestamp counts into both
+            // buckets; the count is surfaced in the note so users spot drift.
+            let inToday = ts.map { $0 >= startOfToday } ?? true
+            let inWeek = ts.map { $0 >= sevenDaysAgo } ?? true
+            if ts == nil { unparseableTimestamps += 1 }
+            if let messageId = msg.id, !messageId.isEmpty,
+               let requestId = parsed.requestId, !requestId.isEmpty {
+                mergeKeyed(ScanMemo.KeyedUsage(model: model, usage: modelUsage,
+                                               inToday: inToday, inWeek: inWeek),
+                           key: messageId + "\u{0}" + requestId, into: &keyed)
             } else {
-                // Fail-safe: count missing-timestamp records into today.
-                // We surface the count in the note so users can spot drift.
-                CostAggregator.add(modelUsage, into: &totalsToday, model: model)
-                CostAggregator.add(modelUsage, into: &totalsLast7, model: model)
-                unparseableTimestamps += 1
+                if inToday { CostAggregator.add(modelUsage, into: &totalsToday, model: model) }
+                if inWeek { CostAggregator.add(modelUsage, into: &totalsLast7, model: model) }
             }
         }
     }

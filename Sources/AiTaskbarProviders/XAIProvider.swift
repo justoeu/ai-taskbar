@@ -114,9 +114,7 @@ public final class XAIProvider: UsageProvider {
                 let tid = teamId.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !tid.isEmpty else {
                     if preferGrokCLI {
-                        throw AppError.credentials(
-                            "Para monitorar o Grok, é necessário ter o Grok CLI instalado e autenticado (`grok login`), ou configure a Management Key e Team ID da xAI em console.x.ai."
-                        )
+                        throw AppError.guidance(.grokCLIRequired)
                     }
                     throw AppError.credentials("xAI team_id is required — copy it from console.x.ai → Team settings")
                 }

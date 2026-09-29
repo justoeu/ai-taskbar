@@ -23,10 +23,19 @@ public struct CachedFetch: Sendable {
         fetch: () async throws -> Data
     ) async throws -> CachedOutcome<Snapshot> {
         try Task.checkCancellation()
+        // A fresh entry the current decoder rejects (schema change across an
+        // upgrade) falls through to the network instead of failing every tick
+        // until the TTL expires; the fetch below overwrites it on success.
         if !forceRefresh, let hit = cache.freshPayloadWithAge() {
-            return try makeOutcome(from: hit.0, decode: decode,
-                                    isStale: false, cacheAge: hit.1,
-                                    lastError: nil)
+            do {
+                return makeOutcome(snapshot: try decode(hit.0), isStale: false,
+                                   cacheAge: hit.1, lastError: nil)
+            } catch {
+                // Not swallowed: the fetch below usually replaces the entry,
+                // but a decoder that rejects its own cache is schema drift.
+                AppLog.lifecycle.warning(
+                    "\(self.cache.vendor.rawValue, privacy: .public): fresh cache rejected by decoder, refetching: \(String(describing: error), privacy: .public)")
+            }
         }
         do {
             let data = try await fetch()
@@ -51,8 +60,14 @@ public struct CachedFetch: Sendable {
                 fe = FetchError(status: status,
                                 body: PIIScrub.scrub(diagnostic: body))
             } else {
-                fe = FetchError(status: 0,
-                                body: PIIScrub.scrub(diagnostic: appErr.description))
+                // `.guidance` may stand for a 401/503 (agy not signed in /
+                // unavailable); keep that status so the stale-card re-login
+                // banner still fires, and the case so its tooltip is localized.
+                var guidance: VendorGuidance?
+                if case .guidance(let g) = appErr { guidance = g }
+                fe = FetchError(status: appErr.httpStatus ?? 0,
+                                body: PIIScrub.scrub(diagnostic: appErr.description),
+                                guidance: guidance)
             }
             cache.markFailed(fe)
             return try fallback(error: appErr, decode: decode, lastError: fe)
@@ -103,9 +118,17 @@ public struct CachedFetch: Sendable {
         lastError: FetchError
     ) throws -> CachedOutcome<Snapshot> {
         if let hit = cache.anyPayloadWithAge() {
-            return try makeOutcome(from: hit.0, decode: decode,
-                                    isStale: true, cacheAge: hit.1,
-                                    lastError: lastError)
+            do {
+                return try makeOutcome(from: hit.0, decode: decode,
+                                       isStale: true, cacheAge: hit.1,
+                                       lastError: lastError)
+            } catch {
+                // The stale payload is unusable too. Report why the live
+                // fetch failed, not the decode error of a fallback nobody
+                // asked for (CQ-MAE-010).
+                AppLog.lifecycle.warning(
+                    "\(self.cache.vendor.rawValue, privacy: .public): stale cache rejected by decoder: \(String(describing: error), privacy: .public)")
+            }
         }
         throw AppError.wrapping(error)
     }

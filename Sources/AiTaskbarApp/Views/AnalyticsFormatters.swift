@@ -43,10 +43,27 @@ public enum AnalyticsFormatters {
     public static func peakDayText(_ record: PeakDayRecord) -> String {
         let dateStr = dateFormatter.string(from: record.date)
         if record.costUSD > 0 {
-            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(Int(record.utilizationPercent))% quota)"
+            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(quotaText(record.utilizationPercent)))"
         } else {
-            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(Int(record.utilizationPercent))% quota)"
+            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(quotaText(record.utilizationPercent)))"
         }
+    }
+
+    /// "85% quota", localized: the word was a hard-coded English suffix on
+    /// otherwise localized Analytics strings (CQ-MAE-022).
+    public static func quotaText(_ percent: Double) -> String {
+        L10n.localizedString("analytics_quota_percent_fmt", PercentText.whole(percent))
+    }
+
+    /// The Usage donut's centre label: the mean `totalUsagePercent` of
+    /// `vendors` (a vendor without a summary counts as 0), rounded like every
+    /// other percent label (CQ-MAE-023).
+    static func averageUsageText(vendors: [VendorId], summaries: [VendorAnalyticsSummary]) -> String {
+        guard !vendors.isEmpty else { return "0%" }
+        let total = vendors.map { vendor in
+            summaries.first(where: { $0.vendor == vendor })?.totalUsagePercent ?? 0
+        }.reduce(0, +)
+        return PercentText.format(total / Double(vendors.count))
     }
 
     public static func vendorColor(for vendor: VendorId) -> Color {

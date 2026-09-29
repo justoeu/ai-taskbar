@@ -188,9 +188,8 @@ public struct AnalyticsView: View {
             )
         }
 
-        let avgUsage = shares.isEmpty ? 0 : Int(shares.map { share in
-            snapshot?.vendorSummaries.first(where: { $0.vendor == share.vendor })?.totalUsagePercent ?? 0
-        }.reduce(0, +) / Double(shares.count))
+        let avgUsage = AnalyticsFormatters.averageUsageText(
+            vendors: shares.map(\.vendor), summaries: snapshot?.vendorSummaries ?? [])
 
         let hoveredSlice = usageSlices.first(where: { $0.id == hoveredUsageVendor })
 
@@ -206,14 +205,14 @@ public struct AnalyticsView: View {
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
-                            Text("\(Int(h.value.rounded()))%")
+                            Text(PercentText.format(h.value))
                                 .font(.headline.weight(.bold).monospacedDigit())
                                 .foregroundStyle(h.color)
                         } else {
                             Text(L10n.localizedString("analytics_usage"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text("\(avgUsage)%")
+                            Text(avgUsage)
                                 .font(.headline.weight(.bold).monospacedDigit())
                         }
                     }
@@ -238,7 +237,7 @@ public struct AnalyticsView: View {
                                     .font(.callout.weight(isHovered ? .bold : .medium))
                                     .lineLimit(1)
                                 Spacer()
-                                Text(String(format: "%.0f%%", usagePct))
+                                Text(PercentText.format(usagePct))
                                     .font(.callout.monospacedDigit().weight(isHovered ? .bold : .medium))
                                     .foregroundStyle(isHovered ? Color.primary : Color.secondary)
                             }
@@ -283,6 +282,7 @@ public struct AnalyticsView: View {
         }
 
         let hoveredSlice = costSlices.first(where: { $0.id == hoveredCostVendor })
+        let costAvailable = analyticsStore.snapshot?.isCostAvailable ?? true
 
         return VStack(alignment: .leading, spacing: 8) {
             Text(L10n.localizedString("analytics_cost_distribution_title"))
@@ -300,7 +300,7 @@ public struct AnalyticsView: View {
                                 .font(.subheadline.weight(.bold).monospacedDigit())
                                 .foregroundStyle(h.color)
                         } else {
-                            Text(AnalyticsMoneyFormatter.formatCompact(totalCost))
+                            Text(costAvailable ? AnalyticsMoneyFormatter.formatCompact(totalCost) : "—")
                                 .font(.headline.weight(.bold).monospacedDigit())
                             Text("USD")
                                 .font(.system(size: 9))
@@ -312,7 +312,14 @@ public struct AnalyticsView: View {
                 .frame(width: 96, height: 96)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    if shares.isEmpty {
+                    if !costAvailable {
+                        // Month: the scanners keep 7 days, so there is no
+                        // 30-day cost to show — say so instead of "$0".
+                        Text(L10n.localizedString("analytics_cost_7d_only"))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if shares.isEmpty {
                         Text(L10n.localizedString("analytics_empty_data"))
                             .font(.callout)
                             .foregroundStyle(.secondary)

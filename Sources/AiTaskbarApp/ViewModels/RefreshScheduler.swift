@@ -17,7 +17,28 @@ public final class RefreshScheduler: ObservableObject {
     private var refreshLoop: Task<Void, Never>?
     private var statusRefreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
-    private var updateCheckLoop: Task<Void, Never>?
+    /// Internal read so a test can prove the loop never started (TEST-MAE-011).
+    private(set) var updateCheckLoop: Task<Void, Never>?
+    /// Suspends the usage refresh loop between ticks. Production uses
+    /// `Task.sleep`; tests inject a scripted sleeper so the cadence and the
+    /// 429 back-off can be asserted without wall-clock waits. Returning early
+    /// on cancellation is fine: the loop re-checks `Task.isCancelled`.
+    typealias Sleeper = @MainActor (TimeInterval) async -> Void
+    private let sleeper: Sleeper
+    /// Suspends the update-check loop; defaults to `sleeper`. Separate so a
+    /// test can script the daily cadence without mixing in refresh ticks.
+    private let updateSleeper: Sleeper
+    /// The time a tick is dispatched at, which bounds how long a hung fetch
+    /// is skipped (`UsageStore.maxInFlightAge`). Tests advance it with the
+    /// scripted sleeper instead of waiting on the wall clock.
+    typealias Clock = @MainActor () -> Date
+    private let clock: Clock
+
+    static func taskSleep(_ seconds: TimeInterval) async {
+        // Best-effort: a cancelled sleep simply returns and the loop's own
+        // `Task.isCancelled` check ends it.
+        try? await Task.sleep(for: .seconds(seconds))
+    }
 
     public convenience init(store: UsageStore,
                             statusStore: ServiceStatusStore? = nil,
@@ -34,8 +55,14 @@ public final class RefreshScheduler: ObservableObject {
          updates: UpdateChecker? = nil,
          interval: TimeInterval,
          minimumInterval: TimeInterval,
-         minimumStatusInterval: TimeInterval) {
+         minimumStatusInterval: TimeInterval,
+         sleeper: @escaping Sleeper = RefreshScheduler.taskSleep,
+         updateSleeper: Sleeper? = nil,
+         clock: @escaping Clock = { .now }) {
         self.store = store
+        self.sleeper = sleeper
+        self.updateSleeper = updateSleeper ?? sleeper
+        self.clock = clock
         self.statusStore = statusStore
         self.costEstimator = costEstimator
         self.updates = updates
@@ -59,68 +86,82 @@ public final class RefreshScheduler: ObservableObject {
     /// long-lived timer; status and usage merely have independent loops.
     private func startStatusRefreshLoop() {
         guard statusRefreshLoop == nil, statusStore != nil else { return }
+        let seconds = statusInterval
+        // Every loop re-reads `self` weakly per step and never holds it
+        // across a sleep, so dropping the scheduler lets deinit cancel the
+        // loops (LEAK-FAN-008).
         statusRefreshLoop = Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.statusStore?.refreshAll(forceRefresh: false)
-            await self.statusStore?.waitForCurrentRefresh()
+            await Self.refreshStatus(self?.statusStore)
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(self.statusInterval))
+                try? await Task.sleep(for: .seconds(seconds))
                 if Task.isCancelled { break }
-                self.statusStore?.refreshAll(forceRefresh: false)
-                await self.statusStore?.waitForCurrentRefresh()
+                await Self.refreshStatus(self?.statusStore)
             }
         }
     }
 
+    private static func refreshStatus(_ statusStore: ServiceStatusStore?) async {
+        guard let statusStore else { return }
+        statusStore.refreshAll(forceRefresh: false)
+        await statusStore.waitForCurrentRefresh()
+    }
+
     private func startRefreshLoop() {
         guard refreshLoop == nil else { return }
+        let sleeper = self.sleeper
+        let interval = self.interval
         refreshLoop = Task { @MainActor [weak self] in
-            guard let self else { return }
             // Initial fetch keeps cache semantics — if a relaunch lands
             // inside a fresh cache window, don't burn a network call.
-            self.store?.markScheduledTick()
-            self.store?.refreshAll(forceRefresh: false)
-            self.costEstimator?.refresh()
+            self?.dispatchScheduledTick()
             while !Task.isCancelled {
                 // Sleep the configured interval first. While we sleep, the
                 // previous cycle's async per-vendor Tasks complete and
                 // update their state. Only AFTER waking do we sample
                 // `hasRateLimitedVendor`, because if we sampled before the
                 // sleep the state we'd read is the synchronous `.loading`
-                // that `refreshAll` just set — wiping any `.failed(429)`
+                // that `refreshIdleVendors` just set — wiping any `.failed(429)`
                 // or stale-`.ok(429-lastError)` from the cycle we're
                 // trying to back off from.
-                try? await Task.sleep(for: .seconds(self.interval))
+                await sleeper(interval)
                 if Task.isCancelled { break }
-                if self.store?.hasRateLimitedVendor ?? false {
+                if self?.store?.hasRateLimitedVendor ?? false {
                     // Surface the back-off to the UI so the countdown
                     // label can render "Aguardando rate-limit…" instead
                     // of freezing at 0:00 for 60 s. Cleared right before
                     // the markScheduledTick that follows so the countdown
                     // re-anchors cleanly.
-                    self.store?.enterRateLimitBackoff()
-                    try? await Task.sleep(for: .seconds(Self.rateLimitBackoff))
-                    self.store?.exitRateLimitBackoff()
+                    self?.store?.enterRateLimitBackoff()
+                    await sleeper(Self.rateLimitBackoff)
+                    self?.store?.exitRateLimitBackoff()
                     if Task.isCancelled { break }
                 }
-                // Scheduled ticks use `forceRefresh: false`. AppEnvironment
-                // wires the DiskCache TTL to `max(15, interval - 5)`, so
-                // at T=interval the cache age (≈ interval) is always
-                // strictly greater than the TTL — `freshPayload()` returns
-                // nil and CachedFetch goes to the network without needing
-                // a force flag. The 5-second margin absorbs Task.sleep
-                // jitter without ever letting the boundary equal the TTL.
-                // Single-flight tick: if any vendor is still loading from the
-                // previous cycle, skip stacking another fan-out (BP-HYD-005).
-                // Cancel-on-supersede in VendorViewModel covers the rest.
-                if self.store?.isAnyVendorLoading == true {
-                    continue
-                }
-                self.store?.markScheduledTick()
-                self.store?.refreshAll(forceRefresh: false)
-                self.costEstimator?.refresh()
+                self?.dispatchScheduledTick()
             }
         }
+    }
+
+    /// One scheduled fan-out, with `forceRefresh: false`. AppEnvironment
+    /// wires the DiskCache TTL to `max(15, interval - 5)` and ticks are
+    /// dispatched `interval` apart (plus any 429 back-off), measured from
+    /// dispatch, not from completion. So a fetch that completed within ~5 s
+    /// of its dispatch left a cache entry that is already expired at the
+    /// next tick, and CachedFetch goes to the network. A slower fetch wrote
+    /// its entry later: the next tick may still land inside the TTL and
+    /// serve that payload (at most one interval old) from cache; the tick
+    /// after that refetches.
+    ///
+    /// Single-flight per vendor: a vendor whose previous fetch is still in
+    /// flight is skipped (BP-HYD-005) while every other vendor refreshes, so
+    /// one hung fetch cannot stall the whole cycle (RACE-CRO-003), until the
+    /// fetch is `UsageStore.maxInFlightAge` old; then this tick supersedes it
+    /// (RACE-MAE-001). Cancel-on-supersede in VendorViewModel covers manual
+    /// refreshes.
+    private func dispatchScheduledTick() {
+        guard let store else { return }
+        store.markScheduledTick()
+        store.refreshIdleVendors(forceRefresh: false, now: clock())
+        costEstimator?.refresh()
     }
 
     private func startCompactLoop() {
@@ -144,14 +185,21 @@ public final class RefreshScheduler: ObservableObject {
     }
 
     private func startUpdateCheckLoop() {
-        guard updateCheckLoop == nil, updates != nil else { return }
+        guard updateCheckLoop == nil, let updates, updates.config.enabled else { return }
+        let sleeper = self.updateSleeper
         updateCheckLoop = Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.updates?.checkIfNeeded()
+            // Once per local calendar day (UPDATE-SCHED-001): check at launch
+            // when due, then sleep until the next local day (or 24 h), which
+            // is recomputed from the stored last-check date after every round,
+            // so a manual check from About moves the next one too. The
+            // instance delay carries the 60 s floor that keeps a busy check
+            // from spinning.
+            self?.updates?.checkIfNeeded()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(86_400))
+                guard let delay = self?.updates?.delayUntilNextCheck() else { break }
+                await sleeper(delay)
                 if Task.isCancelled { break }
-                self.updates?.checkIfNeeded()
+                self?.updates?.checkIfNeeded()
             }
         }
     }

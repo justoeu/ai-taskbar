@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import AiTaskbarCore
 
@@ -51,5 +52,42 @@ struct CodeSignatureInfoTests {
         if let team {
             #expect(!team.isEmpty)
         }
+    }
+
+    // DUP-MAE-001: the shared requirement check.
+    private static let calculator = URL(fileURLWithPath: "/System/Applications/Calculator.app")
+    private static let strict = SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures)
+
+    @Test("an Apple app satisfies an Apple-anchor requirement")
+    func requirement_apple_anchor_passes() {
+        #expect(CodeSignatureInfo.checkRequirement(
+            of: Self.calculator, requirement: "anchor apple", flags: Self.strict) == errSecSuccess)
+    }
+
+    @Test("an Apple app fails a third-party team requirement")
+    func requirement_wrong_team_fails() {
+        let rule = "anchor apple generic and certificate leaf[subject.OU] = \"5HHL78743R\""
+        #expect(CodeSignatureInfo.checkRequirement(
+            of: Self.calculator, requirement: rule, flags: Self.strict) == errSecCSReqFailed)
+    }
+
+    @Test("nested-code validation of an Apple app still passes")
+    func requirement_nested_code_passes() {
+        let flags = SecCSFlags(rawValue: Self.strict.rawValue | kSecCSCheckNestedCode)
+        #expect(CodeSignatureInfo.checkRequirement(
+            of: Self.calculator, requirement: "anchor apple", flags: flags) == errSecSuccess)
+    }
+
+    @Test("an unparseable requirement is reported, not treated as satisfied")
+    func requirement_unparseable_fails() {
+        #expect(CodeSignatureInfo.checkRequirement(
+            of: Self.calculator, requirement: "anchor apple and (", flags: Self.strict) != errSecSuccess)
+    }
+
+    @Test("a missing path is reported, not treated as satisfied")
+    func requirement_missing_path_fails() {
+        let missing = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).app")
+        #expect(CodeSignatureInfo.checkRequirement(
+            of: missing, requirement: "anchor apple", flags: Self.strict) != errSecSuccess)
     }
 }

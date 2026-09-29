@@ -18,7 +18,7 @@ public final class CostEstimator: ObservableObject {
     /// from the size and contents of the current user's on-disk histories.
     private let claudeEstimate: @Sendable () -> CostEstimate
     private let codexEstimate: @Sendable () -> CostEstimate
-    private let opencodeScan: @Sendable ([String: [String]]) -> [String: OpencodeScan]
+    private let opencodeScan: @Sendable ([String: [String]]) -> [String: OpencodeScan]?
 
     /// Usage that reached a vendor through opencode rather than that vendor's
     /// own CLI, keyed by the vendor it was billed to.
@@ -53,7 +53,7 @@ public final class CostEstimator: ObservableObject {
     private var inFlight: Task<Void, Never>?
     /// The opencode scan, tracked separately so it can be cancelled without
     /// touching the scan that owns `isLoading`.
-    private var opencodeTask: Task<Void, Never>?
+    private(set) var opencodeTask: Task<Void, Never>?
     /// Bumped on every `refresh`. A task only writes state if this still
     /// matches the value it captured — otherwise a scan superseded while a
     /// NEWER one was already running would clear that newer scan's `isLoading`
@@ -70,13 +70,28 @@ public final class CostEstimator: ObservableObject {
     public init() {
         self.claudeEstimate = { ClaudeSessionScanner.estimate() }
         self.codexEstimate = { CodexCost.estimate() }
-        self.opencodeScan = { OpencodeScanner.scan(providerGroups: $0) ?? [:] }
+        self.opencodeScan = { groups in
+            Self.opencodeRows(from: OpencodeScanner.scanOutcome(providerGroups: groups))
+        }
+    }
+
+    /// A missing database means opencode is not installed: genuinely no rows.
+    /// An unavailable scan is a read failure and stays nil, so the previously
+    /// published rows are kept (BUG-ART-013). Decided by the scanner's own
+    /// probe, not a second `fileExists` that could disagree with it.
+    nonisolated static func opencodeRows(from outcome: OpencodeScanner.Outcome)
+        -> [String: OpencodeScan]? {
+        switch outcome {
+        case .notInstalled: return [:]
+        case .unavailable: return nil
+        case .scanned(let scans): return scans
+        }
     }
 
     internal init(
         claudeEstimate: @escaping @Sendable () -> CostEstimate,
         codexEstimate: @escaping @Sendable () -> CostEstimate,
-        opencodeScan: @escaping @Sendable ([String: [String]]) -> [String: OpencodeScan]
+        opencodeScan: @escaping @Sendable ([String: [String]]) -> [String: OpencodeScan]?
     ) {
         self.claudeEstimate = claudeEstimate
         self.codexEstimate = codexEstimate
@@ -135,8 +150,13 @@ public final class CostEstimator: ObservableObject {
             }
             await MainActor.run { [self] in
                 guard self.generation == gen else { return }
-                self.byVendor[.anthropic] = claudeEstimate
-                self.byVendor[.openai] = codexEstimate
+                // One assignment, one emission: two subscript writes on the
+                // @Published dictionary fired every subscriber twice per scan
+                // (PERF-FLU-001).
+                var updated = self.byVendor
+                updated[.anthropic] = claudeEstimate
+                updated[.openai] = codexEstimate
+                self.byVendor = updated
                 self.lastComputedAt = .now
                 self.isLoading = false
                 self.inFlight = nil
@@ -161,16 +181,23 @@ public final class CostEstimator: ObservableObject {
         opencodeTask = Task.detached(priority: .utility) {
             let groups = Dictionary(uniqueKeysWithValues:
                 Self.opencodeProviders.map { ($0.key.rawValue, $0.value) })
+            // nil = the database exists but could not be read (open, prepare
+            // or step failed). That is not "no usage": keep the rows the card
+            // shows and let the next refresh retry (BUG-ART-013).
             let rawScans = opencodeScan(groups)
-            let scans: [VendorId: OpencodeScan] = Dictionary(
-                uniqueKeysWithValues: rawScans.compactMap { key, scan in
-                guard let vendor = VendorId(rawValue: key), !scan.isEmpty else { return nil }
-                return (vendor, scan)
-            })
             guard !Task.isCancelled else { return }
+            if rawScans == nil {
+                AppLog.cost.error("opencode scan failed; keeping the previous rows")
+            }
+            let scans: [VendorId: OpencodeScan]? = rawScans.map { raw in
+                Dictionary(uniqueKeysWithValues: raw.compactMap { key, scan in
+                    guard let vendor = VendorId(rawValue: key), !scan.isEmpty else { return nil }
+                    return (vendor, scan)
+                })
+            }
             await MainActor.run { [self] in
                 guard self.generation == gen else { return }
-                self.opencode = scans
+                if let scans { self.opencode = scans }
                 self.opencodeTask = nil
             }
         }

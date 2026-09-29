@@ -28,6 +28,12 @@ public final class VendorViewModel: ObservableObject, Identifiable {
             }
         }
 
+        /// True while a refresh is in flight.
+        public var isLoading: Bool {
+            if case .loading = self { return true }
+            return false
+        }
+
         /// True when the current state represents the Claude Keychain ACL
         /// block, including CachedFetch's stale-success shape. A live fetch
         /// failure with a cached payload is returned as `.ok(isStale: true)`
@@ -54,6 +60,11 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     let openAIReset = OpenAIResetController()
 
     @Published public private(set) var state: State = .idle
+    /// When the in-flight refresh started, on the clock of whoever started
+    /// it (the scheduler passes its own). Meaningful only while `state` is
+    /// `.loading`; `UsageStore.refreshIdleVendors` reads it to bound how long
+    /// a hung fetch can keep a vendor out of the scheduled ticks.
+    public private(set) var loadingSince: Date?
     @Published public private(set) var history: [UsageHistoryStore.Sample] = []
     @Published public private(set) var lastNetworkFetch: Date?
     @Published public private(set) var rateLimitRetryAt: Date?
@@ -76,8 +87,7 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     @Published public var isExpanded: Bool {
         didSet {
             guard isExpanded != oldValue else { return }
-            UserDefaults.standard.set(isExpanded,
-                                      forKey: Self.expansionKey(for: vendorId))
+            defaults.set(isExpanded, forKey: Self.expansionKey(for: vendorId))
         }
     }
 
@@ -120,6 +130,12 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         }
     }
 
+    /// The "Re-login" child for this vendor. Lives on the view model, not the
+    /// view: the popover closes as soon as the user switches to the browser,
+    /// and the OAuth flow must survive that. Not stopped on recovery either:
+    /// a successful login exits on its own, and `agy` may be a live session.
+    let reloginProcess = ReloginProcessTracker()
+
     public let historyStore: UsageHistoryStore?
     private weak var notifications: NotificationService?
     /// Bumped on every refresh — used to track in-flight task ownership
@@ -136,23 +152,58 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     private var credWatcher: DispatchSourceFileSystemObject?
     private var credDebounce: Task<Void, Never>?
 
+    /// Loads the initial 24 h history window. Injectable so a test can hold
+    /// the load open and order it against a refresh (RACE-CRO-011).
+    public typealias HistoryLoader = @Sendable (UsageHistoryStore, Date) async -> [UsageHistoryStore.Sample]
+
+    /// Production loader: decodes the JSONL off the MainActor so a
+    /// multi-vendor launch does not block the popover (N1-NEX-006).
+    public nonisolated static let detachedHistoryLoad: HistoryLoader = { store, cutoff in
+        await Task.detached(priority: .utility) { store.load(since: cutoff) }.value
+    }
+
+    /// True when the history store could not be created, so this vendor has
+    /// no sparkline and contributes nothing to Analytics this session.
+    public let historyUnavailable: Bool
+
+    /// Backs `isExpanded`. Injected so tests never touch `.standard`.
+    private let defaults: UserDefaults
+
+    /// Wall clock read when a response arrives, to stamp the 429 cooldown and
+    /// `lastNetworkFetch`. Injected so tests can model a slow request
+    /// (BUG-MAE-009). A wall clock, not `ContinuousClock`: both stamps are
+    /// `Date`s compared with `Date`s elsewhere (CQ-MAE-019).
+    private let clock: @MainActor () -> Date
+
     public init(provider: any UsageProvider,
-                notifications: NotificationService? = nil) {
+                notifications: NotificationService? = nil,
+                defaults: UserDefaults = .standard,
+                historyStoreFactory: (VendorId) throws -> UsageHistoryStore = UsageHistoryStore.defaultFor,
+                historyLoader: @escaping HistoryLoader = VendorViewModel.detachedHistoryLoad,
+                clock: @escaping @MainActor () -> Date = { Date.now }) {
         self.vendorId = provider.vendorId
+        self.clock = clock
         self.provider = provider
         self.notifications = notifications
-        self.isExpanded = (UserDefaults.standard
+        self.defaults = defaults
+        self.isExpanded = (defaults
             .object(forKey: Self.expansionKey(for: provider.vendorId)) as? Bool) ?? true
-        self.historyStore = try? UsageHistoryStore.defaultFor(provider.vendorId)
-        // Load history off the MainActor so multi-vendor launch does not
-        // block the popover on JSONL decode (N1-NEX-006).
-        if let store = historyStore {
+        // History is best-effort, but a store that cannot be created must not
+        // vanish silently: log it and expose the flag (BEST-ATE-006).
+        var store: UsageHistoryStore?
+        do {
+            store = try historyStoreFactory(provider.vendorId)
+        } catch {
+            AppLog.lifecycle.error(
+                "history store unavailable for \(provider.vendorId.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+        self.historyStore = store
+        self.historyUnavailable = store == nil
+        if let store {
             let cutoff = Date.now.addingTimeInterval(-24 * 3600)
             Task { @MainActor [weak self] in
-                let samples = await Task.detached(priority: .utility) {
-                    store.load(since: cutoff)
-                }.value
-                self?.history = samples
+                let samples = await historyLoader(store, cutoff)
+                self?.mergeLoadedHistory(samples)
             }
         }
         if let credPath = provider.credentialFileURL {
@@ -211,28 +262,42 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     /// work does not stack (RACE-HER-002 / BP-HYD-003).
     private var refreshTask: Task<Void, Never>?
 
-    public func refresh(forceRefresh: Bool) {
+    public func refresh(forceRefresh: Bool, now: Date = .now) {
         // A manual refresh bypasses the disk cache, but must not bypass a
         // server-imposed cooldown: repeated clicks otherwise amplify a 429.
-        if let retryAt = rateLimitRetryAt, Date.now < retryAt { return }
+        // Same clock as `loadingSince`, so a caller-supplied `now` drives the
+        // cooldown too (CQ-MAE-014).
+        if let retryAt = rateLimitRetryAt, now < retryAt { return }
         epoch += 1
         let myEpoch = epoch
         let previous = state.outcome
+        loadingSince = now
         state = .loading(previous: previous)
+        // The cooldown is stamped at ARRIVAL on the caller's timeline: the
+        // dispatch `now` plus however long the request took on `clock`, so a
+        // slow 429 still gets the full cooldown (BUG-MAE-009).
+        let dispatchedAt = clock()
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             guard let self else { return }
+            let arrival = { now.addingTimeInterval(self.clock().timeIntervalSince(dispatchedAt)) }
             do {
                 let outcome = try await self.provider.fetchUsage(forceRefresh: forceRefresh)
                 if Task.isCancelled { return }
                 guard myEpoch == self.epoch else { return }   // newer refresh wins
                 self.state = .ok(outcome)
-                self.observeRateLimit(status: outcome.lastError?.status)
-                if (outcome.cacheAge ?? .greatestFiniteMagnitude) <= 1 {
-                    self.lastNetworkFetch = .now
+                self.observeRateLimit(status: outcome.lastError?.status, at: arrival())
+                if Self.isNetworkOutcome(outcome) {
+                    self.lastNetworkFetch = self.clock()   // one time source (CQ-MAE-019)
                 }
                 self.notifications?.observe(vendor: self.vendorId, snapshot: outcome.snapshot)
-                self.recordHistory(outcome.snapshot.maxUtilization)
+                // Only a real network reading is a new sample. A stale
+                // fallback or a cache replay re-serves an old number, and
+                // stamping it `now` would plot a pre-outage percent past a
+                // window reset (BUG-ART-010).
+                if Self.isFreshNetworkOutcome(outcome) {
+                    self.recordHistory(outcome.snapshot.maxUtilization)
+                }
             } catch is CancellationError {
                 return
             } catch {
@@ -244,22 +309,24 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 let fallback = previous ?? self.state.outcome
                 self.state = .failed(error: appErr, fallback: fallback)
                 if case .http(let status, _) = appErr {
-                    self.observeRateLimit(status: status)
+                    self.observeRateLimit(status: status, at: arrival())
                 } else {
-                    self.observeRateLimit(status: nil)
+                    self.observeRateLimit(status: nil, at: arrival())
                 }
             }
         }
     }
 
-    private func observeRateLimit(status: Int?) {
+    /// `now` is the response-arrival time on the dispatching refresh's
+    /// clock, so the cooldown is stamped and checked on the same clock.
+    private func observeRateLimit(status: Int?, at now: Date) {
         guard status == 429 else {
             consecutiveRateLimits = 0
             rateLimitRetryAt = nil
             return
         }
         consecutiveRateLimits += 1
-        rateLimitRetryAt = Date.now.addingTimeInterval(
+        rateLimitRetryAt = now.addingTimeInterval(
             Self.rateLimitCooldown(forAttempt: consecutiveRateLimits))
     }
 
@@ -284,7 +351,28 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         history = current.filter { $0.at >= cutoff }
     }
 
-    public func compactHistory() {
-        historyStore?.compact()
+    /// "Network, not cache": `CachedFetch` stamps a live fetch `cacheAge: 0`
+    /// and a replay with the entry's age. Drives `lastNetworkFetch`.
+    static func isNetworkOutcome(_ outcome: FetchOutcome) -> Bool {
+        (outcome.cacheAge ?? .greatestFiniteMagnitude) <= 1
+    }
+
+    /// A network reading that is not a stale fallback: the only outcome that
+    /// counts as a new history sample.
+    static func isFreshNetworkOutcome(_ outcome: FetchOutcome) -> Bool {
+        !outcome.isStale && isNetworkOutcome(outcome)
+    }
+
+    /// Folds the initial disk load into `history` instead of replacing it, so
+    /// a sample recorded while the load was in flight survives (RACE-CRO-011).
+    /// A sample both appended in memory and read back from the file is kept
+    /// once.
+    private func mergeLoadedHistory(_ loaded: [UsageHistoryStore.Sample]) {
+        let cutoff = Date.now.addingTimeInterval(-24 * 3600).timeIntervalSince1970
+        let loadedStamps = Set(loaded.map(\.at))
+        let recordedMeanwhile = history.filter { !loadedStamps.contains($0.at) }
+        history = (loaded + recordedMeanwhile)
+            .filter { $0.at >= cutoff }
+            .sorted { $0.at < $1.at }
     }
 }

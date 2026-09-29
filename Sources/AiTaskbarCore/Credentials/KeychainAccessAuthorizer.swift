@@ -87,31 +87,6 @@ public enum KeychainAccessAuthorizer {
         }
     }
 
-    /// UIFail probe: `true` when this binary can already DECRYPT the item's
-    /// data with no SecurityAgent prompt — i.e. the decrypt ACL + partition
-    /// list already grant access. `kSecUseAuthenticationUIFail` guarantees we
-    /// fast-fail (`errSecInteractionNotAllowed`) instead of ever prompting, so
-    /// this is safe to call from any context. See `KeychainCredentialReader`
-    /// for why the deprecated UIFail key is deliberate for these plain
-    /// generic-password items.
-    public static func canReadSilently(_ service: String, account: String? = nil) -> Bool {
-        var result: CFTypeRef?
-        var query: [String: Any] = [
-            kSecClass as String:               kSecClassGenericPassword,
-            kSecAttrService as String:         service,
-            kSecMatchLimit as String:          kSecMatchLimitOne,
-            kSecReturnData as String:          true,
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
-        ]
-        if let account { query[kSecAttrAccount as String] = account }
-        // UIFail alone does NOT silence the partition-list password dialog —
-        // only the trusted-app Allow/Deny one. The suppressor guarantees the
-        // probe is truly silent (see KeychainPromptSuppressor).
-        return KeychainPromptSuppressor.withPromptsSuppressed {
-            SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
-        }
-    }
-
     /// Called only by the user's Authorize action, never by scheduled refresh.
     public static func authorize(service: String, account: String? = nil) throws -> Outcome {
         try authorize(service: service, account: account,

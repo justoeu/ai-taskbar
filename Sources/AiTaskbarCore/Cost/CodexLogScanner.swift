@@ -29,8 +29,9 @@ public enum CodexLogScanner {
         }
         defer { sqlite3_close(db) }
 
-        let sevenDaysAgo = Int(now.timeIntervalSince1970) - 7 * 86_400
-        let startOfToday = Int(Calendar.current.startOfDay(for: now).timeIntervalSince1970)
+        let window = CostWindow(now: now)
+        let sevenDaysAgo = Int(window.startOfLast7Days.timeIntervalSince1970)
+        let startOfToday = Int(window.startOfToday.timeIntervalSince1970)
 
         let sql = """
             SELECT ts, feedback_log_body

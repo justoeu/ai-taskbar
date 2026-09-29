@@ -1,5 +1,4 @@
 import Foundation
-import os
 import AiTaskbarCore
 
 public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
@@ -48,7 +47,18 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     }
 
     public func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
-        try await fetcher.run(
+        // A cache hit decodes synchronously, so the plan label must already
+        // be memoized: reading the Keychain from decode would block a
+        // cooperative-pool thread (RACE-CRO-004). The fetch path primes it
+        // from its own read. Priming only when a fresh entry will actually be
+        // served keeps a cold fetch to ONE Keychain read, and bounds a failing
+        // priming read to the fresh hits of one TTL instead of every tick: once
+        // the entry ages out, the fetch path reads and surfaces the error
+        // (PERF-MAE-003).
+        if !forceRefresh, fetcher.cache.hasFreshPayload() {
+            await primeLabelCacheOffPoolIfNeeded()
+        }
+        return try await fetcher.run(
             forceRefresh: forceRefresh,
             decode: decodeSnapshot,
             fetch: { [self] in
@@ -74,9 +84,9 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         )
     }
 
-    /// Single-flight OAuth refresh (RACE-HER-003) — same RT rotation hazard as OpenAI.
-    private let refreshFlight = OSAllocatedUnfairLock(
-        initialState: Optional<Task<AnthropicCredentials, Error>>.none)
+    /// Single-flight OAuth refresh (RACE-HER-003, RACE-CRO-001) — same RT
+    /// rotation hazard as OpenAI.
+    private let refreshFlight = SingleFlight<AnthropicCredentials>()
 
     private func loadCredentials() async throws -> AnthropicCredentials {
         var credentials = try await credentialReader.readOffPool()
@@ -88,32 +98,39 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         if manageOAuthRefresh, credentialReader.canPersistCredentials,
            credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
             credentials = try await refreshAndWriteBack(credentials)
+            try Task.checkCancellation()
         }
         return credentials
     }
 
     private func refreshAndWriteBack(_ credentials: AnthropicCredentials) async throws -> AnthropicCredentials {
-        if let existing = refreshFlight.withLock({ $0 }) {
-            return try await existing.value
-        }
-        let task = Task<AnthropicCredentials, Error> {
-            defer { refreshFlight.withLock { $0 = nil } }
+        try await refreshFlight.run { [self] in
+            // The caller's credential may predate a rotation by an earlier
+            // flight or by the Claude Code CLI; exchanging its refresh token
+            // would spend one the server already consumed (RACE-CRO-002).
+            // No invalidate first: the reader's memory cache only serves a
+            // credential outside the refresh window (both buffers are 300 s),
+            // i.e. a newer one, and invalidating would drop a pending,
+            // not-yet-persisted rotation.
+            let current = try await credentialReader.readOffPool()
+            // The re-read may have fallen back to /usr/bin/security, which
+            // cannot write back; never rotate what cannot be persisted.
+            if current.refreshToken != credentials.refreshToken
+                || !credentialReader.canPersistCredentials {
+                return current
+            }
             let resp = try await AnthropicOAuth.refresh(
-                refreshToken: credentials.refreshToken, http: http)
-            try Task.checkCancellation()
-            let updated = credentials.rotated(
+                refreshToken: current.refreshToken, http: http)
+            // No cancellation check here: the flight is never cancelled (see
+            // SingleFlight), and once the server rotated the token the new
+            // one must be written back. `loadCredentials` checks afterwards.
+            let updated = current.rotated(
                 accessToken: resp.access_token,
                 refreshToken: resp.refresh_token,
                 expiresAt: Date.now.addingTimeInterval(resp.expires_in))
             try credentialReader.writeBack(updated)
             return updated
         }
-        let winner: Task<AnthropicCredentials, Error> = refreshFlight.withLock { slot in
-            if let existing = slot { return existing }
-            slot = task
-            return task
-        }
-        return try await winner.value
     }
 
     private func requestUsage(using credentials: AnthropicCredentials) async throws -> Data {
@@ -149,17 +166,21 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         return .anthropic(parsed.toSnapshot(planLabel: planLabel()))
     }
 
+    /// Memoized only. Decode runs synchronously on the caller's executor, so
+    /// it must never touch the Keychain.
     private func planLabel() -> String? {
-        labelLock.lock()
-        let cached = labelCache
-        labelLock.unlock()
-        if let cached { return cached.label }
-        guard let credentials = try? credentialReader.read() else { return nil }
-        primeLabelCache(subscriptionType: credentials.subscriptionType,
-                        rateLimit: credentials.rateLimitTier)
         labelLock.lock()
         defer { labelLock.unlock() }
         return labelCache?.label
+    }
+
+    /// Best-effort: a failed read only costs the plan label on this cache
+    /// hit. The fetch path reads again and surfaces credential errors.
+    private func primeLabelCacheOffPoolIfNeeded() async {
+        guard !labelLock.withLock({ labelCache != nil }),
+              let credentials = try? await credentialReader.readOffPool() else { return }
+        primeLabelCache(subscriptionType: credentials.subscriptionType,
+                        rateLimit: credentials.rateLimitTier)
     }
 
     private func primeLabelCache(subscriptionType: String?, rateLimit: String?) {

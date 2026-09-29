@@ -18,7 +18,7 @@ struct AiTaskbarApp: App {
 
     init() {
         let env = AppEnvironment.live()
-        let updates = UpdateChecker(config: env.config.updates)
+        let updates = UpdateChecker(config: env.config.updates, http: env.http)
         _updates = StateObject(wrappedValue: updates)
         let watcherPath = (try? Paths.configFile())
             ?? URL(fileURLWithPath: NSTemporaryDirectory())

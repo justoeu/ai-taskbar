@@ -96,10 +96,13 @@ public struct VendorAnalyticsCardView: View {
                         Spacer()
 
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text(AnalyticsMoneyFormatter.format(summary.totalCostUSD))
+                            // Month has no cost source: a dash, not "$0.00".
+                            Text(summary.isCostAvailable
+                                 ? AnalyticsMoneyFormatter.format(summary.totalCostUSD)
+                                 : "—")
                                 .font(.headline.monospacedDigit())
                             if summary.totalUsagePercent > 0 {
-                                Text("\(Int(summary.totalUsagePercent))% quota")
+                                Text(AnalyticsFormatters.quotaText(summary.totalUsagePercent))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -175,11 +178,11 @@ public struct VendorAnalyticsCardView: View {
 
                     // Session Stats & Delta
                     HStack(spacing: 12) {
-                        if summary.sessionCount > 0 {
-                            let sessionLabel = summary.sessionCount == 1
-                                ? "1 \(L10n.localizedString("analytics_session_single"))"
-                                : "\(summary.sessionCount) \(L10n.localizedString("analytics_sessions"))"
-                            Label(sessionLabel, systemImage: "macwindow")
+                        // Real sessions where a session counter exists; otherwise
+                        // the number of models, labelled as such.
+                        if let countLabel = Self.countLabel(sessions: summary.sessionCount,
+                                                            models: summary.modelCount) {
+                            Label(countLabel, systemImage: "macwindow")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -247,7 +250,7 @@ public struct VendorAnalyticsCardView: View {
                             }
                         }
                         .padding(.top, 4)
-                    } else if !summary.vendor.isPrepaidOnly && summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
+                    } else if summary.isCostAvailable && !summary.vendor.isPrepaidOnly && summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.callout)
@@ -261,14 +264,7 @@ public struct VendorAnalyticsCardView: View {
                     }
 
                     // Empty state when there is no usage data
-                    let hasNoData = summary.costByModel.isEmpty
-                        && summary.sessionCount == 0
-                        && summary.peakDay == nil
-                        && (summary.lifetimeCostUSD == nil || summary.lifetimeCostUSD == 0)
-                        && summary.totalCostUSD <= 0.0001
-                        && summary.totalUsagePercent <= 0.0001
-
-                    if hasNoData {
+                    if summary.showsNoRecentUsage {
                         HStack(spacing: 6) {
                             Image(systemName: "clock.arrow.circlepath")
                                 .font(.callout)
@@ -292,5 +288,23 @@ public struct VendorAnalyticsCardView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
         )
+    }
+}
+
+extension VendorAnalyticsCardView {
+    /// "N sessions" where a session counter exists, else "N models", else
+    /// nil. One formatter for both counts (DUP-MAE-002).
+    static func countLabel(sessions: Int, models: Int) -> String? {
+        if sessions > 0 {
+            return count(sessions, single: "analytics_session_single", plural: "analytics_sessions")
+        }
+        if models > 0 {
+            return count(models, single: "analytics_model_single", plural: "analytics_models")
+        }
+        return nil
+    }
+
+    private static func count(_ n: Int, single: String, plural: String) -> String {
+        "\(n) \(L10n.localizedString(n == 1 ? single : plural))"
     }
 }

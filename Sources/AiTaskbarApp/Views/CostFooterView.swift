@@ -195,7 +195,7 @@ public struct CostFooterView: View {
                     Spacer(minLength: 6)
                 }
                 ForEach(models.sorted(), id: \.self) { model in
-                    let usd7d = scan.costLast7DaysByModel[model] ?? 0
+                    let usd7d = Self.opencodeRecordedDollars(model: model, in: scan)
                     HStack(spacing: 0) {
                         Text("•  ")
                             .font(.callout)
@@ -206,7 +206,7 @@ public struct CostFooterView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer(minLength: 6)
-                        if usd7d > 0 {
+                        if let usd7d {
                             Text(String(format: "$%.2f", usd7d))
                                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.primary)
@@ -220,6 +220,16 @@ public struct CostFooterView: View {
             }
             .padding(.leading, 2)
         }
+    }
+
+    /// The dollar figure an opencode row may show, or nil when it must show
+    /// tokens instead. opencode records a cost only for pay-per-token traffic;
+    /// subscription traffic (ChatGPT-plan OpenAI models) is recorded at zero,
+    /// and printing "$0.00" or any re-priced figure for it would invent
+    /// spending that never happened (CLAUDE.md "Cost scanners").
+    static func opencodeRecordedDollars(model: String, in scan: OpencodeScan) -> Double? {
+        guard let usd = scan.costLast7DaysByModel[model], usd > 0 else { return nil }
+        return usd
     }
 
     /// "169M in · 2.7B cache · 12M out" — the three buckets that differ by
@@ -246,8 +256,8 @@ public struct CostFooterView: View {
 
     @ViewBuilder
     private func modelRow(_ row: ModelRow, totalToday: Double, total7d: Double) -> some View {
-        let todayPct = totalToday > 0 ? Int((row.usdToday / totalToday * 100).rounded()) : 0
-        let weekPct  = total7d > 0    ? Int((row.usd7d   / total7d   * 100).rounded()) : 0
+        let todayPct = totalToday > 0 ? Int(saturating: (row.usdToday / totalToday * 100).rounded()) : 0
+        let weekPct  = total7d > 0    ? Int(saturating: (row.usd7d   / total7d   * 100).rounded()) : 0
         HStack(spacing: 0) {
             Text("•  ")
                 .font(.callout)
@@ -270,7 +280,7 @@ public struct CostFooterView: View {
                 Text(String(format: "$%.2f", row.usdToday))
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.primary)
-                Text(String(format: " (%d%%)", todayPct))
+                Text(String(format: " (%ld%%)", todayPct))
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(.secondary)
             } else {
@@ -289,7 +299,7 @@ public struct CostFooterView: View {
                 Text(String(format: "$%.2f", row.usd7d))
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.primary)
-                Text(String(format: " (%d%%)", weekPct))
+                Text(String(format: " (%ld%%)", weekPct))
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(.secondary)
             } else {

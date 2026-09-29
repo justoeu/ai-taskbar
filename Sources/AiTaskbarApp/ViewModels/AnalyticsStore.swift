@@ -62,12 +62,18 @@ public final class AnalyticsStore: ObservableObject {
 
     private let estimatesProvider: () -> [VendorId: CostEstimate]
     private let snapshotsProvider: () -> [VendorId: VendorSnapshot]
-    private let historyProvider: (VendorId) -> [UsageHistoryStore.Sample]
+    private let historyProvider: @Sendable (VendorId) -> [UsageHistoryStore.Sample]
+    /// Last histories loaded off the MainActor. `recompute()` aggregates from
+    /// these synchronously, so a timeframe switch never waits on disk.
+    private var histories: [VendorId: [UsageHistoryStore.Sample]] = [:]
+    /// The in-flight off-main history load. Superseded on every trigger, so a
+    /// burst of triggers loads each vendor once. Internal so tests can await it.
+    private(set) var historyReloadTask: Task<Void, Never>?
 
     public init(
         estimatesProvider: @escaping () -> [VendorId: CostEstimate] = { [:] },
         snapshotsProvider: @escaping () -> [VendorId: VendorSnapshot] = { [:] },
-        historyProvider: @escaping (VendorId) -> [UsageHistoryStore.Sample] = { _ in [] },
+        historyProvider: @escaping @Sendable (VendorId) -> [UsageHistoryStore.Sample] = { _ in [] },
         defaults: UserDefaults = .standard
     ) {
         self.estimatesProvider = estimatesProvider
@@ -78,130 +84,118 @@ public final class AnalyticsStore: ObservableObject {
             .compactMap(VendorId.init(rawValue:))
     }
 
-    public convenience init(usageStore: UsageStore, costEstimator: CostEstimator) {
+    /// Folds opencode's per-vendor scans into the vendor estimates Analytics
+    /// shows. Pure so the default `estimatesProvider` merge is testable.
+    nonisolated static func mergingOpencode(
+        _ byVendor: [VendorId: CostEstimate],
+        opencode: [VendorId: OpencodeScan]
+    ) -> [VendorId: CostEstimate] {
+        var dict = byVendor
+        for (v, scan) in opencode {
+            // opencode is a client, not a vendor (see `CostEstimator.opencode`):
+            // its tokens are shown, its dollars are never added. OpenAI rides a
+            // subscription; xAI/Z.AI/Gemini totals must not be restated. Its
+            // models get NO breakdown row either: a $0.00 row would contradict
+            // the popover footer, which shows opencode's recorded cost (or its
+            // tokens) in a separate section. Only the token totals merge.
+            guard let existing = dict[v] else {
+                dict[v] = CostEstimate(usdToday: 0, usdLast7Days: 0,
+                                       totalsByModel: scan.last7DaysByModel)
+                continue
+            }
+            var mergedTotals = existing.totalsByModel
+            for (m, u) in scan.last7DaysByModel {
+                CostAggregator.add(u, into: &mergedTotals, model: m)
+            }
+            dict[v] = CostEstimate(
+                usdToday: existing.usdToday,
+                usdLast7Days: existing.usdLast7Days,
+                modelBreakdownToday: existing.modelBreakdownToday,
+                modelBreakdownLast7Days: existing.modelBreakdownLast7Days,
+                totalsByModel: mergedTotals,
+                computedAt: existing.computedAt,
+                isApproximate: existing.isApproximate,
+                note: existing.note,
+                unpricedModelsToday: existing.unpricedModelsToday,
+                unpricedModelsLast7Days: existing.unpricedModelsLast7Days
+            )
+        }
+        return dict
+    }
+
+    /// The estimates Analytics shows: the cost scanners' per-vendor totals
+    /// with opencode's tokens folded in. Pure and static so the default
+    /// `estimatesProvider` is testable without a live `UsageStore` /
+    /// `CostEstimator`.
+    ///
+    /// It takes no snapshots on purpose: **no vendor snapshot contributes
+    /// money here.** Every figure lands in a fixed window (`usdToday`,
+    /// `usdLast7Days`) and no snapshot carries one: OpenRouter
+    /// `/api/v1/activity` covers the last 30 days (no per-item date is
+    /// decoded), and xAI `spentUSD` / `prepaidUsedUSD` are
+    /// billing-cycle-to-date. Both were once written into `usdLast7Days`; they
+    /// stay on the vendor's popover card, which labels their real window.
+    nonisolated static func defaultEstimates(
+        byVendor: [VendorId: CostEstimate],
+        opencode: [VendorId: OpencodeScan]
+    ) -> [VendorId: CostEstimate] {
+        mergingOpencode(byVendor, opencode: opencode)
+    }
+
+    /// Latest good snapshot per vendor, as the popover currently shows it.
+    static func currentSnapshots(_ usageStore: UsageStore?) -> [VendorId: VendorSnapshot] {
+        guard let usageStore else { return [:] }
+        var dict: [VendorId: VendorSnapshot] = [:]
+        for v in usageStore.vendors {
+            if let outcome = v.state.outcome {
+                dict[v.vendorId] = outcome.snapshot
+            }
+        }
+        return dict
+    }
+
+    /// Production history source: the vendor's on-disk JSONL, last 90 days.
+    public nonisolated static func diskHistory(_ vendor: VendorId) -> [UsageHistoryStore.Sample] {
+        diskHistory(vendor, makeStore: UsageHistoryStore.defaultFor, onFailure: logHistoryUnavailable)
+    }
+
+    /// Analytics has no history for a vendor whose store cannot be created;
+    /// that must be visible in the log, as it is for `VendorViewModel`
+    /// (BEST-ATE-006 / CQ-MAE-006), not an empty chart with no reason.
+    nonisolated static func diskHistory(
+        _ vendor: VendorId,
+        makeStore: (VendorId) throws -> UsageHistoryStore,
+        onFailure: (VendorId, Error) -> Void
+    ) -> [UsageHistoryStore.Sample] {
+        do {
+            return try makeStore(vendor).load(since: Date().addingTimeInterval(-90 * 86_400))
+        } catch {
+            onFailure(vendor, error)
+            return []
+        }
+    }
+
+    nonisolated static func logHistoryUnavailable(_ vendor: VendorId, _ error: Error) {
+        AppLog.lifecycle.error(
+            "analytics history unavailable for \(vendor.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
+    }
+
+    public convenience init(
+        usageStore: UsageStore,
+        costEstimator: CostEstimator,
+        historyProvider: @escaping @Sendable (VendorId) -> [UsageHistoryStore.Sample] = AnalyticsStore.diskHistory
+    ) {
         self.init(
-            estimatesProvider: { [weak costEstimator, weak usageStore] in
+            estimatesProvider: { [weak costEstimator] in
                 guard let costEstimator else { return [:] }
-                var dict = costEstimator.byVendor
-                for (v, scan) in costEstimator.opencode {
-                    let table = PricingTable.table(for: v)
-                    var computedToday: [String: Double] = [:]
-                    for (model, usage) in scan.todayByModel {
-                        let existingCost = scan.costTodayByModel[model] ?? 0
-                        if existingCost > 0 {
-                            computedToday[model] = existingCost
-                        } else if let pricing = PricingTable.lookup(model, table: table) {
-                            computedToday[model] = CostMath.cost(usage: usage, pricing: pricing)
-                        } else {
-                            computedToday[model] = 0
-                        }
-                    }
-
-                    var computedLast7: [String: Double] = [:]
-                    for (model, usage) in scan.last7DaysByModel {
-                        let existingCost = scan.costLast7DaysByModel[model] ?? 0
-                        if existingCost > 0 {
-                            computedLast7[model] = existingCost
-                        } else if let pricing = PricingTable.lookup(model, table: table) {
-                            computedLast7[model] = CostMath.cost(usage: usage, pricing: pricing)
-                        } else {
-                            computedLast7[model] = 0
-                        }
-                    }
-
-                    let sumToday = computedToday.values.reduce(0, +)
-                    let sumLast7 = computedLast7.values.reduce(0, +)
-
-                    if dict[v] == nil {
-                        dict[v] = CostEstimate(
-                            usdToday: sumToday,
-                            usdLast7Days: sumLast7,
-                            modelBreakdownToday: computedToday,
-                            modelBreakdownLast7Days: computedLast7,
-                            totalsByModel: scan.last7DaysByModel
-                        )
-                    } else if let existing = dict[v] {
-                        var mergedToday = existing.modelBreakdownToday
-                        for (m, c) in computedToday {
-                            mergedToday[m, default: 0] += c
-                        }
-                        var mergedLast7 = existing.modelBreakdownLast7Days
-                        for (m, c) in computedLast7 {
-                            mergedLast7[m, default: 0] += c
-                        }
-                        var mergedTotals = existing.totalsByModel
-                        for (m, u) in scan.last7DaysByModel {
-                            CostAggregator.add(u, into: &mergedTotals, model: m)
-                        }
-                        dict[v] = CostEstimate(
-                            usdToday: existing.usdToday + sumToday,
-                            usdLast7Days: existing.usdLast7Days + sumLast7,
-                            modelBreakdownToday: mergedToday,
-                            modelBreakdownLast7Days: mergedLast7,
-                            totalsByModel: mergedTotals,
-                            computedAt: existing.computedAt,
-                            isApproximate: existing.isApproximate,
-                            note: existing.note
-                        )
-                    }
-                }
-                if let usageStore {
-                    for v in usageStore.vendors {
-                        let vid = v.vendorId
-                        if let outcome = v.state.outcome {
-                            switch outcome.snapshot {
-                            case .openrouter(let s):
-                                // totalUsageUSD is lifetime account usage, NOT today/weekly spend.
-                                var breakdown: [String: Double] = [:]
-                                if let top = s.topModels {
-                                    for m in top {
-                                        breakdown[m.model] = m.rawUsage
-                                    }
-                                }
-                                let totalFromModels = breakdown.values.reduce(0, +)
-                                if totalFromModels > 0 {
-                                    let existing = dict[vid]
-                                    dict[vid] = CostEstimate(
-                                        usdToday: existing?.usdToday ?? 0,
-                                        usdLast7Days: totalFromModels,
-                                        modelBreakdownToday: existing?.modelBreakdownToday ?? [:],
-                                        modelBreakdownLast7Days: breakdown,
-                                        totalsByModel: existing?.totalsByModel ?? [:]
-                                    )
-                                }
-                            case .xai(let s):
-                                let used = (s.spentUSD ?? 0) + (s.prepaidUsedUSD ?? 0)
-                                if used > 0 {
-                                    let existing = dict[vid]
-                                    dict[vid] = CostEstimate(
-                                        usdToday: existing?.usdToday ?? 0,
-                                        usdLast7Days: max(existing?.usdLast7Days ?? 0, used),
-                                        modelBreakdownToday: existing?.modelBreakdownToday ?? [:],
-                                        modelBreakdownLast7Days: existing?.modelBreakdownLast7Days ?? [:],
-                                        totalsByModel: existing?.totalsByModel ?? [:]
-                                    )
-                                }
-                            default:
-                                break
-                            }
-                        }
-                    }
-                }
-                return dict
+                return AnalyticsStore.defaultEstimates(
+                    byVendor: costEstimator.byVendor,
+                    opencode: costEstimator.opencode)
             },
             snapshotsProvider: { [weak usageStore] in
-                guard let usageStore else { return [:] }
-                var dict: [VendorId: VendorSnapshot] = [:]
-                for v in usageStore.vendors {
-                    if let outcome = v.state.outcome {
-                        dict[v.vendorId] = outcome.snapshot
-                    }
-                }
-                return dict
+                AnalyticsStore.currentSnapshots(usageStore)
             },
-            historyProvider: { vendor in
-                (try? UsageHistoryStore.defaultFor(vendor))?.load(since: Date().addingTimeInterval(-90 * 86_400)) ?? []
-            }
+            historyProvider: historyProvider
         )
         self.usageStore = usageStore
         self.costEstimator = costEstimator
@@ -243,28 +237,58 @@ public final class AnalyticsStore: ObservableObject {
         }
     }
 
+    /// Publishes a snapshot from the in-memory inputs right away, then reloads
+    /// the 90-day histories off the MainActor and publishes again when they
+    /// land. The load used to run synchronously here, on the MainActor, for
+    /// every vendor on every trigger (PERF-FLU-001 / LEAK-FAN-003).
     private func recompute() {
-        isLoading = true
-        defer { isLoading = false }
+        let vendors = publishSnapshot()
+        reloadHistories(for: vendors)
+    }
 
+    /// Aggregates from the cached histories. Returns the vendors in scope.
+    @discardableResult
+    private func publishSnapshot() -> Set<VendorId> {
         let estimates = estimatesProvider()
         let snapshots = snapshotsProvider()
         let vendors = Set(estimates.keys).union(snapshots.keys)
-
-        var histories: [VendorId: [UsageHistoryStore.Sample]] = [:]
-        for v in vendors {
-            histories[v] = historyProvider(v)
-        }
-
         self.snapshot = AnalyticsAggregator.aggregate(
             timeframe: timeframe,
             compareWithPrevious: compareWithPrevious,
             comparisonOffset: comparisonOffset,
             now: Date(),
-            histories: histories,
+            histories: histories.filter { vendors.contains($0.key) },
             estimates: estimates,
             snapshots: snapshots
         )
+        return vendors
+    }
+
+    private func reloadHistories(for vendors: Set<VendorId>) {
+        historyReloadTask?.cancel()
+        isLoading = true
+        let provider = historyProvider
+        historyReloadTask = Task { @MainActor [weak self] in
+            // A synchronous burst of triggers cancels this before it runs.
+            guard !Task.isCancelled else { return }
+            let load = Task.detached(priority: .utility) { () -> [VendorId: [UsageHistoryStore.Sample]]? in
+                var loaded: [VendorId: [UsageHistoryStore.Sample]] = [:]
+                for vendor in vendors {
+                    if Task.isCancelled { return nil }
+                    loaded[vendor] = provider(vendor)
+                }
+                return loaded
+            }
+            let loaded = await withTaskCancellationHandler {
+                await load.value
+            } onCancel: {
+                load.cancel()
+            }
+            guard let loaded, !Task.isCancelled, let self else { return }
+            self.histories = loaded
+            self.isLoading = false
+            self.publishSnapshot()
+        }
     }
 
     public func displayIndex(of id: VendorId) -> Int {

@@ -1,6 +1,9 @@
 # ai-taskbar config
 # Lives at: ~/Library/Application Support/ai-taskbar/config.toml
 # Missing file or missing sections fall back to the defaults below.
+# Missing sections are appended to this file on launch. If config.toml is a
+# symlink (e.g. into a dotfiles repo) the app reads it but never writes
+# through it: the append is skipped (logged) and Settings cannot save.
 
 [ui]
 # primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi | gemini | deepseek | xai
@@ -23,7 +26,7 @@ notify_at = [90, 100]   # percent thresholds that trigger a notification
 # override owner_repo to your fork to receive your own releases.
 # enabled = true
 # owner_repo = "justoeu/ai-taskbar"
-# include_prereleases = false           # set true to consider beta/rc tags too
+# include_prereleases = false           # true: read the release list and offer the newest beta/rc too
 
 [security]
 # TLS pinning (SPKI hash, Trust-On-First-Use). Empty list = no pinning.
@@ -87,7 +90,9 @@ api_key_env = "MOONSHOT_API_KEY"
 
 [gemini]
 enabled = true
-api_key_env = "GEMINI_API_KEY"
+prefer_antigravity = true    # default true: query the local Antigravity CLI (`agy`) for quota windows
+# agy_path = "/path/to/agy"  # optional: explicit binary if not in a standard install path
+api_key_env = "GEMINI_API_KEY"   # heartbeat fallback when `agy` is missing or unauthenticated
 # api_key = "AIza..."        # inline fallback if env not set
 # base_url = "https://generativelanguage.googleapis.com/v1beta"
 # Note: Google AI doesn't expose a public usage/billing REST endpoint —
@@ -103,6 +108,10 @@ api_key_env = "DEEPSEEK_API_KEY"
 
 [xai]
 enabled = true
+prefer_grok_cli = true       # default true: read the Grok CLI login (~/.grok/auth.json) for plan quota
+# grok_auth_path = "~/.grok/auth.json"
+# grok_base_url = "https://cli-chat-proxy.grok.com"  # https only; hosts cli-chat-proxy.grok.com or management-api.x.ai (shared xAI allow-list), anything else falls back to the default
+# Management API fallback (used when prefer_grok_cli = false):
 api_key_env = "XAI_MANAGEMENT_KEY"
 # api_key = "xai-..."         # management key from console.x.ai → Settings → Management Keys
 #                             # (NOT the inference API key used with api.x.ai)

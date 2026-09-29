@@ -50,7 +50,8 @@ endif
 
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
         sign-developer sign-developer-universal dmg-signed notarize staple \
-        release release-arm64 release-universal publish ship universal-check icon
+        release release-arm64 release-universal publish ship universal-check icon \
+        release-assets-check
 
 all: app
 
@@ -337,9 +338,27 @@ publish:
 		exit 1; }
 	$(MAKE) release
 	shasum -a 256 $(DMG) $(DMG_ARM64) > checksums-$(VERSION).txt
-	gh release upload "v$(VERSION)" $(DMG) $(DMG_ARM64) checksums-$(VERSION).txt --clobber
-	gh release edit "v$(VERSION)" --draft=false
+	$(GH) release upload "v$(VERSION)" $(DMG) $(DMG_ARM64) checksums-$(VERSION).txt --clobber
+	$(MAKE) release-assets-check
+	$(GH) release edit "v$(VERSION)" --draft=false
 	@echo "✓ Published v$(VERSION): $(DMG_ARM64) + $(DMG) + checksums"
+
+# Refuses unless the GitHub release for v$(VERSION) lists both DMGs and the
+# checksums file. The in-app updater fails closed without a checksums line
+# (updates_no_checksum) and pickDMGAsset needs both DMG names, so a release
+# published without them breaks every in-app update. Run by `publish` right
+# before it flips the draft; GH is overridable so the check can be exercised
+# against a fake `gh` without touching GitHub.
+GH ?= gh
+release-assets-check:
+	@names="$$($(GH) release view "v$(VERSION)" --json assets --jq '.assets[].name')" || { \
+		echo "✗ could not list assets of release v$(VERSION)"; exit 1; }; \
+	for asset in checksums-$(VERSION).txt $(DMG) $(DMG_ARM64); do \
+		printf '%s\n' "$$names" | grep -qxF "$$asset" || { \
+			echo "✗ release v$(VERSION) has no $$asset asset — not publishing (in-app updates would fail)"; \
+			exit 1; }; \
+	done; \
+	echo "✓ release v$(VERSION) carries checksums-$(VERSION).txt, $(DMG) and $(DMG_ARM64)"
 
 # One-shot release: push main → wait for CI to bump/tag/draft → pull the bump
 # commit → make publish. Aborts cleanly when the head commit opted out via
