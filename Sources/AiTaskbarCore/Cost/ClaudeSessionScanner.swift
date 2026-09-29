@@ -173,6 +173,9 @@ public enum ClaudeSessionScanner {
                 let cache_creation_input_tokens: Int?
                 let cache_read_input_tokens: Int?
                 let cache_creation: CacheCreation?
+                /// "standard" or "fast". Absent on older transcripts, which
+                /// predate fast mode and are therefore standard.
+                let speed: String?
 
                 struct CacheCreation: Decodable {
                     let ephemeral_5m_input_tokens: Int?
@@ -233,12 +236,24 @@ public enum ClaudeSessionScanner {
             // Any unclassified remainder uses the five-minute rate. Older
             // transcript lines have only `cache_creation_input_tokens`.
             let cacheCreate5m = cacheCreateTotal - cacheCreate1h
+            // Clamped like the cache-creation counts above: a transcript is a
+            // file we don't control, and a negative count would subtract from
+            // the total — and, via the fast subsets, from the fast premium.
+            let input = max(0, usage.input_tokens ?? 0)
+            let output = max(0, usage.output_tokens ?? 0)
+            let cacheRead = max(0, usage.cache_read_input_tokens ?? 0)
+            let isFast = usage.speed == "fast"
             let modelUsage = ModelUsage(
-                inputTokens: usage.input_tokens ?? 0,
-                outputTokens: usage.output_tokens ?? 0,
-                cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+                inputTokens: input,
+                outputTokens: output,
+                cacheReadTokens: cacheRead,
                 cacheCreateTokens: cacheCreate5m,
-                cacheCreate1hTokens: cacheCreate1h
+                cacheCreate1hTokens: cacheCreate1h,
+                fastInputTokens: isFast ? input : 0,
+                fastOutputTokens: isFast ? output : 0,
+                fastCacheReadTokens: isFast ? cacheRead : 0,
+                fastCacheCreateTokens: isFast ? cacheCreate5m : 0,
+                fastCacheCreate1hTokens: isFast ? cacheCreate1h : 0
             )
 
             let ts = parsed.timestamp.flatMap(ISO8601Parsing.parse)

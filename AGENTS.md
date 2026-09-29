@@ -359,6 +359,55 @@ traffic rides a subscription (zero marginal cost, so tokens are shown and
 dollars are not), and xAI's card already reports account-wide cycle spend from
 the Management API, so adding opencode's dollars there would double-count.
 
+### Claude fast mode is a per-request premium, not a separate model
+
+Fast mode (`usage.speed == "fast"` in `~/.claude/projects` transcripts) keeps
+the same model id, so it cannot be priced by a table key. `ClaudeSessionScanner`
+copies a fast request's tokens into `ModelUsage.fast*` SUBSETS (same pattern as
+the long-context fields: they carry only the premium, so visible token totals
+are never double-counted), and `CostMath` adds
+`(fastModeMultiplier − 1) × standard rate` for every category, cache reads and
+writes included — Anthropic stacks the caching multipliers on top of the fast
+price. Only Opus 5.5 ($8/$40), Opus 5 and Opus 4.8 ($10/$50) have fast mode —
+2x their standard rates. Opus 4.7 rejects it and Opus 4.6 runs it at standard
+price, so a model with no `fastModeMultiplier` bills a fast-tagged request at
+standard rates; do not give it one. As of 2026-09-28 no local transcript
+carried `"speed":"fast"` (all 109k were `"standard"`); the `"fast"` value
+follows the API's `speed: "fast"` request parameter.
+
+### Pinned menu-bar items — measured macOS 26 behavior, not assumptions
+
+`PinnedStatusItemManager` went through four "fix" PRs (#26–#29) built on
+guesses. These are the facts, measured on macOS 26 with a standalone
+`NSStatusItem` probe plus the Accessibility API and `CGWindowList`:
+
+- **A new status item is placed LEFT of every existing one.** So creation
+  order is display order, right to left: the main `MenuBarExtra` item must
+  exist before any pinned item, and pinned items are created in
+  `pinnedVendorOrder`. `configure` runs in `App.init`, before the scene exists,
+  and neither the initial `@Published` emission nor `DispatchQueue.main.async`
+  waits long enough — the same build put xAI on either side of the main icon
+  from launch to launch. Creation is gated on `MainStatusItemHolder.mainButton`
+  being set (with a 3 s fallback so a failed lookup degrades to misordered,
+  never to invisible).
+- **An anonymous item re-created after another was removed never reaches the
+  screen.** Its window reports x = 0 (or a stale slot) and WindowServer draws
+  nothing — the unpin → re-pin path. Every pinned item therefore gets a stable
+  `autosaveName` (`ai-taskbar.pinned.<vendor>`); with it every sequence tried
+  stayed visible. Do not remove it.
+- **Every status item window is owned by Control Center**, not by this app, so
+  `CGWindowList` cannot be filtered by owner, and it omits items the system has
+  already hidden for lack of room. The space check takes the minimum of the
+  visible-window minX and this app's own item frames (which still report the
+  would-be position of a hidden item), so an overflow that already happened
+  reads as "full".
+- **Measure the badge, don't guess it.** The check uses the widest the real
+  `PinnedStatusBadgeView` can render (stacked `100%` + flame). The old 50 pt
+  guess was narrower than a loaded badge (56 pt measured) and let the last pin
+  slide under the notch — the "icons overlapping" report.
+- The geometry check must not depend on finding the main button: a failed
+  lookup used to return "allowed", which is how every LLM could be pinned.
+
 ### Codex credits are a QUANTITY — never render them as money
 
 `GET /backend-api/wham/usage` returns `"balance": "4890.3162520000"`: a bare

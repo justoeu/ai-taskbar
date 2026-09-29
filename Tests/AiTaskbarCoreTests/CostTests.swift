@@ -243,15 +243,36 @@ struct CostTests {
         #expect(m?.longContextOutputMultiplier == 2.0)
     }
 
-    @Test("Opus 5.5 has explicit pricing at $5/$25 tier")
+    @Test("Opus 5.5 has its own $4/$20 tier, not the Opus 5 prices")
     func lookup_opus55() {
         let hyphenated = PricingTable.lookup("claude-opus-5-5", table: PricingTable.anthropic)
-        #expect(hyphenated?.inputPer1M == 5.0)
-        #expect(hyphenated?.outputPer1M == 25.0)
-        #expect(hyphenated?.cacheReadPer1M == 0.5)
+        #expect(hyphenated?.inputPer1M == 4.0)
+        #expect(hyphenated?.outputPer1M == 20.0)
+        // 0.05x base, not the usual 0.1x.
+        #expect(hyphenated?.cacheReadPer1M == 0.2)
+        #expect(hyphenated?.cacheCreatePer1M == 5.0)
+        #expect(hyphenated?.cacheCreate1hPer1M == 8.0)
         let dotted = PricingTable.lookup("claude-opus-5.5", table: PricingTable.anthropic)
-        #expect(dotted?.inputPer1M == 5.0)
-        #expect(dotted?.outputPer1M == 25.0)
+        #expect(dotted?.inputPer1M == 4.0)
+        #expect(dotted?.outputPer1M == 20.0)
+        // A dated suffix still resolves to 5.5, never to the Opus 5 prefix.
+        let suffixed = PricingTable.lookup("claude-opus-5-5-20260915", table: PricingTable.anthropic)
+        #expect(suffixed?.inputPer1M == 4.0)
+        #expect(PricingTable.lookup("claude-opus-5", table: PricingTable.anthropic)?.inputPer1M == 5.0)
+    }
+
+    @Test("Sonnet 5.5 has explicit pricing at the $2/$10 tier")
+    func lookup_sonnet55() {
+        for id in ["claude-sonnet-5-5", "claude-sonnet-5.5"] {
+            let m = PricingTable.lookup(id, table: PricingTable.anthropic)
+            #expect(m?.inputPer1M == 2.0)
+            #expect(m?.outputPer1M == 10.0)
+            #expect(m?.cacheReadPer1M == 0.2)
+            #expect(m?.cacheCreatePer1M == 2.5)
+            #expect(m?.cacheCreate1hPer1M == 4.0)
+        }
+        // Resolved by its own key, not by the Sonnet 5 prefix.
+        #expect(PricingTable.anthropic["claude-sonnet-5-5"] != nil)
     }
 
     @Test("GLM Flash models have expected pricing tiers")
@@ -314,5 +335,57 @@ struct CostEstimateTests {
         let c = ModelUsage(inputTokens: 1, outputTokens: 3)
         #expect(a == b)
         #expect(a != c)
+    }
+
+    @Test("fast mode doubles every category on Opus 5.5, cache included")
+    func fast_mode_opus55_doubles_all_categories() throws {
+        let pricing = try #require(PricingTable.lookup("claude-opus-5-5", table: PricingTable.anthropic))
+        let standard = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000,
+                                  cacheReadTokens: 1_000_000, cacheCreateTokens: 1_000_000,
+                                  cacheCreate1hTokens: 1_000_000)
+        var fast = standard
+        fast.fastInputTokens = 1_000_000
+        fast.fastOutputTokens = 1_000_000
+        fast.fastCacheReadTokens = 1_000_000
+        fast.fastCacheCreateTokens = 1_000_000
+        fast.fastCacheCreate1hTokens = 1_000_000
+        // Standard: 4 + 20 + 0.2 + 5 + 8 = 37.2. Compared with a tolerance so
+        // a harmless reordering of the sum inside CostMath cannot fail it.
+        #expect(abs(CostMath.cost(usage: standard, pricing: pricing) - 37.2) < 1e-9)
+        // Fast: $8/$40 published, and caching multipliers stack on top.
+        #expect(abs(CostMath.cost(usage: fast, pricing: pricing) - 74.4) < 1e-9)
+    }
+
+    @Test("fast mode is $10/$50 on Opus 5 and Opus 4.8")
+    func fast_mode_opus5_and_48() throws {
+        for id in ["claude-opus-5", "claude-opus-4-8"] {
+            let pricing = try #require(PricingTable.lookup(id, table: PricingTable.anthropic))
+            let u = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000,
+                               fastInputTokens: 1_000_000, fastOutputTokens: 1_000_000)
+            #expect(abs(CostMath.cost(usage: u, pricing: pricing) - 60) < 1e-9)
+        }
+    }
+
+    @Test("models without fast mode bill a fast-tagged request at standard rates")
+    func fast_mode_absent_is_standard() throws {
+        for id in ["claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-4-5"] {
+            let pricing = try #require(PricingTable.lookup(id, table: PricingTable.anthropic))
+            expectTrue(pricing.fastModeMultiplier == nil)
+            let plain = ModelUsage(inputTokens: 1_000, outputTokens: 1_000)
+            var tagged = plain
+            tagged.fastInputTokens = 1_000
+            tagged.fastOutputTokens = 1_000
+            #expect(CostMath.cost(usage: tagged, pricing: pricing) == CostMath.cost(usage: plain, pricing: pricing))
+        }
+    }
+
+    @Test("fast subsets add up across samples")
+    func fast_subsets_aggregate() {
+        var bucket: [String: ModelUsage] = [:]
+        let u = ModelUsage(inputTokens: 5, fastInputTokens: 5, fastCacheCreate1hTokens: 2)
+        CostAggregator.add(u, into: &bucket, model: "claude-opus-5-5")
+        CostAggregator.add(u, into: &bucket, model: "claude-opus-5-5")
+        #expect(bucket["claude-opus-5-5"]?.fastInputTokens == 10)
+        #expect(bucket["claude-opus-5-5"]?.fastCacheCreate1hTokens == 4)
     }
 }

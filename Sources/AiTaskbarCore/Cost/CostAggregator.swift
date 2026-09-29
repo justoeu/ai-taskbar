@@ -23,6 +23,11 @@ public enum CostAggregator {
         existing.longContextCacheReadTokens = saturatingAdd(existing.longContextCacheReadTokens, u.longContextCacheReadTokens)
         existing.longContextCacheCreateTokens = saturatingAdd(existing.longContextCacheCreateTokens, u.longContextCacheCreateTokens)
         existing.longContextCacheCreate1hTokens = saturatingAdd(existing.longContextCacheCreate1hTokens, u.longContextCacheCreate1hTokens)
+        existing.fastInputTokens = saturatingAdd(existing.fastInputTokens, u.fastInputTokens)
+        existing.fastOutputTokens = saturatingAdd(existing.fastOutputTokens, u.fastOutputTokens)
+        existing.fastCacheReadTokens = saturatingAdd(existing.fastCacheReadTokens, u.fastCacheReadTokens)
+        existing.fastCacheCreateTokens = saturatingAdd(existing.fastCacheCreateTokens, u.fastCacheCreateTokens)
+        existing.fastCacheCreate1hTokens = saturatingAdd(existing.fastCacheCreate1hTokens, u.fastCacheCreate1hTokens)
         bucket[model] = existing
     }
 

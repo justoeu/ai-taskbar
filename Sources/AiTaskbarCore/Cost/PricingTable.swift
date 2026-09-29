@@ -29,13 +29,20 @@ public struct ModelPricing: Sendable, Equatable {
     public let longContextThresholdTokens: Int?
     public let longContextInputMultiplier: Double?
     public let longContextOutputMultiplier: Double?
+    /// Premium applied to EVERY token category of a fast-mode request
+    /// (`usage.speed == "fast"`), prompt-cache reads and writes included —
+    /// Anthropic stacks the caching multipliers on top of the fast price.
+    /// Nil means the model has no fast mode: the API either rejects the
+    /// request or runs it at standard speed and bills it at standard rates.
+    public let fastModeMultiplier: Double?
 
     public init(input: Double, output: Double,
                 cacheRead: Double? = nil, cacheCreate: Double? = nil,
                 cacheCreate1h: Double? = nil,
                 longContextThreshold: Int? = nil,
                 longContextInputMultiplier: Double? = nil,
-                longContextOutputMultiplier: Double? = nil) {
+                longContextOutputMultiplier: Double? = nil,
+                fastModeMultiplier: Double? = nil) {
         self.inputPer1M = input
         self.outputPer1M = output
         self.cacheReadPer1M = cacheRead
@@ -44,6 +51,7 @@ public struct ModelPricing: Sendable, Equatable {
         self.longContextThresholdTokens = longContextThreshold
         self.longContextInputMultiplier = longContextInputMultiplier
         self.longContextOutputMultiplier = longContextOutputMultiplier
+        self.fastModeMultiplier = fastModeMultiplier
     }
 }
 
@@ -59,18 +67,31 @@ public enum PricingTable {
         // Fable/Mythos 5.0 legacy logs.
         "claude-fable-5":        ModelPricing(input: 10, output: 50, cacheRead: 1.0, cacheCreate: 12.5, cacheCreate1h: 20),
         "claude-mythos-5":       ModelPricing(input: 10, output: 50, cacheRead: 1.0, cacheCreate: 12.5, cacheCreate1h: 20),
-        // Opus 5.5
-        "claude-opus-5-5":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
-        "claude-opus-5.5":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
+        // Opus 5.5 — CHEAPER than Opus 5: $4 in / $20 out, and cache hits at
+        // 0.05x base ($0.20) instead of the usual 0.1x. Verified against
+        // platform.claude.com/docs/en/about-claude/pricing on 2026-09-28; it
+        // had been entered at the Opus 5 tier, overstating every Opus 5.5 turn
+        // by 25% (and cache reads by 2.5x). Explicit keys are essential: the
+        // `claude-opus-5` prefix would otherwise match and apply the 5.0 tier.
+        "claude-opus-5-5":       ModelPricing(input: 4,  output: 20, cacheRead: 0.2, cacheCreate: 5,    cacheCreate1h: 8,
+                                              fastModeMultiplier: 2),
+        "claude-opus-5.5":       ModelPricing(input: 4,  output: 20, cacheRead: 0.2, cacheCreate: 5,    cacheCreate1h: 8,
+                                              fastModeMultiplier: 2),
         // Opus 5 — same $5 in / $25 out tier as Opus 4.8 (verified against the
         // claude-api skill's cached model table, 2026-07-24). Listed before the
         // 4.x block because it shares no prefix with them: "claude-opus-5" can
         // never be shadowed by "claude-opus-4", so ordering here is cosmetic.
-        "claude-opus-5":         ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
+        "claude-opus-5":         ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10,
+                                              fastModeMultiplier: 2),
         // Opus 4.5–4.8 — repriced to $5 in / $25 out (down from the 4.0/4.1 tier).
         // Each version is listed explicitly so the `claude-opus-4` prefix below
         // (which still serves the legacy 4.0/4.1 at $15/$75) doesn't shadow them.
-        "claude-opus-4-8":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
+        // Fast mode exists only on Opus 5.5, Opus 5 and Opus 4.8: $8/$40 on
+        // 5.5 and $10/$50 on the other two — exactly 2x their standard rates.
+        // Opus 4.7 rejects `speed: "fast"`; Opus 4.6 runs it at standard
+        // speed and standard price, so neither carries a multiplier.
+        "claude-opus-4-8":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10,
+                                              fastModeMultiplier: 2),
         "claude-opus-4-7":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
         "claude-opus-4-6":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
         "claude-opus-4-5":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10),
@@ -80,6 +101,11 @@ public enum PricingTable {
         // 2026-09-05. Prefer the current source of truth over the earlier
         // announcement that described this tier as introductory.
         "claude-sonnet-5":       ModelPricing(input: 2,  output: 10, cacheRead: 0.2, cacheCreate: 2.5, cacheCreate1h: 4),
+        // Sonnet 5.5 — same $2/$10 tier as Sonnet 5 (same source, same date).
+        // Listed explicitly rather than left to the `claude-sonnet-5` prefix,
+        // so a future Sonnet 5 repricing cannot silently reprice 5.5 too.
+        "claude-sonnet-5-5":     ModelPricing(input: 2,  output: 10, cacheRead: 0.2, cacheCreate: 2.5, cacheCreate1h: 4),
+        "claude-sonnet-5.5":     ModelPricing(input: 2,  output: 10, cacheRead: 0.2, cacheCreate: 2.5, cacheCreate1h: 4),
         // Sonnet 4.x
         "claude-sonnet-4-6":     ModelPricing(input: 3,  output: 15, cacheRead: 0.3, cacheCreate: 3.75, cacheCreate1h: 6),
         "claude-sonnet-4":       ModelPricing(input: 3,  output: 15, cacheRead: 0.3, cacheCreate: 3.75, cacheCreate1h: 6),

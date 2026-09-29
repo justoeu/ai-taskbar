@@ -17,6 +17,14 @@ public struct ModelUsage: Sendable, Equatable {
     public var longContextCacheReadTokens: Int = 0
     public var longContextCacheCreateTokens: Int = 0
     public var longContextCacheCreate1hTokens: Int = 0
+    /// Subsets of the totals above that came from fast-mode requests. Like
+    /// the long-context fields they carry only the premium, so the token
+    /// counts shown to the user are not double-counted.
+    public var fastInputTokens: Int = 0
+    public var fastOutputTokens: Int = 0
+    public var fastCacheReadTokens: Int = 0
+    public var fastCacheCreateTokens: Int = 0
+    public var fastCacheCreate1hTokens: Int = 0
 
     public init(inputTokens: Int = 0, outputTokens: Int = 0,
                 cacheReadTokens: Int = 0, cacheCreateTokens: Int = 0,
@@ -25,7 +33,12 @@ public struct ModelUsage: Sendable, Equatable {
                 longContextOutputTokens: Int = 0,
                 longContextCacheReadTokens: Int = 0,
                 longContextCacheCreateTokens: Int = 0,
-                longContextCacheCreate1hTokens: Int = 0) {
+                longContextCacheCreate1hTokens: Int = 0,
+                fastInputTokens: Int = 0,
+                fastOutputTokens: Int = 0,
+                fastCacheReadTokens: Int = 0,
+                fastCacheCreateTokens: Int = 0,
+                fastCacheCreate1hTokens: Int = 0) {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.cacheReadTokens = cacheReadTokens
@@ -36,6 +49,11 @@ public struct ModelUsage: Sendable, Equatable {
         self.longContextCacheReadTokens = longContextCacheReadTokens
         self.longContextCacheCreateTokens = longContextCacheCreateTokens
         self.longContextCacheCreate1hTokens = longContextCacheCreate1hTokens
+        self.fastInputTokens = fastInputTokens
+        self.fastOutputTokens = fastOutputTokens
+        self.fastCacheReadTokens = fastCacheReadTokens
+        self.fastCacheCreateTokens = fastCacheCreateTokens
+        self.fastCacheCreate1hTokens = fastCacheCreate1hTokens
     }
 }
 
@@ -121,8 +139,23 @@ public enum CostMath {
         let longCacheCreate1h = per(
             usage.longContextCacheCreate1hTokens,
             cacheCreate1hRate * (inputMultiplier - 1))
+
+        // Fast-mode fields are subsets too. The premium applies to every
+        // category at the model's standard rate, cache traffic included.
+        // Fast mode is billed flat across the whole context window, so it
+        // stacks on the standard rate, never on a long-context rate.
+        let fastPremium = (pricing.fastModeMultiplier ?? 1) - 1
+        let fastSurcharge = fastPremium == 0 ? 0 : (
+            per(usage.fastInputTokens, pricing.inputPer1M)
+            + per(usage.fastOutputTokens, pricing.outputPer1M)
+            + per(usage.fastCacheReadTokens, cacheReadRate)
+            + per(usage.fastCacheCreateTokens, cacheCreateRate)
+            + per(usage.fastCacheCreate1hTokens, cacheCreate1hRate)
+        ) * fastPremium
+
         return inputCost + outputCost + cacheRead + cacheCreate + cacheCreate1h
             + longInput + longOutput + longCacheRead
             + longCacheCreate + longCacheCreate1h
+            + fastSurcharge
     }
 }

@@ -38,6 +38,14 @@ public final class CenterTrackingNSView: NSView {
     public func triggerCenterScroll() {
         isTargeted = true
         hasScrolled = false
+        // Try immediately (works when the view already sits in its scroll view,
+        // e.g. offscreen rendering), but never instead of the staged retries:
+        // a view created before it joins a window has no enclosing scroll view
+        // yet, so this first attempt is a no-op and only the retries below can
+        // land the scroll. `hasScrolled` keeps them from scrolling twice.
+        if window == nil {
+            performCenterScroll()
+        }
         // Run with staged delays to ensure parent transitions and layout passes are settled.
         for delay in [0.05, 0.15, 0.30] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
@@ -83,6 +91,11 @@ public final class CenterTrackingNSView: NSView {
         }
 
         hasScrolled = true
+        if window == nil {
+            scrollView.contentView.scroll(to: targetOrigin)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            return
+        }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.25
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)

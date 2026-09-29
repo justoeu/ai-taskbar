@@ -1014,9 +1014,22 @@ section("PricingTable lookup") {
     let glm4Flash = PricingTable.lookup("glm-4-flash", table: PricingTable.zai)
     expect(glm4Flash?.inputPer1M == 0.0, "GLM-4 Flash free tier ($0/MTok)")
     let opus55 = PricingTable.lookup("claude-opus-5-5", table: PricingTable.anthropic)
-    expect(opus55?.inputPer1M == 5, "Opus 5.5 input price ($5/MTok)")
+    expect(opus55?.inputPer1M == 4, "Opus 5.5 input price ($4/MTok)")
+    expect(opus55?.outputPer1M == 20, "Opus 5.5 output price ($20/MTok)")
+    expect(opus55?.cacheReadPer1M == 0.2, "Opus 5.5 cache-read price ($0.20/MTok, 0.05x)")
     let opus55Dot = PricingTable.lookup("claude-opus-5.5", table: PricingTable.anthropic)
-    expect(opus55Dot?.inputPer1M == 5, "Opus 5.5 dotted format input price ($5/MTok)")
+    expect(opus55Dot?.inputPer1M == 4, "Opus 5.5 dotted format input price ($4/MTok)")
+    let sonnet55 = PricingTable.lookup("claude-sonnet-5-5", table: PricingTable.anthropic)
+    expect(sonnet55?.inputPer1M == 2, "Sonnet 5.5 input price ($2/MTok)")
+    expect(sonnet55?.outputPer1M == 10, "Sonnet 5.5 output price ($10/MTok)")
+    expect(opus55?.fastModeMultiplier == 2, "Opus 5.5 fast mode is 2x ($8/$40)")
+    expect(sonnet55?.fastModeMultiplier == nil, "Sonnet 5.5 has no fast mode")
+    var fastOpus = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000)
+    fastOpus.fastInputTokens = 1_000_000
+    fastOpus.fastOutputTokens = 1_000_000
+    if let opus55 {
+        expect(abs(CostMath.cost(usage: fastOpus, pricing: opus55) - 48) < 1e-9, "Opus 5.5 fast 1M in + 1M out = $48")
+    }
     let kimiK15 = PricingTable.lookup("kimi-k1.5", table: PricingTable.kimi)
     expect(kimiK15?.inputPer1M == 1.65, "Kimi k1.5 input price ($1.65/MTok)")
     let moonshotAuto = PricingTable.lookup("moonshot-v1-auto", table: PricingTable.kimi)
