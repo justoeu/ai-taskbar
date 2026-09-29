@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-003",
+ "verdict": "APROVA",
+ "reasoning": "OpencodeScanner.swift:57-70 adds the public Outcome enum and scanOutcome. The public scan(providerGroups:) keeps its signature and nil semantics. CostEstimator.swift:74 is the only caller, and its duplicate fileExists probe is gone. The API is additive, so it breaks no client.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:57",
+  "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:74"
+ ],
+ "lens": "SCOPE",
+ "_task": "a7a7bc4f8d753c08e",
+ "batch": "B15-core-followups"
+}

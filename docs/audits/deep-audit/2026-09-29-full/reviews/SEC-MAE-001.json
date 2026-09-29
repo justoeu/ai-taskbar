@@ -1,0 +1,65 @@
+{
+  "id": "SEC-MAE-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:07:06 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "HTTPClient.swift:302-307: a refused redirect sets the flag, calls task.cancel() and then completionHandler(nil). session.download then throws URLError.cancelled, which :99-103 maps to AppError.transport. This cannot hang: cancelling always completes the task. It cannot leave a temp file either: HTTPClient never receives a tmp URL, URLSession removes its own partial file on cancel, and UpdateChecker's pending stays nil. UpdateChecker.swift:309 passes isAllowedDownloadURL, and the port check at :381 closes the second gap. Reversals, each RED: dropping allowRedirect (requestedHosts included evil.example), dropping the port check (:60 true), and passing delegate:nil (captured.count 2). One side effect: if the caller cancels at the same moment as a refusal, the error is transport instead of CancellationError. That is harmless.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:302",
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:99",
+        "Sources/AiTaskbarApp/UpdateChecker.swift:309",
+        "Sources/AiTaskbarApp/UpdateChecker.swift:381"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "HTTPClient.swift:436-470 reuses the existing BoundedRedirectDelegate through a cancelOnRefusal flag instead of adding a second delegate, so no policy is duplicated. The refusal flag is an OSAllocatedUnfairLock, which is Sendable-safe. A refused redirect maps to AppError.transport and is not confused with the caller's cancellation. The default `allowRedirect: nil` keeps the other callers unchanged. UpdateChecker.swift:380 adds a one-line port guard. CLAUDE.md and AGENTS.md are updated in lockstep.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:445",
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:300",
+        "Sources/AiTaskbarApp/UpdateChecker.swift:380"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Networking/HTTPClient.swift:76-100: download(_:allowRedirect:) gains a parameter that defaults to nil, so existing sources still compile. UpdateChecker.swift:309 is the only production caller (grep). The port-443 restriction at UpdateChecker.swift:380 also narrows the checksums redirect, which is intended and documented. README, CLAUDE.md and AGENTS.md change together. No new host, dependency or entitlement.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:76",
+        "Sources/AiTaskbarApp/UpdateChecker.swift:309",
+        "Sources/AiTaskbarApp/UpdateChecker.swift:380",
+        "README.md:83"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

@@ -1,0 +1,13 @@
+{
+ "id": "PERF-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "HTTPClient.swift:199-221 buffers 64 KiB chunks and checks cancellation once per chunk. The cap check is exact, and a mutation test pins it. The fix also removes the duplicated `maximumResponseBytes >= 0` guard from send and sendBounded and keeps a single copy in readBounded (:505), which pays off the duplication noted in LEAK-MAE-002's evidence. Nesting inside the for loop grows by one level (for > if), which is acceptable.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:199",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:505"
+ ],
+ "lens": "QUALITY",
+ "_task": "a58827042eae0c95c",
+ "batch": "B15-core-followups"
+}

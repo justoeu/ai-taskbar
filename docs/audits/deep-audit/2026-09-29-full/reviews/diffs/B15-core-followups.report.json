@@ -1,0 +1,162 @@
+{
+ "batch": "B15-core-followups",
+ "results": [
+  {
+   "id": "BUG-MAE-008",
+   "outcome": "fixed",
+   "tests": [
+    "ConfigLoaderTests#ensure_unreadable_config_throws_and_keeps_file"
+   ],
+   "red": "ConfigLoaderTests.swift:106:9: Expectation failed: threwIO / :107 Expectation failed: try String(contentsOf: path, encoding: .utf8) == original",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-MAE-004",
+   "outcome": "fixed",
+   "tests": [
+    "CodexSessionScannerTests#malformed_total_keeps_billed_turn"
+   ],
+   "red": "Expectation failed: (result.loss.decodeFailures → 1) == 0; (result.today[\"gpt-5.5\"]?.inputTokens → nil) == 500",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-010",
+   "outcome": "fixed",
+   "tests": [
+    "CachedFetchEdgeTests#network_failure_over_undecodable_cache_keeps_network_cause"
+   ],
+   "red": "CachedFetchEdgeTests.swift:261:19: Expectation failed: value (a SchemaError was thrown, not the 503)",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-015",
+   "outcome": "fixed",
+   "tests": [
+    "CachedFetchEdgeTests#guidance_stays_in_memory_on_the_stale_path"
+   ],
+   "red": "mutation: fallback uses cache.lastError() ?? lastError -> CachedFetchEdgeTests.swift:286:19 Expectation failed: value",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-014",
+   "outcome": "fixed",
+   "tests": [
+    "VendorViewModelRateLimitTests#cooldown_uses_injected_now"
+   ],
+   "red": "VendorViewModelRateLimitTests.swift:76:9: Expectation failed: (provider.callCount → 1) == 2",
+   "reversal": "ok"
+  },
+  {
+   "id": "SEC-MAE-001",
+   "outcome": "fixed",
+   "tests": [
+    "UpdateCheckerDownloadTests#off_platform_redirect_is_refused",
+    "UpdateCheckerAssetTests#download_host_allowlist_rejects_port",
+    "HTTPClientTests#download_refuses_rejected_redirect",
+    "HTTPClientTests#download_follows_allowed_redirect"
+   ],
+   "red": "requestedHosts → [\"github.com\", \"evil.example\"]; isAllowedDownloadURL(https://github.com:8443/...) → true; mutation delegate:nil -> captured.count → 2",
+   "reversal": "ok"
+  },
+  {
+   "id": "PERF-MAE-002",
+   "outcome": "fixed",
+   "tests": [
+    "HTTPClientTests#cap_is_exact_across_chunks"
+   ],
+   "red": "mutation `<` to `<=`: HTTPClientTests.swift:339 an error was expected but none was thrown",
+   "reversal": "ok"
+  },
+  {
+   "id": "PERF-MAE-003",
+   "outcome": "fixed",
+   "tests": [
+    "OAuthKeychainConcurrencyTests#anthropic_cold_fetch_reads_keychain_once",
+    "DiskCacheTests#has_fresh_payload_matches_ttl_boundary"
+   ],
+   "red": "Expectation failed: (reader.totalReads → 2) == 1",
+   "reversal": "ok"
+  },
+  {
+   "id": "LEAK-MAE-002",
+   "outcome": "fixed",
+   "tests": [
+    "BoundedProcessTests#grandchild_holding_pipe_is_abandoned"
+   ],
+   "red": "BoundedProcessTests.swift:147:9 fileExists(closed) false; :148 still-open marker exists",
+   "reversal": "ok"
+  },
+  {
+   "id": "RACE-MAE-002",
+   "outcome": "fixed",
+   "tests": [
+    "SingleFlightTests#caller_cancellation_does_not_cancel_flight",
+    "OffPoolTests#offpool_leaves_cooperative_pool"
+   ],
+   "red": "mutation withTaskCancellationHandler{task.cancel()} -> SingleFlightTests.swift:81/82 Expectation failed",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-003",
+   "outcome": "fixed",
+   "tests": [
+    "OpencodeScannerTests#scan_outcome_distinguishes_causes",
+    "OpencodeScannerTests#scan_outcome_scanned",
+    "CostEstimatorLoadingTests#opencode_outcome_mapping"
+   ],
+   "red": "mutation missing file -> .unavailable: (missing → .unavailable) == .notInstalled",
+   "reversal": "ok"
+  },
+  {
+   "id": "TEST-MAE-007",
+   "outcome": "fixed",
+   "tests": [
+    "source-ratchet-selftest#radix parse + Int(d) on one line"
+   ],
+   "red": "✗ GATE IS BLIND to: radix parse + Int(d) on one line (exit 0)",
+   "reversal": "n/a"
+  },
+  {
+   "id": "DEP-MAE-002",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a (config file; YAML parsed: [github-actions, swift])",
+   "reversal": "n/a"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1125,
+  "coverage": "93.13%",
+  "warnings": 0
+ },
+ "files": [
+  "Sources/AiTaskbarCore/Config/ConfigLoader.swift",
+  "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift",
+  "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift",
+  "Sources/AiTaskbarCore/Cache/DiskCache.swift",
+  "Sources/AiTaskbarCore/Models/FetchOutcome.swift",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift",
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift",
+  "Sources/AiTaskbarCore/Util/SingleFlight.swift",
+  "Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift",
+  "Sources/AiTaskbarProviders/CachedFetch.swift",
+  "Sources/AiTaskbarProviders/AnthropicProvider.swift",
+  "Sources/AiTaskbarProviders/OpenAIProvider.swift",
+  "Sources/AiTaskbarApp/UpdateChecker.swift",
+  "Sources/AiTaskbarApp/DMGVerifier.swift",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+  "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift",
+  "Sources/AiTaskbarApp/ViewModels/OpenAIResetController.swift",
+  "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
+  "scripts/check-source-ratchets.sh",
+  "scripts/source-ratchet-selftest.sh",
+  ".github/dependabot.yml",
+  "README.md",
+  "CLAUDE.md",
+  "AGENTS.md",
+  "Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift",
+  "Tests/AiTaskbarCoreTests/OffPoolTests.swift",
+  "plus 12 edited test files"
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "LEAK-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "BoundedProcess.swift:640-691 merges the old keep==nil readDataToEndOfFile path and the chunked path into one poll/read loop, so a duplicate path is removed. `try? handle.close()` in the defer is best-effort cleanup, which the repo explicitly allows, and a comment explains it. The `timedOut = stop?() != true` line cited in the finding now has an explanation (:124-126). Nesting peaks at async > while > if > if, four levels, in a function of about 50 lines. That is acceptable for syscall handling.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:652",
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:665",
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:124"
+ ],
+ "lens": "QUALITY",
+ "_task": "a58827042eae0c95c",
+ "batch": "B15-core-followups"
+}

@@ -1,0 +1,12 @@
+{
+ "id": "DEP-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": ".github/dependabot.yml sets github-actions to weekly as the finding asked, and adds swift. The prefix 'ci(deps) [skip release]' ends in ']', so Dependabot adds no colon and the subject keeps [skip release], which auto-tag reads. There is no behavioural test because this is a config file, so no reversal applies.",
+ "required_changes": [],
+ "cited_paths": [
+  ".github/dependabot.yml:18"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

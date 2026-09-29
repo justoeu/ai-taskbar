@@ -1,0 +1,15 @@
+{
+ "id": "SEC-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Networking/HTTPClient.swift:76-100: download(_:allowRedirect:) gains a parameter that defaults to nil, so existing sources still compile. UpdateChecker.swift:309 is the only production caller (grep). The port-443 restriction at UpdateChecker.swift:380 also narrows the checksums redirect, which is intended and documented. README, CLAUDE.md and AGENTS.md change together. No new host, dependency or entitlement.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:76",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:309",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:380",
+  "README.md:83"
+ ],
+ "lens": "SCOPE",
+ "_task": "a7a7bc4f8d753c08e",
+ "batch": "B15-core-followups"
+}

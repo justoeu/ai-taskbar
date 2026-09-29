@@ -2130,14 +2130,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B2",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-004",
-    "blocks_pr": false
+    "resolved_test": "CodexSessionScannerTests#malformed_total_keeps_billed_turn",
+    "resolved_at": "2026-09-29 18:07:05 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste CodexSessionScannerTests#malformed_total_keeps_billed_turn · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:05 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "classic_bugs",
@@ -2315,13 +2346,67 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B14",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-008",
+    "resolved_test": "ConfigLoaderTests#ensure_unreadable_config_throws_and_keeps_file",
+    "resolved_at": "2026-09-29 18:07:05 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste ConfigLoaderTests#ensure_unreadable_config_throws_and_keeps_file · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:05 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+    "line": 316,
+    "title": "429 cooldown is stamped from dispatch time, not response arrival, so a slow 429 gets a shorter cooldown",
+    "evidence": "observeRateLimit(at: now) uses the dispatch clock since CQ-MAE-014 (raised by Higia and Nemesis, remediation B15)",
+    "fix": "Read the injected clock again when the response arrives",
+    "impact": "Cooldown shorter than rateLimitCooldown(forAttempt:) by the request duration",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B15",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-009",
     "blocks_pr": false
   },
   {
@@ -2697,14 +2782,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B2",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-003",
-    "blocks_pr": false
+    "resolved_test": "OpencodeScannerTests#scan_outcome_distinguishes_causes,OpencodeScannerTests#scan_outcome_scanned,CostEstimatorLoadingTests#opencode_outcome_mapping",
+    "resolved_at": "2026-09-29 18:07:07 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste OpencodeScannerTests#scan_outcome_distinguishes_causes,OpencodeScannerTests#scan_outcome_scanned,CostEstimatorLoadingTests#opencode_outcome_mapping · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:07 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -2905,14 +3021,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B11",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-010",
-    "blocks_pr": false
+    "resolved_test": "CachedFetchEdgeTests#network_failure_over_undecodable_cache_keeps_network_cause",
+    "resolved_at": "2026-09-29 18:07:05 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste CachedFetchEdgeTests#network_failure_over_undecodable_cache_keeps_network_cause · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:05 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -2951,14 +3098,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B14",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-014",
-    "blocks_pr": false
+    "resolved_test": "VendorViewModelRateLimitTests#cooldown_uses_injected_now",
+    "resolved_at": "2026-09-29 18:07:06 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelRateLimitTests#cooldown_uses_injected_now · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -2974,13 +3152,67 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B14",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-015",
+    "resolved_test": "CachedFetchEdgeTests#guidance_stays_in_memory_on_the_stale_path",
+    "resolved_at": "2026-09-29 18:07:06 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste CachedFetchEdgeTests#guidance_stays_in_memory_on_the_stale_path · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "CLAUDE.md",
+    "line": null,
+    "title": "CLAUDE.md/AGENTS.md do not document .github/dependabot.yml, its [skip release] prefix, or that the swift ecosystem watches TOMLKit",
+    "evidence": "Release rule depends on the dependabot prefix but no doc says so (raised by Jano, remediation B15)",
+    "fix": "Document in Releasing and in the TOMLKit known-limitation note; add a row to the release-failure table about skip-release action bumps",
+    "impact": "A maintainer editing the prefix could trigger releases",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B15",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-017",
     "blocks_pr": false
   },
   {
@@ -2997,14 +3229,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B13",
     "domain": "deps",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DEP-MAE-002",
-    "blocks_pr": false
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 18:07:07 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:07 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "title": "GitHub Actions checked out via floating major tag, not commit SHA",
@@ -3454,6 +3717,29 @@
     "in_progress": false
   },
   {
+    "lens": "duplication",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Cache/DiskCache.swift",
+    "line": 87,
+    "title": "DiskCache freshPayloadWithAge, hasFreshPayload and anyPayloadWithAge repeat the same stat/mtime/age block",
+    "evidence": "Three copies of the age computation (raised by Higia, remediation B15)",
+    "fix": "Extract a private payloadAge() and apply TTL/maxStale to it once",
+    "impact": "TTL rules can drift between the probe and the read",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B15",
+    "domain": "duplication",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "DUP-MAE-004",
+    "blocks_pr": false
+  },
+  {
     "agent": "Fantasma",
     "lens": "memleak",
     "severity": "LOW",
@@ -3858,14 +4144,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B9",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "LEAK-MAE-002",
-    "blocks_pr": false
+    "resolved_test": "BoundedProcessTests#grandchild_holding_pipe_is_abandoned",
+    "resolved_at": "2026-09-29 18:07:06 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste BoundedProcessTests#grandchild_holding_pipe_is_abandoned · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "performance",
@@ -3881,14 +4198,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B9",
     "domain": "performance",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "PERF-MAE-002",
-    "blocks_pr": false
+    "resolved_test": "HTTPClientTests#cap_is_exact_across_chunks",
+    "resolved_at": "2026-09-29 18:07:06 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste HTTPClientTests#cap_is_exact_across_chunks · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "performance",
@@ -3904,14 +4252,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B10",
     "domain": "performance",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "PERF-MAE-003",
-    "blocks_pr": false
+    "resolved_test": "OAuthKeychainConcurrencyTests#anthropic_cold_fetch_reads_keychain_once,DiskCacheTests#has_fresh_payload_matches_ttl_boundary",
+    "resolved_at": "2026-09-29 18:07:06 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#anthropic_cold_fetch_reads_keychain_once,DiskCacheTests#has_fresh_payload_matches_ttl_boundary · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "agent": "Cronos",
@@ -4384,14 +4763,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B10",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "RACE-MAE-002",
-    "blocks_pr": false
+    "resolved_test": "SingleFlightTests#caller_cancellation_does_not_cancel_flight,OffPoolTests#offpool_leaves_cooperative_pool",
+    "resolved_at": "2026-09-29 18:07:06 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste SingleFlightTests#caller_cancellation_does_not_cancel_flight,OffPoolTests#offpool_leaves_cooperative_pool · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "agent": "Cérbero",
@@ -4663,14 +5073,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B8",
     "domain": "security",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "SEC-MAE-001",
-    "blocks_pr": false
+    "resolved_test": "UpdateCheckerDownloadTests#off_platform_redirect_is_refused,UpdateCheckerAssetTests#download_host_allowlist_rejects_port,HTTPClientTests#download_refuses_rejected_redirect,HTTPClientTests#download_follows_allowed_redirect",
+    "resolved_at": "2026-09-29 18:07:06 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerDownloadTests#off_platform_redirect_is_refused,UpdateCheckerAssetTests#download_host_allowlist_rejects_port,HTTPClientTests#download_refuses_rejected_redirect,HTTPClientTests#download_follows_allowed_redirect · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "title": "The vacuous-#expect grep misses the Optional-Bool form when a message argument follows, and a live instance guards TLS pins",
@@ -5411,14 +5852,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B13",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-007",
-    "blocks_pr": false
+    "resolved_test": "source-ratchet-selftest#radix parse + Int(d) on one line",
+    "resolved_at": "2026-09-29 18:07:07 UTC",
+    "resolved_note": "batch B15-core-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste source-ratchet-selftest#radix parse + Int(d) on one line · revisão approved (3/3) · batch B15-core-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:07:07 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "tests",
@@ -5441,6 +5913,29 @@
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-009",
+    "blocks_pr": false
+  },
+  {
+    "lens": "tests",
+    "severity": "LOW",
+    "path": "scripts/check-source-ratchets.sh",
+    "line": 106,
+    "title": "Bare-Int ratchet blanks the whole radix call, hiding a trapping conversion nested in its arguments such as Int(Int(d), radix: 16)",
+    "evidence": "Corner case (raised by Nemesis, remediation B15)",
+    "fix": "Blank only the radix string argument, or re-scan the call arguments",
+    "impact": "A nested trapping conversion in a WireTypes file would pass the gate",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B15",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-010",
     "blocks_pr": false
   },
   {
@@ -6654,6 +7149,29 @@
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-013",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift",
+    "line": 284,
+    "title": "OpencodeScanner .unavailable groups caller configuration errors with SQLite read failures",
+    "evidence": "Alias-set misconfiguration and read errors share one case (raised by Higia, remediation B15)",
+    "fix": "Separate case or assertion for caller misuse",
+    "impact": "A misconfigured alias set keeps stale rows",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B15",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-016",
     "blocks_pr": false
   },
   {

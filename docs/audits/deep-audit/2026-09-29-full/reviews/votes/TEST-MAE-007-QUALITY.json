@@ -1,0 +1,13 @@
+{
+ "id": "TEST-MAE-007",
+ "verdict": "APROVA",
+ "reasoning": "check-source-ratchets.sh:103-109 no longer skips a whole line on `radix:`. It blanks out only the balanced radix call, using a recursive regex, and a comment explains why. source-ratchet-selftest.sh:124 adds a rejecting case, and the accepting set gains two cases (nested String(x) and `??`). So the gate is proven able to fail in both directions, as CLAUDE.md requires ('A gate that cannot fail is worse than no gate').",
+ "required_changes": [],
+ "cited_paths": [
+  "scripts/check-source-ratchets.sh:103",
+  "scripts/source-ratchet-selftest.sh:124"
+ ],
+ "lens": "QUALITY",
+ "_task": "a58827042eae0c95c",
+ "batch": "B15-core-followups"
+}

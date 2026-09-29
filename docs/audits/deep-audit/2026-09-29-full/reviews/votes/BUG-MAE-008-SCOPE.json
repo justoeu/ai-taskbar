@@ -1,0 +1,14 @@
+{
+ "id": "BUG-MAE-008",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Config/ConfigLoader.swift:253-264: the only change is that a read failure now throws AppError.io instead of rewriting the file from defaults. Existing callers already handle a throwing top-up (AppEnvironment.topUpConfigSections logs the error), so no contract changes. CLAUDE.md, AGENTS.md (Config schema) and ConfigLoaderTests change in the same diff. No file outside the finding.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Config/ConfigLoader.swift:253",
+  "CLAUDE.md:645",
+  "Tests/AiTaskbarCoreTests/ConfigLoaderTests.swift:106"
+ ],
+ "lens": "SCOPE",
+ "_task": "a7a7bc4f8d753c08e",
+ "batch": "B15-core-followups"
+}

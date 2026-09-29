@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-003",
+ "verdict": "APROVA",
+ "reasoning": "OpencodeScanner.swift:128: the scanner's own probe now decides notInstalled. CostEstimator.swift:82-88 maps notInstalled to [:], unavailable to nil and scanned to its rows, with no second fileExists call. The nil-returning scan wrappers behave exactly as before. Reversals: returning unavailable for a missing file made OpencodeScannerTests.swift:321 go RED, and mapping notInstalled to nil made CostEstimatorLoadingTests.swift:42 go RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:128",
+  "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:82"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

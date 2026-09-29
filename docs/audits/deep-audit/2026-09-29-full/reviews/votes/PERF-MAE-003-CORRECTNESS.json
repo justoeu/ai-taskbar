@@ -1,0 +1,14 @@
+{
+ "id": "PERF-MAE-003",
+ "verdict": "APROVA",
+ "reasoning": "AnthropicProvider.swift:58: the label is primed only when hasFreshPayload() is true. hasFreshPayload (DiskCache.swift:100) uses the same mtime and ttl rule as freshPayloadWithAge. decodeSnapshot reads only labelCache, so skipping the prime never causes a Keychain read on the pool. Reversal: removing the condition made OAuthKeychainConcurrencyTests.swift:319 go RED (totalReads 2). DMGVerifier and OpenAIResetController now use OffPool.run with the same semantics. Caveat: there is a check-then-act window where the entry ages out between the probe and the read. It is benign, because the fetch path then primes the label itself.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/AnthropicProvider.swift:58",
+  "Sources/AiTaskbarCore/Cache/DiskCache.swift:100",
+  "Sources/AiTaskbarApp/DMGVerifier.swift:62"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

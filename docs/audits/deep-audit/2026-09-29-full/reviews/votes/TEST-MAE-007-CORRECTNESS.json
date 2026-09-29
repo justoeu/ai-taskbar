@@ -1,0 +1,13 @@
+{
+ "id": "TEST-MAE-007",
+ "verdict": "APROVA",
+ "reasoning": "check-source-ratchets.sh:106-109 blanks out only the balanced Int(...) calls that contain radix:, instead of skipping the whole line. With the new script the self-test passes and the real tree still passes the ratchet. Reversal: with the HEAD script, the self-test printed 'GATE IS BLIND to: radix parse + Int(d) on one line'. Caveat: a conversion nested inside a radix call, such as Int(Int(d), radix:16), is still hidden. That is a corner case outside this finding.",
+ "required_changes": [],
+ "cited_paths": [
+  "scripts/check-source-ratchets.sh:106",
+  "scripts/source-ratchet-selftest.sh:127"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

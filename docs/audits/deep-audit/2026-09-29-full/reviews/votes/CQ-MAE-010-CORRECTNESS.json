@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-010",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarProviders/CachedFetch.swift:121-131: when the stale cache fails to decode, the error is logged and the code falls through to AppError.wrapping(error). The inner catch's error shadows the parameter only inside its own block, so the network cause is what gets thrown. A fresh-cache decode failure is now logged at :33-37. Reversal: I made the catch unreachable and CachedFetchEdgeTests.swift:261 went RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/CachedFetch.swift:121",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:33"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

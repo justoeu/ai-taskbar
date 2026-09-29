@@ -1,0 +1,61 @@
+{
+  "id": "CQ-MAE-014",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:07:06 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:262: the cooldown check now uses the injected now. Reversal: putting Date.now back made VendorViewModelRateLimitTests.swift:76 go RED (callCount 1). One caveat: :316 now stamps retryAt from dispatch time rather than arrival time. That shortens the cooldown by the request's duration. It is negligible for a fast 429 and is not a demonstrated bug.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:262",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:316"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:260,166-175 passes one clock (`now`) to both the cooldown check and the stamp. That removes the mixed Date.now/now use without adding a new abstraction. The parameter name `at now:` matches what the code does.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:260",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:166"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:262,273,296-316: the cooldown check and the stamp now both use the injected now, and observeRateLimit is private. The @Published rateLimitRetryAt keeps its type. The new test file VendorViewModelRateLimitTests.swift belongs to this finding.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:262",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:316",
+        "Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

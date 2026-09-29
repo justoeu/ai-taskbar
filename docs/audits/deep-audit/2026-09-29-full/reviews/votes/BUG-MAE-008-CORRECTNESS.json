@@ -1,0 +1,14 @@
+{
+ "id": "BUG-MAE-008",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Config/ConfigLoader.swift:259-264: a file that exists but can't be read now throws AppError.io before AtomicFileWrite, so the user's config is never replaced with bare defaults. A missing file still returns [] at :256, as before; it has no top-up path. If the file is deleted between the fileExists check and the read, the call throws and writes nothing, which is safe. AppEnvironment.topUpConfigSections logs the error and does not rewrite. Reversal: I put the try? ?? \"\" form back and ConfigLoaderTests.swift:106/107 went RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Config/ConfigLoader.swift:256",
+  "Sources/AiTaskbarCore/Config/ConfigLoader.swift:259",
+  "Sources/AiTaskbarApp/AppEnvironment.swift:60"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

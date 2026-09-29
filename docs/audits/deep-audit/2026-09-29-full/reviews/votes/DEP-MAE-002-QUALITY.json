@@ -1,0 +1,13 @@
+{
+ "id": "DEP-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": ".github/dependabot.yml:1-29 is a minimal config with a header that says why each ecosystem is watched. Action bumps carry `[skip release]`, which follows the CLAUDE.md rule for CI-only and non-code commits. The swift ecosystem releases normally, which is correct because it changes shipped code. The TOMLKit note matches the accepted-risk entry in CLAUDE.md.",
+ "required_changes": [],
+ "cited_paths": [
+  ".github/dependabot.yml:26",
+  ".github/dependabot.yml:29"
+ ],
+ "lens": "QUALITY",
+ "_task": "a58827042eae0c95c",
+ "batch": "B15-core-followups"
+}

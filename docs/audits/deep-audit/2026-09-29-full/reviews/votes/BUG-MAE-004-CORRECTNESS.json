@@ -1,0 +1,12 @@
+{
+ "id": "BUG-MAE-004",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:276-281: only total_token_usage is decoded with try?. A malformed total now just removes the dedup signal. last_token_usage is still strict. Reversal: with try instead of try? the test went RED at CodexSessionScannerTests.swift:382/383 (decodeFailures 1, inputTokens nil).",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:280"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

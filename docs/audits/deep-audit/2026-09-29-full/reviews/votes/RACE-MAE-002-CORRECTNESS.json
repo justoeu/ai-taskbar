@@ -1,0 +1,15 @@
+{
+ "id": "RACE-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "The finding's four points are each addressed. (1) Flight semantics are documented at SingleFlight.swift:14-22. (2) The dead checkCancellation inside the refresh flight was removed, and the check moved to after refreshAndWriteBack (AnthropicProvider.swift:101; OpenAIProvider.swift:79 and :95). The rotated token is therefore always written back before the caller aborts. (3) The gate is held for the whole dialog, and this is now documented (KeychainCredentialReader.swift:88). (4) OffPool tests moved to their own file, and the detached task in VendorSectionView was dropped because authorizeCredentialsOffPool already hops to GCD. The Ferreiro's mutation check covers SingleFlightTests; I did not re-run that particular mutation. The test passes on the current tree.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/SingleFlight.swift:14",
+  "Sources/AiTaskbarProviders/AnthropicProvider.swift:101",
+  "Sources/AiTaskbarProviders/OpenAIProvider.swift:95",
+  "Sources/AiTaskbarApp/Views/VendorSectionView.swift:421"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

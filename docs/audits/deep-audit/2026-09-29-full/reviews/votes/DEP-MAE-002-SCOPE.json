@@ -1,0 +1,14 @@
+{
+ "id": "DEP-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "In .github/dependabot.yml, github-actions bumps carry the prefix 'ci(deps) [skip release]'. Dependabot puts the prefix in both the PR title and the commit message, so the marker survives a squash merge (subject) and a merge commit (body). auto-tag reads it anywhere in the head message, as CLAUDE.md requires for non-code pushes. The swift ecosystem uses the 'deps' prefix, which gives a patch release, correct because the shipped code changes. Its comment says a PR is only a prompt to re-evaluate, which matches the TOMLKit accepted-risk note ('don't swap preemptively'). No new runtime surface.",
+ "required_changes": [],
+ "cited_paths": [
+  ".github/dependabot.yml:20",
+  ".github/dependabot.yml:28",
+  "CLAUDE.md"
+ ],
+ "lens": "SCOPE",
+ "_task": "a7a7bc4f8d753c08e",
+ "batch": "B15-core-followups"
+}

@@ -1,0 +1,13 @@
+{
+ "id": "LEAK-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Util/BoundedProcess.swift:145-215: the drains now poll and can be abandoned, and the timedOut comment is added. Both are items in the finding's evidence, and the duplicate HTTPClient guard is removed. The 50 ms poll only runs while a reader is idle, so the hot path gets no new I/O. try? handle.close() is a best-effort cleanup that the try? rule allows.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:145",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:140"
+ ],
+ "lens": "SCOPE",
+ "_task": "a7a7bc4f8d753c08e",
+ "batch": "B15-core-followups"
+}

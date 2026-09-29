@@ -1,0 +1,12 @@
+{
+ "id": "BUG-MAE-008",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Config/ConfigLoader.swift:256-264 replaces the forbidden `(try? String(...)) ?? \"\"` with do/catch that throws AppError.io. This removes a swallowed error that could have wiped the user's config, as CLAUDE.md 'Don't swallow errors with try?' requires. No new nesting. CLAUDE.md and AGENTS.md are updated in the same change.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Config/ConfigLoader.swift:256"
+ ],
+ "lens": "QUALITY",
+ "_task": "a58827042eae0c95c",
+ "batch": "B15-core-followups"
+}

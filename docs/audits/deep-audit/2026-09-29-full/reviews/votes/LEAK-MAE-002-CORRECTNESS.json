@@ -1,0 +1,13 @@
+{
+ "id": "LEAK-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "BoundedProcess.swift:189-212: the poll+read loop reads to EOF. poll reports POLLHUP only after the remaining bytes are available, and read returns them before returning 0. The keep path, including the prefix on overflow, matches the old one. So normal output is neither truncated nor missing bytes. Data is still published only at the end, as before. The abandon() calls at :150-151 run after the outcome has captured stdout and stderr, so bytes dropped after that point were never part of the result. That matches the old behaviour, where an undrained reader also gave an empty result. Closing the handle in the defer releases the pipe. Reversal: with the HEAD file, BoundedProcessTests.swift:147/148 went RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:189",
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:150"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a39e75243c2866436",
+ "batch": "B15-core-followups"
+}

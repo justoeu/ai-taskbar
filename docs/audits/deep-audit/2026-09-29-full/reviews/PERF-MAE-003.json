@@ -1,0 +1,65 @@
+{
+  "id": "PERF-MAE-003",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:07:06 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "AnthropicProvider.swift:58: the label is primed only when hasFreshPayload() is true. hasFreshPayload (DiskCache.swift:100) uses the same mtime and ttl rule as freshPayloadWithAge. decodeSnapshot reads only labelCache, so skipping the prime never causes a Keychain read on the pool. Reversal: removing the condition made OAuthKeychainConcurrencyTests.swift:319 go RED (totalReads 2). DMGVerifier and OpenAIResetController now use OffPool.run with the same semantics. Caveat: there is a check-then-act window where the entry ages out between the probe and the read. It is benign, because the fetch path then primes the label itself.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/AnthropicProvider.swift:58",
+        "Sources/AiTaskbarCore/Cache/DiskCache.swift:100",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:62"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "AnthropicProvider.swift:58 primes the label only when a fresh cache entry will be served, which is a minimal fix. DMGVerifier.swift:62 and OpenAIResetController.swift:57 now use the existing OffPool helper instead of Task.detached, following the established pattern. DiskCache.hasFreshPayload (:100-106) copies the stat/mtime/`<= ttl` rule from freshPayloadWithAge instead of sharing a helper. DiskCacheTests#has_fresh_payload_matches_ttl_boundary pins the two to agree at the boundary, so drift would fail a test. Given that, I am filing the extraction as a new finding rather than a required change.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cache/DiskCache.swift:100",
+        "Sources/AiTaskbarProviders/AnthropicProvider.swift:58",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:62",
+        "Sources/AiTaskbarApp/ViewModels/OpenAIResetController.swift:57"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "AnthropicProvider.swift:53-60 gates priming on the new DiskCache.hasFreshPayload (DiskCache.swift:100), a stat-only probe that mirrors freshPayloadWithAge's `<= ttl` check. The DMGVerifier.swift:60 and OpenAIResetController.swift:57 switches to OffPool.run are named in this finding's evidence. OffPool already exists in HEAD. The new public DiskCache method is covered by DiskCacheTests.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/AnthropicProvider.swift:53",
+        "Sources/AiTaskbarCore/Cache/DiskCache.swift:100",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:60",
+        "Sources/AiTaskbarApp/ViewModels/OpenAIResetController.swift:57"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

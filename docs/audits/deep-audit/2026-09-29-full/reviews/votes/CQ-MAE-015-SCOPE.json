@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-015",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Models/FetchOutcome.swift:6-13: the fix takes the finding's second option (confirm no persisted path reaches the UI and pin it with a test). The .last_error on-disk format is unchanged, so no migration is needed. The only code change is a doc comment plus CachedFetchEdgeTests.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Models/FetchOutcome.swift:6",
+  "Sources/AiTaskbarCore/Cache/DiskCache.swift:82"
+ ],
+ "lens": "SCOPE",
+ "_task": "a7a7bc4f8d753c08e",
+ "batch": "B15-core-followups"
+}

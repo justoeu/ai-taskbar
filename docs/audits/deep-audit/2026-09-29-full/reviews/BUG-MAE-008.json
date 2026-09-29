@@ -1,0 +1,61 @@
+{
+  "id": "BUG-MAE-008",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:07:05 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Config/ConfigLoader.swift:259-264: a file that exists but can't be read now throws AppError.io before AtomicFileWrite, so the user's config is never replaced with bare defaults. A missing file still returns [] at :256, as before; it has no top-up path. If the file is deleted between the fileExists check and the read, the call throws and writes nothing, which is safe. AppEnvironment.topUpConfigSections logs the error and does not rewrite. Reversal: I put the try? ?? \"\" form back and ConfigLoaderTests.swift:106/107 went RED.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Config/ConfigLoader.swift:256",
+        "Sources/AiTaskbarCore/Config/ConfigLoader.swift:259",
+        "Sources/AiTaskbarApp/AppEnvironment.swift:60"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Config/ConfigLoader.swift:256-264 replaces the forbidden `(try? String(...)) ?? \"\"` with do/catch that throws AppError.io. This removes a swallowed error that could have wiped the user's config, as CLAUDE.md 'Don't swallow errors with try?' requires. No new nesting. CLAUDE.md and AGENTS.md are updated in the same change.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Config/ConfigLoader.swift:256"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Config/ConfigLoader.swift:253-264: the only change is that a read failure now throws AppError.io instead of rewriting the file from defaults. Existing callers already handle a throwing top-up (AppEnvironment.topUpConfigSections logs the error), so no contract changes. CLAUDE.md, AGENTS.md (Config schema) and ConfigLoaderTests change in the same diff. No file outside the finding.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Config/ConfigLoader.swift:253",
+        "CLAUDE.md:645",
+        "Tests/AiTaskbarCoreTests/ConfigLoaderTests.swift:106"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}
