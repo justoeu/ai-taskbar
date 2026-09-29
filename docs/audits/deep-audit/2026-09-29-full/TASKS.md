@@ -8,7 +8,7 @@
 
 **Lentes:** Bugs clássicos · Segurança · Arquitetura · Qualidade · Performance · Testes · Boas práticas · Backpressure · Complexidade · Dependências · Duplicação · Memory leak · Race · Verbosidade · N+1
 
-**Resumo:** 185 tasks · 159 resolvidas · 0 em progresso · 0 pendentes · 16 refutadas · 10 aceitas · **100% fechadas** · ✅ nenhum HIGH aberto
+**Resumo:** 188 tasks · 159 resolvidas · 0 em progresso · 3 pendentes · 16 refutadas · 10 aceitas · **98% fechadas** · ✅ nenhum HIGH aberto
 
 **Revisão das correções (painel Nêmesis · Hígia · Jano):** 159/159 aprovadas
 
@@ -295,7 +295,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 - [x] **VERB-MAE-001** · Verbosidade · LOW · `Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:136` — AnalyticsStore.defaultEstimates ignores its snapshots parameter; currentSnapshots computed each refresh for nothing · resp: Maestro · teste: `AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring · revisão approved (3/3) · batch B14-app-followups
 
-### INFO (31/54 resolvidos)
+### INFO (31/57 resolvidos)
 
 - [x] **ARCH-ATL-007** · Arquitetura · INFO · `Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:48` — Flame severity color rule duplicated in 3 places and diverging from SeverityColor · resp: Atlas · teste: `SeverityColorFlameTests (6 cases)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SeverityColorFlameTests (6 cases) · revisão approved (3/3) · batch B11-app-lows
@@ -367,6 +367,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > aceito (divida-cosmetica): send -> deliveryFinished -> tracker.{delivered,park,unmark} keep passing (vendor, label, threshold, token) as four separate values.
   > consequência: No behaviour defect today. A future fifth field could be threaded through some call sites and missed at others. The token check (isCurrent) already rejects a mismatched late completion. · reabre se: A field is added to a pending crossing, or any change touches the tracker's unmark/delivered/park signatures · ratificou: user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
   > progresso 2026-09-29: aceito (divida-cosmetica) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+- [ ] **CQ-MAE-025** · Qualidade · INFO · `scripts/check-source-ratchets.sh:279` — Over-long comment line in check-source-ratchets.sh check 4 block · resp: Maestro · teste: —
 - [x] **DEP-MAE-001** · Dependências · INFO · `Makefile:339` — Fail-closed update checksum makes the checksums upload in make publish a hard requirement with no guard · resp: Maestro · teste: `SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON) · revisão approved (3/3) · batch B8-updater
 - [-] **DUP-ECO-003** · Duplicação · INFO · `Sources/AiTaskbarProviders/RSSStatusSource.swift:287` — safeSourceURL host/scheme validation duplicated between RSSStatusSource and StatuspageSource with different scheme-recovery behavior · resp: Eco · teste: —
@@ -382,6 +383,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste PercentTextTests (existing format test) · revisão approved (3/3) · batch B18-r2
 - [x] **DUP-MAE-007** · Duplicação · INFO · `Sources/AiTaskbarApp/NotificationService.swift:294` — Tracker repeats per-key cleanup (drop empty pending; remove from three maps on reset and prune); clearKnownDenial also re-arms without saying so · resp: Maestro · teste: `NotificationThresholdTrackerTests (whole suite),NotificationDeliveryRollbackTests (whole suite)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste NotificationThresholdTrackerTests (whole suite),NotificationDeliveryRollbackTests (whole suite) · revisão approved (3/3) · batch B19-tail
+- [ ] **DUP-MAE-008** · Duplicação · INFO · `Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift:1` — Six App test files copy the same #filePath walk-up to read Localizable.strings · resp: Maestro · teste: —
 - [x] **LEAK-FAN-007** · Memory leak · INFO · `Sources/AiTaskbarApp/NotificationService.swift:71` — NotificationService.highestNotified keeps an orphan key every month for the xAI Monthly (YYYY-MM) window label · resp: Fantasma · teste: `NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms · revisão approved (3/3) · batch B11-app-lows
 - [x] **LEAK-FAN-008** · Memory leak · INFO · `Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:77` — RefreshScheduler loops upgrade [weak self] to strong for the whole infinite loop, so the cancels in deinit can never run · resp: Fantasma · teste: `RefreshScheduler#started_scheduler_is_released` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -432,6 +434,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste RefreshScheduler#updates disabled: no update loop runs, so nothing sleeps or checks · revisão approved (3/3) · batch B18-last-followups
 - [x] **TEST-MAE-012** · Testes · INFO · `scripts/check-source-ratchets.sh:183` — Strings ratchet catches %d/%i only; %u/%o/%x/%X without a 64-bit modifier pass; header says either check; self-test [6/6] checks exit code only; ci.yml comment lists only the older checks · resp: Maestro · teste: `scripts/source-ratchet-selftest.sh [4/8] %u/%o/%x/%X/%hhx + duplicate plants,[6/8] missing-file message grep,[7/8]/[8/8] inline String(format:)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste scripts/source-ratchet-selftest.sh [4/8] %u/%o/%x/%X/%hhx + duplicate plants,[6/8] missing-file message grep,[7/8]/[8/8] inline String(format:) · revisão approved (3/3) · batch B21-strings-tail
+- [ ] **TEST-MAE-013** · Testes · INFO · `scripts/check-source-ratchets.sh:332` — Inline format ratchet (check 4) does not scan NSString(format:), String(format:locale:), .init(format:), formats held in a let, multi-line literals, or %x fed a Swift Int · resp: Maestro · teste: —
 - [x] **VERB-LAC-002** · Verbosidade · INFO · `Sources/AiTaskbarCore/Util/AppLog.swift:25` — Two of AppLog seven Logger categories are declared but never logged to · resp: Lacônio · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup
 - [x] **VERB-MAE-002** · Verbosidade · INFO · `Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:1` — 8 more unused localization keys (e.g. updated_ago_fmt, analytics_usage_share, vs_previous_period_fmt) in all locales · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -439,7 +442,9 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 
 ## Ainda aberto
 
-_Nada aberto._ 🎉
+- **CQ-MAE-025** (INFO) — Over-long comment line in check-source-ratchets.sh check 4 block · plano: Rewrap
+- **DUP-MAE-008** (INFO) — Six App test files copy the same #filePath walk-up to read Localizable.strings · plano: Shared helper in the AppTests target
+- **TEST-MAE-013** (INFO) — Inline format ratchet (check 4) does not scan NSString(format:), String(format:locale:), .init(format:), formats held in a let, multi-line literals, or %x fed a Swift Int · plano: Widen check 4 to those forms with self-test plants
 
 ## Roadmap de libs / dependências
 
@@ -509,7 +514,3 @@ _Toda lib pesquisada está no latest stable._ ✅
 - **2026-09-29 18:07:06 UTC** — resolvido CQ-MAE-015 (teste: CachedFetchEdgeTests#guidance_stays_in_memory_on_the_stale_path) — batch B15-core-followups
 - **2026-09-29 18:07:05 UTC** — resolvido CQ-MAE-010 (teste: CachedFetchEdgeTests#network_failure_over_undecodable_cache_keeps_network_cause) — batch B15-core-followups
 - **2026-09-29 18:07:05 UTC** — resolvido BUG-MAE-004 (teste: CodexSessionScannerTests#malformed_total_keeps_billed_turn) — batch B15-core-followups
-
-## ✅ RODADA FECHADA
-
-Todos os 185 achados têm desfecho: 159 resolvidos · 16 refutados · 10 aceitos. Nenhum aberto.
