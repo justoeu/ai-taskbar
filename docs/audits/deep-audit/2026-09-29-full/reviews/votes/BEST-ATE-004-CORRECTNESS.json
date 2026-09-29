@@ -1,0 +1,13 @@
+{
+ "id": "BEST-ATE-004",
+ "verdict": "APROVA",
+ "reasoning": "The try? sniff is gone. GeminiProvider.swift:104 now routes by top-level keys (isAntigravityPayload, :147-157). The agy branch decodes strictly and throws AppError.schema(\"agy usage decode: ...\"), so drift no longer falls through to the base_url message. Non-JSON input now throws a schema error instead of reaching the models decoder. Reversal: I restored the old try? block. agy_schema_drift_reports_agy_decode_error (:59/:60) and non_json_payload_is_schema_error (:114) went RED, then passed again after restore. One minor change, noted but not blocking: an agy object with none of name==usage or groups used to fall through to a misleading 'missing models' error. It now yields an active Antigravity card with no windows.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/GeminiProvider.swift:104",
+  "Sources/AiTaskbarProviders/GeminiProvider.swift:147"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a43baa006f1e4fc6c",
+ "batch": "B4-i18n"
+}

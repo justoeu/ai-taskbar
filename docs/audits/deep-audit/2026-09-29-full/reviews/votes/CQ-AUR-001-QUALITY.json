@@ -1,0 +1,16 @@
+{
+ "id": "CQ-AUR-001",
+ "verdict": "APROVA",
+ "reasoning": "The fix follows the CLAUDE.md rule \"Never build a user-facing sentence inside a wire type; emit structure and let the localized view render it\". Core/Models/VendorNotice.swift adds two closed enums, VendorDisclaimer and VendorGuidance (Sendable, Codable, CaseIterable), with no [String: Any]. The App maps them to localized text in one place, App/Localization/VendorNoticeText.swift:38-68, and the switches are exhaustive with no default. So a new case fails to compile until it has a key, and VendorNoticeLocalizationTests.keys_exist_in_every_language checks that every key exists in en, pt-BR and es. AppError gains a single computed httpStatus (AppError.swift:41-58). isTransient, isRateLimited and isUnauthorized now read from it, which removes two `if case .http` pattern matches instead of adding a third. No error is swallowed: every throw site in AntigravityExecutor.swift, GeminiProvider.swift and XAIProvider.swift still throws, now as .guidance. CachedFetch.swift:54-58 keeps the status through `appErr.httpStatus ?? 0`; that is not a silent default, because the old code already used 0 there. New tests use expectTrue for optional conditions, as the Testing policy requires (e.g. GeminiXAILocaleNeutralTests `snap?.isAntigravityActive == true`). The two test names made stale by the fix were renamed (GeminiProviderTests `...throws antigravityNotFound guidance`, `...into structured guidance`). README and all three Localizable.strings were updated together. The report records validate exit 0 with 0 warnings; I did not rebuild, per the read-only protocol.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Models/VendorNotice.swift:433-491",
+  "Sources/AiTaskbarApp/Localization/VendorNoticeText.swift:38-68",
+  "Sources/AiTaskbarCore/Models/AppError.swift:41-71",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:54-58",
+  "Tests/AiTaskbarAppTests/VendorNoticeLocalizationTests.swift:32-40"
+ ],
+ "lens": "QUALITY",
+ "_task": "a7274b7a10cca7059",
+ "batch": "B4-i18n"
+}

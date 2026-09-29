@@ -1,0 +1,13 @@
+{
+ "id": "BUG-ART-009",
+ "verdict": "APROVA",
+ "reasoning": "GeminiWireTypes.swift:701 replaces `?? 1.0` with `guard let ... else { continue }`. That removes a silent default (0% used) for a value that is unknown, and matches the CLAUDE.md \"No denominator, no bar\" rule for Codex credits. Nesting inside the bucket loop is unchanged. The new comment explains why (proto3 omits a zero double) rather than restating the code. The WireTypesEdgeTests test was renamed to \"...produces no window\" and marked as a deliberate behavior change, so the old name that pinned the bug no longer misleads.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/GeminiWireTypes.swift:697-701",
+  "Tests/AiTaskbarProvidersTests/WireTypesEdgeTests.swift:1276-1296"
+ ],
+ "lens": "QUALITY",
+ "_task": "a7274b7a10cca7059",
+ "batch": "B4-i18n"
+}

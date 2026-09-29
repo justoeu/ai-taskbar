@@ -153,8 +153,9 @@ section("Wire types: Antigravity Gemini fixture") {
     let s = parsed.toSnapshot()
     expect(s.planLabel == "Antigravity", "Antigravity plan label")
     expect(s.isAntigravityActive, "isAntigravityActive is true")
-    expect(s.disclaimer == "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado.",
-           "Antigravity disclaimer matches mandatory text")
+    // Structure, not prose (CQ-AUR-001): the App localizes it.
+    expect(s.disclaimer == .antigravityRequired,
+           "Antigravity disclaimer is the structured antigravityRequired notice")
     expect(s.fiveHour?.label == "Gemini (5h)", "Gemini 5h label")
     expect(abs((s.fiveHour?.utilizationPercent ?? 0) - 16.344) < 0.01,
            "Gemini 5h utilization matches fixture")
@@ -280,14 +281,14 @@ section("Wire types: Grok CLI fixtures") {
     expect(snap.balance?.detail == "$40.00 available", "grok balance detail")
     expect(snap.prepaidUSD == 40.0, "grok prepaid USD")
     expect(snap.prepaidUsedUSD == nil, "grok prepaid used is not balance x weekly %")
-    expect(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.",
-           "grok disclaimer matches mandatory text")
+    expect(snap.disclaimer == .grokCLIRequired,
+           "grok disclaimer is the structured grokCLIRequired notice")
 
     let cached = XAICachedPayload(grokBilling: billing, grokSettings: settings)
     let cs = cached.toSnapshot()
     expect(cs.planLabel == "SuperGrok Heavy", "grok cached payload snapshot plan label")
     expect(cs.weekly?.utilizationPercent == 3.0, "grok cached payload weekly util")
-    expect(cs.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.",
+    expect(cs.disclaimer == .grokCLIRequired,
            "grok cached payload has disclaimer")
 
     let authEntries = try SharedCoders.decoder.decode(

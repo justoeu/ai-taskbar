@@ -77,9 +77,7 @@ public final class GeminiProvider: UsageProvider {
                     apiKey = try credentials.read()
                 } catch {
                     if preferAntigravity {
-                        throw AppError.credentials(
-                            "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado. (Instale o 'agy' ou defina GEMINI_API_KEY para verificar a API)."
-                        )
+                        throw AppError.guidance(.antigravityRequired)
                     }
                     throw error
                 }
@@ -97,18 +95,27 @@ public final class GeminiProvider: UsageProvider {
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
-        // Attempt decoding as Antigravity /usage JSON
-        if let agy = try? SharedCoders.decoder.decode(AntigravityUsageResponse.self, from: data) {
+        // The cached bytes are either `agy /usage` output or the AI Studio
+        // `/models` body. agy output always carries one of these top-level
+        // keys and `/models` never does, so that is the source tag. The agy
+        // branch decodes strictly: its schema drift must report as an agy
+        // error, not fall through to "base_url may be wrong" for an AI
+        // Studio endpoint that was never called (the old `try?` did that).
+        if try Self.isAntigravityPayload(data) {
+            let agy: AntigravityUsageResponse
+            do {
+                agy = try SharedCoders.decoder.decode(AntigravityUsageResponse.self, from: data)
+            } catch {
+                throw AppError.schema("agy usage decode: \(error)")
+            }
             if agy.status == "ERROR" {
-                let err = agy.error ?? agy.response ?? "Erro no Antigravity"
+                let err = agy.error ?? agy.response ?? "agy reported an error"
                 if err == "context canceled" {
-                    throw AppError.io("Operação cancelada ou tempo limite esgotado pelo Antigravity.")
+                    throw AppError.guidance(.antigravityCanceled)
                 }
                 throw AppError.io("agy: \(err)")
             }
-            if agy.command?.name == "usage" || (agy.command?.data?.groups != nil && !(agy.command?.data?.groups?.isEmpty ?? true)) {
-                return .gemini(agy.toSnapshot())
-            }
+            return .gemini(agy.toSnapshot())
         }
 
         let parsed: GeminiModelsResponse
@@ -131,5 +138,21 @@ public final class GeminiProvider: UsageProvider {
                 "gemini models: response missing `models` field — base_url may be wrong or the API has changed")
         }
         return .gemini(parsed.toSnapshot())
+    }
+
+    /// Top-level keys only `agy --output-format json` emits.
+    static let antigravityKeys: Set<String> = ["command", "conversation_id", "status"]
+
+    /// True when `data` is an agy payload. Throws `AppError.schema` when the
+    /// bytes are not JSON at all, which neither source ever produces.
+    static func isAntigravityPayload(_ data: Data) throws -> Bool {
+        let root: JSONValue
+        do {
+            root = try SharedCoders.decoder.decode(JSONValue.self, from: data)
+        } catch {
+            throw AppError.schema("gemini payload is not JSON: \(error)")
+        }
+        guard case .object(let fields) = root else { return false }
+        return !antigravityKeys.isDisjoint(with: fields.keys)
     }
 }

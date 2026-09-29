@@ -219,7 +219,7 @@ struct GeminiProviderTests {
         }
         expectTrue(s.isAntigravityActive)
         #expect(s.planLabel == "Antigravity")
-        #expect(s.disclaimer != nil)
+        expectTrue(s.disclaimer == .antigravityRequired)
         #expect(s.fiveHour != nil)
         #expect(s.weekly != nil)
         #expect(s.thirdParty5Hour != nil)
@@ -232,7 +232,7 @@ struct GeminiProviderTests {
     func antigravity_unauthenticated_error() async throws {
         let mock = MockAntigravityExecutor(
             installed: true,
-            error: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal.")
+            error: AppError.guidance(.antigravityNotAuthenticated)
         )
         let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
         let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
@@ -286,7 +286,7 @@ struct GeminiProviderTests {
         }
         expectFalse(s.isAntigravityActive)
         #expect(s.modelCount == 3)
-        #expect(s.disclaimer != nil)
+        expectTrue(s.disclaimer == .antigravityRequired)
         #expect(StubURLProtocol.captured.count == 1)
         try? FileManager.default.removeItem(at: tmpCacheDir)
         StubURLProtocol.reset()
@@ -312,13 +312,9 @@ struct GeminiProviderTests {
         )
         do {
             _ = try await provider.fetchUsage(forceRefresh: true)
-            Issue.record("expected credentials error")
+            Issue.record("expected guidance error")
         } catch let err as AppError {
-            if case .credentials(let msg) = err {
-                expectTrue(msg.contains("Antigravity instalado e autenticado"))
-            } else {
-                Issue.record("expected credentials, got \(err)")
-            }
+            #expect(err == .guidance(.antigravityRequired))
         }
         try? FileManager.default.removeItem(at: tmpCacheDir)
     }
@@ -378,19 +374,15 @@ struct GeminiProviderTests {
         try? FileManager.default.removeItem(at: scriptDir)
     }
 
-    @Test("ProcessAntigravityExecutor.fetchUsageJSON throws credentials when not installed")
+    @Test("ProcessAntigravityExecutor.fetchUsageJSON throws antigravityNotFound guidance when not installed")
     func process_executor_not_installed_throws() async throws {
         let exec = ProcessAntigravityExecutor(customPath: "/nonexistent/path/to/agy")
         if !exec.isInstalled() {
             do {
                 _ = try await exec.fetchUsageJSON()
-                Issue.record("expected credentials error")
+                Issue.record("expected guidance error")
             } catch let err as AppError {
-                if case .credentials(let msg) = err {
-                    expectTrue(msg.contains("Antigravity instalado e autenticado"))
-                } else {
-                    Issue.record("expected credentials, got \(err)")
-                }
+                #expect(err == .guidance(.antigravityNotFound))
             }
         }
     }
@@ -450,7 +442,7 @@ struct GeminiProviderTests {
             Issue.record("expected AppError.io")
         } catch let err as AppError {
             if case .io(let msg) = err {
-                expectTrue(msg.contains("código 2"))
+                expectTrue(msg.contains("exit 2"))
             } else {
                 Issue.record("expected io error, got \(err)")
             }
@@ -459,7 +451,7 @@ struct GeminiProviderTests {
         try? FileManager.default.removeItem(at: scriptDir)
     }
 
-    @Test("ProcessAntigravityExecutor parses context canceled into clean Portuguese message")
+    @Test("ProcessAntigravityExecutor parses context canceled into structured guidance")
     func process_executor_context_canceled_parsed_cleanly() async throws {
         let scriptDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ai-taskbar-script-\(UUID().uuidString)")
@@ -476,15 +468,9 @@ struct GeminiProviderTests {
         let exec = ProcessAntigravityExecutor(customPath: scriptPath)
         do {
             _ = try await exec.fetchUsageJSON()
-            Issue.record("expected io error")
+            Issue.record("expected guidance error")
         } catch let err as AppError {
-            if case .io(let msg) = err {
-                expectTrue(msg.contains("Operação cancelada ou tempo limite esgotado"))
-                expectFalse(msg.contains("conversation_id"))
-                expectFalse(msg.contains("status"))
-            } else {
-                Issue.record("expected io error, got \(err)")
-            }
+            #expect(err == .guidance(.antigravityCanceled))
         }
 
         try? FileManager.default.removeItem(at: scriptDir)
@@ -509,12 +495,9 @@ struct GeminiProviderTests {
             _ = try await exec.fetchUsageJSON()
             Issue.record("expected 503 error")
         } catch let err as AppError {
-            if case .http(let status, let body) = err {
-                #expect(status == 503)
-                expectTrue(body.contains("temporariamente indisponível"))
-            } else {
-                Issue.record("expected 503 error, got \(err)")
-            }
+            #expect(err == .guidance(.antigravityUnavailable))
+            expectTrue(err.httpStatus == 503)
+            expectTrue(err.isTransient)
         }
 
         try? FileManager.default.removeItem(at: scriptDir)

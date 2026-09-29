@@ -1,0 +1,30 @@
+[
+ [
+  "SCOPE",
+  "LOW: when a card is stale, the body of the stored FetchError is now the English diagnostic ('guidance: Antigravity is not authenticated...'). Today the App only reads that body for the ACL check (VendorViewModel.swift:40), so users never see it. If a later change displays lastError.body, it would bypass VendorNoticeText."
+ ],
+ [
+  "SCOPE",
+  "INFO: the serialized shape of GeminiSnapshot/XAISnapshot changed (disclaimer is now an enum raw value). This is safe because snapshots are never persisted. If a snapshot cache is added later, it needs a lenient decoder for the old String form."
+ ],
+ [
+  "SCOPE",
+  "INFO: the other providers' AppError messages (for example 'xAI team_id is required', XAIProvider.swift:120) still render in English on the card through localizedDescription. This is consistent with the existing convention and outside this batch."
+ ],
+ [
+  "QUALITY",
+  "Tests/AiTaskbarProvidersTests/XAIProviderTests.swift:271: `Issue.record(\"expected credentials error\")` in grok_missing_auth_throws_disclaimer is stale; the error is now .guidance(.grokCLIRequired). The Ferreiro updated the same message in GeminiProviderTests but missed this one. Cosmetic."
+ ],
+ [
+  "QUALITY",
+  "Sources/AiTaskbarApp/Views/VendorSectionView.swift:294: the stale-card tooltip shows outcome.lastError?.body raw. For guidance errors that body is the English diagnostic with an internal prefix (\"guidance: Antigravity is not authenticated...\"), because CachedFetch stores appErr.description. The live-failure path is localized; the stale path is not. It was Portuguese before, so this is not a regression, but the tooltip still ignores the user's language and leaks the case prefix. Suggestion: persist the VendorGuidance raw value in FetchError, or have the view map lastError back to VendorNoticeText."
+ ],
+ [
+  "QUALITY",
+  "Sources/AiTaskbarApp/Localization/VendorNoticeText.swift:48-49: key naming is inconsistent. antigravityNotFound and antigravityNotAuthenticated reuse the old gemini_antigravity_* keys, while the other cases use the new guidance_* prefix. Harmless, but it makes grepping by prefix incomplete."
+ ],
+ [
+  "QUALITY",
+  "Duplicate agy error handling that predates this fix (translated here, not introduced): the \"agy reported an error\" fallback appears 3 times (AntigravityExecutor.swift:160, :172; GeminiProvider.swift:112) and the \"context canceled\" -> .antigravityCanceled mapping twice (AntigravityExecutor.swift:122, GeminiProvider.swift:113). A good candidate to extract into one helper in a later round."
+ ]
+]

@@ -170,7 +170,7 @@ struct GoldenSnapshotTests {
         let snap = parsed.toSnapshot()
         #expect(snap.modelCount == 0)
         #expect(snap.status?.detail == "API key valid (no models visible)")
-        #expect(snap.disclaimer != nil)
+        expectTrue(snap.disclaimer == .antigravityRequired)
     }
 
     @Test("Gemini golden — Antigravity usage JSON produces 5h and weekly quota windows")
@@ -182,7 +182,9 @@ struct GoldenSnapshotTests {
 
         #expect(snap.planLabel == "Antigravity")
         #expect(snap.isAntigravityActive)
-        #expect(snap.disclaimer == "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado.")
+        // Deliberate schema decision (CQ-AUR-001): the disclaimer is a
+        // structured notice the App localizes, no longer a Portuguese String.
+        expectTrue(snap.disclaimer == .antigravityRequired)
 
         #expect(snap.fiveHour?.label == "Gemini (5h)")
         let fiveHourUtil = snap.fiveHour?.utilizationPercent ?? 0

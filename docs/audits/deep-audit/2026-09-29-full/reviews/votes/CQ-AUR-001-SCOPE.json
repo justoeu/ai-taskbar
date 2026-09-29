@@ -1,0 +1,18 @@
+{
+ "id": "CQ-AUR-001",
+ "verdict": "APROVA",
+ "reasoning": "Every touched file ties to the finding. Portuguese prose was removed from Providers: GeminiWireTypes.swift:57,71,199, XAIWireTypes.swift:251,302,403, GeminiProvider.swift:80, XAIProvider.swift:117 and AntigravityExecutor.swift:57-166. The App now renders it through VendorNoticeText.swift, and VendorSectionView.swift:360,660,729 changed only at the Text() call sites. The contract change from disclaimer String? to VendorDisclaimer? (UsageSnapshot.swift:492,565,607) needs no migration. VendorSnapshot/GeminiSnapshot/XAISnapshot are never persisted: the only encoder.encode of a snapshot is in tests (GoldenSnapshotTests.swift:280, SnapshotModelTests.swift:79). DiskCache stores the raw vendor bytes and decodes them again, so no old on-disk data carries the Portuguese string. The removed public API (GrokBillingResponse.defaultDisclaimer, toSnapshot(disclaimer:)) has no remaining callers in Sources or Tests. The new AppError.guidance case keeps the behavior at the edges: AppError.httpStatus maps it to 401/503, VendorViewModel.needsReauth reads isUnauthorized, CachedFetch.swift:57 keeps the status in FetchError, and observeRateLimit only acts on 429, which guidance never produces. All 3 Localizable.strings have the same key set (339 = 339 = 339, diff empty), with real es/pt-BR translations for the 5 new guidance_* keys. README.md:282,311 are updated, AiTaskbarValidate/main.swift:156,284,297 were migrated to the enum, and grep finds no leftover Portuguese in Sources/*.swift.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:492",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/VendorNotice.swift:1",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/AppError.swift:12",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/CachedFetch.swift:57",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Localization/VendorNoticeText.swift:1",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:98",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md:282"
+ ],
+ "lens": "SCOPE",
+ "_task": "aa0273dcc5e783094",
+ "batch": "B4-i18n"
+}

@@ -1,0 +1,59 @@
+{
+  "id": "BEST-ATE-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 13:40:41 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The try? sniff is gone. GeminiProvider.swift:104 now routes by top-level keys (isAntigravityPayload, :147-157). The agy branch decodes strictly and throws AppError.schema(\"agy usage decode: ...\"), so drift no longer falls through to the base_url message. Non-JSON input now throws a schema error instead of reaching the models decoder. Reversal: I restored the old try? block. agy_schema_drift_reports_agy_decode_error (:59/:60) and non_json_payload_is_schema_error (:114) went RED, then passed again after restore. One minor change, noted but not blocking: an agy object with none of name==usage or groups used to fall through to a misleading 'missing models' error. It now yields an active Antigravity card with no windows.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/GeminiProvider.swift:104",
+        "Sources/AiTaskbarProviders/GeminiProvider.swift:147"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "GeminiProvider.swift:98-130 removes the `try?` that swallowed the agy decode error, a practice CLAUDE.md forbids outside best-effort paths. The source is now identified explicitly by isAntigravityPayload (GeminiProvider.swift:142-156): a small, static, testable function that throws .schema on non-JSON instead of returning false. The agy decode error is wrapped in .schema with its cause kept. Nesting in decodeSnapshot stays the same: the old composite condition `agy.command?.name == \"usage\" || (groups != nil && !(groups?.isEmpty ?? true))` is gone, so the new version is easier to read. The one cost is that the payload is decoded twice (JSONValue, then the struct), which is acceptable because this is one cached payload per tick, not a hot path. The JSONValue type follows the project rule.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/GeminiProvider.swift:98-130",
+        "Sources/AiTaskbarProviders/GeminiProvider.swift:142-156"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The change stays inside GeminiProvider.decodeSnapshot (GeminiProvider.swift:98-155). It tags the source by top-level keys through JSONValue, which follows the no-[String: Any] rule, and decodes agy strictly instead of using try?. The old command.name == \"usage\" gate was removed as part of the same fix, so an agy payload no longer falls through to the /models branch. There is no new dependency, host or contract change, and the extra JSONValue parse runs once per fetch, not per item.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiProvider.swift:110"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

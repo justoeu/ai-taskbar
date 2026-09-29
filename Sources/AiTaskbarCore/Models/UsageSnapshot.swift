@@ -487,8 +487,9 @@ public struct GeminiSnapshot: Sendable, Equatable, Codable {
     public let thirdParty5Hour: UsageWindow?
     /// 3rd-party models (Claude/GPT) weekly quota window from Antigravity.
     public let thirdPartyWeekly: UsageWindow?
-    /// Mandatory disclaimer explaining that Antigravity is required for quota monitoring.
-    public let disclaimer: String?
+    /// Notice that Antigravity is required for quota monitoring. Structure,
+    /// not prose: the App renders it through L10n (was a Portuguese String).
+    public let disclaimer: VendorDisclaimer?
     /// True when backed by active, authenticated Antigravity data.
     public let isAntigravityActive: Bool
 
@@ -499,7 +500,7 @@ public struct GeminiSnapshot: Sendable, Equatable, Codable {
                 weekly: UsageWindow? = nil,
                 thirdParty5Hour: UsageWindow? = nil,
                 thirdPartyWeekly: UsageWindow? = nil,
-                disclaimer: String? = nil,
+                disclaimer: VendorDisclaimer? = nil,
                 isAntigravityActive: Bool = false) {
         self.planLabel = planLabel
         self.status = status
@@ -559,8 +560,9 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
     public let prepaidUsedUSD: Double?
     /// Billing cycle label, e.g. "2026-07".
     public let billingCycleLabel: String?
-    /// Mandatory disclaimer explaining that Grok CLI is required for quota monitoring.
-    public let disclaimer: String?
+    /// Notice that Grok CLI is required for quota monitoring. Structure, not
+    /// prose: the App renders it through L10n (was a Portuguese String).
+    public let disclaimer: VendorDisclaimer?
 
     public init(planLabel: String? = nil,
                 weekly: UsageWindow? = nil,
@@ -571,7 +573,7 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
                 spendingLimitUSD: Double? = nil,
                 prepaidUsedUSD: Double? = nil,
                 billingCycleLabel: String? = nil,
-                disclaimer: String? = nil) {
+                disclaimer: VendorDisclaimer? = nil) {
         self.planLabel = planLabel
         self.weekly = weekly
         self.balance = balance
@@ -602,6 +604,6 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
         spendingLimitUSD = try c.decodeIfPresent(Double.self, forKey: .spendingLimitUSD)
         prepaidUsedUSD = try c.decodeIfPresent(Double.self, forKey: .prepaidUsedUSD)
         billingCycleLabel = try c.decodeIfPresent(String.self, forKey: .billingCycleLabel)
-        disclaimer = try c.decodeIfPresent(String.self, forKey: .disclaimer)
+        disclaimer = try c.decodeIfPresent(VendorDisclaimer.self, forKey: .disclaimer)
     }
 }

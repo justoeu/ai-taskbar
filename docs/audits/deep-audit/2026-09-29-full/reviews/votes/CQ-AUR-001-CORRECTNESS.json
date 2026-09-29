@@ -1,0 +1,16 @@
+{
+ "id": "CQ-AUR-001",
+ "verdict": "APROVA",
+ "reasoning": "Both Portuguese routes are closed: the disclaimers and the thrown errors. Disclaimers are now the VendorDisclaimer enum (UsageSnapshot.swift:492,565; GeminiWireTypes.swift:57,71,199; XAIWireTypes.swift:255,302,403), shown through VendorNoticeText at VendorSectionView.swift:660,729. Errors are now AppError.guidance (GeminiProvider.swift:80,114; XAIProvider.swift:117; AntigravityExecutor.swift:57,105,118,120,123,139), shown through VendorNoticeText.message at VendorSectionView.swift:360. A grep of Providers and Core for accented Portuguese finds only a doc comment (AnthropicWireTypes.swift:78). The 401/503 meaning is kept: AppError.httpStatus (AppError.swift:51-57) maps guidance to 401 or 503, so isUnauthorized, isRateLimited and isTransient behave as before, and CachedFetch.swift:57 now stores that status in the stale lastError (VendorViewModel.swift:100 reads status == 401). I checked every other switch over AppError. VendorViewModel.swift:246 still reads only .http for 429, and no guidance case is 429, so nothing changes there. OpenRouterProvider.swift:67 (403) and KeychainAccessAuthorizer.swift:293 (.credentials) are not affected. Cache and upgrade: the DiskCache stores raw vendor bytes (agy JSON, XAICachedPayload), never a GeminiSnapshot or XAISnapshot, so changing disclaimer from String to enum cannot break decoding of existing caches. I ran the filtered suite: 93 tests, all green. Reversal: I put a Portuguese AppError.credentials back in XAIProvider and set CachedFetch status back to 0. providers_sources_carry_no_portuguese_prose, XAIProviderTests:273 and stale_guidance_keeps_401_status all went RED. After restoring, the working-tree diff is byte-identical to the saved B4-i18n.diff.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Models/AppError.swift:51",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:57",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:100",
+  "Sources/AiTaskbarApp/Views/VendorSectionView.swift:360",
+  "Sources/AiTaskbarCore/Models/VendorNotice.swift:41"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a43baa006f1e4fc6c",
+ "batch": "B4-i18n"
+}

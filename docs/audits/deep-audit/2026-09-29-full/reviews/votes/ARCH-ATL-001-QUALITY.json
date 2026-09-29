@@ -1,0 +1,14 @@
+{
+ "id": "ARCH-ATL-001",
+ "verdict": "APROVA",
+ "reasoning": "This is a duplicate of CQ-AUR-001 and was fixed by the same code. Snapshots now carry VendorDisclaimer? instead of String? (UsageSnapshot.swift:490, :563, :607). The toSnapshot(disclaimer:) override parameters and the GrokBillingResponse.defaultDisclaimer constant were removed rather than kept as dead API (GeminiWireTypes.swift:130, XAIWireTypes.swift:251). The golden tests are updated with a comment marking the change as a deliberate schema decision, which is what the immutability mandate asks for (GoldenSnapshotTests.swift:185-187, XAIProviderTests.swift:164-166). The same quality assessment as CQ-AUR-001 applies.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Models/UsageSnapshot.swift:490",
+  "Sources/AiTaskbarProviders/XAIWireTypes.swift:251",
+  "Tests/AiTaskbarProvidersTests/GoldenSnapshotTests.swift:185"
+ ],
+ "lens": "QUALITY",
+ "_task": "a7274b7a10cca7059",
+ "batch": "B4-i18n"
+}

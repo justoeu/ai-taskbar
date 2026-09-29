@@ -1,0 +1,80 @@
+{
+ "batch": "B4-i18n",
+ "results": [
+  {
+   "id": "CQ-AUR-001",
+   "outcome": "fixed",
+   "tests": [
+    "GeminiXAILocaleNeutralTests#providers_sources_carry_no_portuguese_prose",
+    "XAIProviderTests#grok_missing_auth_throws_disclaimer",
+    "GoldenSnapshotTests#gemini_antigravity_golden",
+    "VendorNoticeLocalizationTests#gemini_disclaimer_english",
+    "VendorNoticeLocalizationTests#guidance_resolves_everywhere",
+    "AppErrorTests#guidance_not_authenticated_is_unauthorized",
+    "GeminiXAILocaleNeutralTests#stale_guidance_keeps_401_status"
+   ],
+   "red": "GeminiXAILocaleNeutralTests.swift:43:9: Expectation failed: (hits → [\"XAIWireTypes.swift: Para conseguir\", \"XAIWireTypes.swift: necessário\", ... \"GeminiWireTypes.swift: Para con…",
+   "reversal": "ok"
+  },
+  {
+   "id": "ARCH-ATL-001",
+   "outcome": "fixed",
+   "tests": [
+    "same as CQ-AUR-001 (duplicate, merged)"
+   ],
+   "red": "same as CQ-AUR-001",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-AUR-002",
+   "outcome": "fixed",
+   "tests": [
+    "VendorNoticeLocalizationTests#keys_exist_in_every_language"
+   ],
+   "red": "n/a (dead-key deletion). Grep proof: the literal key appears in no .swift file for quit, config, open_config_toml, models_tooltip_header, settings_vendors, settings_primary_vendor, reorder_vendors_help. The two disclaimer keys are now used by VendorNoticeText.",
+   "reversal": "n/a"
+  },
+  {
+   "id": "BEST-ATE-004",
+   "outcome": "fixed",
+   "tests": [
+    "GeminiXAILocaleNeutralTests#agy_schema_drift_reports_agy_decode_error",
+    "GeminiXAILocaleNeutralTests#non_json_payload_is_schema_error",
+    "GeminiXAILocaleNeutralTests#json_array_is_not_agy"
+   ],
+   "red": "GeminiXAILocaleNeutralTests.swift:59:19: Expectation failed: value ↳ schema mismatch: gemini models: response missing `models` field — base_url may be wrong or the API has changed",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-009",
+   "outcome": "fixed",
+   "tests": [
+    "GeminiXAILocaleNeutralTests#antigravity_missing_remaining_fraction_is_unknown",
+    "WireTypesEdgeTests#antigravity_nil_remaining_fraction"
+   ],
+   "red": "GeminiXAILocaleNeutralTests.swift:77:19: Expectation failed: value (fiveHour non-nil, 0% used)",
+   "reversal": "ok"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 957,
+  "coverage": "92.08%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/VendorNotice.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/AppError.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/{CachedFetch,GeminiProvider,GeminiWireTypes,XAIProvider,XAIWireTypes,AntigravityExecutor}.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Localization/VendorNoticeText.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/{en,pt-BR,es}.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarValidate/main.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/VendorNoticeLocalizationTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/AppErrorTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/{GeminiProviderTests,GoldenSnapshotTests,WireTypesEdgeTests,XAIProviderTests}.swift"
+ ]
+}

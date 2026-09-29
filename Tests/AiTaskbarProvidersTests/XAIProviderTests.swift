@@ -161,7 +161,9 @@ struct XAIProviderTests {
         // The old reference would have been 1.2 = remaining $40 x weekly 3%,
         // a product of two unrelated numbers; there is no prepaid-used figure.
         expectTrue(snap.prepaidUsedUSD == nil)
-        expectTrue(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.")
+        // Deliberate schema decision (CQ-AUR-001): the disclaimer is a
+        // structured notice the App localizes, no longer a Portuguese String.
+        expectTrue(snap.disclaimer == .grokCLIRequired)
     }
 
     @Test("Grok prepaidUsedUSD is the reported on-demand spend, never balance x weekly %")
@@ -268,7 +270,7 @@ struct XAIProviderTests {
             _ = try await provider.fetchUsage(forceRefresh: true)
             Issue.record("expected credentials error")
         } catch let error as AppError {
-            expectTrue(error.description.contains("Grok CLI"))
+            expectTrue(error == .guidance(.grokCLIRequired))
         } catch {
             Issue.record("unexpected error: \(error)")
         }

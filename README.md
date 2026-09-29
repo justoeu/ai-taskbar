@@ -279,7 +279,7 @@ AI Taskbar supports two modes for xAI:
      - **Subscription tier:** Identifies active tier (e.g. `SuperGrok Heavy`).
      - **Weekly quota window:** Current utilization percentage (e.g. `3% used`) and reset time.
      - **Prepaid balance:** Available balance (e.g. `$40.00 available`).
-     - **Disclaimer:** An in-card informational notice reminds you that Grok CLI must remain installed and logged in: *"Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado."*
+     - **Disclaimer:** An in-card informational notice reminds you, in the app's language, that Grok CLI must remain installed and logged in (e.g. *"To monitor Grok, Grok must be installed and authenticated."*).
    - **Setup:** Simply install the Grok CLI and run `grok login` in Terminal. No manual API keys or team IDs needed in `config.toml`.
    - **Recovery / 401:** If the token expires or is missing, the card displays a **Re-login** button that executes `grok login`.
 
@@ -308,7 +308,7 @@ AI Taskbar supports two monitoring paths for Google Gemini:
      - **Gemini (5h):** Session quota window utilization and remaining fraction.
      - **Gemini (Weekly):** Weekly quota window utilization and reset countdown.
      - **Third-party models (5h & Weekly):** Tracks secondary quotas for third-party models accessed through Antigravity (e.g. Claude).
-     - **Disclaimer:** When Antigravity is unauthenticated or missing, the card shows a clear notice: *"Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."*
+     - **Disclaimer:** When Antigravity is unauthenticated or missing, the card shows a clear notice in the app's language (e.g. *"To monitor Gemini quotas, Antigravity must be installed and authenticated."*). A quota bucket that `agy` reports without a `remaining_fraction` draws no bar rather than being shown as 100% remaining.
    - **Setup:** Install the Antigravity CLI and log in by running `agy` in Terminal.
    - **Recovery / 401:** If the session is unauthenticated, clicking the **Re-login** button runs `agy` in Terminal to re-authenticate.
 

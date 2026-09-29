@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-29 13:18:17 UTC",
+  "generated_at": "2026-09-29 13:40:42 UTC",
   "panel_source": "vote-files",
   "lenses": [
     "CORRECTNESS",
@@ -11,6 +11,6 @@
   "changes_requested": 0,
   "rejected": 0,
   "by_id": {
-    "BUG-CET-001": "approved"
+    "BUG-ART-009": "approved"
   }
 }

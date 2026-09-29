@@ -357,7 +357,7 @@ public struct VendorSectionView: View {
                 } else if err.isKeychainACLBlocked {
                     keychainAuthorizeAffordance
                 } else {
-                    Text(err.localizedDescription)
+                    Text(VendorNoticeText.message(for: err))
                         .font(.subheadline)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
@@ -657,7 +657,7 @@ public struct VendorSectionView: View {
                         Image(systemName: "info.circle")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(disclaimer)
+                        Text(VendorNoticeText.text(for: disclaimer))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -726,7 +726,7 @@ public struct VendorSectionView: View {
                         Image(systemName: "info.circle")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(disclaimer)
+                        Text(VendorNoticeText.text(for: disclaimer))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

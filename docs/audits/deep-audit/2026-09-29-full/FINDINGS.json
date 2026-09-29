@@ -210,7 +210,7 @@
     "impact": "Violates the CLAUDE.md rule: Never build a user-facing sentence inside a wire type; emit structure and let the localized view render it. That rule was written after a pt-BR card showed English; this is the same bug in reverse. Every en/es user with Gemini or Grok enabled sees a Portuguese info line on each card, and Portuguese error text when a credential is missing. Because the Snapshot contract carries prose instead of structure, the App cannot localize it.",
     "fix": "Replace disclaimer: String? on GeminiSnapshot/XAISnapshot with a structured flag/enum (requiresAntigravity / requiresGrokCLI) resolved in the view via the existing L10n keys; model credential-missing errors as typed AppError cases localized by the view; update golden tests.",
     "test_red_green": {
-      "name": "ProvidersEmitNoNaturalLanguageTests.no_portuguese_literals + GoldenSnapshotTests.gemini_disclaimer_is_structured",
+      "name": "same as CQ-AUR-001 (duplicate, merged)",
       "assert_before": "A source scan of Sources/AiTaskbarProviders for Para conseguir / Para monitorar finds matches, and GeminiSnapshot.disclaimer is a Portuguese String: FAIL",
       "assert_after": "No matches; the snapshot exposes a Bool/enum, and a view test resolves it to the en string under languageOverride=en"
     },
@@ -218,10 +218,41 @@
     "cetico_evidence": "Duplicate of CQ-AUR-001 (same literals and render sites: VendorSectionView.swift:655-660, 724-729). Merge them. The structural fix (flag/enum in the snapshot) is the one consistent with CLAUDE.md.",
     "verification": "cetico",
     "domain": "architecture",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/GeminiWireTypes.swift",
     "id": "ARCH-ATL-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "same as CQ-AUR-001 (duplicate, merged)",
+    "resolved_at": "2026-09-29 13:40:41 UTC",
+    "resolved_note": "batch B4-i18n",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:40:41 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste same as CQ-AUR-001 (duplicate, merged) · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -468,15 +499,46 @@
     "cetico_evidence": "Portuguese literals: GeminiWireTypes.swift:57,71,136; XAIWireTypes.swift:251 (used at :257,:304,:405); GeminiProvider.swift:81; XAIProvider.swift:118; AntigravityExecutor.swift:58,120,141. No provider passes a disclaimer, so the default always wins. The disclaimer is set on SUCCESS snapshots too, so every en/es user sees it on each Gemini/Grok card. It renders verbatim at VendorSectionView.swift:660,729. The keys gemini_antigravity_disclaimer and xai_grok_disclaimer exist in en/es/pt-BR (en.lproj:300,310) with 0 Swift references. It breaks the 'no user-facing sentence in a wire type' rule. Kept at MEDIUM, not HIGH: the text is informational, no function or data is lost, and Gemini/Grok are opt-in secondary vendors.",
     "verification": "cetico",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/GeminiWireTypes.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "GeminiXAILocaleNeutralTests#providers_sources_carry_no_portuguese_prose,XAIProviderTests#grok_missing_auth_throws_disclaimer,GoldenSnapshotTests#gemini_antigravity_golden,VendorNoticeLocalizationTests#gemini_disclaimer_english,VendorNoticeLocalizationTests#guidance_resolves_everywhere,AppErrorTests#guidance_not_authenticated_is_unauthorized,GeminiXAILocaleNeutralTests#stale_guidance_keeps_401_status",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-AUR-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "GeminiXAILocaleNeutralTests#providers_sources_carry_no_portuguese_prose,XAIProviderTests#grok_missing_auth_throws_disclaimer,GoldenSnapshotTests#gemini_antigravity_golden,VendorNoticeLocalizationTests#gemini_disclaimer_english,VendorNoticeLocalizationTests#guidance_resolves_everywhere,AppErrorTests#guidance_not_authenticated_is_unauthorized,GeminiXAILocaleNeutralTests#stale_guidance_keeps_401_status",
+    "resolved_at": "2026-09-29 13:40:41 UTC",
+    "resolved_note": "batch B4-i18n",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:40:40 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#providers_sources_carry_no_portuguese_prose,XAIProviderTests#grok_missing_auth_throws_disclaimer,GoldenSnapshotTests#gemini_antigravity_golden,VendorNoticeLocalizationTests#gemini_disclaimer_english,VendorNoticeLocalizationTests#guidance_resolves_everywhere,AppErrorTests#guidance_not_authenticated_is_unauthorized,GeminiXAILocaleNeutralTests#stale_guidance_keeps_401_status · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "in_progress": false
   },
   {
     "title": "AnalyticsStore.recompute() does synchronous multi-vendor disk I/O on MainActor, invoked twice per cost-estimate cycle",
@@ -869,7 +931,7 @@
     "fix": "Branch on the payload source (tag it in fetch) or a discriminator key via JSONValue. On the agy branch, rethrow AppError.schema(\"agy usage decode: \\(error)\").",
     "confidence": "high",
     "test_red_green": {
-      "name": "agyDriftSurfacesAgyError",
+      "name": "GeminiXAILocaleNeutralTests#agy_schema_drift_reports_agy_decode_error,GeminiXAILocaleNeutralTests#non_json_payload_is_schema_error,GeminiXAILocaleNeutralTests#json_array_is_not_agy",
       "assert_before": "agy fixture with renamed groups -> message contains 'base_url may be wrong'",
       "assert_after": "message contains 'agy usage decode'"
     },
@@ -877,10 +939,41 @@
     "cetico_evidence": "GeminiProvider.swift:101 decodes with try?. If the agy decode fails it falls through to GeminiModelsResponse, and :127-129 throws 'base_url may be wrong'. The real DecodingError is lost.",
     "verification": "cetico",
     "domain": "best_practices",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/GeminiProvider.swift",
     "id": "BEST-ATE-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "GeminiXAILocaleNeutralTests#agy_schema_drift_reports_agy_decode_error,GeminiXAILocaleNeutralTests#non_json_payload_is_schema_error,GeminiXAILocaleNeutralTests#json_array_is_not_agy",
+    "resolved_at": "2026-09-29 13:40:41 UTC",
+    "resolved_note": "batch B4-i18n",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:40:41 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#agy_schema_drift_reports_agy_decode_error,GeminiXAILocaleNeutralTests#non_json_payload_is_schema_error,GeminiXAILocaleNeutralTests#json_array_is_not_agy · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "in_progress": false
   },
   {
     "title": "VendorViewModel swallows UsageHistoryStore creation failure with try?, silently disabling history for the process lifetime",
@@ -1108,7 +1201,7 @@
     "fix": "Treat a missing fraction as unknown (skip the window or flag it), never as fully available. Add a fixture with no remaining_fraction.",
     "failure_scenario": "The bucket {id: gemini-5h, window: 5h, reset_time: ...} has no fraction, and the UI shows Gemini (5h) 0%.",
     "test_red_green": {
-      "name": "antigravityMissingFractionIsNotZeroUsed",
+      "name": "GeminiXAILocaleNeutralTests#antigravity_missing_remaining_fraction_is_unknown,WireTypesEdgeTests#antigravity_nil_remaining_fraction",
       "assert_before": "utilizationPercent == 0",
       "assert_after": "window nil or unknown"
     },
@@ -1117,10 +1210,41 @@
     "cetico_evidence": "GeminiWireTypes.swift:150 defaults to 1.0, and WireTypesEdgeTests.swift:316 pins that as intended. The only real sample (Fixtures.swift:416-443) always emits the key, even at 1.0. The proto3 omit-zero theory is unverified, as the finder admits. Without an observed exhausted-bucket payload there is no proof.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/GeminiWireTypes.swift",
     "id": "BUG-ART-009",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "GeminiXAILocaleNeutralTests#antigravity_missing_remaining_fraction_is_unknown,WireTypesEdgeTests#antigravity_nil_remaining_fraction",
+    "resolved_at": "2026-09-29 13:40:42 UTC",
+    "resolved_note": "batch B4-i18n",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:40:42 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#antigravity_missing_remaining_fraction_is_unknown,WireTypesEdgeTests#antigravity_nil_remaining_fraction · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -3458,15 +3582,46 @@
     "cetico_evidence": "0 Swift references for quit, open_config_toml, models_tooltip_header, settings_vendors, settings_primary_vendor, reorder_vendors_help, gemini_antigravity_disclaimer, xai_grok_disclaimer. 'config' only matches non-L10n strings (AppLog.swift:23, Fixtures.swift:308). No interpolated key construction was found.",
     "verification": "cetico",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
     "test_red_green": {
-      "name": "TBD",
+      "name": "VendorNoticeLocalizationTests#keys_exist_in_every_language",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-AUR-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "VendorNoticeLocalizationTests#keys_exist_in_every_language",
+    "resolved_at": "2026-09-29 13:40:41 UTC",
+    "resolved_note": "batch B4-i18n",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:40:41 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste VendorNoticeLocalizationTests#keys_exist_in_every_language · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "in_progress": false
   },
   {
     "title": "SettingsViewModel.reloadFromDisk doc comment is false: original is a let and only draft is replaced",

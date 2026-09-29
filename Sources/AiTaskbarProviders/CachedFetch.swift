@@ -51,7 +51,10 @@ public struct CachedFetch: Sendable {
                 fe = FetchError(status: status,
                                 body: PIIScrub.scrub(diagnostic: body))
             } else {
-                fe = FetchError(status: 0,
+                // `.guidance` may stand for a 401/503 (agy not signed in /
+                // unavailable); keep that status so the stale-card re-login
+                // banner still fires.
+                fe = FetchError(status: appErr.httpStatus ?? 0,
                                 body: PIIScrub.scrub(diagnostic: appErr.description))
             }
             cache.markFailed(fe)

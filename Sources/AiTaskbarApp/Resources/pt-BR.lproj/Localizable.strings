@@ -13,9 +13,7 @@
 // Mostrado durante o back-off de 60 s pós-429 — informa que estamos esperando
 // o vendor liberar a cota antes de tentar de novo, em vez de mostrar 0:00 fixo.
 "rate_limit_waiting" = "Aguardando rate-limit…";
-"config" = "Configurações";
 "open_at_login" = "Abrir no login";
-"quit" = "Sair";
 "config_changed_banner" = "Configuração alterada — reinicie para aplicar.";
 "relaunch" = "Reiniciar";
 "dismiss" = "Dispensar";
@@ -88,7 +86,6 @@
 "about_built_with" = "Construído com SwiftUI · Licença MIT";
 // %@ = nome extraído do certificado Developer ID que assinou o binário.
 "about_developer_fmt" = "Desenvolvido por %@";
-"open_config_toml" = "Abrir config.toml";
 "done" = "Concluir";
 
 // History / sparkline
@@ -118,7 +115,6 @@
 
 // Model breakdown
 "models_label" = "Modelos";
-"models_tooltip_header" = "Modelos usados hoje:";
 "models_columns_header" = "hoje / últimos 7 dias";
 
 // About — cost data source
@@ -134,9 +130,7 @@
 "settings_notifications" = "Notificações";
 "settings_updates" = "Atualizações";
 "settings_security" = "Segurança";
-"settings_vendors" = "Provedores";
 "settings_enabled" = "Habilitado";
-"settings_primary_vendor" = "Provedor primário";
 "settings_menu_bar_mode" = "Exibição na barra";
 "settings_mb_icon_only" = "Apenas ícone";
 "settings_mb_icon_and_percent" = "Ícone + percentual";
@@ -210,7 +204,6 @@
 "settings_updates_enabled_help" = "Verifica periodicamente o repo por novos lançamentos e avisa quando há um disponível.";
 "settings_updates_prereleases_help" = "Inclui tags beta / rc ao buscar atualizações. Deixe desligado exceto se você quer builds de ponta.";
 "settings_pin_hosts_help" = "Hosts adicionais para pin TLS (um por linha). Os pins dos hosts conhecidos já vêm no binário — deixe vazio a menos que você tenha um endpoint privado.";
-"reorder_vendors_help" = "Use as setas para cima/baixo no card para reordenar. A ordem fica salva neste Mac.";
 "move_vendor_up_help" = "Mover este card para cima";
 "move_vendor_down_help" = "Mover este card para baixo";
 "settings_notifications_unavailable_tahoe" = "Desabilitado no macOS 26 (Tahoe) — o handshake XPC de usernotifications crasheia binários compilados contra SDKs antigos. Será reabilitado quando o pipeline de release recompilar num runner Tahoe.";
@@ -303,6 +296,10 @@
 "gemini_antigravity_settings_hint" = "O monitoramento de quotas do Gemini requer o Antigravity instalado e autenticado (`agy`). Sem ele, apenas o status da chave de API é verificado.";
 "gemini_antigravity_not_installed" = "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado. O executável 'agy' não foi encontrado.";
 "gemini_antigravity_not_logged_in" = "Antigravity não autenticado — execute 'agy' no Terminal para entrar.";
+"guidance_antigravity_required" = "Para monitorar o Gemini, instale e autentique o Antigravity (`agy`) ou defina GEMINI_API_KEY para verificar a chave de API.";
+"guidance_antigravity_unavailable" = "O Google Antigravity está temporariamente indisponível. Tente novamente mais tarde.";
+"guidance_antigravity_timed_out" = "O Antigravity (`agy`) não respondeu a tempo. Tente novamente.";
+"guidance_antigravity_canceled" = "O Antigravity cancelou a solicitação ou o tempo limite esgotou.";
 "settings_gemini_agy_path" = "Caminho do executável agy (Antigravity)";
 "settings_gemini_agy_path_help" = "Caminho absoluto para o executável 'agy' do Google Antigravity. Deixe em branco para detecção automática nos locais padrão (~/.local/bin/agy, Homebrew, etc.).";
 "settings_gemini_advanced" = "Google AI Studio (Fallback de Chave de API)";
@@ -310,6 +307,7 @@
 
 // Grok / xAI
 "xai_grok_disclaimer" = "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.";
+"guidance_grok_cli_required" = "Para monitorar o Grok, instale e autentique o Grok CLI (`grok login`) ou configure a Management Key e o Team ID da xAI em console.x.ai.";
 
 // Analytics & Visão Geral de Consumo
 "analytics_toolbar_button" = "Visão Geral de Consumo e Gráficos";

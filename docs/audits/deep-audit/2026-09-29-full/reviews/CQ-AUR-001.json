@@ -1,0 +1,71 @@
+{
+  "id": "CQ-AUR-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 13:40:40 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Both Portuguese routes are closed: the disclaimers and the thrown errors. Disclaimers are now the VendorDisclaimer enum (UsageSnapshot.swift:492,565; GeminiWireTypes.swift:57,71,199; XAIWireTypes.swift:255,302,403), shown through VendorNoticeText at VendorSectionView.swift:660,729. Errors are now AppError.guidance (GeminiProvider.swift:80,114; XAIProvider.swift:117; AntigravityExecutor.swift:57,105,118,120,123,139), shown through VendorNoticeText.message at VendorSectionView.swift:360. A grep of Providers and Core for accented Portuguese finds only a doc comment (AnthropicWireTypes.swift:78). The 401/503 meaning is kept: AppError.httpStatus (AppError.swift:51-57) maps guidance to 401 or 503, so isUnauthorized, isRateLimited and isTransient behave as before, and CachedFetch.swift:57 now stores that status in the stale lastError (VendorViewModel.swift:100 reads status == 401). I checked every other switch over AppError. VendorViewModel.swift:246 still reads only .http for 429, and no guidance case is 429, so nothing changes there. OpenRouterProvider.swift:67 (403) and KeychainAccessAuthorizer.swift:293 (.credentials) are not affected. Cache and upgrade: the DiskCache stores raw vendor bytes (agy JSON, XAICachedPayload), never a GeminiSnapshot or XAISnapshot, so changing disclaimer from String to enum cannot break decoding of existing caches. I ran the filtered suite: 93 tests, all green. Reversal: I put a Portuguese AppError.credentials back in XAIProvider and set CachedFetch status back to 0. providers_sources_carry_no_portuguese_prose, XAIProviderTests:273 and stale_guidance_keeps_401_status all went RED. After restoring, the working-tree diff is byte-identical to the saved B4-i18n.diff.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Models/AppError.swift:51",
+        "Sources/AiTaskbarProviders/CachedFetch.swift:57",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:100",
+        "Sources/AiTaskbarApp/Views/VendorSectionView.swift:360",
+        "Sources/AiTaskbarCore/Models/VendorNotice.swift:41"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The fix follows the CLAUDE.md rule \"Never build a user-facing sentence inside a wire type; emit structure and let the localized view render it\". Core/Models/VendorNotice.swift adds two closed enums, VendorDisclaimer and VendorGuidance (Sendable, Codable, CaseIterable), with no [String: Any]. The App maps them to localized text in one place, App/Localization/VendorNoticeText.swift:38-68, and the switches are exhaustive with no default. So a new case fails to compile until it has a key, and VendorNoticeLocalizationTests.keys_exist_in_every_language checks that every key exists in en, pt-BR and es. AppError gains a single computed httpStatus (AppError.swift:41-58). isTransient, isRateLimited and isUnauthorized now read from it, which removes two `if case .http` pattern matches instead of adding a third. No error is swallowed: every throw site in AntigravityExecutor.swift, GeminiProvider.swift and XAIProvider.swift still throws, now as .guidance. CachedFetch.swift:54-58 keeps the status through `appErr.httpStatus ?? 0`; that is not a silent default, because the old code already used 0 there. New tests use expectTrue for optional conditions, as the Testing policy requires (e.g. GeminiXAILocaleNeutralTests `snap?.isAntigravityActive == true`). The two test names made stale by the fix were renamed (GeminiProviderTests `...throws antigravityNotFound guidance`, `...into structured guidance`). README and all three Localizable.strings were updated together. The report records validate exit 0 with 0 warnings; I did not rebuild, per the read-only protocol.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Models/VendorNotice.swift:433-491",
+        "Sources/AiTaskbarApp/Localization/VendorNoticeText.swift:38-68",
+        "Sources/AiTaskbarCore/Models/AppError.swift:41-71",
+        "Sources/AiTaskbarProviders/CachedFetch.swift:54-58",
+        "Tests/AiTaskbarAppTests/VendorNoticeLocalizationTests.swift:32-40"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Every touched file ties to the finding. Portuguese prose was removed from Providers: GeminiWireTypes.swift:57,71,199, XAIWireTypes.swift:251,302,403, GeminiProvider.swift:80, XAIProvider.swift:117 and AntigravityExecutor.swift:57-166. The App now renders it through VendorNoticeText.swift, and VendorSectionView.swift:360,660,729 changed only at the Text() call sites. The contract change from disclaimer String? to VendorDisclaimer? (UsageSnapshot.swift:492,565,607) needs no migration. VendorSnapshot/GeminiSnapshot/XAISnapshot are never persisted: the only encoder.encode of a snapshot is in tests (GoldenSnapshotTests.swift:280, SnapshotModelTests.swift:79). DiskCache stores the raw vendor bytes and decodes them again, so no old on-disk data carries the Portuguese string. The removed public API (GrokBillingResponse.defaultDisclaimer, toSnapshot(disclaimer:)) has no remaining callers in Sources or Tests. The new AppError.guidance case keeps the behavior at the edges: AppError.httpStatus maps it to 401/503, VendorViewModel.needsReauth reads isUnauthorized, CachedFetch.swift:57 keeps the status in FetchError, and observeRateLimit only acts on 429, which guidance never produces. All 3 Localizable.strings have the same key set (339 = 339 = 339, diff empty), with real es/pt-BR translations for the 5 new guidance_* keys. README.md:282,311 are updated, AiTaskbarValidate/main.swift:156,284,297 were migrated to the enum, and grep finds no leftover Portuguese in Sources/*.swift.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:492",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/VendorNotice.swift:1",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/AppError.swift:12",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/CachedFetch.swift:57",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Localization/VendorNoticeText.swift:1",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:98",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md:282"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

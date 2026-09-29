@@ -1,0 +1,1323 @@
+diff --git a/README.md b/README.md
+index 526b663..8553846 100644
+--- a/README.md
++++ b/README.md
+@@ -279,7 +279,7 @@ AI Taskbar supports two modes for xAI:
+      - **Subscription tier:** Identifies active tier (e.g. `SuperGrok Heavy`).
+      - **Weekly quota window:** Current utilization percentage (e.g. `3% used`) and reset time.
+      - **Prepaid balance:** Available balance (e.g. `$40.00 available`).
+-     - **Disclaimer:** An in-card informational notice reminds you that Grok CLI must remain installed and logged in: *"Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado."*
++     - **Disclaimer:** An in-card informational notice reminds you, in the app's language, that Grok CLI must remain installed and logged in (e.g. *"To monitor Grok, Grok must be installed and authenticated."*).
+    - **Setup:** Simply install the Grok CLI and run `grok login` in Terminal. No manual API keys or team IDs needed in `config.toml`.
+    - **Recovery / 401:** If the token expires or is missing, the card displays a **Re-login** button that executes `grok login`.
+ 
+@@ -308,7 +308,7 @@ AI Taskbar supports two monitoring paths for Google Gemini:
+      - **Gemini (5h):** Session quota window utilization and remaining fraction.
+      - **Gemini (Weekly):** Weekly quota window utilization and reset countdown.
+      - **Third-party models (5h & Weekly):** Tracks secondary quotas for third-party models accessed through Antigravity (e.g. Claude).
+-     - **Disclaimer:** When Antigravity is unauthenticated or missing, the card shows a clear notice: *"Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."*
++     - **Disclaimer:** When Antigravity is unauthenticated or missing, the card shows a clear notice in the app's language (e.g. *"To monitor Gemini quotas, Antigravity must be installed and authenticated."*). A quota bucket that `agy` reports without a `remaining_fraction` draws no bar rather than being shown as 100% remaining.
+    - **Setup:** Install the Antigravity CLI and log in by running `agy` in Terminal.
+    - **Recovery / 401:** If the session is unauthenticated, clicking the **Re-login** button runs `agy` in Terminal to re-authenticate.
+ 
+diff --git a/Sources/AiTaskbarApp/Localization/VendorNoticeText.swift b/Sources/AiTaskbarApp/Localization/VendorNoticeText.swift
+new file mode 100644
+index 0000000..fa22042
+--- /dev/null
++++ b/Sources/AiTaskbarApp/Localization/VendorNoticeText.swift
+@@ -0,0 +1,41 @@
++import Foundation
++import AiTaskbarCore
++
++/// Renders the structured notices Providers emit (`VendorDisclaimer`,
++/// `AppError.guidance`) in the user's language. Providers never build these
++/// sentences themselves: see CLAUDE.md, "emit structure and let the localized
++/// view render it".
++@MainActor
++public enum VendorNoticeText {
++    public static func key(for disclaimer: VendorDisclaimer) -> String {
++        switch disclaimer {
++        case .antigravityRequired: return "gemini_antigravity_disclaimer"
++        case .grokCLIRequired:     return "xai_grok_disclaimer"
++        }
++    }
++
++    public static func key(for guidance: VendorGuidance) -> String {
++        switch guidance {
++        case .antigravityRequired:         return "guidance_antigravity_required"
++        case .antigravityNotFound:         return "gemini_antigravity_not_installed"
++        case .antigravityNotAuthenticated: return "gemini_antigravity_not_logged_in"
++        case .antigravityUnavailable:      return "guidance_antigravity_unavailable"
++        case .antigravityTimedOut:         return "guidance_antigravity_timed_out"
++        case .antigravityCanceled:         return "guidance_antigravity_canceled"
++        case .grokCLIRequired:             return "guidance_grok_cli_required"
++        }
++    }
++
++    public static func text(for disclaimer: VendorDisclaimer) -> String {
++        L10n.localizedString(key(for: disclaimer))
++    }
++
++    /// Card text for a failed fetch: localized for `.guidance`, the error's
++    /// own diagnostic for everything else (unchanged behavior).
++    public static func message(for error: AppError) -> String {
++        if case .guidance(let guidance) = error {
++            return L10n.localizedString(key(for: guidance))
++        }
++        return error.localizedDescription
++    }
++}
+diff --git a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+index 147528e..ba5d809 100644
+--- a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+@@ -14,9 +14,7 @@
+ // Shown during the 60 s post-429 back-off — tells the user we're holding
+ // off intentionally instead of leaving the countdown frozen at 0:00.
+ "rate_limit_waiting" = "Waiting on rate-limit…";
+-"config" = "Config";
+ "open_at_login" = "Open at login";
+-"quit" = "Quit";
+ "config_changed_banner" = "Config changed — relaunch to apply.";
+ "relaunch" = "Relaunch";
+ "dismiss" = "Dismiss";
+@@ -89,7 +87,6 @@
+ "about_built_with" = "Built with SwiftUI · MIT-licensed";
+ // %@ = name extracted from the Developer ID certificate that signed the binary.
+ "about_developer_fmt" = "Developed by %@";
+-"open_config_toml" = "Open config.toml";
+ "done" = "Done";
+ 
+ // History / sparkline
+@@ -119,7 +116,6 @@
+ 
+ // Model breakdown
+ "models_label" = "Models";
+-"models_tooltip_header" = "Models used today:";
+ "models_columns_header" = "today / last 7 days";
+ 
+ // About — cost data source
+@@ -135,9 +131,7 @@
+ "settings_notifications" = "Notifications";
+ "settings_updates" = "Updates";
+ "settings_security" = "Security";
+-"settings_vendors" = "Vendors";
+ "settings_enabled" = "Enabled";
+-"settings_primary_vendor" = "Primary vendor";
+ "settings_menu_bar_mode" = "Menu-bar display";
+ "settings_mb_icon_only" = "Icon only";
+ "settings_mb_icon_and_percent" = "Icon + percentage";
+@@ -211,7 +205,6 @@
+ "settings_updates_enabled_help" = "Periodically check the repo for new releases and notify when one is available.";
+ "settings_updates_prereleases_help" = "Include beta / rc tags when checking for updates. Leave off unless you want cutting-edge builds.";
+ "settings_pin_hosts_help" = "Additional hosts to TLS-pin (one per line). Baseline pins for known vendor hosts ship in-binary — leave empty unless you have a private endpoint.";
+-"reorder_vendors_help" = "Use the up/down arrows on a card to reorder. Order is saved on this Mac.";
+ "move_vendor_up_help" = "Move this card up";
+ "move_vendor_down_help" = "Move this card down";
+ "settings_notifications_unavailable_tahoe" = "Disabled on macOS 26 (Tahoe) — the usernotifications XPC handshake crashes binaries built against older SDKs. Will be re-enabled once the release pipeline rebuilds on a Tahoe runner.";
+@@ -304,6 +297,10 @@
+ "gemini_antigravity_settings_hint" = "Gemini quota monitoring requires Antigravity installed and authenticated (`agy`). Without it, only API Key status can be verified.";
+ "gemini_antigravity_not_installed" = "Antigravity not found — install and authenticate Antigravity (`agy`) to monitor Gemini.";
+ "gemini_antigravity_not_logged_in" = "Antigravity not authenticated — run 'agy' in Terminal to log in.";
++"guidance_antigravity_required" = "To monitor Gemini, install and sign in to Antigravity (`agy`), or set GEMINI_API_KEY to check the API key.";
++"guidance_antigravity_unavailable" = "Google Antigravity is temporarily unavailable. Try again later.";
++"guidance_antigravity_timed_out" = "Antigravity (`agy`) did not respond in time. Try again.";
++"guidance_antigravity_canceled" = "Antigravity canceled the request or timed out.";
+ "settings_gemini_agy_path" = "Antigravity agy executable path";
+ "settings_gemini_agy_path_help" = "Absolute path to the Google Antigravity 'agy' executable. Leave blank for auto-discovery in standard locations (~/.local/bin/agy, Homebrew, etc.).";
+ "settings_gemini_advanced" = "Google AI Studio (API Key Fallback)";
+@@ -311,6 +308,7 @@
+ 
+ // Grok / xAI
+ "xai_grok_disclaimer" = "To monitor Grok, Grok must be installed and authenticated.";
++"guidance_grok_cli_required" = "To monitor Grok, install and sign in to Grok CLI (`grok login`), or set the xAI Management Key and Team ID from console.x.ai.";
+ 
+ // Analytics & Consumption Overview
+ "analytics_toolbar_button" = "Consumption Overview & Charts";
+diff --git a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+index 2e52a8f..b08041b 100644
+--- a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+@@ -13,9 +13,7 @@
+ // Mostrado durante el back-off de 60 s tras un 429 — indica que estamos
+ // esperando a propósito, en lugar de dejar el contador congelado en 0:00.
+ "rate_limit_waiting" = "Esperando rate-limit…";
+-"config" = "Configuración";
+ "open_at_login" = "Abrir al iniciar sesión";
+-"quit" = "Salir";
+ "config_changed_banner" = "Configuración modificada — reinicia para aplicar.";
+ "relaunch" = "Reiniciar";
+ "dismiss" = "Descartar";
+@@ -88,7 +86,6 @@
+ "about_built_with" = "Construido con SwiftUI · Licencia MIT";
+ // %@ = nombre extraído del certificado Developer ID que firmó el binario.
+ "about_developer_fmt" = "Desarrollado por %@";
+-"open_config_toml" = "Abrir config.toml";
+ "done" = "Hecho";
+ 
+ // History / sparkline
+@@ -118,7 +115,6 @@
+ 
+ // Model breakdown
+ "models_label" = "Modelos";
+-"models_tooltip_header" = "Modelos usados hoy:";
+ "models_columns_header" = "hoy / últimos 7 días";
+ 
+ // About — cost data source
+@@ -134,9 +130,7 @@
+ "settings_notifications" = "Notificaciones";
+ "settings_updates" = "Actualizaciones";
+ "settings_security" = "Seguridad";
+-"settings_vendors" = "Proveedores";
+ "settings_enabled" = "Habilitado";
+-"settings_primary_vendor" = "Proveedor primario";
+ "settings_menu_bar_mode" = "Visualización en barra";
+ "settings_mb_icon_only" = "Solo icono";
+ "settings_mb_icon_and_percent" = "Icono + porcentaje";
+@@ -210,7 +204,6 @@
+ "settings_updates_enabled_help" = "Verifica periódicamente el repo por nuevos lanzamientos y avisa cuando hay uno disponible.";
+ "settings_updates_prereleases_help" = "Incluye tags beta / rc al buscar actualizaciones. Deja apagado excepto si quieres builds de punta.";
+ "settings_pin_hosts_help" = "Hosts adicionales para pin TLS (uno por línea). Los pines de los hosts conocidos ya vienen en el binario — deja vacío a menos que tengas un endpoint privado.";
+-"reorder_vendors_help" = "Usa las flechas arriba/abajo en la tarjeta para reordenar. El orden se guarda en este Mac.";
+ "move_vendor_up_help" = "Mover esta tarjeta arriba";
+ "move_vendor_down_help" = "Mover esta tarjeta abajo";
+ "settings_notifications_unavailable_tahoe" = "Deshabilitado en macOS 26 (Tahoe) — el handshake XPC de usernotifications crashea binarios compilados contra SDKs antiguos. Se rehabilitará cuando el pipeline de release recompile en un runner Tahoe.";
+@@ -303,6 +296,10 @@
+ "gemini_antigravity_settings_hint" = "El monitoreo de cuotas de Gemini requiere Antigravity instalado y autenticado (`agy`). Sin él, solo se puede verificar el estado de la clave API.";
+ "gemini_antigravity_not_installed" = "Antigravity no encontrado — para monitorear Gemini, instale y autentique Antigravity (`agy`).";
+ "gemini_antigravity_not_logged_in" = "Antigravity no autenticado — ejecute 'agy' en Terminal para iniciar sesión.";
++"guidance_antigravity_required" = "Para monitorear Gemini, instale y autentique Antigravity (`agy`) o defina GEMINI_API_KEY para verificar la clave API.";
++"guidance_antigravity_unavailable" = "Google Antigravity no está disponible temporalmente. Inténtelo de nuevo más tarde.";
++"guidance_antigravity_timed_out" = "Antigravity (`agy`) no respondió a tiempo. Inténtelo de nuevo.";
++"guidance_antigravity_canceled" = "Antigravity canceló la solicitud o se agotó el tiempo de espera.";
+ "settings_gemini_agy_path" = "Ruta del ejecutable agy (Antigravity)";
+ "settings_gemini_agy_path_help" = "Ruta absoluta al ejecutable 'agy' de Google Antigravity. Dejar en blanco para detección automática en ubicaciones estándar (~/.local/bin/agy, Homebrew, etc.).";
+ "settings_gemini_advanced" = "Google AI Studio (Fallback de Clave de API)";
+@@ -310,6 +307,7 @@
+ 
+ // Grok / xAI
+ "xai_grok_disclaimer" = "Para monitorear Grok, es necesario tener Grok instalado y autenticado.";
++"guidance_grok_cli_required" = "Para monitorear Grok, instale y autentique Grok CLI (`grok login`) o configure la Management Key y el Team ID de xAI en console.x.ai.";
+ 
+ // Analytics & Resumen de Consumo
+ "analytics_toolbar_button" = "Resumen de Consumo y Gráficos";
+diff --git a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+index 70a824d..393239a 100644
+--- a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+@@ -13,9 +13,7 @@
+ // Mostrado durante o back-off de 60 s pós-429 — informa que estamos esperando
+ // o vendor liberar a cota antes de tentar de novo, em vez de mostrar 0:00 fixo.
+ "rate_limit_waiting" = "Aguardando rate-limit…";
+-"config" = "Configurações";
+ "open_at_login" = "Abrir no login";
+-"quit" = "Sair";
+ "config_changed_banner" = "Configuração alterada — reinicie para aplicar.";
+ "relaunch" = "Reiniciar";
+ "dismiss" = "Dispensar";
+@@ -88,7 +86,6 @@
+ "about_built_with" = "Construído com SwiftUI · Licença MIT";
+ // %@ = nome extraído do certificado Developer ID que assinou o binário.
+ "about_developer_fmt" = "Desenvolvido por %@";
+-"open_config_toml" = "Abrir config.toml";
+ "done" = "Concluir";
+ 
+ // History / sparkline
+@@ -118,7 +115,6 @@
+ 
+ // Model breakdown
+ "models_label" = "Modelos";
+-"models_tooltip_header" = "Modelos usados hoje:";
+ "models_columns_header" = "hoje / últimos 7 dias";
+ 
+ // About — cost data source
+@@ -134,9 +130,7 @@
+ "settings_notifications" = "Notificações";
+ "settings_updates" = "Atualizações";
+ "settings_security" = "Segurança";
+-"settings_vendors" = "Provedores";
+ "settings_enabled" = "Habilitado";
+-"settings_primary_vendor" = "Provedor primário";
+ "settings_menu_bar_mode" = "Exibição na barra";
+ "settings_mb_icon_only" = "Apenas ícone";
+ "settings_mb_icon_and_percent" = "Ícone + percentual";
+@@ -210,7 +204,6 @@
+ "settings_updates_enabled_help" = "Verifica periodicamente o repo por novos lançamentos e avisa quando há um disponível.";
+ "settings_updates_prereleases_help" = "Inclui tags beta / rc ao buscar atualizações. Deixe desligado exceto se você quer builds de ponta.";
+ "settings_pin_hosts_help" = "Hosts adicionais para pin TLS (um por linha). Os pins dos hosts conhecidos já vêm no binário — deixe vazio a menos que você tenha um endpoint privado.";
+-"reorder_vendors_help" = "Use as setas para cima/baixo no card para reordenar. A ordem fica salva neste Mac.";
+ "move_vendor_up_help" = "Mover este card para cima";
+ "move_vendor_down_help" = "Mover este card para baixo";
+ "settings_notifications_unavailable_tahoe" = "Desabilitado no macOS 26 (Tahoe) — o handshake XPC de usernotifications crasheia binários compilados contra SDKs antigos. Será reabilitado quando o pipeline de release recompilar num runner Tahoe.";
+@@ -303,6 +296,10 @@
+ "gemini_antigravity_settings_hint" = "O monitoramento de quotas do Gemini requer o Antigravity instalado e autenticado (`agy`). Sem ele, apenas o status da chave de API é verificado.";
+ "gemini_antigravity_not_installed" = "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado. O executável 'agy' não foi encontrado.";
+ "gemini_antigravity_not_logged_in" = "Antigravity não autenticado — execute 'agy' no Terminal para entrar.";
++"guidance_antigravity_required" = "Para monitorar o Gemini, instale e autentique o Antigravity (`agy`) ou defina GEMINI_API_KEY para verificar a chave de API.";
++"guidance_antigravity_unavailable" = "O Google Antigravity está temporariamente indisponível. Tente novamente mais tarde.";
++"guidance_antigravity_timed_out" = "O Antigravity (`agy`) não respondeu a tempo. Tente novamente.";
++"guidance_antigravity_canceled" = "O Antigravity cancelou a solicitação ou o tempo limite esgotou.";
+ "settings_gemini_agy_path" = "Caminho do executável agy (Antigravity)";
+ "settings_gemini_agy_path_help" = "Caminho absoluto para o executável 'agy' do Google Antigravity. Deixe em branco para detecção automática nos locais padrão (~/.local/bin/agy, Homebrew, etc.).";
+ "settings_gemini_advanced" = "Google AI Studio (Fallback de Chave de API)";
+@@ -310,6 +307,7 @@
+ 
+ // Grok / xAI
+ "xai_grok_disclaimer" = "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.";
++"guidance_grok_cli_required" = "Para monitorar o Grok, instale e autentique o Grok CLI (`grok login`) ou configure a Management Key e o Team ID da xAI em console.x.ai.";
+ 
+ // Analytics & Visão Geral de Consumo
+ "analytics_toolbar_button" = "Visão Geral de Consumo e Gráficos";
+diff --git a/Sources/AiTaskbarApp/Views/VendorSectionView.swift b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+index 75f9d3a..6853703 100644
+--- a/Sources/AiTaskbarApp/Views/VendorSectionView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+@@ -357,7 +357,7 @@ public struct VendorSectionView: View {
+                 } else if err.isKeychainACLBlocked {
+                     keychainAuthorizeAffordance
+                 } else {
+-                    Text(err.localizedDescription)
++                    Text(VendorNoticeText.message(for: err))
+                         .font(.subheadline)
+                         .foregroundStyle(.red)
+                         .textSelection(.enabled)
+@@ -657,7 +657,7 @@ public struct VendorSectionView: View {
+                         Image(systemName: "info.circle")
+                             .font(.caption)
+                             .foregroundStyle(.secondary)
+-                        Text(disclaimer)
++                        Text(VendorNoticeText.text(for: disclaimer))
+                             .font(.caption)
+                             .foregroundStyle(.secondary)
+                             .fixedSize(horizontal: false, vertical: true)
+@@ -726,7 +726,7 @@ public struct VendorSectionView: View {
+                         Image(systemName: "info.circle")
+                             .font(.caption)
+                             .foregroundStyle(.secondary)
+-                        Text(disclaimer)
++                        Text(VendorNoticeText.text(for: disclaimer))
+                             .font(.caption)
+                             .foregroundStyle(.secondary)
+                             .fixedSize(horizontal: false, vertical: true)
+diff --git a/Sources/AiTaskbarCore/Models/AppError.swift b/Sources/AiTaskbarCore/Models/AppError.swift
+index ab71f12..c8e16bb 100644
+--- a/Sources/AiTaskbarCore/Models/AppError.swift
++++ b/Sources/AiTaskbarCore/Models/AppError.swift
+@@ -9,6 +9,9 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
+     case toml(String)
+     case disabled(String)
+     case other(String)
++    /// A setup state the user resolves (install / sign in to a CLI). Carries
++    /// structure so the App renders it in the user's language.
++    case guidance(VendorGuidance)
+ 
+     public var description: String {
+         switch self {
+@@ -20,6 +23,7 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
+         case .toml(let m):            return "toml: \(m)"
+         case .disabled(let m):        return "disabled: \(m)"
+         case .other(let m):           return m
++        case .guidance(let g):        return "guidance: \(g.diagnostic)"
+         }
+     }
+ 
+@@ -37,18 +41,25 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
+ 
+     /// True when retrying might help (network or server transient).
+     public var isTransient: Bool {
++        if case .transport = self { return true }
++        guard let s = httpStatus else { return false }
++        return s == 408 || s == 429 || (500...599).contains(s)
++    }
++
++    /// The HTTP status the error carries or is equivalent to: the real one
++    /// for `.http`, `VendorGuidance.httpStatus` for `.guidance`, else nil.
++    public var httpStatus: Int? {
+         switch self {
+-        case .transport:                  return true
+-        case .http(let s, _):             return s == 408 || s == 429 || (500...599).contains(s)
+-        default:                          return false
++        case .http(let s, _):   return s
++        case .guidance(let g):  return g.httpStatus
++        default:                return nil
+         }
+     }
+ 
+     /// True only when the vendor responded with HTTP 429 (Too Many Requests).
+     /// Scheduler uses this to extend the next sleep — see RefreshScheduler.
+     public var isRateLimited: Bool {
+-        if case .http(let s, _) = self, s == 429 { return true }
+-        return false
++        httpStatus == 429
+     }
+ 
+     /// True only when the vendor responded with HTTP 401 (Unauthorized). Used
+@@ -56,8 +67,7 @@ public enum AppError: Error, Sendable, Equatable, CustomStringConvertible, Local
+     /// generic red error — a 401 on an OAuth vendor (Codex/Claude) means the
+     /// access token expired and a fresh login is the recovery, not a retry.
+     public var isUnauthorized: Bool {
+-        if case .http(let s, _) = self, s == 401 { return true }
+-        return false
++        httpStatus == 401
+     }
+ 
+     /// Wraps any error into an `AppError`, passing through if it's already one.
+diff --git a/Sources/AiTaskbarCore/Models/UsageSnapshot.swift b/Sources/AiTaskbarCore/Models/UsageSnapshot.swift
+index 5ce192c..294beb9 100644
+--- a/Sources/AiTaskbarCore/Models/UsageSnapshot.swift
++++ b/Sources/AiTaskbarCore/Models/UsageSnapshot.swift
+@@ -487,8 +487,9 @@ public struct GeminiSnapshot: Sendable, Equatable, Codable {
+     public let thirdParty5Hour: UsageWindow?
+     /// 3rd-party models (Claude/GPT) weekly quota window from Antigravity.
+     public let thirdPartyWeekly: UsageWindow?
+-    /// Mandatory disclaimer explaining that Antigravity is required for quota monitoring.
+-    public let disclaimer: String?
++    /// Notice that Antigravity is required for quota monitoring. Structure,
++    /// not prose: the App renders it through L10n (was a Portuguese String).
++    public let disclaimer: VendorDisclaimer?
+     /// True when backed by active, authenticated Antigravity data.
+     public let isAntigravityActive: Bool
+ 
+@@ -499,7 +500,7 @@ public struct GeminiSnapshot: Sendable, Equatable, Codable {
+                 weekly: UsageWindow? = nil,
+                 thirdParty5Hour: UsageWindow? = nil,
+                 thirdPartyWeekly: UsageWindow? = nil,
+-                disclaimer: String? = nil,
++                disclaimer: VendorDisclaimer? = nil,
+                 isAntigravityActive: Bool = false) {
+         self.planLabel = planLabel
+         self.status = status
+@@ -559,8 +560,9 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
+     public let prepaidUsedUSD: Double?
+     /// Billing cycle label, e.g. "2026-07".
+     public let billingCycleLabel: String?
+-    /// Mandatory disclaimer explaining that Grok CLI is required for quota monitoring.
+-    public let disclaimer: String?
++    /// Notice that Grok CLI is required for quota monitoring. Structure, not
++    /// prose: the App renders it through L10n (was a Portuguese String).
++    public let disclaimer: VendorDisclaimer?
+ 
+     public init(planLabel: String? = nil,
+                 weekly: UsageWindow? = nil,
+@@ -571,7 +573,7 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
+                 spendingLimitUSD: Double? = nil,
+                 prepaidUsedUSD: Double? = nil,
+                 billingCycleLabel: String? = nil,
+-                disclaimer: String? = nil) {
++                disclaimer: VendorDisclaimer? = nil) {
+         self.planLabel = planLabel
+         self.weekly = weekly
+         self.balance = balance
+@@ -602,6 +604,6 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
+         spendingLimitUSD = try c.decodeIfPresent(Double.self, forKey: .spendingLimitUSD)
+         prepaidUsedUSD = try c.decodeIfPresent(Double.self, forKey: .prepaidUsedUSD)
+         billingCycleLabel = try c.decodeIfPresent(String.self, forKey: .billingCycleLabel)
+-        disclaimer = try c.decodeIfPresent(String.self, forKey: .disclaimer)
++        disclaimer = try c.decodeIfPresent(VendorDisclaimer.self, forKey: .disclaimer)
+     }
+ }
+diff --git a/Sources/AiTaskbarCore/Models/VendorNotice.swift b/Sources/AiTaskbarCore/Models/VendorNotice.swift
+new file mode 100644
+index 0000000..98ae2b9
+--- /dev/null
++++ b/Sources/AiTaskbarCore/Models/VendorNotice.swift
+@@ -0,0 +1,68 @@
++import Foundation
++
++/// Informational notice a vendor card carries, as STRUCTURE rather than prose.
++///
++/// Providers never build a user-facing sentence (CLAUDE.md: "emit structure
++/// and let the localized view render it"). The App maps each case to a key in
++/// `Localizable.strings`. Gemini and xAI once stored a Portuguese sentence
++/// here, so every en/es user read Portuguese on those two cards.
++public enum VendorDisclaimer: String, Sendable, Equatable, Codable, CaseIterable {
++    /// Gemini quota monitoring needs the Antigravity CLI (`agy`) installed and signed in.
++    case antigravityRequired
++    /// Grok quota monitoring needs the Grok CLI installed and signed in.
++    case grokCLIRequired
++}
++
++/// Recoverable setup states a provider reports through `AppError.guidance`.
++///
++/// Each case is a situation the user fixes by installing or signing in to a
++/// CLI, not a bug. The App renders it via L10n. `diagnostic` is the English
++/// text for logs and the persisted `.last_error`, like every other
++/// `AppError` message; it is not what the card shows.
++public enum VendorGuidance: String, Sendable, Equatable, Codable, CaseIterable {
++    /// `prefer_antigravity` is on, `agy` is missing and no API key is set.
++    case antigravityRequired
++    /// The `agy` executable was not found at any known location.
++    case antigravityNotFound
++    /// `agy` reported that the user is not signed in.
++    case antigravityNotAuthenticated
++    /// The Antigravity backend answered UNAVAILABLE.
++    case antigravityUnavailable
++    /// `agy` did not answer within the executor's time budget.
++    case antigravityTimedOut
++    /// `agy` reported `context canceled`.
++    case antigravityCanceled
++    /// `prefer_grok_cli` is on, Grok CLI auth is missing and no team_id is set.
++    case grokCLIRequired
++
++    /// HTTP status the situation is equivalent to, so the 401 re-login banner
++    /// and the transient/back-off logic treat it as they treated the old
++    /// `AppError.http` form. nil = not an HTTP-shaped condition.
++    public var httpStatus: Int? {
++        switch self {
++        case .antigravityNotAuthenticated: return 401
++        case .antigravityUnavailable:      return 503
++        default:                           return nil
++        }
++    }
++
++    /// English diagnostic for logs and `.last_error`. Not rendered by the card.
++    public var diagnostic: String {
++        switch self {
++        case .antigravityRequired:
++            return "Antigravity is required: install 'agy' or set GEMINI_API_KEY"
++        case .antigravityNotFound:
++            return "the 'agy' executable was not found"
++        case .antigravityNotAuthenticated:
++            return "Antigravity is not authenticated; run 'agy' to sign in"
++        case .antigravityUnavailable:
++            return "Antigravity service temporarily unavailable"
++        case .antigravityTimedOut:
++            return "timed out waiting for agy"
++        case .antigravityCanceled:
++            return "agy: context canceled"
++        case .grokCLIRequired:
++            return "Grok CLI is required (grok login), or set the xAI management key and team_id"
++        }
++    }
++}
+diff --git a/Sources/AiTaskbarProviders/AntigravityExecutor.swift b/Sources/AiTaskbarProviders/AntigravityExecutor.swift
+index 1c4c55d..f6b0e00 100644
+--- a/Sources/AiTaskbarProviders/AntigravityExecutor.swift
++++ b/Sources/AiTaskbarProviders/AntigravityExecutor.swift
+@@ -54,9 +54,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+ 
+     public func fetchUsageJSON() async throws -> Data {
+         guard let exe = resolvedExecutableURL else {
+-            throw AppError.credentials(
+-                "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado. O executável 'agy' não foi encontrado."
+-            )
++            throw AppError.guidance(.antigravityNotFound)
+         }
+ 
+         let process = Process()
+@@ -104,7 +102,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+                 timer.cancel()
+ 
+                 if timedOut.withLock({ $0 }) {
+-                    continuation.resume(throwing: AppError.io("Tempo limite esgotado ao consultar o Antigravity (agy). Tente novamente."))
++                    continuation.resume(throwing: AppError.guidance(.antigravityTimedOut))
+                     return
+                 }
+ 
+@@ -117,12 +115,12 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+                 if process.terminationStatus != 0 || structuredError != nil {
+                     let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
+                     if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
+-                        continuation.resume(throwing: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal para fazer login."))
++                        continuation.resume(throwing: AppError.guidance(.antigravityNotAuthenticated))
+                     } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
+-                        continuation.resume(throwing: AppError.http(status: 503, body: "Serviço do Google Antigravity temporariamente indisponível. Tente novamente."))
++                        continuation.resume(throwing: AppError.guidance(.antigravityUnavailable))
+                     } else if let structured = structuredError {
+                         if structured == "context canceled" {
+-                            continuation.resume(throwing: AppError.io("Operação cancelada ou tempo limite esgotado pelo Antigravity."))
++                            continuation.resume(throwing: AppError.guidance(.antigravityCanceled))
+                         } else {
+                             continuation.resume(throwing: AppError.io("agy: \(structured)"))
+                         }
+@@ -132,13 +130,13 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+                             : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
+                         let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
+                         let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
+-                        continuation.resume(throwing: AppError.io("agy falhou (código \(process.terminationStatus)): \(clean)"))
++                        continuation.resume(throwing: AppError.io("agy failed (exit \(process.terminationStatus)): \(clean)"))
+                     }
+                     return
+                 }
+ 
+                 if outStr.contains("not logged in") || outStr.contains("error getting token source") {
+-                    continuation.resume(throwing: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal para fazer login."))
++                    continuation.resume(throwing: AppError.guidance(.antigravityNotAuthenticated))
+                     return
+                 }
+ 
+@@ -159,7 +157,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+                 if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
+                     if let err = env.error, !err.isEmpty { return err }
+                     if let resp = env.response, !resp.isEmpty { return resp }
+-                    return "Erro no Antigravity"
++                    return "agy reported an error"
+                 }
+             }
+             let str = String(data: data, encoding: .utf8) ?? ""
+@@ -171,7 +169,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+                     if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
+                         if let err = env.error, !err.isEmpty { return err }
+                         if let resp = env.response, !resp.isEmpty { return resp }
+-                        return "Erro no Antigravity"
++                        return "agy reported an error"
+                     }
+                 }
+             }
+diff --git a/Sources/AiTaskbarProviders/CachedFetch.swift b/Sources/AiTaskbarProviders/CachedFetch.swift
+index 3724938..84e148e 100644
+--- a/Sources/AiTaskbarProviders/CachedFetch.swift
++++ b/Sources/AiTaskbarProviders/CachedFetch.swift
+@@ -51,7 +51,10 @@ public struct CachedFetch: Sendable {
+                 fe = FetchError(status: status,
+                                 body: PIIScrub.scrub(diagnostic: body))
+             } else {
+-                fe = FetchError(status: 0,
++                // `.guidance` may stand for a 401/503 (agy not signed in /
++                // unavailable); keep that status so the stale-card re-login
++                // banner still fires.
++                fe = FetchError(status: appErr.httpStatus ?? 0,
+                                 body: PIIScrub.scrub(diagnostic: appErr.description))
+             }
+             cache.markFailed(fe)
+diff --git a/Sources/AiTaskbarProviders/GeminiProvider.swift b/Sources/AiTaskbarProviders/GeminiProvider.swift
+index 77bc76f..17abab8 100644
+--- a/Sources/AiTaskbarProviders/GeminiProvider.swift
++++ b/Sources/AiTaskbarProviders/GeminiProvider.swift
+@@ -77,9 +77,7 @@ public final class GeminiProvider: UsageProvider {
+                     apiKey = try credentials.read()
+                 } catch {
+                     if preferAntigravity {
+-                        throw AppError.credentials(
+-                            "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado. (Instale o 'agy' ou defina GEMINI_API_KEY para verificar a API)."
+-                        )
++                        throw AppError.guidance(.antigravityRequired)
+                     }
+                     throw error
+                 }
+@@ -97,18 +95,27 @@ public final class GeminiProvider: UsageProvider {
+     }
+ 
+     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
+-        // Attempt decoding as Antigravity /usage JSON
+-        if let agy = try? SharedCoders.decoder.decode(AntigravityUsageResponse.self, from: data) {
++        // The cached bytes are either `agy /usage` output or the AI Studio
++        // `/models` body. agy output always carries one of these top-level
++        // keys and `/models` never does, so that is the source tag. The agy
++        // branch decodes strictly: its schema drift must report as an agy
++        // error, not fall through to "base_url may be wrong" for an AI
++        // Studio endpoint that was never called (the old `try?` did that).
++        if try Self.isAntigravityPayload(data) {
++            let agy: AntigravityUsageResponse
++            do {
++                agy = try SharedCoders.decoder.decode(AntigravityUsageResponse.self, from: data)
++            } catch {
++                throw AppError.schema("agy usage decode: \(error)")
++            }
+             if agy.status == "ERROR" {
+-                let err = agy.error ?? agy.response ?? "Erro no Antigravity"
++                let err = agy.error ?? agy.response ?? "agy reported an error"
+                 if err == "context canceled" {
+-                    throw AppError.io("Operação cancelada ou tempo limite esgotado pelo Antigravity.")
++                    throw AppError.guidance(.antigravityCanceled)
+                 }
+                 throw AppError.io("agy: \(err)")
+             }
+-            if agy.command?.name == "usage" || (agy.command?.data?.groups != nil && !(agy.command?.data?.groups?.isEmpty ?? true)) {
+-                return .gemini(agy.toSnapshot())
+-            }
++            return .gemini(agy.toSnapshot())
+         }
+ 
+         let parsed: GeminiModelsResponse
+@@ -132,4 +139,20 @@ public final class GeminiProvider: UsageProvider {
+         }
+         return .gemini(parsed.toSnapshot())
+     }
++
++    /// Top-level keys only `agy --output-format json` emits.
++    static let antigravityKeys: Set<String> = ["command", "conversation_id", "status"]
++
++    /// True when `data` is an agy payload. Throws `AppError.schema` when the
++    /// bytes are not JSON at all, which neither source ever produces.
++    static func isAntigravityPayload(_ data: Data) throws -> Bool {
++        let root: JSONValue
++        do {
++            root = try SharedCoders.decoder.decode(JSONValue.self, from: data)
++        } catch {
++            throw AppError.schema("gemini payload is not JSON: \(error)")
++        }
++        guard case .object(let fields) = root else { return false }
++        return !antigravityKeys.isDisjoint(with: fields.keys)
++    }
+ }
+diff --git a/Sources/AiTaskbarProviders/GeminiWireTypes.swift b/Sources/AiTaskbarProviders/GeminiWireTypes.swift
+index b10ff41..d2780dc 100644
+--- a/Sources/AiTaskbarProviders/GeminiWireTypes.swift
++++ b/Sources/AiTaskbarProviders/GeminiWireTypes.swift
+@@ -54,7 +54,7 @@ extension GeminiModelsResponse {
+                                         resetsAt: nil,
+                                         detail: "API key valid (no models visible)"),
+                     modelCount: 0,
+-                    disclaimer: "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
++                    disclaimer: .antigravityRequired
+                 )
+             }
+         } else {
+@@ -68,7 +68,7 @@ extension GeminiModelsResponse {
+                                 resetsAt: nil,
+                                 detail: detail),
+             modelCount: count,
+-            disclaimer: "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
++            disclaimer: .antigravityRequired
+         )
+     }
+ }
+@@ -127,14 +127,12 @@ public struct AntigravityBucket: Decodable, Sendable {
+ }
+ 
+ extension AntigravityUsageResponse {
+-    public func toSnapshot(disclaimer: String? = nil) -> GeminiSnapshot {
++    public func toSnapshot() -> GeminiSnapshot {
+         var fiveHour: UsageWindow?
+         var weekly: UsageWindow?
+         var thirdParty5Hour: UsageWindow?
+         var thirdPartyWeekly: UsageWindow?
+ 
+-        let resolvedDisclaimer = disclaimer ?? "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado."
+-
+         if let groups = command?.data?.groups {
+             for group in groups {
+                 let gName = (group.name ?? "").lowercased()
+@@ -147,7 +145,11 @@ extension AntigravityUsageResponse {
+                     let is5h = bWin == "5h" || bId.contains("5h")
+                     let isWeekly = bWin == "weekly" || bId.contains("weekly")
+ 
+-                    let rawRem = bucket.remainingFraction ?? 1.0
++                    // A bucket with no fraction is UNKNOWN, not full: a
++                    // proto3 encoder omits a zero double, so the `?? 1.0`
++                    // default could paint an exhausted bucket as 0% used.
++                    // No number, no bar (same rule as Codex credits).
++                    guard let rawRem = bucket.remainingFraction else { continue }
+                     // Clamp once: the detail line and the consumed fraction
+                     // must agree, and an unclamped 1e300 trapped in `Int(_:)`.
+                     let rem = rawRem.isNaN ? 1.0 : max(0.0, min(1.0, rawRem))
+@@ -194,7 +196,7 @@ extension AntigravityUsageResponse {
+             weekly: weekly,
+             thirdParty5Hour: thirdParty5Hour,
+             thirdPartyWeekly: thirdPartyWeekly,
+-            disclaimer: resolvedDisclaimer,
++            disclaimer: .antigravityRequired,
+             isAntigravityActive: true
+         )
+     }
+diff --git a/Sources/AiTaskbarProviders/XAIProvider.swift b/Sources/AiTaskbarProviders/XAIProvider.swift
+index cdcf688..4bff409 100644
+--- a/Sources/AiTaskbarProviders/XAIProvider.swift
++++ b/Sources/AiTaskbarProviders/XAIProvider.swift
+@@ -114,9 +114,7 @@ public final class XAIProvider: UsageProvider {
+                 let tid = teamId.trimmingCharacters(in: .whitespacesAndNewlines)
+                 guard !tid.isEmpty else {
+                     if preferGrokCLI {
+-                        throw AppError.credentials(
+-                            "Para monitorar o Grok, é necessário ter o Grok CLI instalado e autenticado (`grok login`), ou configure a Management Key e Team ID da xAI em console.x.ai."
+-                        )
++                        throw AppError.guidance(.grokCLIRequired)
+                     }
+                     throw AppError.credentials("xAI team_id is required — copy it from console.x.ai → Team settings")
+                 }
+diff --git a/Sources/AiTaskbarProviders/XAIWireTypes.swift b/Sources/AiTaskbarProviders/XAIWireTypes.swift
+index dc3644c..aeed5dd 100644
+--- a/Sources/AiTaskbarProviders/XAIWireTypes.swift
++++ b/Sources/AiTaskbarProviders/XAIWireTypes.swift
+@@ -248,13 +248,11 @@ public struct GrokSettingsResponse: Decodable, Encodable, Sendable, Equatable {
+ }
+ 
+ extension GrokBillingResponse {
+-    public static let defaultDisclaimer = "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado."
+-
+-    public func toSnapshot(planLabel: String? = nil, disclaimer: String? = nil) -> XAISnapshot {
++    public func toSnapshot(planLabel: String? = nil) -> XAISnapshot {
+         guard let cfg = config else {
+             return XAISnapshot(
+                 planLabel: planLabel ?? "SuperGrok",
+-                disclaimer: disclaimer ?? Self.defaultDisclaimer
++                disclaimer: .grokCLIRequired
+             )
+         }
+ 
+@@ -301,7 +299,7 @@ extension GrokBillingResponse {
+             spendingLimitUSD: nil,
+             prepaidUsedUSD: prepaidUsedUSD,
+             billingCycleLabel: nil,
+-            disclaimer: disclaimer ?? Self.defaultDisclaimer
++            disclaimer: .grokCLIRequired
+         )
+     }
+ }
+@@ -402,7 +400,7 @@ extension XAICachedPayload {
+             spendingLimitUSD: limitUSD,
+             prepaidUsedUSD: prepaidUsedUSD,
+             billingCycleLabel: cycleLabel,
+-            disclaimer: GrokBillingResponse.defaultDisclaimer
++            disclaimer: .grokCLIRequired
+         )
+     }
+ }
+diff --git a/Sources/AiTaskbarValidate/main.swift b/Sources/AiTaskbarValidate/main.swift
+index db36f5f..e898fc6 100644
+--- a/Sources/AiTaskbarValidate/main.swift
++++ b/Sources/AiTaskbarValidate/main.swift
+@@ -153,8 +153,9 @@ section("Wire types: Antigravity Gemini fixture") {
+     let s = parsed.toSnapshot()
+     expect(s.planLabel == "Antigravity", "Antigravity plan label")
+     expect(s.isAntigravityActive, "isAntigravityActive is true")
+-    expect(s.disclaimer == "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado.",
+-           "Antigravity disclaimer matches mandatory text")
++    // Structure, not prose (CQ-AUR-001): the App localizes it.
++    expect(s.disclaimer == .antigravityRequired,
++           "Antigravity disclaimer is the structured antigravityRequired notice")
+     expect(s.fiveHour?.label == "Gemini (5h)", "Gemini 5h label")
+     expect(abs((s.fiveHour?.utilizationPercent ?? 0) - 16.344) < 0.01,
+            "Gemini 5h utilization matches fixture")
+@@ -280,14 +281,14 @@ section("Wire types: Grok CLI fixtures") {
+     expect(snap.balance?.detail == "$40.00 available", "grok balance detail")
+     expect(snap.prepaidUSD == 40.0, "grok prepaid USD")
+     expect(snap.prepaidUsedUSD == nil, "grok prepaid used is not balance x weekly %")
+-    expect(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.",
+-           "grok disclaimer matches mandatory text")
++    expect(snap.disclaimer == .grokCLIRequired,
++           "grok disclaimer is the structured grokCLIRequired notice")
+ 
+     let cached = XAICachedPayload(grokBilling: billing, grokSettings: settings)
+     let cs = cached.toSnapshot()
+     expect(cs.planLabel == "SuperGrok Heavy", "grok cached payload snapshot plan label")
+     expect(cs.weekly?.utilizationPercent == 3.0, "grok cached payload weekly util")
+-    expect(cs.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.",
++    expect(cs.disclaimer == .grokCLIRequired,
+            "grok cached payload has disclaimer")
+ 
+     let authEntries = try SharedCoders.decoder.decode(
+diff --git a/Tests/AiTaskbarAppTests/VendorNoticeLocalizationTests.swift b/Tests/AiTaskbarAppTests/VendorNoticeLocalizationTests.swift
+new file mode 100644
+index 0000000..fb5b139
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/VendorNoticeLocalizationTests.swift
+@@ -0,0 +1,85 @@
++import Foundation
++import Testing
++import AiTaskbarCore
++@testable import AiTaskbarApp
++
++/// CQ-AUR-001 / ARCH-ATL-001: Gemini and xAI notices are structure in the
++/// snapshot/error and are rendered here in the user's language. Before the
++/// fix they were Portuguese sentences shown verbatim to en/es users.
++@MainActor
++@Suite("Vendor notice localization", .serialized)
++struct VendorNoticeLocalizationTests {
++    private static func strings(_ language: String) throws -> String {
++        var root = URL(fileURLWithPath: #filePath)
++        for _ in 0..<3 { root.deleteLastPathComponent() }
++        let file = root
++            .appendingPathComponent("Sources/AiTaskbarApp/Resources")
++            .appendingPathComponent("\(language).lproj/Localizable.strings")
++        return try String(contentsOf: file, encoding: .utf8)
++    }
++
++    private static var allKeys: [String] {
++        VendorDisclaimer.allCases.map { VendorNoticeText.key(for: $0) }
++            + VendorGuidance.allCases.map { VendorNoticeText.key(for: $0) }
++    }
++
++    @Test("every notice key exists in en, pt-BR and es")
++    func keys_exist_in_every_language() throws {
++        for language in ["en", "pt-BR", "es"] {
++            let contents = try Self.strings(language)
++            for key in Self.allKeys {
++                expectTrue(contents.contains("\"\(key)\" = "), "missing \(key) in \(language)")
++            }
++        }
++    }
++
++    @Test("notice keys are distinct")
++    func keys_are_distinct() {
++        #expect(Set(Self.allKeys).count == Self.allKeys.count)
++    }
++
++    @Test("Gemini disclaimer renders in English under languageOverride=en")
++    func gemini_disclaimer_english() {
++        let prev = L10n.languageOverride
++        defer { L10n.languageOverride = prev }
++        L10n.languageOverride = "en"
++        #expect(VendorNoticeText.text(for: .antigravityRequired)
++                == "To monitor Gemini quotas, Antigravity must be installed and authenticated.")
++    }
++
++    @Test("Grok disclaimer renders in Spanish under languageOverride=es")
++    func grok_disclaimer_spanish() {
++        let prev = L10n.languageOverride
++        defer { L10n.languageOverride = prev }
++        L10n.languageOverride = "es"
++        #expect(VendorNoticeText.text(for: .grokCLIRequired)
++                == "Para monitorear Grok, es necesario tener Grok instalado y autenticado.")
++    }
++
++    @Test("guidance error renders the localized sentence, not the diagnostic")
++    func guidance_error_is_localized() {
++        let prev = L10n.languageOverride
++        defer { L10n.languageOverride = prev }
++        L10n.languageOverride = "en"
++        #expect(VendorNoticeText.message(for: .guidance(.antigravityNotFound))
++                == "Antigravity not found — install and authenticate Antigravity (`agy`) to monitor Gemini.")
++    }
++
++    @Test("every guidance case resolves to a translation in every language")
++    func guidance_resolves_everywhere() {
++        let prev = L10n.languageOverride
++        defer { L10n.languageOverride = prev }
++        for language in ["en", "pt-BR", "es"] {
++            L10n.languageOverride = language
++            for g in VendorGuidance.allCases {
++                let key = VendorNoticeText.key(for: g)
++                #expect(VendorNoticeText.message(for: .guidance(g)) != key, "\(language): \(key)")
++            }
++        }
++    }
++
++    @Test("non-guidance errors keep their own description")
++    func other_errors_pass_through() {
++        #expect(VendorNoticeText.message(for: .io("agy: quota exceeded")) == "io: agy: quota exceeded")
++    }
++}
+diff --git a/Tests/AiTaskbarCoreTests/AppErrorTests.swift b/Tests/AiTaskbarCoreTests/AppErrorTests.swift
+index 272b7df..56eefca 100644
+--- a/Tests/AiTaskbarCoreTests/AppErrorTests.swift
++++ b/Tests/AiTaskbarCoreTests/AppErrorTests.swift
+@@ -100,4 +100,47 @@ struct AppErrorTests {
+         #expect(AppError.http(status: 500, body: "x") == AppError.http(status: 500, body: "x"))
+         #expect(AppError.http(status: 500, body: "x") != AppError.http(status: 500, body: "y"))
+     }
++
++    // MARK: guidance (CQ-AUR-001)
++
++    @Test("guidance keeps the 401 re-login semantics of agy not signed in")
++    func guidance_not_authenticated_is_unauthorized() {
++        #expect(AppError.guidance(.antigravityNotAuthenticated).isUnauthorized)
++    }
++
++    @Test("guidance unavailable is transient like the old 503")
++    func guidance_unavailable_is_transient() {
++        #expect(AppError.guidance(.antigravityUnavailable).isTransient)
++    }
++
++    @Test("setup guidance carries no HTTP status")
++    func guidance_setup_has_no_status() {
++        expectTrue(AppError.guidance(.grokCLIRequired).httpStatus == nil)
++    }
++
++    @Test("guidance is neither rate-limited nor unauthorized unless mapped")
++    func guidance_setup_is_not_unauthorized() {
++        #expect(!AppError.guidance(.antigravityRequired).isUnauthorized)
++        #expect(!AppError.guidance(.antigravityTimedOut).isRateLimited)
++    }
++
++    @Test("guidance description is an English diagnostic with a case prefix")
++    func guidance_description() {
++        #expect(AppError.guidance(.antigravityNotFound).description
++                == "guidance: the 'agy' executable was not found")
++    }
++
++    @Test("every guidance case has a non-empty diagnostic")
++    func guidance_diagnostics_non_empty() {
++        for g in VendorGuidance.allCases {
++            #expect(!g.diagnostic.isEmpty, "\(g)")
++        }
++    }
++
++    @Test("VendorDisclaimer round-trips through Codable by raw value")
++    func disclaimer_codable_round_trip() throws {
++        let data = try JSONEncoder().encode(VendorDisclaimer.grokCLIRequired)
++        #expect(String(decoding: data, as: UTF8.self) == "\"grokCLIRequired\"")
++        #expect(try JSONDecoder().decode(VendorDisclaimer.self, from: data) == .grokCLIRequired)
++    }
+ }
+diff --git a/Tests/AiTaskbarProvidersTests/GeminiProviderTests.swift b/Tests/AiTaskbarProvidersTests/GeminiProviderTests.swift
+index 877df8e..99d8d85 100644
+--- a/Tests/AiTaskbarProvidersTests/GeminiProviderTests.swift
++++ b/Tests/AiTaskbarProvidersTests/GeminiProviderTests.swift
+@@ -219,7 +219,7 @@ struct GeminiProviderTests {
+         }
+         expectTrue(s.isAntigravityActive)
+         #expect(s.planLabel == "Antigravity")
+-        #expect(s.disclaimer != nil)
++        expectTrue(s.disclaimer == .antigravityRequired)
+         #expect(s.fiveHour != nil)
+         #expect(s.weekly != nil)
+         #expect(s.thirdParty5Hour != nil)
+@@ -232,7 +232,7 @@ struct GeminiProviderTests {
+     func antigravity_unauthenticated_error() async throws {
+         let mock = MockAntigravityExecutor(
+             installed: true,
+-            error: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal.")
++            error: AppError.guidance(.antigravityNotAuthenticated)
+         )
+         let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+         let cache = DiskCache(vendor: .gemini, baseDir: tmpCacheDir)
+@@ -286,7 +286,7 @@ struct GeminiProviderTests {
+         }
+         expectFalse(s.isAntigravityActive)
+         #expect(s.modelCount == 3)
+-        #expect(s.disclaimer != nil)
++        expectTrue(s.disclaimer == .antigravityRequired)
+         #expect(StubURLProtocol.captured.count == 1)
+         try? FileManager.default.removeItem(at: tmpCacheDir)
+         StubURLProtocol.reset()
+@@ -312,13 +312,9 @@ struct GeminiProviderTests {
+         )
+         do {
+             _ = try await provider.fetchUsage(forceRefresh: true)
+-            Issue.record("expected credentials error")
++            Issue.record("expected guidance error")
+         } catch let err as AppError {
+-            if case .credentials(let msg) = err {
+-                expectTrue(msg.contains("Antigravity instalado e autenticado"))
+-            } else {
+-                Issue.record("expected credentials, got \(err)")
+-            }
++            #expect(err == .guidance(.antigravityRequired))
+         }
+         try? FileManager.default.removeItem(at: tmpCacheDir)
+     }
+@@ -378,19 +374,15 @@ struct GeminiProviderTests {
+         try? FileManager.default.removeItem(at: scriptDir)
+     }
+ 
+-    @Test("ProcessAntigravityExecutor.fetchUsageJSON throws credentials when not installed")
++    @Test("ProcessAntigravityExecutor.fetchUsageJSON throws antigravityNotFound guidance when not installed")
+     func process_executor_not_installed_throws() async throws {
+         let exec = ProcessAntigravityExecutor(customPath: "/nonexistent/path/to/agy")
+         if !exec.isInstalled() {
+             do {
+                 _ = try await exec.fetchUsageJSON()
+-                Issue.record("expected credentials error")
++                Issue.record("expected guidance error")
+             } catch let err as AppError {
+-                if case .credentials(let msg) = err {
+-                    expectTrue(msg.contains("Antigravity instalado e autenticado"))
+-                } else {
+-                    Issue.record("expected credentials, got \(err)")
+-                }
++                #expect(err == .guidance(.antigravityNotFound))
+             }
+         }
+     }
+@@ -450,7 +442,7 @@ struct GeminiProviderTests {
+             Issue.record("expected AppError.io")
+         } catch let err as AppError {
+             if case .io(let msg) = err {
+-                expectTrue(msg.contains("código 2"))
++                expectTrue(msg.contains("exit 2"))
+             } else {
+                 Issue.record("expected io error, got \(err)")
+             }
+@@ -459,7 +451,7 @@ struct GeminiProviderTests {
+         try? FileManager.default.removeItem(at: scriptDir)
+     }
+ 
+-    @Test("ProcessAntigravityExecutor parses context canceled into clean Portuguese message")
++    @Test("ProcessAntigravityExecutor parses context canceled into structured guidance")
+     func process_executor_context_canceled_parsed_cleanly() async throws {
+         let scriptDir = URL(fileURLWithPath: NSTemporaryDirectory())
+             .appendingPathComponent("ai-taskbar-script-\(UUID().uuidString)")
+@@ -476,15 +468,9 @@ struct GeminiProviderTests {
+         let exec = ProcessAntigravityExecutor(customPath: scriptPath)
+         do {
+             _ = try await exec.fetchUsageJSON()
+-            Issue.record("expected io error")
++            Issue.record("expected guidance error")
+         } catch let err as AppError {
+-            if case .io(let msg) = err {
+-                expectTrue(msg.contains("Operação cancelada ou tempo limite esgotado"))
+-                expectFalse(msg.contains("conversation_id"))
+-                expectFalse(msg.contains("status"))
+-            } else {
+-                Issue.record("expected io error, got \(err)")
+-            }
++            #expect(err == .guidance(.antigravityCanceled))
+         }
+ 
+         try? FileManager.default.removeItem(at: scriptDir)
+@@ -509,12 +495,9 @@ struct GeminiProviderTests {
+             _ = try await exec.fetchUsageJSON()
+             Issue.record("expected 503 error")
+         } catch let err as AppError {
+-            if case .http(let status, let body) = err {
+-                #expect(status == 503)
+-                expectTrue(body.contains("temporariamente indisponível"))
+-            } else {
+-                Issue.record("expected 503 error, got \(err)")
+-            }
++            #expect(err == .guidance(.antigravityUnavailable))
++            expectTrue(err.httpStatus == 503)
++            expectTrue(err.isTransient)
+         }
+ 
+         try? FileManager.default.removeItem(at: scriptDir)
+diff --git a/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift b/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift
+new file mode 100644
+index 0000000..ee82059
+--- /dev/null
++++ b/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift
+@@ -0,0 +1,168 @@
++import Testing
++import Foundation
++@testable import AiTaskbarCore
++@testable import AiTaskbarProviders
++import AiTaskbarTesting
++
++/// Regression suite for the B4-i18n batch (CQ-AUR-001 / ARCH-ATL-001,
++/// BEST-ATE-004, BUG-ART-009).
++///
++/// CLAUDE.md: "Never build a user-facing sentence inside a wire type; emit
++/// structure and let the localized view render it." Gemini and xAI used to
++/// bake Portuguese sentences into snapshots and errors, so every en/es user
++/// read Portuguese on those two cards.
++@Suite("Gemini + xAI emit structure, not prose", .serialized)
++struct GeminiXAILocaleNeutralTests {
++
++    // MARK: CQ-AUR-001 / ARCH-ATL-001
++
++    /// Portuguese fragments that were hard-coded in Providers. Any of them
++    /// reappearing means a sentence is again being built below the view.
++    private static let portugueseMarkers = [
++        "Para conseguir", "Para monitorar", "necessário", "não ", "Operação",
++        "Tempo limite", "falhou", "Erro no", "Tente novamente", "código",
++        "Instale", "autenticado",
++    ]
++
++    @Test("Providers sources contain no Portuguese user-facing prose")
++    func providers_sources_carry_no_portuguese_prose() throws {
++        var root = URL(fileURLWithPath: #filePath)
++        for _ in 0..<3 { root.deleteLastPathComponent() }
++        let dir = root.appendingPathComponent("Sources/AiTaskbarProviders")
++        let files = try FileManager.default
++            .contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
++            .filter { $0.pathExtension == "swift" }
++        #expect(!files.isEmpty)
++        var hits: [String] = []
++        for file in files {
++            let text = try String(contentsOf: file, encoding: .utf8)
++            for marker in Self.portugueseMarkers where text.contains(marker) {
++                hits.append("\(file.lastPathComponent): \(marker)")
++            }
++        }
++        #expect(hits == [])
++    }
++
++    // MARK: BEST-ATE-004
++
++    @Test("agy schema drift surfaces the agy decode error, not a base_url hint")
++    func agy_schema_drift_reports_agy_decode_error() async throws {
++        // `remaining_fraction` drifted from number to string: the agy decode
++        // fails. It used to be swallowed by `try?` and re-reported as the AI
++        // Studio "base_url may be wrong", an endpoint that was never called.
++        let drifted = #"""
++        {"status":"SUCCESS","command":{"name":"usage","data":{"groups":[
++          {"name":"Gemini Models","buckets":[
++            {"id":"gemini-5h","window":"5h","remaining_fraction":"0.5"}]}]}}}
++        """#
++        let message = try await Self.fetchError(agyPayload: Data(drifted.utf8))
++        expectTrue(message.contains("agy usage decode"), "\(message)")
++        expectFalse(message.contains("base_url"), "\(message)")
++    }
++
++    // MARK: BUG-ART-009
++
++    @Test("Antigravity bucket without remaining_fraction draws no bar")
++    func antigravity_missing_remaining_fraction_is_unknown() throws {
++        let body = #"""
++        {"command":{"name":"usage","data":{"groups":[
++          {"name":"Gemini Models","buckets":[{"id":"gemini-5h","window":"5h"}]}]}}}
++        """#
++        let parsed = try JSONDecoder().decode(AntigravityUsageResponse.self,
++                                              from: Data(body.utf8))
++        let snap = parsed.toSnapshot()
++        // Unknown is not "100% remaining": a proto3 encoder omits a zero
++        // (exhausted) double, so defaulting to 1.0 could show a spent bucket
++        // as 0% used.
++        expectTrue(snap.fiveHour == nil)
++    }
++
++    @Test("stale fallback keeps 401 for agy not signed in, so the re-login banner shows")
++    func stale_guidance_keeps_401_status() async throws {
++        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
++            .appendingPathComponent("ai-taskbar-b4-\(UUID().uuidString)")
++        try Paths.ensureDir(dir)
++        defer { try? FileManager.default.removeItem(at: dir) }
++        let fetch = CachedFetch(cache: DiskCache(vendor: .gemini, baseDir: dir))
++        let fixture = Fixtures.data(Fixtures.antigravityUsage200)
++        let decode: (Data) throws -> Int = { $0.count }
++        _ = try await fetch.run(forceRefresh: true, decode: decode, fetch: { fixture })
++        let outcome = try await fetch.run(forceRefresh: true, decode: decode, fetch: {
++            throw AppError.guidance(.antigravityNotAuthenticated)
++        })
++        #expect(outcome.isStale)
++        expectTrue(outcome.lastError?.status == 401)
++    }
++
++    @Test("agy SUCCESS payload decodes through the agy branch")
++    func agy_payload_decodes() async throws {
++        let snap = try await Self.fetchSnapshot(agyPayload: Fixtures.data(Fixtures.antigravityUsage200))
++        expectTrue(snap?.isAntigravityActive == true)
++        expectTrue(snap?.disclaimer == .antigravityRequired)
++    }
++
++    @Test("agy context canceled payload maps to structured guidance")
++    func agy_canceled_payload_is_guidance() async throws {
++        let body = #"{"conversation_id":"","status":"ERROR","response":"","error":"context canceled"}"#
++        let message = try await Self.fetchError(agyPayload: Data(body.utf8))
++        #expect(message == AppError.guidance(.antigravityCanceled).description)
++    }
++
++    @Test("non-JSON payload is a schema error")
++    func non_json_payload_is_schema_error() async throws {
++        let message = try await Self.fetchError(agyPayload: Data("not json".utf8))
++        expectTrue(message.contains("gemini payload is not JSON"), "\(message)")
++    }
++
++    @Test("a top-level JSON array is not an agy payload")
++    func json_array_is_not_agy() throws {
++        expectFalse(try GeminiProvider.isAntigravityPayload(Data("[1]".utf8)))
++    }
++
++    // MARK: helpers
++
++    private static func fetchSnapshot(agyPayload: Data) async throws -> GeminiSnapshot? {
++        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
++            .appendingPathComponent("ai-taskbar-b4-\(UUID().uuidString)")
++        try Paths.ensureDir(dir)
++        defer { try? FileManager.default.removeItem(at: dir) }
++        let outcome = try await makeProvider(dir: dir, payload: agyPayload)
++            .fetchUsage(forceRefresh: true)
++        if case .gemini(let s) = outcome.snapshot { return s }
++        return nil
++    }
++
++    private static func makeProvider(dir: URL, payload: Data) -> GeminiProvider {
++        GeminiProvider(
++            credentials: EnvOrConfigCredentialReader(envVarName: "_UNSET_GEMINI_B4",
++                                                     inlineKey: nil,
++                                                     vendorName: "Gemini"),
++            cache: DiskCache(vendor: .gemini, baseDir: dir),
++            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]),
++            baseURL: URL(string: "https://generativelanguage.googleapis.com/v1beta")!,
++            antigravity: FixedAntigravityExecutor(payload: payload),
++            preferAntigravity: true
++        )
++    }
++
++    private static func fetchError(agyPayload: Data) async throws -> String {
++        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
++            .appendingPathComponent("ai-taskbar-b4-\(UUID().uuidString)")
++        try Paths.ensureDir(dir)
++        defer { try? FileManager.default.removeItem(at: dir) }
++        let provider = makeProvider(dir: dir, payload: agyPayload)
++        do {
++            _ = try await provider.fetchUsage(forceRefresh: true)
++        } catch {
++            return String(describing: error)
++        }
++        Issue.record("expected fetchUsage to throw")
++        return ""
++    }
++}
++
++private struct FixedAntigravityExecutor: AntigravityExecuting, Sendable {
++    let payload: Data
++    func isInstalled() -> Bool { true }
++    func fetchUsageJSON() async throws -> Data { payload }
++}
+diff --git a/Tests/AiTaskbarProvidersTests/GoldenSnapshotTests.swift b/Tests/AiTaskbarProvidersTests/GoldenSnapshotTests.swift
+index 88fba13..322ec62 100644
+--- a/Tests/AiTaskbarProvidersTests/GoldenSnapshotTests.swift
++++ b/Tests/AiTaskbarProvidersTests/GoldenSnapshotTests.swift
+@@ -170,7 +170,7 @@ struct GoldenSnapshotTests {
+         let snap = parsed.toSnapshot()
+         #expect(snap.modelCount == 0)
+         #expect(snap.status?.detail == "API key valid (no models visible)")
+-        #expect(snap.disclaimer != nil)
++        expectTrue(snap.disclaimer == .antigravityRequired)
+     }
+ 
+     @Test("Gemini golden — Antigravity usage JSON produces 5h and weekly quota windows")
+@@ -182,7 +182,9 @@ struct GoldenSnapshotTests {
+ 
+         #expect(snap.planLabel == "Antigravity")
+         #expect(snap.isAntigravityActive)
+-        #expect(snap.disclaimer == "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado.")
++        // Deliberate schema decision (CQ-AUR-001): the disclaimer is a
++        // structured notice the App localizes, no longer a Portuguese String.
++        expectTrue(snap.disclaimer == .antigravityRequired)
+ 
+         #expect(snap.fiveHour?.label == "Gemini (5h)")
+         let fiveHourUtil = snap.fiveHour?.utilizationPercent ?? 0
+diff --git a/Tests/AiTaskbarProvidersTests/WireTypesEdgeTests.swift b/Tests/AiTaskbarProvidersTests/WireTypesEdgeTests.swift
+index 5abd83a..22aba41 100644
+--- a/Tests/AiTaskbarProvidersTests/WireTypesEdgeTests.swift
++++ b/Tests/AiTaskbarProvidersTests/WireTypesEdgeTests.swift
+@@ -310,10 +310,14 @@ struct WireTypesEdgeTests {
+         #expect(snap.weekly == nil)
+         #expect(snap.thirdParty5Hour == nil)
+         #expect(snap.thirdPartyWeekly == nil)
+-        #expect(snap.disclaimer != nil)
++        expectTrue(snap.disclaimer == .antigravityRequired)
+     }
+ 
+-    @Test("Antigravity bucket with nil remainingFraction defaults to 0% utilization")
++    // Deliberate behavior change (BUG-ART-009): this test used to pin the
++    // `?? 1.0` default, i.e. a bucket with no fraction read "100% remaining".
++    // A proto3 encoder omits a zero double, so a missing fraction may mean
++    // EXHAUSTED; unknown now draws no bar instead of guessing either way.
++    @Test("Antigravity bucket with nil remainingFraction produces no window")
+     func antigravity_nil_remaining_fraction() throws {
+         let body = #"""
+         {
+@@ -333,12 +337,9 @@ struct WireTypesEdgeTests {
+         }
+         """#
+         let parsed = try JSONDecoder().decode(AntigravityUsageResponse.self, from: Data(body.utf8))
+-        let snap = parsed.toSnapshot(disclaimer: "Custom Disclaimer")
++        let snap = parsed.toSnapshot()
+         expectTrue(snap.isAntigravityActive)
+-        #expect(snap.disclaimer == "Custom Disclaimer")
+-        #expect(snap.fiveHour?.label == "Gemini (5h)")
+-        #expect(snap.fiveHour?.utilizationPercent == 0)
+-        #expect(snap.fiveHour?.detail == "100% remaining")
++        expectTrue(snap.fiveHour == nil)
+     }
+ 
+     @Test("Z.AI envelope with nil data produces fallback snapshot")
+diff --git a/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift b/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
+index f9d01d9..2f65151 100644
+--- a/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
++++ b/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
+@@ -161,7 +161,9 @@ struct XAIProviderTests {
+         // The old reference would have been 1.2 = remaining $40 x weekly 3%,
+         // a product of two unrelated numbers; there is no prepaid-used figure.
+         expectTrue(snap.prepaidUsedUSD == nil)
+-        expectTrue(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.")
++        // Deliberate schema decision (CQ-AUR-001): the disclaimer is a
++        // structured notice the App localizes, no longer a Portuguese String.
++        expectTrue(snap.disclaimer == .grokCLIRequired)
+     }
+ 
+     @Test("Grok prepaidUsedUSD is the reported on-demand spend, never balance x weekly %")
+@@ -268,7 +270,7 @@ struct XAIProviderTests {
+             _ = try await provider.fetchUsage(forceRefresh: true)
+             Issue.record("expected credentials error")
+         } catch let error as AppError {
+-            expectTrue(error.description.contains("Grok CLI"))
++            expectTrue(error == .guidance(.grokCLIRequired))
+         } catch {
+             Issue.record("unexpected error: \(error)")
+         }

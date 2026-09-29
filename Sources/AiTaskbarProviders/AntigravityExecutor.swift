@@ -54,9 +54,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
 
     public func fetchUsageJSON() async throws -> Data {
         guard let exe = resolvedExecutableURL else {
-            throw AppError.credentials(
-                "Para conseguir monitorar o Gemini, é necessário ter o Antigravity instalado e autenticado. O executável 'agy' não foi encontrado."
-            )
+            throw AppError.guidance(.antigravityNotFound)
         }
 
         let process = Process()
@@ -104,7 +102,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                 timer.cancel()
 
                 if timedOut.withLock({ $0 }) {
-                    continuation.resume(throwing: AppError.io("Tempo limite esgotado ao consultar o Antigravity (agy). Tente novamente."))
+                    continuation.resume(throwing: AppError.guidance(.antigravityTimedOut))
                     return
                 }
 
@@ -117,12 +115,12 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                 if process.terminationStatus != 0 || structuredError != nil {
                     let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
                     if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
-                        continuation.resume(throwing: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal para fazer login."))
+                        continuation.resume(throwing: AppError.guidance(.antigravityNotAuthenticated))
                     } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
-                        continuation.resume(throwing: AppError.http(status: 503, body: "Serviço do Google Antigravity temporariamente indisponível. Tente novamente."))
+                        continuation.resume(throwing: AppError.guidance(.antigravityUnavailable))
                     } else if let structured = structuredError {
                         if structured == "context canceled" {
-                            continuation.resume(throwing: AppError.io("Operação cancelada ou tempo limite esgotado pelo Antigravity."))
+                            continuation.resume(throwing: AppError.guidance(.antigravityCanceled))
                         } else {
                             continuation.resume(throwing: AppError.io("agy: \(structured)"))
                         }
@@ -132,13 +130,13 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                             : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
                         let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
                         let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
-                        continuation.resume(throwing: AppError.io("agy falhou (código \(process.terminationStatus)): \(clean)"))
+                        continuation.resume(throwing: AppError.io("agy failed (exit \(process.terminationStatus)): \(clean)"))
                     }
                     return
                 }
 
                 if outStr.contains("not logged in") || outStr.contains("error getting token source") {
-                    continuation.resume(throwing: AppError.http(status: 401, body: "Antigravity não autenticado. Execute 'agy' no Terminal para fazer login."))
+                    continuation.resume(throwing: AppError.guidance(.antigravityNotAuthenticated))
                     return
                 }
 
@@ -159,7 +157,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                 if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
                     if let err = env.error, !err.isEmpty { return err }
                     if let resp = env.response, !resp.isEmpty { return resp }
-                    return "Erro no Antigravity"
+                    return "agy reported an error"
                 }
             }
             let str = String(data: data, encoding: .utf8) ?? ""
@@ -171,7 +169,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                     if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
                         if let err = env.error, !err.isEmpty { return err }
                         if let resp = env.response, !resp.isEmpty { return resp }
-                        return "Erro no Antigravity"
+                        return "agy reported an error"
                     }
                 }
             }

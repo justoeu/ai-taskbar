@@ -248,13 +248,11 @@ public struct GrokSettingsResponse: Decodable, Encodable, Sendable, Equatable {
 }
 
 extension GrokBillingResponse {
-    public static let defaultDisclaimer = "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado."
-
-    public func toSnapshot(planLabel: String? = nil, disclaimer: String? = nil) -> XAISnapshot {
+    public func toSnapshot(planLabel: String? = nil) -> XAISnapshot {
         guard let cfg = config else {
             return XAISnapshot(
                 planLabel: planLabel ?? "SuperGrok",
-                disclaimer: disclaimer ?? Self.defaultDisclaimer
+                disclaimer: .grokCLIRequired
             )
         }
 
@@ -301,7 +299,7 @@ extension GrokBillingResponse {
             spendingLimitUSD: nil,
             prepaidUsedUSD: prepaidUsedUSD,
             billingCycleLabel: nil,
-            disclaimer: disclaimer ?? Self.defaultDisclaimer
+            disclaimer: .grokCLIRequired
         )
     }
 }
@@ -402,7 +400,7 @@ extension XAICachedPayload {
             spendingLimitUSD: limitUSD,
             prepaidUsedUSD: prepaidUsedUSD,
             billingCycleLabel: cycleLabel,
-            disclaimer: GrokBillingResponse.defaultDisclaimer
+            disclaimer: .grokCLIRequired
         )
     }
 }
