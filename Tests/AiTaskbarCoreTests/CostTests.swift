@@ -349,10 +349,11 @@ struct CostEstimateTests {
         fast.fastCacheReadTokens = 1_000_000
         fast.fastCacheCreateTokens = 1_000_000
         fast.fastCacheCreate1hTokens = 1_000_000
-        // Standard: 4 + 20 + 0.2 + 5 + 8 = 37.2
-        #expect(CostMath.cost(usage: standard, pricing: pricing) == 37.2)
+        // Standard: 4 + 20 + 0.2 + 5 + 8 = 37.2. Compared with a tolerance so
+        // a harmless reordering of the sum inside CostMath cannot fail it.
+        #expect(abs(CostMath.cost(usage: standard, pricing: pricing) - 37.2) < 1e-9)
         // Fast: $8/$40 published, and caching multipliers stack on top.
-        #expect(CostMath.cost(usage: fast, pricing: pricing) == 74.4)
+        #expect(abs(CostMath.cost(usage: fast, pricing: pricing) - 74.4) < 1e-9)
     }
 
     @Test("fast mode is $10/$50 on Opus 5 and Opus 4.8")
@@ -361,7 +362,7 @@ struct CostEstimateTests {
             let pricing = try #require(PricingTable.lookup(id, table: PricingTable.anthropic))
             let u = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000,
                                fastInputTokens: 1_000_000, fastOutputTokens: 1_000_000)
-            #expect(CostMath.cost(usage: u, pricing: pricing) == 60)
+            #expect(abs(CostMath.cost(usage: u, pricing: pricing) - 60) < 1e-9)
         }
     }
 

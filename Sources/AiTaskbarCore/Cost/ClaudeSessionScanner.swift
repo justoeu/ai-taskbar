@@ -236,9 +236,12 @@ public enum ClaudeSessionScanner {
             // Any unclassified remainder uses the five-minute rate. Older
             // transcript lines have only `cache_creation_input_tokens`.
             let cacheCreate5m = cacheCreateTotal - cacheCreate1h
-            let input = usage.input_tokens ?? 0
-            let output = usage.output_tokens ?? 0
-            let cacheRead = usage.cache_read_input_tokens ?? 0
+            // Clamped like the cache-creation counts above: a transcript is a
+            // file we don't control, and a negative count would subtract from
+            // the total — and, via the fast subsets, from the fast premium.
+            let input = max(0, usage.input_tokens ?? 0)
+            let output = max(0, usage.output_tokens ?? 0)
+            let cacheRead = max(0, usage.cache_read_input_tokens ?? 0)
             let isFast = usage.speed == "fast"
             let modelUsage = ModelUsage(
                 inputTokens: input,

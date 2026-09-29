@@ -1028,7 +1028,7 @@ section("PricingTable lookup") {
     fastOpus.fastInputTokens = 1_000_000
     fastOpus.fastOutputTokens = 1_000_000
     if let opus55 {
-        expect(CostMath.cost(usage: fastOpus, pricing: opus55) == 48, "Opus 5.5 fast 1M in + 1M out = $48")
+        expect(abs(CostMath.cost(usage: fastOpus, pricing: opus55) - 48) < 1e-9, "Opus 5.5 fast 1M in + 1M out = $48")
     }
     let kimiK15 = PricingTable.lookup("kimi-k1.5", table: PricingTable.kimi)
     expect(kimiK15?.inputPer1M == 1.65, "Kimi k1.5 input price ($1.65/MTok)")

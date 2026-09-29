@@ -275,4 +275,24 @@ struct ClaudeSessionScannerTests {
         #expect(u?.fastCacheCreateTokens == 10)
         #expect(u?.fastCacheCreate1hTokens == 20)
     }
+
+    @Test("negative token counts from a hostile transcript are clamped to zero")
+    func negative_counts_clamped() {
+        let startOfToday = Date(timeIntervalSince1970: 1_764_000_000)
+        let iso = ISO8601DateFormatter().string(from: startOfToday.addingTimeInterval(60))
+        let line = #"""
+        {"timestamp":"\#(iso)","message":{"role":"assistant","model":"claude-opus-5-5","usage":{"input_tokens":-500,"output_tokens":-7,"cache_read_input_tokens":-9,"speed":"fast"}}}
+        """#
+        var today: [String: ModelUsage] = [:]
+        var week: [String: ModelUsage] = [:]
+        var unparseable = 0
+        ClaudeSessionScanner.scan(data: Data((line + "\n").utf8), startOfToday: startOfToday,
+                                  sevenDaysAgo: startOfToday.addingTimeInterval(-7 * 86_400),
+                                  totalsToday: &today, totalsLast7: &week,
+                                  unparseableTimestamps: &unparseable)
+        #expect(today["claude-opus-5-5"]?.inputTokens == 0)
+        #expect(today["claude-opus-5-5"]?.outputTokens == 0)
+        #expect(today["claude-opus-5-5"]?.cacheReadTokens == 0)
+        #expect(today["claude-opus-5-5"]?.fastInputTokens == 0)
+    }
 }

@@ -233,7 +233,16 @@ struct PinnedStatusItemTests {
         let store = UsageStore(vendors: [v1, v2], primary: nil,
                                preferredOrder: [.anthropic, .openai])
         let manager = PinnedStatusItemManager()
-        defer { manager.removeAll() }
+        defer {
+            manager.removeAll()
+            // Naming an item makes AppKit remember its position in the test
+            // process's standard domain; don't leave that behind.
+            for vid in [VendorId.anthropic, .openai] {
+                let name = PinnedStatusItemManager.autosaveName(for: vid)
+                UserDefaults.standard.removeObject(forKey: "NSStatusItem Preferred Position \(name)")
+                UserDefaults.standard.removeObject(forKey: "NSStatusItem Visible \(name)")
+            }
+        }
         manager.configure(store: store)
 
         store.togglePinned(.anthropic, defaults: suite)
