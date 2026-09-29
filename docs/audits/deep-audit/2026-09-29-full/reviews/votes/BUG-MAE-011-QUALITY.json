@@ -1,0 +1,13 @@
+{
+ "id": "BUG-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "Round 2 rework: unmark now restores the value in pending[key][threshold].previous (NotificationService.swift:288) and no longer calls removeValue on the key. The guard-let on the pending entry replaces the old 'still the recorded mark' check, and the doc (:276-283) explains both the old reason and the new one. rearmParked (:317) reuses unmark instead of copying the restore rule. The Crossing typealias is kept. The test names say what they assert, for example failed_higher_crossing_keeps_delivered_lower_mark. Assertions compare Int, [String] and String? values, so none are the vacuous Bool forms.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:284",
+  "Sources/AiTaskbarApp/NotificationService.swift:317"
+ ],
+ "lens": "QUALITY",
+ "_task": "a99b65646812dd328",
+ "batch": "B18-r2"
+}

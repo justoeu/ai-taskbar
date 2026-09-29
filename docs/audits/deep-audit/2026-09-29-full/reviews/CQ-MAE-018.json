@@ -1,0 +1,63 @@
+{
+  "id": "CQ-MAE-018",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 19:32:47 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "PercentText.whole is Int(saturating: percent.rounded()). Every call site the diff touches is a label only: notification title, tooltip, menu bar, pinned badge, analytics, sparkline and row views. Threshold decisions (SeverityColor.tint and showsFlame, tracker.crossings `percent >= $0`, `maxPercent > currentPercent + 5`) still read the raw Double. So rounding never changes whether a notification fires or which color is used. Behaviour changes only on screen: the notification title, analytics totalUsagePercent and peakDay used to truncate and now round. AnalyticsView used `%.0f` (ties to even) and now uses .rounded() (ties away from zero), for example 0.5% now shows as 1%. That is display only. Reversal: with the title back on Int(saturating:), NotificationTitleLocalizationTests.swift:42 went RED ('92%' vs '93%').",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/PercentText.swift",
+        "Sources/AiTaskbarApp/NotificationService.swift",
+        "Sources/AiTaskbarApp/Views/AnalyticsView.swift",
+        "Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift:42"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "New file PercentText.swift: one rounding rule, with 4 tests. It replaces about 15 copies of Int(saturating: x.rounded()) plus 3 sites that truncated (notification title, AnalyticsFormatters.peakDayText, VendorAnalyticsCardView). A grep finds no copies left in Sources/AiTaskbarApp. Cosmetic only: most call sites still write \"\\(PercentText.whole(x))%\" where PercentText.format(x) would fit (PinnedStatusItemManager.swift:258,261,271; MenuBarLabelView.swift:414; ProviderRowView.swift:436; SparklineView.swift:449). Not worth another round.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/PercentText.swift:1",
+        "Sources/AiTaskbarApp/NotificationService.swift:174"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "PercentText.swift is new, internal, App-only, and has tests. All 11 changed call sites are Text or String rendering: MenuBarTooltipBuilder, PinnedStatusBadgeView, MenuBarLabelView, ProviderRowView, SparklineView, VendorSectionView, AnalyticsView, AnalyticsFormatters, VendorAnalyticsCardView, and the notification title. The decision paths keep raw Doubles: SeverityColor.showsFlame/tint and the tracker's percent >= threshold. VendorSnapshot and the golden tests are untouched. notif_title_fmt uses %d in en, pt-BR and es, and PercentText.whole still returns Int, so no Localizable change is needed. Only four sites change their displayed value: title, peakDayText and totalUsagePercent went from truncating to rounding, and AnalyticsView went from %.0f to rounding half away from zero. That is the intended alignment. A grep finds no remaining ad-hoc percent formatting in AiTaskbarApp.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/PercentText.swift:1",
+        "Sources/AiTaskbarApp/NotificationService.swift:174",
+        "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:78"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

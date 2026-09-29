@@ -1,0 +1,63 @@
+{
+  "id": "BUG-MAE-013",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 19:32:49 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "A crossing that fails while permission is known denied is parked: it keeps its mark, and its pending entry is set to parked=true (NotificationService.swift:190-201). Parked crossings are re-armed in two ways: a successful delivery (line 186, clearKnownDenial -> rearmParked), or a re-check in observe (recheckDeniedAuthorization, lines 132-142) that finds the status is no longer .denied. The re-check runs only when knownDenied is true AND this vendor has a parked crossing AND no query is already in flight (authorizationRecheckInFlight). So there is at most one settings query per observe while parked, with no add() and no log. rearmParked only unmarks entries with parked=true, and those were never delivered. unmark follows the pending chain, so no undelivered mark is restored. Parked state lives inside pending[key][threshold], which holds at most one entry per threshold, and the key is dropped on reset/prune (lines 341, 363). park() uses optional chaining, so it cannot create a new entry. Growth is bounded. Reversal against the round-1 NotificationService (rebuilt by applying the B18-last-followups patch to HEAD): denied_crossing_is_resent_after_grant went RED (count 1 == 2) and delivery_rearms_parked_crossing went RED (last is xai.90). The file was then restored byte-identical, and its diff segment matches B18-r2.diff.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:119",
+        "Sources/AiTaskbarApp/NotificationService.swift:132",
+        "Sources/AiTaskbarApp/NotificationService.swift:184",
+        "Sources/AiTaskbarApp/NotificationService.swift:308",
+        "Sources/AiTaskbarApp/NotificationService.swift:319"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "recheckDeniedAuthorization (NotificationService.swift:132-142) is 11 lines. It has 1 compound guard (3 terms, all flags/queries that are easy to read) and 1 guard inside the closure, so nesting is 2. The in-flight flag stops more than one OS query at a time, and the doc says the cost: one settings query per vendor that has a parked crossing, per tick, with no add() and no log. clearKnownDenial (:144) removes a second copy of 'clear the flag and rearm': both the success path (:187) and the re-check call it. There is no catch or try? anywhere. Nit, not required: the name clearKnownDenial hides that it also re-arms the parked crossings. That is documented at the property (:66) but not at the function.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:132",
+        "Sources/AiTaskbarApp/NotificationService.swift:144"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The change stays inside NotificationService.swift (recheckDeniedAuthorization at :133 and clearKnownDenial, plus park/rearmParked/hasParked on the internal tracker) and its tests. The re-check reuses the existing authorizationStatus method on the NotificationCentering protocol (:12), so the protocol does not grow. The added cost is bounded: at most one settings query per vendor with a parked crossing per tick, guarded by authorizationRecheckInFlight, with no add() and no log. The README sentence at README.md:504 is accurate. A transient failure is un-marked, so the next refresh re-sends it. A crossing that failed while denied is parked, and a later observe() that sees the permission granted re-arms it, so a subsequent refresh sends it. It also sits correctly next to the [notifications] example. config.example.toml only lists the key, so nothing is out of sync there.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:133",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md:504"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

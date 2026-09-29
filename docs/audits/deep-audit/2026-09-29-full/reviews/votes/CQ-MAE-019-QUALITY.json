@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-019",
+ "verdict": "APROVA",
+ "reasoning": "VendorViewModel.swift:291: .now becomes self.clock(). The doc for the injected clock (:352-355) now covers both timestamps and says why it is a Date and not ContinuousClock. One line, no new complexity.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:291",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:352"
+ ],
+ "lens": "QUALITY",
+ "_task": "a9afd327ef8db63e4",
+ "batch": "B18-last-followups"
+}

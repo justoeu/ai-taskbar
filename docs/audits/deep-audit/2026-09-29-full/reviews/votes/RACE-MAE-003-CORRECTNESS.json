@@ -1,0 +1,13 @@
+{
+ "id": "RACE-MAE-003",
+ "verdict": "APROVA",
+ "reasoning": "unmark (NotificationService.swift:284-296) now only acts on a crossing that still has a pending entry. Delivered crossings have none (delivered() removes it), so a delivered mark is never touched. I traced three cases. Case 1, 70 and 90 both in flight, 70 fails first: highest is 90, not 70, so the chain rewrites pending[90].previous from 70 to nil. When 90 then fails, highest becomes nil, and the next 75 reading re-sends 70. Case 2, reverse order: 90 fails and restores highest to 70, then 70 fails and sets it to nil. Case 3, 90 fails and then 70 is delivered: highest stays 70, with no duplicate. That matches the higher_failure_keeps_lower_in_flight_mark test. Reversal to round 1 turned double_failure_does_not_restore_undelivered_mark RED (last is 5h.90); restored after.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:284",
+  "Sources/AiTaskbarApp/NotificationService.swift:347"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a279369b2f4b5120b",
+ "batch": "B18-r2"
+}

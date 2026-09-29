@@ -1,0 +1,59 @@
+{
+  "id": "BUG-MAE-011",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 19:32:50 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "This is a re-vote on the reworked tracker. Each crossing records previous = the mark it replaced (line 347). When it fails, unmark sets highestNotified back to that previous value instead of dropping the key (line 288). Trace: 70 is delivered and its pending entry removed; 90 fails, so highest is 70 again. The next 75 reading does not re-send 70, and the next 95 reading re-sends 90. The 'restores the delivered lower mark', 'still retried' and 'unmark restores' tests pass. Reversal to HEAD turned the rollback test RED (count 3 == 2) and the tracker unit test RED; restored byte-identical.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:288",
+        "Sources/AiTaskbarApp/NotificationService.swift:345"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Round 2 rework: unmark now restores the value in pending[key][threshold].previous (NotificationService.swift:288) and no longer calls removeValue on the key. The guard-let on the pending entry replaces the old 'still the recorded mark' check, and the doc (:276-283) explains both the old reason and the new one. rearmParked (:317) reuses unmark instead of copying the restore rule. The Crossing typealias is kept. The test names say what they assert, for example failed_higher_crossing_keeps_delivered_lower_mark. Assertions compare Int, [String] and String? values, so none are the vacuous Bool forms.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:284",
+        "Sources/AiTaskbarApp/NotificationService.swift:317"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The r2 rework (the mark it replaced now lives in tracker.pending instead of being passed through send/deliveryFinished) removes the previousMark parameter the r1 diff had added. The surface shrinks back to the pre-r1 signatures. Only NotificationService.swift and the two notification test files are touched for this id.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:183"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

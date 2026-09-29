@@ -1,0 +1,12 @@
+{
+ "id": "BUG-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "The r2 rework (the mark it replaced now lives in tracker.pending instead of being passed through send/deliveryFinished) removes the previousMark parameter the r1 diff had added. The surface shrinks back to the pre-r1 signatures. Only NotificationService.swift and the two notification test files are touched for this id.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:183"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae1f7cbb53ed74d3d",
+ "batch": "B18-r2"
+}

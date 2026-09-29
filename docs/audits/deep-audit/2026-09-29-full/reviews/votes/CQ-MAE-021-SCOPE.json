@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-021",
+ "verdict": "APROVA",
+ "reasoning": "This change is docs only (docs/SDD-auto-update-checker.md, in Portuguese). The SDD now states the calendar-day rule, points to UPDATE-SCHED-001, warns against restoring the 24 h floor, and adds minimumRetryDelay and the pure functions to §5.1. It matches the code: minimumRetryDelay = 60 at UpdateChecker.swift:61, and the instance-level floor at :151.",
+ "required_changes": [],
+ "cited_paths": [
+  "docs/SDD-auto-update-checker.md:559",
+  "docs/SDD-auto-update-checker.md:610"
+ ],
+ "lens": "SCOPE",
+ "_task": "a49def4288b6e581c",
+ "batch": "B18-last-followups"
+}

@@ -1,0 +1,61 @@
+{
+  "id": "DUP-MAE-005",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 19:32:48 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The 60 s floor moved from the loop (RefreshScheduler.swift:200, which now calls sleeper(delay)) into the instance UpdateChecker.delayUntilNextCheck(). The loop is the only caller of the instance method (checked with grep), and the static method still returns 0 for 'due', which its own tests rely on. So the sleep durations the scheduler sees are unchanged. Reversal: with the instance floor removed, UpdateCheckerCadenceTests.swift:164 went RED (0.0 == 60.0).",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/UpdateChecker.swift:150",
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:200",
+        "Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift:164"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The 60s floor now lives only in the instance delayUntilNextCheck() (UpdateChecker.swift:287-291). The loop's copy is gone (RefreshScheduler.swift:337), and the comments on both sides agree. The docs record where the floor lives.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/UpdateChecker.swift:287",
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:337"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The 60 s floor now lives only in the instance delayUntilNextCheck() (UpdateChecker.swift:151). RefreshScheduler.swift:199 is its only production caller, and that loop no longer applies its own max(). The static pure function is unchanged, so its tests and the SDD §5.1 contract still hold. CLAUDE.md, AGENTS.md and the SDD describe where the floor lives.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/UpdateChecker.swift:151",
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:199"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

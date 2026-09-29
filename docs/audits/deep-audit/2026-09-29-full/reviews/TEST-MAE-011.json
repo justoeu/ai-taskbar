@@ -1,0 +1,58 @@
+{
+  "id": "TEST-MAE-011",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 19:32:48 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The new test reads updateCheckLoop (now private(set)) to show the loop never starts when updates are disabled. Mutation: I dropped `updates.config.enabled` from the guard at RefreshScheduler.swift:188 and RefreshSchedulerTests.swift:381 went RED, so the test does fail when the guard is missing.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:188",
+        "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:381"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "RefreshScheduler.swift:320: private(set) exposes the task for the test and the comment says why. It stays internal, so it does not grow the public API. The test uses expectTrue on an optional comparison, as CLAUDE.md §3 requires.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:320"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The only production change is making updateCheckLoop private(set) at RefreshScheduler.swift:21, so a test can read it. It is internal read access, not public. Everything else is test code.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:21"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

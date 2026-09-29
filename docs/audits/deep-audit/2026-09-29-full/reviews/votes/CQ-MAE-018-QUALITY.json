@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-018",
+ "verdict": "APROVA",
+ "reasoning": "New file PercentText.swift: one rounding rule, with 4 tests. It replaces about 15 copies of Int(saturating: x.rounded()) plus 3 sites that truncated (notification title, AnalyticsFormatters.peakDayText, VendorAnalyticsCardView). A grep finds no copies left in Sources/AiTaskbarApp. Cosmetic only: most call sites still write \"\\(PercentText.whole(x))%\" where PercentText.format(x) would fit (PinnedStatusItemManager.swift:258,261,271; MenuBarLabelView.swift:414; ProviderRowView.swift:436; SparklineView.swift:449). Not worth another round.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/PercentText.swift:1",
+  "Sources/AiTaskbarApp/NotificationService.swift:174"
+ ],
+ "lens": "QUALITY",
+ "_task": "a9afd327ef8db63e4",
+ "batch": "B18-last-followups"
+}

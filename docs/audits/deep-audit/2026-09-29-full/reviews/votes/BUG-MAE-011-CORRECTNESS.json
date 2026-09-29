@@ -1,0 +1,13 @@
+{
+ "id": "BUG-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "This is a re-vote on the reworked tracker. Each crossing records previous = the mark it replaced (line 347). When it fails, unmark sets highestNotified back to that previous value instead of dropping the key (line 288). Trace: 70 is delivered and its pending entry removed; 90 fails, so highest is 70 again. The next 75 reading does not re-send 70, and the next 95 reading re-sends 90. The 'restores the delivered lower mark', 'still retried' and 'unmark restores' tests pass. Reversal to HEAD turned the rollback test RED (count 3 == 2) and the tracker unit test RED; restored byte-identical.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:288",
+  "Sources/AiTaskbarApp/NotificationService.swift:345"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a279369b2f4b5120b",
+ "batch": "B18-r2"
+}

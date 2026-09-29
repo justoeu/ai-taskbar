@@ -1,0 +1,13 @@
+{
+ "id": "BUG-MAE-013",
+ "verdict": "APROVA",
+ "reasoning": "recheckDeniedAuthorization (NotificationService.swift:132-142) is 11 lines. It has 1 compound guard (3 terms, all flags/queries that are easy to read) and 1 guard inside the closure, so nesting is 2. The in-flight flag stops more than one OS query at a time, and the doc says the cost: one settings query per vendor that has a parked crossing, per tick, with no add() and no log. clearKnownDenial (:144) removes a second copy of 'clear the flag and rearm': both the success path (:187) and the re-check call it. There is no catch or try? anywhere. Nit, not required: the name clearKnownDenial hides that it also re-arms the parked crossings. That is documented at the property (:66) but not at the function.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:132",
+  "Sources/AiTaskbarApp/NotificationService.swift:144"
+ ],
+ "lens": "QUALITY",
+ "_task": "a99b65646812dd328",
+ "batch": "B18-r2"
+}

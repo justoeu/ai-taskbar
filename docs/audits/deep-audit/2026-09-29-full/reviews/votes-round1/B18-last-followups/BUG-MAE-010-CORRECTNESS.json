@@ -1,0 +1,14 @@
+{
+ "id": "BUG-MAE-010",
+ "verdict": "APROVA",
+ "reasoning": "AntigravityReportedError.reported(status:error:response:) is now the single rule (status == ERROR, or a non-empty error). Both the live run (AntigravityExecutor.reported) and the cached decode (GeminiProvider) call it, so the second path that only checked status == \"ERROR\" is gone. Reversal: with GeminiProvider back on `agy.status == \"ERROR\"`, GeminiXAILocaleNeutralTests.swift:128 went RED (message \"\" instead of 'io: agy: quota exceeded').",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/GeminiProvider.swift",
+  "Sources/AiTaskbarProviders/AntigravityExecutor.swift",
+  "Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift:128"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "af5598aa69ac05df2",
+ "batch": "B18-last-followups"
+}

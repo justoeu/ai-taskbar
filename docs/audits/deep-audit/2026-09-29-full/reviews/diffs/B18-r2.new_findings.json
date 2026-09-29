@@ -1,0 +1,30 @@
+[
+ [
+  "QUALITY",
+  "NotificationThresholdTracker (Sources/AiTaskbarApp/NotificationService.swift:294, :301): the 'drop the pending bucket when empty' line is written out twice. The reset branch (:339-341) and the prune branch (:361-363) each remove the same key from highestNotified, missedSnapshots and pending. Extracting forget(_ key:) and dropEmptyPending(_ key:) would stop the next new per-key map from being left out of one of the paths."
+ ],
+ [
+  "QUALITY",
+  "NotificationService.clearKnownDenial (Sources/AiTaskbarApp/NotificationService.swift:144) also calls tracker.rearmParked(). A name such as clearKnownDenialAndRearm would say this at the call sites."
+ ],
+ [
+  "QUALITY",
+  "Percent labels still built by hand outside PercentText: Sources/AiTaskbarApp/Views/AnalyticsView.swift:216 (\"\\(avgUsage)%\"), and Sources/AiTaskbarApp/Views/SettingsView.swift:275 and :288, which use Int(saturating:) and so truncate instead of rounding. The DUP-MAE-006 report says every such site was converted, which is not accurate."
+ ],
+ [
+  "SCOPE",
+  "SCOPE INFO (sibling, pre-existing): /Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsView.swift:191/216 still builds Text(\"\\(avgUsage)%\") from a truncated Int(saturating:) average. It does not go through PercentText.whole/format, so 92.9 shows as 92% here and 93% everywhere else (the CQ-MAE-018 rule). It was not listed in DUP-MAE-006."
+ ],
+ [
+  "SCOPE",
+  "SCOPE INFO: SettingsView.swift:275/288 hand-build \"\\(Int(saturating: threshold))%\" for slider thresholds. These are integral setting values, not rounded usage readings, so they are acceptable as they are. I note them only for completeness of the PercentText dedupe."
+ ],
+ [
+  "CORRECTNESS",
+  "Pre-existing, not introduced here: 'notif_title_fmt' uses %d in en:78, pt-BR:77 and es:77, but NotificationService.swift:211 passes a 64-bit Int (PercentText.whole). On arm64 and x86_64 %d reads the low 32 bits, so values from 0 to 2^31 display correctly, but a saturated Int.max would show as -1. %ld would be correct, matching the new analytics_quota_percent_fmt."
+ ],
+ [
+  "CORRECTNESS",
+  "Low-probability race: pending is keyed only by threshold, with no generation token. If a window resets (drops below the minimum) and crosses the same threshold again while the first add() is still in flight, the old completion acts on the new pending entry. A late success drops the new crossing's rollback; a late failure un-marks a new crossing that may still be delivered, which can cause one duplicate. For this to happen the reset and re-cross must both land within the add() latency (milliseconds), against a 300 s tick."
+ ]
+]

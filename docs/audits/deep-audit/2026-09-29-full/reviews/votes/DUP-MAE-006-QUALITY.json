@@ -1,0 +1,14 @@
+{
+ "id": "DUP-MAE-006",
+ "verdict": "APROVA",
+ "reasoning": "The shape is right: AnalyticsView.swift:209 and :241 now call PercentText.format instead of building the string by hand with Int(saturating:)+\"%\" or String(format:\"%.0f%%\"), and the notification title uses PercentText.whole. The helper is still one tiny enum with a doc comment. The report says 'every hand-built ... is now PercentText.format', but grep finds 3 sites left outside the fix: AnalyticsView.swift:216 Text(\"\\(avgUsage)%\"), and SettingsView.swift:275 and :288, which truncate through Int(saturating:) instead of rounding. The two SettingsView values are configured thresholds, not usage readings, so they are arguably a different concept. I am recording them as a new finding, not a required change.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Views/AnalyticsView.swift:209",
+  "Sources/AiTaskbarApp/Views/AnalyticsView.swift:241",
+  "Sources/AiTaskbarApp/PercentText.swift:15"
+ ],
+ "lens": "QUALITY",
+ "_task": "a99b65646812dd328",
+ "batch": "B18-r2"
+}

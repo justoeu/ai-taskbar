@@ -1,0 +1,12 @@
+{
+ "id": "TEST-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "RefreshScheduler.swift:320: private(set) exposes the task for the test and the comment says why. It stays internal, so it does not grow the public API. The test uses expectTrue on an optional comparison, as CLAUDE.md §3 requires.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:320"
+ ],
+ "lens": "QUALITY",
+ "_task": "a9afd327ef8db63e4",
+ "batch": "B18-last-followups"
+}

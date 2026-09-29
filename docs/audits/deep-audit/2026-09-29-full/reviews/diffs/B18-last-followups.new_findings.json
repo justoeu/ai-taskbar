@@ -1,0 +1,34 @@
+[
+ [
+  "QUALITY",
+  "CQ-MAE-020 (won't-fix): I agree. These are config-only advanced settings, they are documented, and adding UI controls would be a visual change that cannot be checked headlessly."
+ ],
+ [
+  "QUALITY",
+  "PercentText (cosmetic): most call sites format by hand as \"\\(PercentText.whole(x))%\" (PinnedStatusItemManager.swift:258,261,271, MenuBarLabelView.swift:414, ProviderRowView.swift:436, SparklineView.swift:449, VendorSectionView.swift:597) instead of PercentText.format(x). The '%' sign is still repeated at each site. It could be made uniform in a later round."
+ ],
+ [
+  "SCOPE",
+  "LOW (quality, not introduced by this diff): AntigravityExecutor.swift:184-188. The new reported(...) and its doc were inserted under the existing '/// `error` when non-empty, else `response`...' line, so that line now describes reported() instead of message(). Move it back above message(error:response:)."
+ ],
+ [
+  "SCOPE",
+  "INFO (pre-existing, i18n): the literal ' quota' suffix at AnalyticsFormatters.swift:46/48 and VendorAnalyticsCardView.swift:105 is hard-coded English inside strings that are otherwise localized. It is outside CQ-MAE-018's scope, which only covered rounding."
+ ],
+ [
+  "SCOPE",
+  "No disagreement with the CQ-MAE-020 won't-fix: the three keys are documented config-only settings and the defaults cover the common case."
+ ],
+ [
+  "CORRECTNESS",
+  "Run: the filtered suites passed, 101 tests in 12 suites, green before the reversals and again after restore. Restore check: the working-tree diff is byte-identical to the copy saved before the reversals. Reversals were line-level edits, not whole-file restores, because the tests depend on APIs added in this batch."
+ ],
+ [
+  "CORRECTNESS",
+  "Low, PERF-MAE-004 follow-up: after the user grants permission, a crossing that failed while permission was denied stays marked until the window resets or a higher threshold is reached. The flag clears only on a successful delivery. Checking the permission again on the next crossing, or clearing the flag when the app becomes active, would re-send that crossing. Not required."
+ ],
+ [
+  "CORRECTNESS",
+  "CQ-MAE-020 won't-fix: no disagreement. The three knobs are documented, have safe defaults, and adding Settings controls would be a UI change this batch cannot check headlessly."
+ ]
+]

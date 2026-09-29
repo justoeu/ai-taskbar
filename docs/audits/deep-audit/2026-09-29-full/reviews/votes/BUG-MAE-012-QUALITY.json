@@ -1,0 +1,12 @@
+{
+ "id": "BUG-MAE-012",
+ "verdict": "APROVA",
+ "reasoning": "UpdateChecker.swift:194-201: recordCheckDate() moved above the owner_repo guard, a one-line change, and the comment says why. CLAUDE.md, AGENTS.md, README and the SDD were updated in the same turn, following the always-update-docs rule.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/UpdateChecker.swift:194"
+ ],
+ "lens": "QUALITY",
+ "_task": "a9afd327ef8db63e4",
+ "batch": "B18-last-followups"
+}

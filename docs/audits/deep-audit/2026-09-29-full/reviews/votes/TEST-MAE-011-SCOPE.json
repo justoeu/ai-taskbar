@@ -1,0 +1,12 @@
+{
+ "id": "TEST-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "The only production change is making updateCheckLoop private(set) at RefreshScheduler.swift:21, so a test can read it. It is internal read access, not public. Everything else is test code.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:21"
+ ],
+ "lens": "SCOPE",
+ "_task": "a49def4288b6e581c",
+ "batch": "B18-last-followups"
+}

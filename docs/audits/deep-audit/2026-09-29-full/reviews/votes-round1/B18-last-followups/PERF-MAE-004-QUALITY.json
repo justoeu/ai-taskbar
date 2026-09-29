@@ -1,0 +1,13 @@
+{
+ "id": "PERF-MAE-004",
+ "verdict": "APROVA",
+ "reasoning": "NotificationService.swift:149-166: deliveryFinished has 2 guards and 1 if, about 17 lines, nesting 2. The error still gets logged at .error, so it is not swallowed. The denial flag is cached and cleared on the next success (:103, :152), with a comment. The new protocol method authorizationStatus (:77, :85-90) passes the status value, which is Sendable, back to MainActor and has a stub in the tests. Error is converted to a String before crossing actors, which avoids a non-Sendable capture.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:77",
+  "Sources/AiTaskbarApp/NotificationService.swift:149"
+ ],
+ "lens": "QUALITY",
+ "_task": "a9afd327ef8db63e4",
+ "batch": "B18-last-followups"
+}

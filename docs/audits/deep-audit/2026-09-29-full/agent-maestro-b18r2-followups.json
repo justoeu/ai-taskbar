@@ -1,0 +1,60 @@
+{
+ "findings": [
+  {
+   "lens": "quality",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarApp/Views/AnalyticsView.swift",
+   "line": 216,
+   "title": "Analytics average usage label truncates (Int(saturating:)) instead of using PercentText rounding",
+   "evidence": "92.9 shows 92% here and 93% elsewhere (raised by Higia and Jano, remediation B18 r2)",
+   "fix": "Compute avgUsage via PercentText.whole / format",
+   "impact": "Inconsistent percent between Analytics average and other labels",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B18 r2"
+  },
+  {
+   "lens": "race",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarApp/NotificationService.swift",
+   "line": 347,
+   "title": "Pending crossings keyed only by threshold: a reset and re-cross while the first add() is in flight lets the stale completion act on the new crossing",
+   "evidence": "No generation token on pending entries (raised by Nemesis, remediation B18 r2)",
+   "fix": "Tag each pending crossing with a generation/token and ignore completions whose token no longer matches",
+   "impact": "Rare duplicate or dropped rollback within add() latency",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B18 r2"
+  },
+  {
+   "lens": "classic_bugs",
+   "severity": "INFO",
+   "path": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+   "line": 78,
+   "title": "notif_title_fmt uses %d for a 64-bit Int argument",
+   "evidence": "Value clamped to 0..1000 so harmless today; %ld is correct (raised by Nemesis, remediation B18 r2)",
+   "fix": "Use %ld in en/pt-BR/es",
+   "impact": "None within the clamp",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B18 r2"
+  },
+  {
+   "lens": "duplication",
+   "severity": "INFO",
+   "path": "Sources/AiTaskbarApp/NotificationService.swift",
+   "line": 294,
+   "title": "Tracker repeats per-key cleanup (drop empty pending; remove from three maps on reset and prune); clearKnownDenial also re-arms without saying so",
+   "evidence": "Raised by Higia, remediation B18 r2",
+   "fix": "Extract forget(key)/dropEmptyPending(key); rename clearKnownDenial to clearKnownDenialAndRearm",
+   "impact": "A future per-key map could be missed on one path",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B18 r2"
+  }
+ ]
+}

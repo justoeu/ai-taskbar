@@ -1,0 +1,61 @@
+{
+  "id": "PERF-MAE-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 19:32:50 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "This is a re-vote on the reworked tracker. When a failure finds status .denied, it sets authorizationKnownDenied and parks the crossing instead of un-marking it (NotificationService.swift:195-199). Later failures while the denial is cached park the crossing without asking the OS (line 190). A denied app therefore makes no more add() calls and writes no more error lines per tick. What remains is at most one settings query per observe of a vendor that has a parked crossing, with no log. A transient failure while authorized still re-arms (line 201). The 4 tests pass. Reversal to HEAD turned all 4 RED (count 2 == 1, statusQueries 0 == 1, 0 == 2); restored after. Everything runs on the MainActor: the class is @MainActor, the completion is @MainActor @Sendable, and SystemNotificationCenter hops through Task { @MainActor }.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:31",
+        "Sources/AiTaskbarApp/NotificationService.swift:190",
+        "Sources/AiTaskbarApp/NotificationService.swift:195"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "deliveryFinished (NotificationService.swift:183-205) is about 22 lines. It has 2 guards, and the closure holds 1 if, so nesting is 2. The error is still logged at .error before any branch, so nothing is swallowed. The Error is turned into a String before the Task hop, which keeps the closure Sendable. With a cached denial, a failure now parks the crossing (tracker.park) instead of leaving it marked for good, and the denial is cleared both on success and on re-check. The doc comment on the property (:62-66) names both finding ids. hasParked (:310) scans every key, but it only runs while authorizationKnownDenied is true, and the key count is tiny (vendors x windows), so it is not a hot-path concern.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:183",
+        "Sources/AiTaskbarApp/NotificationService.swift:62",
+        "Sources/AiTaskbarApp/NotificationService.swift:310"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Once a denial is known, a failure still parks the crossing with no retry (deliveryFinished at :190). The only new OS call is the gated re-check covered under BUG-MAE-013, which does not add() or log, so the PERF goal holds. No new dependency, host, entitlement or file is added.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:190"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

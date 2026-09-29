@@ -1,0 +1,15 @@
+{
+ "id": "CQ-MAE-018",
+ "verdict": "APROVA",
+ "reasoning": "PercentText.whole is Int(saturating: percent.rounded()). Every call site the diff touches is a label only: notification title, tooltip, menu bar, pinned badge, analytics, sparkline and row views. Threshold decisions (SeverityColor.tint and showsFlame, tracker.crossings `percent >= $0`, `maxPercent > currentPercent + 5`) still read the raw Double. So rounding never changes whether a notification fires or which color is used. Behaviour changes only on screen: the notification title, analytics totalUsagePercent and peakDay used to truncate and now round. AnalyticsView used `%.0f` (ties to even) and now uses .rounded() (ties away from zero), for example 0.5% now shows as 1%. That is display only. Reversal: with the title back on Int(saturating:), NotificationTitleLocalizationTests.swift:42 went RED ('92%' vs '93%').",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/PercentText.swift",
+  "Sources/AiTaskbarApp/NotificationService.swift",
+  "Sources/AiTaskbarApp/Views/AnalyticsView.swift",
+  "Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift:42"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "af5598aa69ac05df2",
+ "batch": "B18-last-followups"
+}

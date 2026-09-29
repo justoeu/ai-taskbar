@@ -1,0 +1,61 @@
+{
+  "id": "DUP-MAE-006",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 19:32:50 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Every site listed in the finding (PinnedStatusItemManager, MenuBarLabelView, ProviderRowView, SparklineView, VendorSectionView), plus AnalyticsView:209/241, now calls PercentText.format. The output is unchanged: the old code was Int(saturating: x.rounded()) + '%', and format computes exactly that. One exception is AnalyticsView:241, which used String(format:'%.0f%%') (round half to even, 'nan' for a non-finite value). It now rounds half away from zero and saturates, matching the other sites. PercentText tests pass. What remains was not listed: SettingsView:275/288 (integer config thresholds) and AnalyticsView:216 (avgUsage, already an Int).",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/PercentText.swift:15",
+        "Sources/AiTaskbarApp/Views/AnalyticsView.swift:241"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The shape is right: AnalyticsView.swift:209 and :241 now call PercentText.format instead of building the string by hand with Int(saturating:)+\"%\" or String(format:\"%.0f%%\"), and the notification title uses PercentText.whole. The helper is still one tiny enum with a doc comment. The report says 'every hand-built ... is now PercentText.format', but grep finds 3 sites left outside the fix: AnalyticsView.swift:216 Text(\"\\(avgUsage)%\"), and SettingsView.swift:275 and :288, which truncate through Int(saturating:) instead of rounding. The two SettingsView values are configured thresholds, not usage readings, so they are arguably a different concept. I am recording them as a new finding, not a required change.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Views/AnalyticsView.swift:209",
+        "Sources/AiTaskbarApp/Views/AnalyticsView.swift:241",
+        "Sources/AiTaskbarApp/PercentText.swift:15"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Every site listed in the finding now calls PercentText.format: PinnedStatusItemManager.swift, MenuBarLabelView.swift, ProviderRowView.swift, SparklineView.swift, VendorSectionView.swift and AnalyticsView.swift. The digits are the same because format is \"\\(whole(x))%\". One visible difference, as asked: Text(\"\\(Int)%\") went through LocalizedStringKey, which formats Int interpolation with the locale's grouping, so 1000% showed as '1,000%' (or '1.000%'). Text(String) is verbatim and now shows '1000%'. This only appears at 1000% or more. It now matches the NSStatusItem, tooltip and notification strings, which never grouped, so I accept it and do not require a change. No contract changes.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PercentText.swift:15",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PinnedStatusItemManager.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

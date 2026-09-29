@@ -1,0 +1,13 @@
+{
+ "id": "TEST-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "The new test reads updateCheckLoop (now private(set)) to show the loop never starts when updates are disabled. Mutation: I dropped `updates.config.enabled` from the guard at RefreshScheduler.swift:188 and RefreshSchedulerTests.swift:381 went RED, so the test does fail when the guard is missing.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:188",
+  "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:381"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "af5598aa69ac05df2",
+ "batch": "B18-last-followups"
+}

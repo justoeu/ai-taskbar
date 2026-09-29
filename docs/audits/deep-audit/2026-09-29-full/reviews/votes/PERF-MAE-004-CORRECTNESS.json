@@ -1,0 +1,14 @@
+{
+ "id": "PERF-MAE-004",
+ "verdict": "APROVA",
+ "reasoning": "This is a re-vote on the reworked tracker. When a failure finds status .denied, it sets authorizationKnownDenied and parks the crossing instead of un-marking it (NotificationService.swift:195-199). Later failures while the denial is cached park the crossing without asking the OS (line 190). A denied app therefore makes no more add() calls and writes no more error lines per tick. What remains is at most one settings query per observe of a vendor that has a parked crossing, with no log. A transient failure while authorized still re-arms (line 201). The 4 tests pass. Reversal to HEAD turned all 4 RED (count 2 == 1, statusQueries 0 == 1, 0 == 2); restored after. Everything runs on the MainActor: the class is @MainActor, the completion is @MainActor @Sendable, and SystemNotificationCenter hops through Task { @MainActor }.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:31",
+  "Sources/AiTaskbarApp/NotificationService.swift:190",
+  "Sources/AiTaskbarApp/NotificationService.swift:195"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a279369b2f4b5120b",
+ "batch": "B18-r2"
+}

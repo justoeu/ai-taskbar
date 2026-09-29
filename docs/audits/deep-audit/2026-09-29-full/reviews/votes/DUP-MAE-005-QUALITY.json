@@ -1,0 +1,13 @@
+{
+ "id": "DUP-MAE-005",
+ "verdict": "APROVA",
+ "reasoning": "The 60s floor now lives only in the instance delayUntilNextCheck() (UpdateChecker.swift:287-291). The loop's copy is gone (RefreshScheduler.swift:337), and the comments on both sides agree. The docs record where the floor lives.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/UpdateChecker.swift:287",
+  "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:337"
+ ],
+ "lens": "QUALITY",
+ "_task": "a9afd327ef8db63e4",
+ "batch": "B18-last-followups"
+}

@@ -1,0 +1,127 @@
+{
+ "batch": "B18-last-followups",
+ "results": [
+  {
+   "id": "BUG-MAE-011",
+   "outcome": "fixed",
+   "tests": [
+    "Notification delivery rollback#a failed higher crossing restores the delivered lower mark",
+    "Notification delivery rollback#after restoring the lower mark the failed higher crossing is still retried",
+    "NotificationThresholdTracker — per-window dedupe#unmark restores the mark the failed crossing replaced"
+   ],
+   "red": "NotificationDeliveryRollbackTests.swift:90:9: Expectation failed: (center.identifiers.count → 3) == 2",
+   "reversal": "ok"
+  },
+  {
+   "id": "PERF-MAE-004",
+   "outcome": "fixed",
+   "tests": [
+    "Notification delivery rollback#a failure while authorization is denied does not re-arm the crossing",
+    "Notification delivery rollback#a transient failure with authorization granted still re-arms",
+    "Notification delivery rollback#a known denial is cached: a second failure does not ask the OS again",
+    "Notification delivery rollback#a delivery after a cached denial clears it, so a later failure asks the OS again"
+   ],
+   "red": "NotificationDeliveryRollbackTests.swift:119:9: Expectation failed: (center.identifiers.count → 2) == 1",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-MAE-012",
+   "outcome": "fixed",
+   "tests": [
+    "RefreshScheduler#an invalid owner_repo backs off to the next day instead of waking every minute",
+    "UpdateChecker Cadence and Banner Visibility Tests#an invalid owner_repo still records the attempt",
+    "UpdateChecker Cadence and Banner Visibility Tests#an invalid owner_repo still reports the configuration error"
+   ],
+   "red": "RefreshSchedulerTests.swift:404:9: Expectation failed: (updateSleeper.durations → [60.0, 60.0]) == ([14 * 3_600, 86_400] → [50400.0, 86400.0])",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-018",
+   "outcome": "fixed",
+   "tests": [
+    "Notification title localization#the title rounds the percent the way the card does",
+    "PercentText#rounds half up to the nearest whole percent",
+    "PercentText#formats with a percent sign",
+    "Numeric conversion traps — App formatters#Busiest-day text rounds normal values like the cards"
+   ],
+   "red": "NotificationTitleLocalizationTests.swift:42:9: Expectation failed: (… → \"Claude — 5h at 92%\") == (… → \"Claude — 5h at 93%\")",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-021",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a (doc)",
+   "reversal": "n/a"
+  },
+  {
+   "id": "BUG-MAE-010",
+   "outcome": "fixed",
+   "tests": [
+    "Gemini + xAI emit structure, not prose#an agy error with a non-ERROR status is still an error on the cached path"
+   ],
+   "red": "GeminiXAILocaleNeutralTests.swift:128:9: Expectation failed: (message → \"\") == (… → \"io: agy: quota exceeded\")",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-019",
+   "outcome": "fixed",
+   "tests": [
+    "VendorViewModel rate-limit cooldown clock#lastNetworkFetch is stamped on the injected clock"
+   ],
+   "red": "VendorViewModelRateLimitTests.swift:147:19: Expectation failed: value",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-MAE-005",
+   "outcome": "fixed",
+   "tests": [
+    "UpdateChecker Cadence and Banner Visibility Tests#the instance delay of a due check is the retry floor, not 0"
+   ],
+   "red": "mutation, instance floor removed: (checker.delayUntilNextCheck() → 0.0) == (UpdateChecker.minimumRetryDelay → 60.0)",
+   "reversal": "ok"
+  },
+  {
+   "id": "TEST-MAE-011",
+   "outcome": "fixed",
+   "tests": [
+    "RefreshScheduler#updates disabled: no update loop runs, so nothing sleeps or checks"
+   ],
+   "red": "mutation, `updates.config.enabled` dropped from the startUpdateCheckLoop guard: RefreshSchedulerTests.swift:381:19: Expectation failed: value",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-020",
+   "outcome": "wontfix",
+   "reason": "These are advanced, config-file-only settings. They are documented in config.example.toml and README, and giving them Settings controls would be a visual UI change this batch cannot check headlessly.",
+   "what": "gemini.prefer_antigravity, xai.prefer_grok_cli and xai.grok_base_url can only be changed by editing config.toml",
+   "consequence": "Users have to edit config.toml to change these 3 settings; the defaults (true, true, built-in host) cover the common case",
+   "reopen_if": "A user asks for a Settings control, or a default changes so that most users would need to override it",
+   "accept_type": "divida-cosmetica"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1173,
+  "coverage": "93.24%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PercentText.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/{AnalyticsFormatters,AnalyticsView,MenuBarLabelView,ProviderRowView,SparklineView,VendorAnalyticsCardView,VendorSectionView}.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AntigravityExecutor.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiProvider.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/{NotificationDeliveryRollback,NotificationThresholdTracker,NotificationTitleLocalization,NumericConversionTrap,RefreshScheduler,UpdateCheckerCadence,VendorViewModelRateLimit}Tests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/docs/SDD-auto-update-checker.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md"
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "id": "PERF-MAE-004",
+ "verdict": "APROVA",
+ "reasoning": "deliveryFinished (NotificationService.swift:183-205) is about 22 lines. It has 2 guards, and the closure holds 1 if, so nesting is 2. The error is still logged at .error before any branch, so nothing is swallowed. The Error is turned into a String before the Task hop, which keeps the closure Sendable. With a cached denial, a failure now parks the crossing (tracker.park) instead of leaving it marked for good, and the denial is cleared both on success and on re-check. The doc comment on the property (:62-66) names both finding ids. hasParked (:310) scans every key, but it only runs while authorizationKnownDenied is true, and the key count is tiny (vendors x windows), so it is not a hot-path concern.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:183",
+  "Sources/AiTaskbarApp/NotificationService.swift:62",
+  "Sources/AiTaskbarApp/NotificationService.swift:310"
+ ],
+ "lens": "QUALITY",
+ "_task": "a99b65646812dd328",
+ "batch": "B18-r2"
+}

@@ -1,0 +1,992 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index ee4240e..dcdfa47 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -289,7 +289,10 @@ cleanly on `[skip release]` heads.
+   first, clamped to 60 s...24 h) are pure over an injected `Calendar` + clock;
+   `RefreshScheduler` sleeps that delay and recomputes it after every round
+   from the stored last-check date. A fixed 24 h sleep after a skipped launch
+-  check once delayed checks to ~48 h (UPDATE-SCHED-001).
++  check once delayed checks to ~48 h (UPDATE-SCHED-001). The 60 s floor lives
++  in the instance `delayUntilNextCheck()` only (not in the loop), and `check()`
++  records the attempt BEFORE validating `owner_repo`, so an invalid repo fails
++  once a day instead of waking the loop every minute (BUG-MAE-012).
+ 
+ ### DMG release runbook (generating the signed DMG)
+ 
+diff --git a/CLAUDE.md b/CLAUDE.md
+index ee4240e..dcdfa47 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -289,7 +289,10 @@ cleanly on `[skip release]` heads.
+   first, clamped to 60 s...24 h) are pure over an injected `Calendar` + clock;
+   `RefreshScheduler` sleeps that delay and recomputes it after every round
+   from the stored last-check date. A fixed 24 h sleep after a skipped launch
+-  check once delayed checks to ~48 h (UPDATE-SCHED-001).
++  check once delayed checks to ~48 h (UPDATE-SCHED-001). The 60 s floor lives
++  in the instance `delayUntilNextCheck()` only (not in the loop), and `check()`
++  records the attempt BEFORE validating `owner_repo`, so an invalid repo fails
++  once a day instead of waking the loop every minute (BUG-MAE-012).
+ 
+ ### DMG release runbook (generating the signed DMG)
+ 
+diff --git a/README.md b/README.md
+index 899c18c..66e4686 100644
+--- a/README.md
++++ b/README.md
+@@ -83,7 +83,7 @@ The app runs on macOS 13+ (Ventura). Building the app requires Swift 6.2+; Comma
+ 
+ Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly (or the release list when `include_prereleases = true`, picking the newest non-draft by SemVer precedence, so `beta10` beats `beta9`), compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
+ 
+-The app also checks on its own, once per calendar day — at launch if it has not checked today, and at the start of each new day while running (or 24 h after the last check, whichever comes first). It only reports what it finds; nothing is downloaded without your click. `[updates] enabled = false` turns this off.
++The app also checks on its own, once per calendar day — at launch if it has not checked today, and at the start of each new day while running (or 24 h after the last check, whichever comes first). It only reports what it finds; nothing is downloaded without your click. An invalid `owner_repo` counts as that day's attempt (About shows the error), so it is retried the next day, not every minute. `[updates] enabled = false` turns this off.
+ 
+ The download only follows redirects to GitHub's release hosts. Before the DMG is shown, the app checks it against the release's `checksums-*.txt` (a release without one is refused), confirms the app inside is signed by the same Developer ID team as the installed app, and marks the file with `com.apple.quarantine` so Gatekeeper checks it when you open it. If any step fails, the download is deleted.
+ 
+diff --git a/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift b/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift
+index fdbe4c2..5fa6557 100644
+--- a/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift
++++ b/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift
+@@ -23,7 +23,7 @@ public enum MenuBarTooltipBuilder {
+         locale: Locale = L10n.effectiveLocale
+     ) -> String {
+         guard let snapshot else {
+-            return "\(vendorId.displayName): \(Int(saturating: currentPercent.rounded()))%"
++            return "\(vendorId.displayName): \(PercentText.format(currentPercent))"
+         }
+ 
+         let (dailyWindow, weeklyWindow) = snapshot.menuBarResetWindows
+@@ -53,7 +53,7 @@ public enum MenuBarTooltipBuilder {
+         }
+ 
+         if lines.isEmpty {
+-            return "\(vendorId.displayName): \(Int(saturating: currentPercent.rounded()))%"
++            return "\(vendorId.displayName): \(PercentText.format(currentPercent))"
+         }
+ 
+         return ([vendorId.displayName] + lines).joined(separator: "\n")
+diff --git a/Sources/AiTaskbarApp/NotificationService.swift b/Sources/AiTaskbarApp/NotificationService.swift
+index e1679af..45c09b4 100644
+--- a/Sources/AiTaskbarApp/NotificationService.swift
++++ b/Sources/AiTaskbarApp/NotificationService.swift
+@@ -8,6 +8,8 @@ import AiTaskbarCore
+ @MainActor
+ protocol NotificationPosting {
+     func requestAuthorizationIfNeeded()
++    /// The app's current notification permission, delivered on the main actor.
++    func authorizationStatus(_ completion: @escaping @MainActor @Sendable (UNAuthorizationStatus) -> Void)
+     func add(_ request: UNNotificationRequest,
+              completion: @escaping @Sendable (Error?) -> Void)
+ }
+@@ -26,6 +28,13 @@ struct SystemNotificationCenter: NotificationPosting {
+         }
+     }
+ 
++    func authorizationStatus(_ completion: @escaping @MainActor @Sendable (UNAuthorizationStatus) -> Void) {
++        UNUserNotificationCenter.current().getNotificationSettings { settings in
++            let status = settings.authorizationStatus
++            Task { @MainActor in completion(status) }
++        }
++    }
++
+     func add(_ request: UNNotificationRequest,
+              completion: @escaping @Sendable (Error?) -> Void) {
+         UNUserNotificationCenter.current().add(request, withCompletionHandler: completion)
+@@ -50,6 +59,12 @@ public final class NotificationService {
+     /// connection at all.
+     private var authorizationRequested = false
+ 
++    /// Set when a failed delivery found the permission denied; cleared by the
++    /// next successful delivery. While set, a failure keeps its crossing
++    /// marked instead of re-arming it, so a denied app does not retry (and
++    /// log) on every refresh tick (PERF-MAE-004).
++    private var authorizationKnownDenied = false
++
+     private let center: NotificationPosting
+     private let runtimeIncompatible: Bool
+ 
+@@ -101,11 +116,13 @@ public final class NotificationService {
+         for crossing in tracker.crossings(vendor: vendor, windows: snapshot.windows,
+                                           sortedThresholds: sortedThresholds) {
+             ensureAuthorizedBeforeSend()
+-            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold)
++            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold,
++                 previousMark: crossing.previous)
+         }
+     }
+ 
+-    private func send(vendor: VendorId, window: UsageWindow, threshold: Double) {
++    private func send(vendor: VendorId, window: UsageWindow, threshold: Double,
++                      previousMark: Double?) {
+         // Defense in depth: never reach `UNUserNotificationCenter` on a
+         // runtime known to crash the XPC handshake. `observe()` already
+         // filters this, but `send()` is private and could be reused later.
+@@ -126,25 +143,44 @@ public final class NotificationService {
+         )
+         let label = window.label
+         center.add(req) { [weak self] error in
+-            guard let error else { return }
+-            AppLog.lifecycle.error("notification delivery failed: \(String(describing: error), privacy: .public)")
+-            // The crossing was marked before `add()`. Un-mark it so the next
+-            // refresh re-sends: on the first crossing authorization is still
+-            // pending and `add()` fails with `notificationsNotAllowed`
+-            // (CQ-MAE-012). While authorization stays denied this costs one
+-            // failed `add()` per refresh tick.
++            let failure = error.map { String(describing: $0) }
+             Task { @MainActor in
+-                self?.tracker.unmark(vendor: vendor, label: label, threshold: threshold)
++                self?.deliveryFinished(failure: failure, vendor: vendor, label: label,
++                                       threshold: threshold, previousMark: previousMark)
+             }
+         }
+     }
+ 
++    /// The crossing was marked before `add()`. On failure it is un-marked
++    /// back to `previousMark` so the next refresh re-sends it: on the first
++    /// crossing authorization is still pending and `add()` fails with
++    /// `notificationsNotAllowed` (CQ-MAE-012). Not when the permission is
++    /// denied: no retry can succeed then (PERF-MAE-004).
++    private func deliveryFinished(failure: String?, vendor: VendorId, label: String,
++                                  threshold: Double, previousMark: Double?) {
++        guard let failure else {
++            authorizationKnownDenied = false
++            return
++        }
++        AppLog.lifecycle.error("notification delivery failed: \(failure, privacy: .public)")
++        guard !authorizationKnownDenied else { return }
++        center.authorizationStatus { [weak self] status in
++            guard let self else { return }
++            if status == .denied {
++                self.authorizationKnownDenied = true
++                return
++            }
++            self.tracker.unmark(vendor: vendor, label: label, threshold: threshold,
++                                restoring: previousMark)
++        }
++    }
++
+     /// Non-discreet title, e.g. "Claude — 5h at 92%". Localized: it was a
+     /// hard-coded English sentence while the body beside it was not
+     /// (CQ-MAE-012). The window label is shown as the card shows it.
+     static func title(vendor: VendorId, window: UsageWindow) -> String {
+         L10n.localizedString("notif_title_fmt", vendor.displayName, window.label,
+-                             Int(saturating: window.utilizationPercent))
++                             PercentText.whole(window.utilizationPercent))
+     }
+ 
+     /// Built once. The locale is captured at first use, which is after
+@@ -198,19 +234,26 @@ struct NotificationThresholdTracker {
+     static let pruneAfterMissedSnapshots = 12
+ 
+     /// Forgets a crossing whose delivery failed, so the next snapshot re-fires
+-    /// it. Only when it is still the recorded mark: a higher threshold marked
+-    /// in the meantime, or a reset, must not be undone.
+-    mutating func unmark(vendor: VendorId, label: String, threshold: Double) {
++    /// it, by putting back `previous`, the mark it replaced (nil: none). The
++    /// key is not dropped: a lower threshold already delivered would then be
++    /// re-sent by the next lower reading (BUG-MAE-011). Only when it is still
++    /// the recorded mark: a higher threshold marked in the meantime, or a
++    /// reset, must not be undone.
++    mutating func unmark(vendor: VendorId, label: String, threshold: Double,
++                         restoring previous: Double? = nil) {
+         let key = Key(vendor: vendor, label: label)
+         guard highestNotified[key] == threshold else { return }
+-        highestNotified.removeValue(forKey: key)
++        highestNotified[key] = previous
+     }
+ 
+-    /// Folds one snapshot's windows in and returns the crossings to notify.
++    typealias Crossing = (window: UsageWindow, threshold: Double, previous: Double?)
++
++    /// Folds one snapshot's windows in and returns the crossings to notify,
++    /// each with the mark it replaced (for `unmark(restoring:)`).
+     mutating func crossings(vendor: VendorId, windows: [UsageWindow],
+-                            sortedThresholds: [Double]) -> [(window: UsageWindow, threshold: Double)] {
++                            sortedThresholds: [Double]) -> [Crossing] {
+         guard let minThreshold = sortedThresholds.first else { return [] }
+-        var fired: [(window: UsageWindow, threshold: Double)] = []
++        var fired: [Crossing] = []
+         for window in windows {
+             let key = Key(vendor: vendor, label: window.label)
+             let percent = window.utilizationPercent
+@@ -222,9 +265,10 @@ struct NotificationThresholdTracker {
+             }
+             // Find the highest threshold this reading has reached.
+             guard let reached = sortedThresholds.last(where: { percent >= $0 }) else { continue }
+-            if reached > highestNotified[key] ?? -1 {
++            let previous = highestNotified[key]
++            if reached > previous ?? -1 {
+                 highestNotified[key] = reached
+-                fired.append((window, reached))
++                fired.append((window, reached, previous))
+             }
+         }
+         // Prune this vendor's keys for windows no longer reported (xAI's
+diff --git a/Sources/AiTaskbarApp/PercentText.swift b/Sources/AiTaskbarApp/PercentText.swift
+new file mode 100644
+index 0000000..e2ba046
+--- /dev/null
++++ b/Sources/AiTaskbarApp/PercentText.swift
+@@ -0,0 +1,18 @@
++import Foundation
++import AiTaskbarCore
++
++/// The one rounding rule for a whole-percent label (CQ-MAE-018). Cards,
++/// tooltip, menu bar, pinned badges and the notification title all show
++/// `92.9` as `93%`; the notification title used to truncate it to `92%`.
++enum PercentText {
++    /// Nearest whole percent (half away from zero), saturating so a
++    /// non-finite value never traps.
++    static func whole(_ percent: Double) -> Int {
++        Int(saturating: percent.rounded())
++    }
++
++    /// `whole(percent)` followed by a percent sign, e.g. `93%`.
++    static func format(_ percent: Double) -> String {
++        "\(whole(percent))%"
++    }
++}
+diff --git a/Sources/AiTaskbarApp/PinnedStatusItemManager.swift b/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
+index fb1eac8..8b44862 100644
+--- a/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
++++ b/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
+@@ -96,10 +96,10 @@ public struct PinnedStatusBadgeView: View {
+ 
+             if let weekly = weekly {
+                 VStack(alignment: .trailing, spacing: -1) {
+-                    Text("\(Int(saturating: weekly.rounded()))%")
++                    Text("\(PercentText.whole(weekly))%")
+                         .font(Self.menuBarFont)
+                         .foregroundStyle(.primary)
+-                    Text("\(Int(saturating: current.rounded()))%")
++                    Text("\(PercentText.whole(current))%")
+                         .font(Self.menuBarFont)
+                         .foregroundStyle(.primary)
+                 }
+@@ -109,7 +109,7 @@ public struct PinnedStatusBadgeView: View {
+                 // our own NSHostingView, so a custom font here WOULD apply and
+                 // render visibly larger than the main icon's percentage.
+                 // Use the very font the system uses for the main item.
+-                Text("\(Int(saturating: current.rounded()))%")
++                Text("\(PercentText.whole(current))%")
+                     .font(Self.menuBarFont)
+                     .foregroundStyle(.primary)
+             }
+diff --git a/Sources/AiTaskbarApp/UpdateChecker.swift b/Sources/AiTaskbarApp/UpdateChecker.swift
+index b59e194..f0949bd 100644
+--- a/Sources/AiTaskbarApp/UpdateChecker.swift
++++ b/Sources/AiTaskbarApp/UpdateChecker.swift
+@@ -143,8 +143,13 @@ public final class UpdateChecker: ObservableObject {
+         return min(cadenceInterval, max(minimumRetryDelay, next.timeIntervalSince(now)))
+     }
+ 
++    /// How long the update loop sleeps before its next round: the pure delay
++    /// with a 0 ("due now") raised to `minimumRetryDelay`, so a busy or
++    /// unrecorded check does not spin. The loop owns no floor of its own
++    /// (DUP-MAE-005).
+     public func delayUntilNextCheck() -> TimeInterval {
+-        Self.delayUntilNextCheck(lastCheck: lastCheckDate, now: now(), calendar: calendar)
++        max(Self.minimumRetryDelay,
++            Self.delayUntilNextCheck(lastCheck: lastCheckDate, now: now(), calendar: calendar))
+     }
+ 
+     public var isUpdateBannerVisible: Bool {
+@@ -186,11 +191,14 @@ public final class UpdateChecker: ObservableObject {
+             status = .failed(message: L10n.localizedString("updates_disabled"))
+             return
+         }
++        // Recorded before the repo is validated: an invalid owner_repo is an
++        // attempt too, so it fails once per day instead of keeping the check
++        // due and waking the update loop every minute (BUG-MAE-012).
++        recordCheckDate()
+         guard !config.ownerRepo.isEmpty, config.ownerRepo.contains("/") else {
+             status = .failed(message: L10n.localizedString("updates_bad_repo"))
+             return
+         }
+-        recordCheckDate()
+         status = .checking
+         Task { [weak self] in
+             guard let self else { return }
+diff --git a/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift b/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
+index d0253a4..35d07b2 100644
+--- a/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
++++ b/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
+@@ -17,7 +17,8 @@ public final class RefreshScheduler: ObservableObject {
+     private var refreshLoop: Task<Void, Never>?
+     private var statusRefreshLoop: Task<Void, Never>?
+     private var compactLoop: Task<Void, Never>?
+-    private var updateCheckLoop: Task<Void, Never>?
++    /// Internal read so a test can prove the loop never started (TEST-MAE-011).
++    private(set) var updateCheckLoop: Task<Void, Never>?
+     /// Suspends the usage refresh loop between ticks. Production uses
+     /// `Task.sleep`; tests inject a scripted sleeper so the cadence and the
+     /// 429 back-off can be asserted without wall-clock waits. Returning early
+@@ -190,12 +191,13 @@ public final class RefreshScheduler: ObservableObject {
+             // Once per local calendar day (UPDATE-SCHED-001): check at launch
+             // when due, then sleep until the next local day (or 24 h), which
+             // is recomputed from the stored last-check date after every round,
+-            // so a manual check from About moves the next one too. The floor
+-            // keeps a busy or unrecorded check from spinning.
++            // so a manual check from About moves the next one too. The
++            // instance delay carries the 60 s floor that keeps a busy check
++            // from spinning.
+             self?.updates?.checkIfNeeded()
+             while !Task.isCancelled {
+                 guard let delay = self?.updates?.delayUntilNextCheck() else { break }
+-                await sleeper(max(UpdateChecker.minimumRetryDelay, delay))
++                await sleeper(delay)
+                 if Task.isCancelled { break }
+                 self?.updates?.checkIfNeeded()
+             }
+diff --git a/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift b/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
+index 0e9d501..3c95f02 100644
+--- a/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
++++ b/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
+@@ -169,8 +169,10 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+     /// Backs `isExpanded`. Injected so tests never touch `.standard`.
+     private let defaults: UserDefaults
+ 
+-    /// Wall clock read when a response arrives, to stamp the 429 cooldown.
+-    /// Injected so tests can model a slow request (BUG-MAE-009).
++    /// Wall clock read when a response arrives, to stamp the 429 cooldown and
++    /// `lastNetworkFetch`. Injected so tests can model a slow request
++    /// (BUG-MAE-009). A wall clock, not `ContinuousClock`: both stamps are
++    /// `Date`s compared with `Date`s elsewhere (CQ-MAE-019).
+     private let clock: @MainActor () -> Date
+ 
+     public init(provider: any UsageProvider,
+@@ -286,7 +288,7 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+                 self.state = .ok(outcome)
+                 self.observeRateLimit(status: outcome.lastError?.status, at: arrival())
+                 if Self.isNetworkOutcome(outcome) {
+-                    self.lastNetworkFetch = .now
++                    self.lastNetworkFetch = self.clock()   // one time source (CQ-MAE-019)
+                 }
+                 self.notifications?.observe(vendor: self.vendorId, snapshot: outcome.snapshot)
+                 // Only a real network reading is a new sample. A stale
+diff --git a/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift b/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
+index 2a8ede0..7b9bd07 100644
+--- a/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
++++ b/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
+@@ -43,9 +43,9 @@ public enum AnalyticsFormatters {
+     public static func peakDayText(_ record: PeakDayRecord) -> String {
+         let dateStr = dateFormatter.string(from: record.date)
+         if record.costUSD > 0 {
+-            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(Int(saturating: record.utilizationPercent))% quota)"
++            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(PercentText.whole(record.utilizationPercent))% quota)"
+         } else {
+-            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(Int(saturating: record.utilizationPercent))% quota)"
++            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(PercentText.whole(record.utilizationPercent))% quota)"
+         }
+     }
+ 
+diff --git a/Sources/AiTaskbarApp/Views/AnalyticsView.swift b/Sources/AiTaskbarApp/Views/AnalyticsView.swift
+index 0d321cc..4b3457a 100644
+--- a/Sources/AiTaskbarApp/Views/AnalyticsView.swift
++++ b/Sources/AiTaskbarApp/Views/AnalyticsView.swift
+@@ -206,7 +206,7 @@ public struct AnalyticsView: View {
+                                 .font(.system(size: 9, weight: .semibold))
+                                 .foregroundStyle(.secondary)
+                                 .lineLimit(1)
+-                            Text("\(Int(saturating: h.value.rounded()))%")
++                            Text("\(PercentText.whole(h.value))%")
+                                 .font(.headline.weight(.bold).monospacedDigit())
+                                 .foregroundStyle(h.color)
+                         } else {
+@@ -238,7 +238,7 @@ public struct AnalyticsView: View {
+                                     .font(.callout.weight(isHovered ? .bold : .medium))
+                                     .lineLimit(1)
+                                 Spacer()
+-                                Text(String(format: "%.0f%%", usagePct))
++                                Text(PercentText.format(usagePct))
+                                     .font(.callout.monospacedDigit().weight(isHovered ? .bold : .medium))
+                                     .foregroundStyle(isHovered ? Color.primary : Color.secondary)
+                             }
+diff --git a/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift b/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
+index f7c2be0..5038026 100644
+--- a/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
++++ b/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
+@@ -38,7 +38,7 @@ public struct MenuBarLabelView: View {
+             iconForMaxPercent
+             let percent = store.maxUtilization
+             let isFull = SeverityColor.showsFlame(forPercent: percent, thresholds: store.thresholds)
+-            Text("\(Int(saturating: percent.rounded()))%")
++            Text("\(PercentText.whole(percent))%")
+                 .font(.system(size: 15.0, weight: .bold, design: .monospaced))
+                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent,
+                                                                         thresholds: store.thresholds))
+@@ -71,7 +71,7 @@ public struct MenuBarLabelView: View {
+             Image(systemName: symbolName(for: percent))
+                 .symbolRenderingMode(.hierarchical)
+                 .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
+-            Text("\(shortLabel(for: vm.vendorId)) \(Int(saturating: percent.rounded()))%")
++            Text("\(shortLabel(for: vm.vendorId)) \(PercentText.whole(percent))%")
+                 .font(.system(size: 14.0, weight: .bold, design: .monospaced))
+                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
+             if isFull {
+diff --git a/Sources/AiTaskbarApp/Views/ProviderRowView.swift b/Sources/AiTaskbarApp/Views/ProviderRowView.swift
+index b391c73..b7b90fa 100644
+--- a/Sources/AiTaskbarApp/Views/ProviderRowView.swift
++++ b/Sources/AiTaskbarApp/Views/ProviderRowView.swift
+@@ -23,7 +23,7 @@ public struct ProviderRowView: View {
+                 Text(window.label)
+                     .font(.subheadline.weight(.medium))
+                 Spacer()
+-                Text("\(Int(saturating: percent.rounded()))%")
++                Text("\(PercentText.whole(percent))%")
+                     .font(.subheadline.monospacedDigit())
+                     .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: thresholds))
+             }
+diff --git a/Sources/AiTaskbarApp/Views/SparklineView.swift b/Sources/AiTaskbarApp/Views/SparklineView.swift
+index 010044b..75233e1 100644
+--- a/Sources/AiTaskbarApp/Views/SparklineView.swift
++++ b/Sources/AiTaskbarApp/Views/SparklineView.swift
+@@ -113,7 +113,7 @@ public struct SparklineView: View {
+                     .fill(tint)
+                     .frame(width: 4, height: 4)
+                     .position(x: xFor(last.at), y: yFor(last.max))
+-                Text("\(Int(saturating: last.max.rounded()))%")
++                Text("\(PercentText.whole(last.max))%")
+                     .font(.subheadline.monospacedDigit())
+                     .foregroundStyle(tint)
+                     .position(x: plotWidth + valueLabelWidth / 2,
+@@ -123,7 +123,7 @@ public struct SparklineView: View {
+             // Peak indicator when meaningfully higher than current — surfaces
+             // recent spikes that may have already drained.
+             if maxPercent > currentPercent + 5 {
+-                Text("↑\(Int(saturating: maxPercent.rounded()))%")
++                Text("↑\(PercentText.whole(maxPercent))%")
+                     .font(.system(size: 12).monospacedDigit())
+                     .foregroundStyle(.tertiary)
+                     .position(x: plotWidth + valueLabelWidth / 2,
+diff --git a/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift b/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
+index b529cdc..582844a 100644
+--- a/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
+@@ -102,7 +102,7 @@ public struct VendorAnalyticsCardView: View {
+                                  : "—")
+                                 .font(.headline.monospacedDigit())
+                             if summary.totalUsagePercent > 0 {
+-                                Text("\(Int(saturating: summary.totalUsagePercent))% quota")
++                                Text("\(PercentText.whole(summary.totalUsagePercent))% quota")
+                                     .font(.caption)
+                                     .foregroundStyle(.secondary)
+                             }
+diff --git a/Sources/AiTaskbarApp/Views/VendorSectionView.swift b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+index d95483c..99ede10 100644
+--- a/Sources/AiTaskbarApp/Views/VendorSectionView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+@@ -594,7 +594,7 @@ public struct VendorSectionView: View {
+                         .font(.subheadline.monospaced())
+                         .foregroundStyle(.secondary)
+                     Spacer(minLength: 4)
+-                    Text("\(Int(saturating: m.percent.rounded()))%")
++                    Text("\(PercentText.whole(m.percent))%")
+                         .font(.subheadline.monospacedDigit())
+                         .foregroundStyle(.tertiary)
+                 }
+diff --git a/Sources/AiTaskbarProviders/AntigravityExecutor.swift b/Sources/AiTaskbarProviders/AntigravityExecutor.swift
+index 9f1d778..705c820 100644
+--- a/Sources/AiTaskbarProviders/AntigravityExecutor.swift
++++ b/Sources/AiTaskbarProviders/AntigravityExecutor.swift
+@@ -152,8 +152,8 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+         }
+ 
+         func reported(_ env: AgyEnvelope) -> String? {
+-            guard env.status == "ERROR" || !(env.error ?? "").isEmpty else { return nil }
+-            return AntigravityReportedError.message(error: env.error, response: env.response)
++            AntigravityReportedError.reported(status: env.status, error: env.error,
++                                              response: env.response)
+         }
+ 
+         func inspect(_ data: Data) -> String? {
+@@ -183,6 +183,14 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+ enum AntigravityReportedError {
+     /// `error` when non-empty, else `response` when non-empty, else a
+     /// generic message.
++    /// The one "is this envelope an agy error" rule, for the live run and the
++    /// cached decode alike (BUG-MAE-010): `status == "ERROR"`, or a non-empty
++    /// `error` whatever the status. nil when the envelope reports no error.
++    static func reported(status: String?, error: String?, response: String?) -> String? {
++        guard status == "ERROR" || !(error ?? "").isEmpty else { return nil }
++        return message(error: error, response: response)
++    }
++
+     static func message(error: String?, response: String?) -> String {
+         if let error, !error.isEmpty { return error }
+         if let response, !response.isEmpty { return response }
+diff --git a/Sources/AiTaskbarProviders/GeminiProvider.swift b/Sources/AiTaskbarProviders/GeminiProvider.swift
+index b4ad883..3c2829a 100644
+--- a/Sources/AiTaskbarProviders/GeminiProvider.swift
++++ b/Sources/AiTaskbarProviders/GeminiProvider.swift
+@@ -108,9 +108,9 @@ public final class GeminiProvider: UsageProvider {
+             } catch {
+                 throw AppError.schema("agy usage decode: \(error)")
+             }
+-            if agy.status == "ERROR" {
+-                throw AntigravityReportedError.appError(
+-                    for: AntigravityReportedError.message(error: agy.error, response: agy.response))
++            if let reported = AntigravityReportedError.reported(
++                status: agy.status, error: agy.error, response: agy.response) {
++                throw AntigravityReportedError.appError(for: reported)
+             }
+             return .gemini(agy.toSnapshot())
+         }
+diff --git a/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift b/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift
+index dba7ed6..4c3f1a6 100644
+--- a/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift
++++ b/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift
+@@ -10,9 +10,17 @@ import AiTaskbarCore
+ private final class FakeNotificationCenter: NotificationPosting {
+     private(set) var identifiers: [String] = []
+     private var completions: [@Sendable (Error?) -> Void] = []
++    /// What the OS reports for this app's notification permission.
++    var status: UNAuthorizationStatus = .notDetermined
++    private(set) var statusQueries = 0
+ 
+     func requestAuthorizationIfNeeded() {}
+ 
++    func authorizationStatus(_ completion: @escaping @MainActor @Sendable (UNAuthorizationStatus) -> Void) {
++        statusQueries += 1
++        completion(status)
++    }
++
+     func add(_ request: UNNotificationRequest,
+              completion: @escaping @Sendable (Error?) -> Void) {
+         identifiers.append(request.identifier)
+@@ -33,11 +41,15 @@ private final class FakeNotificationCenter: NotificationPosting {
+ @MainActor
+ @Suite("Notification delivery rollback", .serialized)
+ struct NotificationDeliveryRollbackTests {
+-    private static let snapshot = VendorSnapshot.anthropic(
+-        .init(session: UsageWindow(label: "5h", utilizationPercent: 92), weekly: nil))
++    private static let snapshot = anthropic(92)
++
++    private static func anthropic(_ percent: Double) -> VendorSnapshot {
++        .anthropic(.init(session: UsageWindow(label: "5h", utilizationPercent: percent), weekly: nil))
++    }
+ 
+-    private static func service(_ center: FakeNotificationCenter) -> NotificationService {
+-        NotificationService(config: NotificationsConfig(enabled: true, notifyAt: [90, 100]),
++    private static func service(_ center: FakeNotificationCenter,
++                                notifyAt: [Double] = [90, 100]) -> NotificationService {
++        NotificationService(config: NotificationsConfig(enabled: true, notifyAt: notifyAt),
+                             center: center, runtimeIncompatible: false)
+     }
+ 
+@@ -62,4 +74,92 @@ struct NotificationDeliveryRollbackTests {
+         service.observe(vendor: .anthropic, snapshot: Self.snapshot)
+         #expect(center.identifiers.count == 1)
+     }
++
++    /// BUG-MAE-011: 70 delivered, 90 failed. The unmark dropped the key, so
++    /// the next reading of 75 re-sent the 70 already shown.
++    @Test("a failed higher crossing restores the delivered lower mark")
++    func failed_higher_crossing_keeps_delivered_lower_mark() async {
++        let center = FakeNotificationCenter()
++        let service = Self.service(center, notifyAt: [70, 90])
++        service.observe(vendor: .anthropic, snapshot: Self.anthropic(75))
++        await center.complete(0, with: nil)
++        service.observe(vendor: .anthropic, snapshot: Self.anthropic(95))
++        await center.complete(1, with: UNError(.notificationsNotAllowed))
++        await drainMainQueue()
++        service.observe(vendor: .anthropic, snapshot: Self.anthropic(75))
++        #expect(center.identifiers.count == 2)
++    }
++
++    @Test("after restoring the lower mark the failed higher crossing is still retried")
++    func failed_higher_crossing_is_retried() async {
++        let center = FakeNotificationCenter()
++        let service = Self.service(center, notifyAt: [70, 90])
++        service.observe(vendor: .anthropic, snapshot: Self.anthropic(75))
++        await center.complete(0, with: nil)
++        service.observe(vendor: .anthropic, snapshot: Self.anthropic(95))
++        await center.complete(1, with: UNError(.notificationsNotAllowed))
++        await drainMainQueue()
++        service.observe(vendor: .anthropic, snapshot: Self.anthropic(95))
++        #expect(center.identifiers == ["ai-taskbar.anthropic.5h.70",
++                                       "ai-taskbar.anthropic.5h.90",
++                                       "ai-taskbar.anthropic.5h.90"])
++    }
++
++    /// PERF-MAE-004: with permission denied every tick re-armed the crossing,
++    /// so each refresh made one more failed add() and one error log line.
++    @Test("a failure while authorization is denied does not re-arm the crossing")
++    func denied_authorization_does_not_rearm() async {
++        let center = FakeNotificationCenter()
++        center.status = .denied
++        let service = Self.service(center)
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        await center.complete(0, with: UNError(.notificationsNotAllowed))
++        await drainMainQueue()
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        #expect(center.identifiers.count == 1)
++    }
++
++    @Test("a transient failure with authorization granted still re-arms")
++    func authorized_transient_failure_rearms() async {
++        let center = FakeNotificationCenter()
++        center.status = .authorized
++        let service = Self.service(center)
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        await center.complete(0, with: NSError(domain: "test", code: 1))
++        await drainMainQueue()
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        #expect(center.identifiers.count == 2)
++    }
++
++    @Test("a known denial is cached: a second failure does not ask the OS again")
++    func denial_is_cached() async {
++        let center = FakeNotificationCenter()
++        center.status = .denied
++        let service = Self.service(center)
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        await center.complete(0, with: UNError(.notificationsNotAllowed))
++        await drainMainQueue()
++        service.observe(vendor: .xai, snapshot: Self.snapshot)
++        await center.complete(1, with: UNError(.notificationsNotAllowed))
++        await drainMainQueue()
++        #expect(center.statusQueries == 1)
++    }
++
++    @Test("a delivery after a cached denial clears it, so a later failure asks the OS again")
++    func delivery_clears_cached_denial() async {
++        let center = FakeNotificationCenter()
++        center.status = .denied
++        let service = Self.service(center)
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        await center.complete(0, with: UNError(.notificationsNotAllowed))
++        await drainMainQueue()
++        center.status = .authorized
++        service.observe(vendor: .xai, snapshot: Self.snapshot)
++        await center.complete(1, with: nil)
++        await drainMainQueue()
++        service.observe(vendor: .zai, snapshot: Self.snapshot)
++        await center.complete(2, with: NSError(domain: "test", code: 1))
++        await drainMainQueue()
++        #expect(center.statusQueries == 2)
++    }
+ }
+diff --git a/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift b/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift
+index bdceb22..714d83a 100644
+--- a/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift
++++ b/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift
+@@ -92,6 +92,19 @@ struct NotificationThresholdTrackerTests {
+         expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 90)
+     }
+ 
++    /// BUG-MAE-011: a crossing reports the mark it replaced, and unmark puts
++    /// it back instead of dropping the key.
++    @Test("unmark restores the mark the failed crossing replaced")
++    func unmark_restores_previous_mark() {
++        var t = NotificationThresholdTracker()
++        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 75)],
++                        sortedThresholds: thresholds)
++        let higher = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
++                                 sortedThresholds: thresholds)
++        t.unmark(vendor: .xai, label: "W", threshold: 90, restoring: higher.first?.previous)
++        expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 70)
++    }
++
+     @Test("unmark of the current mark re-fires on the next snapshot")
+     func unmark_current_mark_refires() {
+         var t = NotificationThresholdTracker()
+diff --git a/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift b/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift
+index c9441fb..750b3fa 100644
+--- a/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift
++++ b/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift
+@@ -31,4 +31,39 @@ struct NotificationTitleLocalizationTests {
+     func title_es() {
+         #expect(Self.title(in: "es") == "\(VendorId.anthropic.displayName) — 5h al 92%")
+     }
++
++    /// CQ-MAE-018: the title truncated (92.9 -> 92) while the card rounds.
++    @Test("the title rounds the percent the way the card does")
++    func title_rounds_like_card() {
++        let previous = L10n.languageOverride
++        defer { L10n.languageOverride = previous }
++        L10n.languageOverride = "en"
++        let window = UsageWindow(label: "5h", utilizationPercent: 92.9)
++        #expect(NotificationService.title(vendor: .anthropic, window: window)
++            == "\(VendorId.anthropic.displayName) — 5h at 93%")
++    }
++}
++
++/// CQ-MAE-018: one rounding rule for every whole-percent label.
++@Suite("PercentText")
++struct PercentTextTests {
++    @Test("rounds half up to the nearest whole percent")
++    func rounds() {
++        #expect(PercentText.whole(92.9) == 93)
++    }
++
++    @Test("keeps a value below .5 on its floor")
++    func rounds_down() {
++        #expect(PercentText.whole(92.4) == 92)
++    }
++
++    @Test("formats with a percent sign")
++    func formats() {
++        #expect(PercentText.format(92.9) == "93%")
++    }
++
++    @Test("saturates a non-finite value instead of trapping")
++    func saturates() {
++        #expect(PercentText.whole(.infinity) == Int.max)
++    }
+ }
+diff --git a/Tests/AiTaskbarAppTests/NumericConversionTrapTests.swift b/Tests/AiTaskbarAppTests/NumericConversionTrapTests.swift
+index b8fa4ef..6b0de8f 100644
+--- a/Tests/AiTaskbarAppTests/NumericConversionTrapTests.swift
++++ b/Tests/AiTaskbarAppTests/NumericConversionTrapTests.swift
+@@ -19,11 +19,12 @@ struct NumericConversionTrapAppTests {
+         #expect(text.contains("\(Int.max)% quota"))
+     }
+ 
+-    @Test("Busiest-day text keeps truncating normal values")
++    /// CQ-MAE-018: rounds like the cards now (it truncated 84.9 to 84).
++    @Test("Busiest-day text rounds normal values like the cards")
+     func peak_day_text_normal_utilization() {
+         let record = PeakDayRecord(date: Date(timeIntervalSince1970: 1_700_000_000),
+                                    costUSD: 1, utilizationPercent: 84.9)
+-        #expect(AnalyticsFormatters.peakDayText(record).contains("84% quota"))
++        #expect(AnalyticsFormatters.peakDayText(record).contains("85% quota"))
+     }
+ 
+     @Test("Menu-bar tooltip survives an Anthropic utilization of 1e300 end to end")
+diff --git a/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift b/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
+index a656bea..5774260 100644
+--- a/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
++++ b/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
+@@ -376,12 +376,35 @@ final class RefreshSchedulerTests {
+         let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
+ 
+         scheduler.start()
+-        for _ in 0..<5 { await Task.yield() }
++        // TEST-MAE-011: the guard is synchronous, so the loop handle itself
++        // is the proof of absence (a few `Task.yield()`s proved nothing).
++        expectTrue(scheduler.updateCheckLoop == nil)
+         #expect(updateSleeper.durations.isEmpty)
+         #expect(checker.status == .idle)
+         scheduler.stop()
+     }
+ 
++    /// BUG-MAE-012: an invalid owner_repo returned before recording the
++    /// attempt, so the check stayed due and the loop woke every 60 s.
++    @Test("an invalid owner_repo backs off to the next day instead of waking every minute")
++    func update_loop_with_bad_repo_backs_off_daily() async {
++        let base = UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00")
++        let updateSleeper = ScriptedSleeper(returningSleeps: 1)
++        let checker = UpdateChecker(
++            config: UpdatesConfig(enabled: true, ownerRepo: "no-slash", includePrereleases: false),
++            currentVersion: "1.0.0",
++            http: .stubbed(protocols: [HangingGitHubProtocol.self]),
++            userDefaults: defaults,
++            calendar: UpdateCheckDueTests.saoPaulo,
++            now: { [updateSleeper] in base.addingTimeInterval(updateSleeper.elapsed) })
++        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
++
++        scheduler.start()
++        await updateSleeper.waitForSleeps(2)
++        #expect(updateSleeper.durations == [14 * 3_600, 86_400])
++        scheduler.stop()
++    }
++
+     @Test("dropping the last reference releases a started scheduler (LEAK-FAN-008)")
+     func started_scheduler_is_released() async {
+         let checker = UpdateChecker(
+diff --git a/Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift b/Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift
+index c9118b6..e8eec2f 100644
+--- a/Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift
++++ b/Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift
+@@ -135,4 +135,44 @@ struct UpdateCheckerCadenceTests {
+         checker.setMockStatusForTesting(.updateAvailable(latest: releaseV12))
+         #expect(checker.isUpdateBannerVisible)
+     }
++
++    /// BUG-MAE-012: the invalid-repo early return skipped `recordCheckDate`,
++    /// so the check stayed due and the update loop woke every 60 s.
++    @Test("an invalid owner_repo still records the attempt")
++    @MainActor
++    func bad_repo_records_attempt() {
++        let defaults = makeSuiteDefaults()
++        let now = Date(timeIntervalSince1970: 1_800_000_000)
++        let config = UpdatesConfig(enabled: true, ownerRepo: "no-slash", includePrereleases: false)
++        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
++                                    http: .stubbed(protocols: [OfflineProtocol.self]),
++                                    userDefaults: defaults, now: { now })
++        checker.check()
++        expectTrue(checker.lastCheckDate == now)
++    }
++
++    /// DUP-MAE-005: the loop no longer floors the delay itself, so the
++    /// instance delay must: a due check sleeps the floor, never 0.
++    @Test("the instance delay of a due check is the retry floor, not 0")
++    @MainActor
++    func instance_delay_is_floored() {
++        let checker = UpdateChecker(
++            config: UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false),
++            currentVersion: "1.0.0",
++            http: .stubbed(protocols: [OfflineProtocol.self]),
++            userDefaults: makeSuiteDefaults())
++        #expect(checker.delayUntilNextCheck() == UpdateChecker.minimumRetryDelay)
++    }
++
++    @Test("an invalid owner_repo still reports the configuration error")
++    @MainActor
++    func bad_repo_reports_error() {
++        let defaults = makeSuiteDefaults()
++        let config = UpdatesConfig(enabled: true, ownerRepo: "no-slash", includePrereleases: false)
++        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
++                                    http: .stubbed(protocols: [OfflineProtocol.self]),
++                                    userDefaults: defaults)
++        checker.check()
++        #expect(checker.status == .failed(message: L10n.localizedString("updates_bad_repo")))
++    }
+ }
+diff --git a/Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift b/Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift
+index 821499e..6624895 100644
+--- a/Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift
++++ b/Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift
+@@ -129,4 +129,32 @@ struct VendorViewModelRateLimitTests {
+         let expected = start.addingTimeInterval(100 + VendorViewModel.rateLimitCooldown(forAttempt: 1))
+         #expect(retryAt == expected)
+     }
++
++    /// CQ-MAE-019: `lastNetworkFetch` read `.now` beside the injected clock,
++    /// so the one refresh path used two time sources.
++    @Test("lastNetworkFetch is stamped on the injected clock")
++    func last_network_fetch_uses_injected_clock() async throws {
++        defer { cleanup() }
++        let dir = tmp
++        let stamp = Date(timeIntervalSince1970: 1_000_000)
++        let vm = VendorViewModel(
++            provider: NetworkOutcomeProvider(), defaults: defaults,
++            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) },
++            clock: { stamp })
++
++        vm.refresh(forceRefresh: true, now: stamp)
++        await waitUntil { vm.lastNetworkFetch != nil }
++        expectTrue(vm.lastNetworkFetch == stamp)
++    }
++}
++
++/// Answers a live network reading (`cacheAge: 0`).
++private struct NetworkOutcomeProvider: UsageProvider {
++    let vendorId: VendorId = .zai
++    var displayName: String { vendorId.displayName }
++    var credentialFileURL: URL? { nil }
++    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
++        FetchOutcome(snapshot: .zai(ZAISnapshot(
++            session: UsageWindow(label: "Session", utilizationPercent: 10))), cacheAge: 0)
++    }
+ }
+diff --git a/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift b/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift
+index 83085ce..af1a2bf 100644
+--- a/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift
++++ b/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift
+@@ -118,6 +118,16 @@ struct GeminiXAILocaleNeutralTests {
+         #expect(message == AppError.io("agy: quota backend down").description)
+     }
+ 
++    /// BUG-MAE-010: the live executor treats a non-empty `error` as an agy
++    /// error whatever the `status`; the cached-payload path only checked
++    /// `status == "ERROR"`, so the same envelope rendered as data there.
++    @Test("an agy error with a non-ERROR status is still an error on the cached path")
++    func agy_error_with_other_status_is_error() async throws {
++        let body = #"{"conversation_id":"","status":"SUCCESS","response":"","error":"quota exceeded"}"#
++        let message = try await Self.fetchError(agyPayload: Data(body.utf8))
++        #expect(message == AppError.io("agy: quota exceeded").description)
++    }
++
+     @Test("non-JSON payload is a schema error")
+     func non_json_payload_is_schema_error() async throws {
+         let message = try await Self.fetchError(agyPayload: Data("not json".utf8))
+diff --git a/docs/SDD-auto-update-checker.md b/docs/SDD-auto-update-checker.md
+index 48d7fef..9ae56cc 100644
+--- a/docs/SDD-auto-update-checker.md
++++ b/docs/SDD-auto-update-checker.md
+@@ -9,30 +9,35 @@
+ 
+ ## 1. Goal
+ 
+-Permitir que o AI Taskbar verifique periodicamente (1 vez ao dia / a cada 24 horas) a existência de novas versões publicadas no GitHub Releases de forma não intrusiva em background. Quando uma nova versão for detectada, exibir um banner destacado e elegante no topo do popover informando a disponibilidade da nova versão (`Nova versão vX.Y.Z disponível`) com um botão de ação rápida (`Atualizar`). Ao clicar, o app realiza o download seguro do `.dmg`, valida o checksum SHA-256 e disponibiliza o instalador para o usuário atualizar a aplicação.
++Permitir que o AI Taskbar verifique periodicamente (1 vez por dia do calendário local, ver UPDATE-SCHED-001) a existência de novas versões publicadas no GitHub Releases de forma não intrusiva em background. Quando uma nova versão for detectada, exibir um banner destacado e elegante no topo do popover informando a disponibilidade da nova versão (`Nova versão vX.Y.Z disponível`) com um botão de ação rápida (`Atualizar`). Ao clicar, o app realiza o download seguro do `.dmg`, valida o checksum SHA-256 e disponibiliza o instalador para o usuário atualizar a aplicação.
+ 
+ ---
+ 
+ ## 2. Actors
+ 
+ - **Usuário do AI Taskbar:** Visualiza o banner quando há nova versão disponível e clica em "Atualizar" para baixar o instalador ou dispensa o banner.
+-- **RefreshScheduler / UpdateChecker:** Orquestra a verificação automática com intervalo mínimo de 24h (86.400s) e persiste o timestamp da última checagem no `UserDefaults`.
++- **RefreshScheduler / UpdateChecker:** Orquestra a verificação automática uma vez por dia do calendário local (UPDATE-SCHED-001) e persiste o timestamp da última checagem no `UserDefaults`.
+ - **GitHub Releases API:** Endpoint `GET https://api.github.com/repos/justoeu/ai-taskbar/releases/latest` consultado para checar a tag mais recente e obter os assets (`.dmg` e `checksums-*.txt`).
+ 
+ ---
+ 
+ ## 3. In Scope
+ 
+-### 3.1 Agendamento e Persistência da Cadência (24 Horas)
++### 3.1 Agendamento e Persistência da Cadência (1 vez por dia do calendário)
++> **Atualizado por UPDATE-SCHED-001** (deep-audit 2026-09-29). A regra original
++> ("intervalo mínimo de 24 h") foi substituída: um sleep fixo de 24 h após uma
++> checagem pulada no launch chegou a atrasar a próxima para ~48 h. Não restaure
++> o piso de 24 h.
++
+ 1. **Controle de Frequência:**
+-   - Cadência padrão de 24 horas (`86_400` segundos).
+-   - Timestamp da última verificação persistido no `UserDefaults` sob a chave `ai_taskbar_last_update_check_at`.
+-   - Método `checkIfNeeded(force: Bool = false)`:
+-     - Se `force == false` e o tempo decorrido desde a última checagem for `< 24 horas`, não efetua requisição de rede.
+-     - Se decorrido `≥ 24 horas` ou se nunca foi verificado (`nil`), dispara a checagem assíncrona contra o GitHub Releases e atualiza o timestamp após a conclusão.
++   - Uma checagem por **dia do calendário local**: no launch, se ainda não checou hoje, e no início de cada novo dia enquanto o app roda.
++   - Timestamp da última verificação persistido no `UserDefaults` sob a chave `ai_taskbar_last_update_check_at`, gravado no **início** de cada tentativa (inclusive quando `owner_repo` é inválido, para não reabrir a checagem a cada minuto — BUG-MAE-012).
++   - `UpdateChecker.isCheckDue(lastCheck:now:calendar:)` (puro, `Calendar` + relógio injetados): devida quando nunca verificou (`nil`), quando a última foi em um dia local **anterior**, ou após `≥ 24 h`. Última checagem no futuro (relógio adiantado) não é devida.
++   - `UpdateChecker.delayUntilNextCheck(lastCheck:now:calendar:)`: 0 quando devida; senão o tempo até a próxima meia-noite local ou +24 h, o que vier primeiro, limitado a `60 s...24 h`. A versão de instância aplica o piso de 60 s também ao caso "devida" (`minimumRetryDelay`), para uma checagem em andamento não girar.
++   - Método `checkIfNeeded(force: Bool = false)`: com `force == false` só dispara se `isCheckDue`; `force == true` (botão "Verificar agora") sempre dispara.
+ 2. **Integração no Ciclo de Vida:**
+    - Disparo inicial na inicialização do aplicativo (`start()` do `RefreshScheduler` ou inicialização do `UpdateChecker`).
+-   - Loop em background no `RefreshScheduler` ou timer acoplado verificando a cada intervalo para disparar `checkIfNeeded()`.
++   - Loop em background no `RefreshScheduler`: dorme `delayUntilNextCheck()` e o recalcula a partir da data gravada após cada rodada, então uma checagem manual pela tela *Sobre* também move a próxima.
+    - Respeito à flag de configuração `config.updates.enabled`: se desabilitado em `config.toml`, nenhuma checagem automática é realizada.
+ 
+ ### 3.2 Banner de Notificação no Popover (`PopoverContentView`)
+@@ -80,13 +85,19 @@ Permitir que o AI Taskbar verifique periodicamente (1 vez ao dia / a cada 24 hor
+ ### 5.1 `UpdateChecker`
+ ```swift
+ extension UpdateChecker {
+-    public static let cadenceInterval: TimeInterval = 86_400 // 24 hours
++    public static let cadenceInterval: TimeInterval = 86_400 // 24 hours (teto do sleep)
++    public static let minimumRetryDelay: TimeInterval = 60
+     public static let lastCheckKey: String = "ai_taskbar_last_update_check_at"
+     public static let dismissedTagKey: String = "ai_taskbar_dismissed_update_tag"
+ 
+     public var isUpdateBannerVisible: Bool { get }
+     public func checkIfNeeded(force: Bool = false)
++    public func delayUntilNextCheck() -> TimeInterval
+     public func dismissCurrentUpdate()
++
++    public static func isCheckDue(lastCheck: Date?, now: Date, calendar: Calendar) -> Bool
++    public static func delayUntilNextCheck(lastCheck: Date?, now: Date,
++                                           calendar: Calendar) -> TimeInterval
+ }
+ ```
+ 
+@@ -101,7 +112,7 @@ private func startUpdateCheckLoop()
+ 
+ ## 6. Invariants
+ 
+-1. **Sem Spam de Rede:** Nunca disparar checagem contra a API do GitHub com intervalo inferior a 24 horas, a menos que o usuário clique explicitamente no botão manual "Verificar agora" na tela *Sobre*.
++1. **Sem Spam de Rede:** No máximo uma checagem automática por dia do calendário local (UPDATE-SCHED-001). Duas checagens podem ficar a menos de 24 h uma da outra quando atravessam a meia-noite (ex.: 23:34 e 10:00 do dia seguinte); isso é intencional. O loop nunca acorda com intervalo inferior a 60 s. O botão manual "Verificar agora" na tela *Sobre* ignora a regra.
+ 2. **Segurança de Downloads (SEC-SEN-002):** Bloqueio inegociável de URLs fora dos hosts confiáveis do GitHub; validação obrigatória de integridade SHA-256 antes de qualquer ativação de arquivo.
+ 3. **Concorrência e MainActor:** Todas as propriedades de UI de `UpdateChecker` são `@MainActor`. As tarefas em segundo plano rodam assincronamente sem bloquear a renderização da interface.
+ 4. **Respeito à Baseline e Cobertura:** Cobertura de código mantida $\ge 90\%$ e zero warnings de compilação.
+@@ -111,7 +122,7 @@ private func startUpdateCheckLoop()
+ ## 7. Done When
+ 
+ 1. [x] SDD confirmado e versionado em `docs/SDD-auto-update-checker.md`.
+-2. [ ] Suíte de testes unitários para `checkIfNeeded` (respeito a 24h, mock de tempo, `UserDefaults`), persistência e dismiss do banner.
++2. [ ] Suíte de testes unitários para `checkIfNeeded` (regra do dia do calendário de UPDATE-SCHED-001, mock de tempo, `UserDefaults`), persistência e dismiss do banner.
+ 3. [ ] Banner implementado em `PopoverContentView.swift` com os estados *Disponível*, *Baixando*, *Concluído* e botão de dispensar.
+ 4. [ ] Ciclo de vida integrado com checagem automática diária.
+ 5. [ ] Todos os testes passando (`make test`), `make validate` verde com cobertura $\ge 90\%$.

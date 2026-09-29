@@ -2508,14 +2508,46 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B16 r2",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-011",
-    "blocks_pr": false
+    "resolved_test": "Notification delivery rollback#a failed higher crossing restores the delivered lower mark,Notification delivery rollback#after restoring the lower mark the failed higher crossing is still retried,NotificationThresholdTracker — per-window dedupe#unmark restores the mark the failed crossing replaced",
+    "resolved_at": "2026-09-29 19:32:50 UTC",
+    "resolved_note": "batch B18-r2",
+    "progress": [
+      "2026-09-29: resolvido · teste Notification delivery rollback#a failed higher crossing restores the delivered lower mark,Notification delivery rollback#after restoring the lower mark the failed higher crossing is still retried,NotificationThresholdTracker — per-window dedupe#unmark restores the mark the failed crossing replaced · revisão approved (3/3) · batch B18-r2",
+      "2026-09-29: resolvido · teste Notification delivery rollback#a failed higher crossing restores the delivered lower mark,Notification delivery rollback#after restoring the lower mark the failed higher crossing is still retried,NotificationThresholdTracker — per-window dedupe#unmark restores the mark the failed crossing replaced · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "classic_bugs",
@@ -2531,14 +2563,99 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B17",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-012",
-    "blocks_pr": false
+    "resolved_test": "RefreshScheduler#an invalid owner_repo backs off to the next day instead of waking every minute,UpdateChecker Cadence and Banner Visibility Tests#an invalid owner_repo still records the attempt,UpdateChecker Cadence and Banner Visibility Tests#an invalid owner_repo still reports the configuration error",
+    "resolved_at": "2026-09-29 19:32:47 UTC",
+    "resolved_note": "batch B18-last-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#an invalid owner_repo backs off to the next day instead of waking every minute,UpdateChecker Cadence and Banner Visibility Tests#an invalid owner_repo still records the attempt,UpdateChecker Cadence and Banner Visibility Tests#an invalid owner_repo still reports the configuration error · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:46 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/NotificationService.swift",
+    "line": 190,
+    "title": "A crossing that failed while notification permission was denied stays marked after the user grants permission",
+    "evidence": "authorizationKnownDenied clears only on a later successful delivery (raised by Nemesis, remediation B18)",
+    "fix": "Re-check permission (or clear the cached denial) on app activation / next crossing and re-arm the denied crossings",
+    "impact": "One threshold notification is not re-sent until the window resets or a higher threshold fires",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B18",
+    "domain": "classic_bugs",
+    "status": "resolved",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-013",
+    "resolved_test": "NotificationDeliveryRollbackTests#denied_crossing_is_resent_after_grant,#delivery_rearms_parked_crossing",
+    "resolved_at": "2026-09-29 19:32:49 UTC",
+    "resolved_note": "batch B18-r2",
+    "progress": [
+      "2026-09-29: resolvido · teste NotificationDeliveryRollbackTests#denied_crossing_is_resent_after_grant,#delivery_rearms_parked_crossing · revisão approved (3/3) · batch B18-r2"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "title": "AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic",
@@ -3484,14 +3601,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B16",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-018",
-    "blocks_pr": false
+    "resolved_test": "Notification title localization#the title rounds the percent the way the card does,PercentText#rounds half up to the nearest whole percent,PercentText#formats with a percent sign,Numeric conversion traps — App formatters#Busiest-day text rounds normal values like the cards",
+    "resolved_at": "2026-09-29 19:32:47 UTC",
+    "resolved_note": "batch B18-last-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste Notification title localization#the title rounds the percent the way the card does,PercentText#rounds half up to the nearest whole percent,PercentText#formats with a percent sign,Numeric conversion traps — App formatters#Busiest-day text rounds normal values like the cards · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:47 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -3507,13 +3655,121 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B17",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-021",
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 19:32:47 UTC",
+    "resolved_note": "batch B18-last-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:47 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift",
+    "line": 46,
+    "title": "Hard-coded English \" quota\" suffix inside otherwise localized analytics strings",
+    "evidence": "AnalyticsFormatters.swift:46/48 and VendorAnalyticsCardView.swift:105 append a literal English word (raised by Jano, remediation B18)",
+    "fix": "Move the suffix into a localized format key in en/pt-BR/es",
+    "impact": "pt-BR/es users see an English word in Analytics",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B18",
+    "domain": "quality",
+    "status": "resolved",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-022",
+    "resolved_test": "AnalyticsQuotaLocalizationTests#peak_day_en,#peak_day_pt_br,#peak_day_es,#peak_day_cost_pt_br,#card_quota_pt_br",
+    "resolved_at": "2026-09-29 19:32:49 UTC",
+    "resolved_note": "batch B18-r2",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsQuotaLocalizationTests#peak_day_en,#peak_day_pt_br,#peak_day_es,#peak_day_cost_pt_br,#card_quota_pt_br · revisão approved (3/3) · batch B18-r2"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/Views/AnalyticsView.swift",
+    "line": 216,
+    "title": "Analytics average usage label truncates (Int(saturating:)) instead of using PercentText rounding",
+    "evidence": "92.9 shows 92% here and 93% elsewhere (raised by Higia and Jano, remediation B18 r2)",
+    "fix": "Compute avgUsage via PercentText.whole / format",
+    "impact": "Inconsistent percent between Analytics average and other labels",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B18 r2",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-023",
     "blocks_pr": false
   },
   {
@@ -4638,14 +4894,46 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B16 r2",
     "domain": "performance",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "PERF-MAE-004",
-    "blocks_pr": false
+    "resolved_test": "Notification delivery rollback#a failure while authorization is denied does not re-arm the crossing,Notification delivery rollback#a transient failure with authorization granted still re-arms,Notification delivery rollback#a known denial is cached: a second failure does not ask the OS again,Notification delivery rollback#a delivery after a cached denial clears it, so a later failure asks the OS again",
+    "resolved_at": "2026-09-29 19:32:51 UTC",
+    "resolved_note": "batch B18-r2",
+    "progress": [
+      "2026-09-29: resolvido · teste Notification delivery rollback#a failure while authorization is denied does not re-arm the crossing,Notification delivery rollback#a transient failure with authorization granted still re-arms,Notification delivery rollback#a known denial is cached: a second failure does not ask the OS again,Notification delivery rollback#a delivery after a cached denial clears it, so a later failure asks the OS again · revisão approved (3/3) · batch B18-r2",
+      "2026-09-29: resolvido · teste Notification delivery rollback#a failure while authorization is denied does not re-arm the crossing,Notification delivery rollback#a transient failure with authorization granted still re-arms,Notification delivery rollback#a known denial is cached: a second failure does not ask the OS again,Notification delivery rollback#a delivery after a cached denial clears it, so a later failure asks the OS again · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "agent": "Cronos",
@@ -5157,6 +5445,83 @@
       "test_reversal_checked": false
     },
     "in_progress": false
+  },
+  {
+    "lens": "race",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/NotificationService.swift",
+    "line": 191,
+    "title": "Two in-flight crossings for one window failing out of order can restore a lower mark that was never delivered",
+    "evidence": "Raised by Ferreiro, remediation B18",
+    "fix": "Restore only marks confirmed delivered (track delivered marks separately from pending)",
+    "impact": "A threshold may be skipped in a rare double-failure race",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B18",
+    "domain": "race",
+    "status": "resolved",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "RACE-MAE-003",
+    "resolved_test": "NotificationDeliveryRollbackTests#double_failure_does_not_restore_undelivered_mark,#higher_failure_keeps_lower_in_flight_mark",
+    "resolved_at": "2026-09-29 19:32:50 UTC",
+    "resolved_note": "batch B18-r2",
+    "progress": [
+      "2026-09-29: resolvido · teste NotificationDeliveryRollbackTests#double_failure_does_not_restore_undelivered_mark,#higher_failure_keeps_lower_in_flight_mark · revisão approved (3/3) · batch B18-r2"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "race",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/NotificationService.swift",
+    "line": 347,
+    "title": "Pending crossings keyed only by threshold: a reset and re-cross while the first add() is in flight lets the stale completion act on the new crossing",
+    "evidence": "No generation token on pending entries (raised by Nemesis, remediation B18 r2)",
+    "fix": "Tag each pending crossing with a generation/token and ignore completions whose token no longer matches",
+    "impact": "Rare duplicate or dropped rollback within add() latency",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B18 r2",
+    "domain": "race",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "RACE-MAE-004",
+    "blocks_pr": false
   },
   {
     "agent": "Cérbero",
@@ -7341,13 +7706,68 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B16",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-010",
+    "resolved_test": "GeminiXAILocaleNeutralTests (unchanged, round 1)",
+    "resolved_at": "2026-09-29 19:32:49 UTC",
+    "resolved_note": "batch B18-r2",
+    "progress": [
+      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests (unchanged, round 1) · revisão approved (3/3) · batch B18-r2",
+      "2026-09-29: resolvido · teste Gemini + xAI emit structure, not prose#an agy error with a non-ERROR status is still an error on the cached path · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+    "line": 78,
+    "title": "notif_title_fmt uses %d for a 64-bit Int argument",
+    "evidence": "Value clamped to 0..1000 so harmless today; %ld is correct (raised by Nemesis, remediation B18 r2)",
+    "fix": "Use %ld in en/pt-BR/es",
+    "impact": "None within the clamp",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B18 r2",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-014",
     "blocks_pr": false
   },
   {
@@ -7788,14 +8208,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B16",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-019",
-    "blocks_pr": false
+    "resolved_test": "VendorViewModel rate-limit cooldown clock#lastNetworkFetch is stamped on the injected clock",
+    "resolved_at": "2026-09-29 19:32:48 UTC",
+    "resolved_note": "batch B18-last-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModel rate-limit cooldown clock#lastNetworkFetch is stamped on the injected clock · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:48 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -7811,14 +8262,26 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B16 r2",
     "domain": "quality",
-    "status": "open",
+    "status": "accepted",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-020",
-    "blocks_pr": false
+    "accept": {
+      "type": "divida-cosmetica",
+      "what": "gemini.prefer_antigravity, xai.prefer_grok_cli and xai.grok_base_url can only be changed by editing config.toml",
+      "consequence": "Users have to edit config.toml to change these 3 settings; the defaults (true, true, built-in host) cover the common case",
+      "reopen_if": "A user asks for a Settings control, or a default changes so that most users would need to override it",
+      "ratified_by": "user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    },
+    "accepted_at": "2026-09-29 19:32:49 UTC",
+    "progress": [
+      "2026-09-29: aceito (divida-cosmetica) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    ],
+    "blocks_pr": false,
+    "in_progress": false
   },
   {
     "lens": "deps",
@@ -8028,13 +8491,121 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B17",
     "domain": "duplication",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-MAE-005",
+    "resolved_test": "UpdateChecker Cadence and Banner Visibility Tests#the instance delay of a due check is the retry floor, not 0",
+    "resolved_at": "2026-09-29 19:32:48 UTC",
+    "resolved_note": "batch B18-last-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateChecker Cadence and Banner Visibility Tests#the instance delay of a due check is the retry floor, not 0 · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:48 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "duplication",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/PercentText.swift",
+    "line": 1,
+    "title": "Call sites format percent by hand as PercentText.whole(x) plus % instead of PercentText.format(x)",
+    "evidence": "PinnedStatusItemManager.swift:258,261,271, MenuBarLabelView.swift:414, ProviderRowView.swift:436, SparklineView.swift:449, VendorSectionView.swift:597 (raised by Higia, remediation B18)",
+    "fix": "Use PercentText.format at those sites",
+    "impact": "The percent sign is repeated per site",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B18",
+    "domain": "duplication",
+    "status": "resolved",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "DUP-MAE-006",
+    "resolved_test": "PercentTextTests (existing format test)",
+    "resolved_at": "2026-09-29 19:32:50 UTC",
+    "resolved_note": "batch B18-r2",
+    "progress": [
+      "2026-09-29: resolvido · teste PercentTextTests (existing format test) · revisão approved (3/3) · batch B18-r2"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "duplication",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/NotificationService.swift",
+    "line": 294,
+    "title": "Tracker repeats per-key cleanup (drop empty pending; remove from three maps on reset and prune); clearKnownDenial also re-arms without saying so",
+    "evidence": "Raised by Higia, remediation B18 r2",
+    "fix": "Extract forget(key)/dropEmptyPending(key); rename clearKnownDenial to clearKnownDenialAndRearm",
+    "impact": "A future per-key map could be missed on one path",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B18 r2",
+    "domain": "duplication",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "DUP-MAE-007",
     "blocks_pr": false
   },
   {
@@ -8771,14 +9342,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B17",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-011",
-    "blocks_pr": false
+    "resolved_test": "RefreshScheduler#updates disabled: no update loop runs, so nothing sleeps or checks",
+    "resolved_at": "2026-09-29 19:32:48 UTC",
+    "resolved_note": "batch B18-last-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#updates disabled: no update loop runs, so nothing sleeps or checks · revisão approved (3/3) · batch B18-last-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:32:48 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "title": "Two of AppLog seven Logger categories are declared but never logged to",

@@ -1,0 +1,13 @@
+{
+ "id": "DUP-MAE-006",
+ "verdict": "APROVA",
+ "reasoning": "Every site listed in the finding now calls PercentText.format: PinnedStatusItemManager.swift, MenuBarLabelView.swift, ProviderRowView.swift, SparklineView.swift, VendorSectionView.swift and AnalyticsView.swift. The digits are the same because format is \"\\(whole(x))%\". One visible difference, as asked: Text(\"\\(Int)%\") went through LocalizedStringKey, which formats Int interpolation with the locale's grouping, so 1000% showed as '1,000%' (or '1.000%'). Text(String) is verbatim and now shows '1000%'. This only appears at 1000% or more. It now matches the NSStatusItem, tooltip and notification strings, which never grouped, so I accept it and do not require a change. No contract changes.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PercentText.swift:15",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PinnedStatusItemManager.swift"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae1f7cbb53ed74d3d",
+ "batch": "B18-r2"
+}

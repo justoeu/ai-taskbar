@@ -1,0 +1,14 @@
+{
+ "id": "BUG-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "NotificationService.swift, in NotificationThresholdTracker.unmark: it now sets highestNotified[key] = previous instead of removeValue, and crossings() records `previous` for each fired crossing. When a higher crossing fails, the lower mark that was already delivered comes back, so the next lower reading does not send it again. The guard `highestNotified[key] == threshold` is kept, so a reset or a higher mark set in between is still not undone. The longer async gap (the authorizationStatus hop) is covered by that same guard. Tests are green. Reversal: I put back removeValue and 'a failed higher crossing restores the delivered lower mark' went RED (identifiers.count 3 == 2, NotificationDeliveryRollbackTests.swift:90), and so did 'unmark restores the mark...' (NotificationThresholdTrackerTests.swift:105).",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift",
+  "Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift:90",
+  "Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift:105"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "af5598aa69ac05df2",
+ "batch": "B18-last-followups"
+}

@@ -1,0 +1,100 @@
+{
+ "batch": "B18-r2",
+ "results": [
+  {
+   "id": "BUG-MAE-010",
+   "outcome": "fixed",
+   "tests": [
+    "GeminiXAILocaleNeutralTests (unchanged, round 1)"
+   ],
+   "red": "n/a: doc-only. The 'error when non-empty, else response ... generic message' lines are back directly above message(error:response:), and reported() keeps only its own doc",
+   "reversal": "n/a"
+  },
+  {
+   "id": "CQ-MAE-022",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsQuotaLocalizationTests#peak_day_en",
+    "#peak_day_pt_br",
+    "#peak_day_es",
+    "#peak_day_cost_pt_br",
+    "#card_quota_pt_br"
+   ],
+   "red": "Expectation failed: (Self.inLanguage(\"pt-BR\") { AnalyticsFormatters.peakDayText(Self.record) } → \"🔥 Dia mais movimentado: 14 Nov 2023 (85% quota)\").hasSuffix(\"(85% da quota)\")",
+   "reversal": "ok (old peakDayText suffix put back: pt-BR, es and cost tests RED again; fix restored)"
+  },
+  {
+   "id": "BUG-MAE-013",
+   "outcome": "fixed",
+   "tests": [
+    "NotificationDeliveryRollbackTests#denied_crossing_is_resent_after_grant",
+    "#delivery_rearms_parked_crossing"
+   ],
+   "red": "Expectation failed: (center.identifiers.count → 1) == 2",
+   "reversal": "ok (NotificationService.swift restored from SCRATCH copy: both RED again; fix restored)"
+  },
+  {
+   "id": "RACE-MAE-003",
+   "outcome": "fixed",
+   "tests": [
+    "NotificationDeliveryRollbackTests#double_failure_does_not_restore_undelivered_mark",
+    "#higher_failure_keeps_lower_in_flight_mark"
+   ],
+   "red": "Expectation failed: (center.identifiers.last → \"ai-taskbar.anthropic.5h.90\") == \"ai-taskbar.anthropic.5h.70\"",
+   "reversal": "ok (same restore: RED again; fix restored)"
+  },
+  {
+   "id": "DUP-MAE-006",
+   "outcome": "fixed",
+   "tests": [
+    "PercentTextTests (existing format test)"
+   ],
+   "red": "n/a: non-behavioral dedupe. Every hand-built whole(x)+\"%\" is now PercentText.format(x), including AnalyticsView:209/241",
+   "reversal": "n/a"
+  },
+  {
+   "id": "BUG-MAE-011",
+   "outcome": "fixed",
+   "tests": [
+    "Notification delivery rollback#a failed higher crossing restores the delivered lower mark",
+    "Notification delivery rollback#after restoring the lower mark the failed higher crossing is still retried",
+    "NotificationThresholdTracker — per-window dedupe#unmark restores the mark the failed crossing replaced"
+   ],
+   "red": "NotificationDeliveryRollbackTests.swift:90:9: Expectation failed: (center.identifiers.count → 3) == 2",
+   "reversal": "ok",
+   "note": "re-reviewed in r2: implementation reworked (pending-crossing tracker) by B18-r2"
+  },
+  {
+   "id": "PERF-MAE-004",
+   "outcome": "fixed",
+   "tests": [
+    "Notification delivery rollback#a failure while authorization is denied does not re-arm the crossing",
+    "Notification delivery rollback#a transient failure with authorization granted still re-arms",
+    "Notification delivery rollback#a known denial is cached: a second failure does not ask the OS again",
+    "Notification delivery rollback#a delivery after a cached denial clears it, so a later failure asks the OS again"
+   ],
+   "red": "NotificationDeliveryRollbackTests.swift:119:9: Expectation failed: (center.identifiers.count → 2) == 1",
+   "reversal": "ok",
+   "note": "re-reviewed in r2: implementation reworked (pending-crossing tracker) by B18-r2"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1182,
+  "coverage": "93.24%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AntigravityExecutor.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/{en,pt-BR,es}.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/{ProviderRowView,SparklineView,AnalyticsView,VendorSectionView,MenuBarLabelView}.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsQuotaLocalizationTests.swift"
+ ]
+}

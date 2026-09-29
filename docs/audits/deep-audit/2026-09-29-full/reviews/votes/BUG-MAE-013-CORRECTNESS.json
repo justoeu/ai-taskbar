@@ -1,0 +1,16 @@
+{
+ "id": "BUG-MAE-013",
+ "verdict": "APROVA",
+ "reasoning": "A crossing that fails while permission is known denied is parked: it keeps its mark, and its pending entry is set to parked=true (NotificationService.swift:190-201). Parked crossings are re-armed in two ways: a successful delivery (line 186, clearKnownDenial -> rearmParked), or a re-check in observe (recheckDeniedAuthorization, lines 132-142) that finds the status is no longer .denied. The re-check runs only when knownDenied is true AND this vendor has a parked crossing AND no query is already in flight (authorizationRecheckInFlight). So there is at most one settings query per observe while parked, with no add() and no log. rearmParked only unmarks entries with parked=true, and those were never delivered. unmark follows the pending chain, so no undelivered mark is restored. Parked state lives inside pending[key][threshold], which holds at most one entry per threshold, and the key is dropped on reset/prune (lines 341, 363). park() uses optional chaining, so it cannot create a new entry. Growth is bounded. Reversal against the round-1 NotificationService (rebuilt by applying the B18-last-followups patch to HEAD): denied_crossing_is_resent_after_grant went RED (count 1 == 2) and delivery_rearms_parked_crossing went RED (last is xai.90). The file was then restored byte-identical, and its diff segment matches B18-r2.diff.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:119",
+  "Sources/AiTaskbarApp/NotificationService.swift:132",
+  "Sources/AiTaskbarApp/NotificationService.swift:184",
+  "Sources/AiTaskbarApp/NotificationService.swift:308",
+  "Sources/AiTaskbarApp/NotificationService.swift:319"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a279369b2f4b5120b",
+ "batch": "B18-r2"
+}
