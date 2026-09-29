@@ -1,0 +1,14 @@
+{
+ "id": "BUG-ART-011",
+ "verdict": "APROVA",
+ "reasoning": "XAIWireTypes.swift:487-495 drops the made-up formula (remaining balance times weekly percent) and keeps a 2-line guard. The comment explains why the two numbers are unrelated. The golden test's frozen reference changed on purpose and a comment records the decision, as the CLAUDE.md immutability mandate requires (XAIProviderTests.swift:180-184). The validate runner has a matching assertion (main.swift:506).",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/XAIWireTypes.swift:487",
+  "Tests/AiTaskbarProvidersTests/XAIProviderTests.swift:180",
+  "Sources/AiTaskbarValidate/main.swift:506"
+ ],
+ "lens": "QUALITY",
+ "_task": "af881c516bc3f00aa",
+ "batch": "B1-analytics"
+}

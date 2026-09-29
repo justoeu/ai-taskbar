@@ -18,6 +18,33 @@ struct OpencodeFooterTests {
     }
 
 
+    /// CLAUDE.md: opencode's OpenAI traffic rides a subscription, so the
+    /// footer shows its tokens, never dollars. opencode records those turns at
+    /// cost 0 (measured on real data: 101,543 OpenAI assistant messages, none
+    /// with cost > 0); that zero must not be printed as money.
+    @Test("subscription (zero-cost) opencode traffic shows no dollar figure")
+    func subscription_opencode_shows_no_dollars() {
+        var scan = OpencodeScan()
+        scan.last7DaysByModel["gpt-5.6-sol"] = ModelUsage(inputTokens: 1_000_000)
+        scan.costLast7DaysByModel["gpt-5.6-sol"] = 0
+        expectTrue(CostFooterView.opencodeRecordedDollars(model: "gpt-5.6-sol", in: scan) == nil)
+    }
+
+    @Test("opencode traffic with no recorded cost shows no dollar figure")
+    func missing_cost_shows_no_dollars() {
+        var scan = OpencodeScan()
+        scan.last7DaysByModel["gpt-5.6-sol"] = ModelUsage(inputTokens: 1_000_000)
+        expectTrue(CostFooterView.opencodeRecordedDollars(model: "gpt-5.6-sol", in: scan) == nil)
+    }
+
+    @Test("pay-per-token opencode traffic shows the cost opencode recorded")
+    func pay_per_token_opencode_shows_recorded_dollars() {
+        var scan = OpencodeScan()
+        scan.last7DaysByModel["grok-code-fast"] = ModelUsage(inputTokens: 1_000)
+        scan.costLast7DaysByModel["grok-code-fast"] = 2.5
+        #expect(CostFooterView.opencodeRecordedDollars(model: "grok-code-fast", in: scan) == 2.5)
+    }
+
     /// The three buckets differ by orders of magnitude on real data — 169M
     /// input against 2.7B cache reads — so a single total would bury the
     /// number that dominates. Cache has to survive into the string.

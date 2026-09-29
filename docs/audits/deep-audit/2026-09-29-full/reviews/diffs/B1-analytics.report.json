@@ -1,0 +1,108 @@
+{
+ "batch": "B1-analytics",
+ "results": [
+  {
+   "id": "BUG-ART-003",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsAggregator#monthly_total_not_weekly_cost",
+    "AnalyticsAggregator#monthly_vendor_cost_not_weekly_cost",
+    "AnalyticsAggregator#monthly_breakdown_not_weekly_breakdown",
+    "AnalyticsAggregator#monthly_flags_cost_unavailable",
+    "AnalyticsAggregator#weekly_cost_available"
+   ],
+   "red": "Expectation failed: (Self.monthly().totalCostUSD → 70.0) == (0 → 0.0)",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-004",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsEstimatesMerge#openrouter_activity_not_in_last7",
+    "AnalyticsEstimatesMerge#openrouter_activity_does_not_overwrite_last7",
+    "AnalyticsEstimatesMerge#openrouter_activity_adds_no_breakdown_rows",
+    "AnalyticsEstimatesMerge#xai_cycle_spend_not_in_last7",
+    "AnalyticsEstimatesMerge#xai_cycle_spend_does_not_raise_last7"
+   ],
+   "red": "Expectation failed: (merged[.openrouter]?.usdLast7Days → 30.0) == (7 → 7.0) / (merged[.xai]?.usdLast7Days → 45.0) == (3 → 3.0)",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-011",
+   "outcome": "fixed",
+   "tests": [
+    "XAIProviderTests#golden_grok_billing",
+    "XAIProviderTests#grok_prepaid_used_nil_without_on_demand",
+    "XAIProviderTests#grok_prepaid_used_is_reported_on_demand"
+   ],
+   "red": "XAIProviderTests.swift:163:19: Expectation failed: value (prepaidUsedUSD was 1.2 = $40 x 3%)",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-007",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsAggregator#models_are_not_sessions",
+    "AnalyticsAggregator#models_are_counted_as_models"
+   ],
+   "red": "Expectation failed: (snap.vendorSummaries.first?.sessionCount → 2) == 0",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-MAE-001",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsOpencodeMerge#no_zero_row_last7_existing_vendor",
+    "AnalyticsOpencodeMerge#no_zero_row_today_existing_vendor",
+    "AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_last7",
+    "AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_today"
+   ],
+   "red": "Expectation failed: (merged[.xai]?.modelBreakdownLast7Days → [\"grok-5\": 4.0, \"grok-code-fast\": 0.0]) == [\"grok-5\": 4.0]",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-001",
+   "outcome": "fixed",
+   "tests": [
+    "OpencodeFooterTests#subscription_opencode_shows_no_dollars",
+    "OpencodeFooterTests#missing_cost_shows_no_dollars",
+    "OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars"
+   ],
+   "red": "footer already complied (fixed-by-test); mutation `usd > 0` -> `usd >= 0` in CostFooterView.opencodeRecordedDollars -> OpencodeFooterTests.swift:30:19 Expectation failed",
+   "reversal": "ok"
+  },
+  {
+   "id": "CPX-DED-003",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsEstimatesMerge#scanner_estimates_pass_through",
+    "AnalyticsEstimatesMerge#*"
+   ],
+   "red": "refactor first, no behavior change (the extracted defaultEstimates reproduced 004 RED exactly as the old closure did); after the fix the closure is 4 lines",
+   "reversal": "ok"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 876,
+  "coverage": "91.84%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/AnalyticsModels.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsView.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/CostFooterView.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/XAIWireTypes.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarValidate/main.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/{en,pt-BR,es}.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift (new)",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/OpencodeFooterTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/AnalyticsAggregatorTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift"
+ ]
+}

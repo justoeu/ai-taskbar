@@ -88,39 +88,62 @@ public final class AnalyticsStore: ObservableObject {
         for (v, scan) in opencode {
             // opencode is a client, not a vendor (see `CostEstimator.opencode`):
             // its tokens are shown, its dollars are never added. OpenAI rides a
-            // subscription; xAI/Z.AI/Gemini totals must not be restated. Models
-            // keep a $0 entry so the breakdown still lists them.
-            if dict[v] == nil {
-                dict[v] = CostEstimate(
-                    usdToday: 0,
-                    usdLast7Days: 0,
-                    modelBreakdownToday: scan.todayByModel.mapValues { _ in 0 },
-                    modelBreakdownLast7Days: scan.last7DaysByModel.mapValues { _ in 0 },
-                    totalsByModel: scan.last7DaysByModel
-                )
-            } else if let existing = dict[v] {
-                var mergedToday = existing.modelBreakdownToday
-                for m in scan.todayByModel.keys where mergedToday[m] == nil {
-                    mergedToday[m] = 0
-                }
-                var mergedLast7 = existing.modelBreakdownLast7Days
-                for m in scan.last7DaysByModel.keys where mergedLast7[m] == nil {
-                    mergedLast7[m] = 0
-                }
-                var mergedTotals = existing.totalsByModel
-                for (m, u) in scan.last7DaysByModel {
-                    CostAggregator.add(u, into: &mergedTotals, model: m)
-                }
-                dict[v] = CostEstimate(
-                    usdToday: existing.usdToday,
-                    usdLast7Days: existing.usdLast7Days,
-                    modelBreakdownToday: mergedToday,
-                    modelBreakdownLast7Days: mergedLast7,
-                    totalsByModel: mergedTotals,
-                    computedAt: existing.computedAt,
-                    isApproximate: existing.isApproximate,
-                    note: existing.note
-                )
+            // subscription; xAI/Z.AI/Gemini totals must not be restated. Its
+            // models get NO breakdown row either: a $0.00 row would contradict
+            // the popover footer, which shows opencode's recorded cost (or its
+            // tokens) in a separate section. Only the token totals merge.
+            guard let existing = dict[v] else {
+                dict[v] = CostEstimate(usdToday: 0, usdLast7Days: 0,
+                                       totalsByModel: scan.last7DaysByModel)
+                continue
+            }
+            var mergedTotals = existing.totalsByModel
+            for (m, u) in scan.last7DaysByModel {
+                CostAggregator.add(u, into: &mergedTotals, model: m)
+            }
+            dict[v] = CostEstimate(
+                usdToday: existing.usdToday,
+                usdLast7Days: existing.usdLast7Days,
+                modelBreakdownToday: existing.modelBreakdownToday,
+                modelBreakdownLast7Days: existing.modelBreakdownLast7Days,
+                totalsByModel: mergedTotals,
+                computedAt: existing.computedAt,
+                isApproximate: existing.isApproximate,
+                note: existing.note,
+                unpricedModelsToday: existing.unpricedModelsToday,
+                unpricedModelsLast7Days: existing.unpricedModelsLast7Days
+            )
+        }
+        return dict
+    }
+
+    /// The estimates Analytics shows: the cost scanners' per-vendor totals
+    /// with opencode's tokens folded in. Pure and static so the default
+    /// `estimatesProvider` is testable without a live `UsageStore` /
+    /// `CostEstimator`.
+    ///
+    /// `snapshots` is passed so the rule lives, and is tested, where the merge
+    /// happens: **no vendor snapshot contributes money here.** Every figure
+    /// lands in a fixed window (`usdToday`, `usdLast7Days`) and no snapshot
+    /// carries one: OpenRouter `/api/v1/activity` covers the last 30 days (no
+    /// per-item date is decoded), and xAI `spentUSD` / `prepaidUsedUSD` are
+    /// billing-cycle-to-date. Both were once written into `usdLast7Days`; they
+    /// stay on the vendor's popover card, which labels their real window.
+    nonisolated static func defaultEstimates(
+        byVendor: [VendorId: CostEstimate],
+        opencode: [VendorId: OpencodeScan],
+        snapshots _: [VendorId: VendorSnapshot]
+    ) -> [VendorId: CostEstimate] {
+        mergingOpencode(byVendor, opencode: opencode)
+    }
+
+    /// Latest good snapshot per vendor, as the popover currently shows it.
+    static func currentSnapshots(_ usageStore: UsageStore?) -> [VendorId: VendorSnapshot] {
+        guard let usageStore else { return [:] }
+        var dict: [VendorId: VendorSnapshot] = [:]
+        for v in usageStore.vendors {
+            if let outcome = v.state.outcome {
+                dict[v.vendorId] = outcome.snapshot
             }
         }
         return dict
@@ -130,61 +153,13 @@ public final class AnalyticsStore: ObservableObject {
         self.init(
             estimatesProvider: { [weak costEstimator, weak usageStore] in
                 guard let costEstimator else { return [:] }
-                var dict = AnalyticsStore.mergingOpencode(
-                    costEstimator.byVendor, opencode: costEstimator.opencode)
-                if let usageStore {
-                    for v in usageStore.vendors {
-                        let vid = v.vendorId
-                        if let outcome = v.state.outcome {
-                            switch outcome.snapshot {
-                            case .openrouter(let s):
-                                // totalUsageUSD is lifetime account usage, NOT today/weekly spend.
-                                var breakdown: [String: Double] = [:]
-                                if let top = s.topModels {
-                                    for m in top {
-                                        breakdown[m.model] = m.rawUsage
-                                    }
-                                }
-                                let totalFromModels = breakdown.values.reduce(0, +)
-                                if totalFromModels > 0 {
-                                    let existing = dict[vid]
-                                    dict[vid] = CostEstimate(
-                                        usdToday: existing?.usdToday ?? 0,
-                                        usdLast7Days: totalFromModels,
-                                        modelBreakdownToday: existing?.modelBreakdownToday ?? [:],
-                                        modelBreakdownLast7Days: breakdown,
-                                        totalsByModel: existing?.totalsByModel ?? [:]
-                                    )
-                                }
-                            case .xai(let s):
-                                let used = (s.spentUSD ?? 0) + (s.prepaidUsedUSD ?? 0)
-                                if used > 0 {
-                                    let existing = dict[vid]
-                                    dict[vid] = CostEstimate(
-                                        usdToday: existing?.usdToday ?? 0,
-                                        usdLast7Days: max(existing?.usdLast7Days ?? 0, used),
-                                        modelBreakdownToday: existing?.modelBreakdownToday ?? [:],
-                                        modelBreakdownLast7Days: existing?.modelBreakdownLast7Days ?? [:],
-                                        totalsByModel: existing?.totalsByModel ?? [:]
-                                    )
-                                }
-                            default:
-                                break
-                            }
-                        }
-                    }
-                }
-                return dict
+                return AnalyticsStore.defaultEstimates(
+                    byVendor: costEstimator.byVendor,
+                    opencode: costEstimator.opencode,
+                    snapshots: AnalyticsStore.currentSnapshots(usageStore))
             },
             snapshotsProvider: { [weak usageStore] in
-                guard let usageStore else { return [:] }
-                var dict: [VendorId: VendorSnapshot] = [:]
-                for v in usageStore.vendors {
-                    if let outcome = v.state.outcome {
-                        dict[v.vendorId] = outcome.snapshot
-                    }
-                }
-                return dict
+                AnalyticsStore.currentSnapshots(usageStore)
             },
             historyProvider: { vendor in
                 (try? UsageHistoryStore.defaultFor(vendor))?.load(since: Date().addingTimeInterval(-90 * 86_400)) ?? []

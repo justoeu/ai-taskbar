@@ -283,12 +283,12 @@ extension GrokBillingResponse {
             )
         }()
 
+        // Only the reported on-demand spend. `creditUsagePercent` is the weekly
+        // subscription utilization and `prepaidBalance` is what REMAINS, so
+        // their product is not money spent; with no report there is no figure.
         let prepaidUsedUSD: Double? = {
-            if let used = cfg.onDemandUsed?.usd, used > 0 { return used }
-            if let pct = cfg.creditUsagePercent, let balance = prepaidUSD, pct > 0 {
-                return (balance * pct) / 100.0
-            }
-            return nil
+            guard let used = cfg.onDemandUsed?.usd, used > 0 else { return nil }
+            return used
         }()
 
         return XAISnapshot(

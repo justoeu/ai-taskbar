@@ -1,0 +1,12 @@
+{
+ "id": "BUG-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "mergingOpencode (AnalyticsStore.swift:100-121) replaces the if/else-if with two dictionary loops that inserted zeros by a `guard ... continue` and one token loop, so nesting drops a level. It now also carries `unpricedModelsToday/Last7Days`, which the old rebuild dropped without notice. The comment says why there is no $0 row. The tests make one assertion each.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:100"
+ ],
+ "lens": "QUALITY",
+ "_task": "af881c516bc3f00aa",
+ "batch": "B1-analytics"
+}

@@ -1,0 +1,14 @@
+{
+ "id": "BUG-ART-007",
+ "verdict": "APROVA",
+ "reasoning": "AnalyticsAggregator.swift:132-139 stops using the model count as sessionCount, and the new modelCount (AnalyticsModels.swift:35) is shown in VendorAnalyticsCardView.swift:190-196. The keys analytics_models and analytics_model_single appear in the en, es and pt-BR strings files, and README.md:33 mentions the change. The other sessionCount consumer, hasNoData at VendorAnalyticsCardView.swift:277, still reads correctly.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:132",
+  "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:190",
+  "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:327"
+ ],
+ "lens": "SCOPE",
+ "_task": "a52cfdd84a025720c",
+ "batch": "B1-analytics"
+}

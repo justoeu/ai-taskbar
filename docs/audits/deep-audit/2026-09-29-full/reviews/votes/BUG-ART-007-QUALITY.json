@@ -1,0 +1,13 @@
+{
+ "id": "BUG-ART-007",
+ "verdict": "APROVA",
+ "reasoning": "AnalyticsAggregator.swift:381-390 removes the model-count-as-sessions branch, leaving only the real counters. A new field `modelCount` is added with a name that matches what it holds (`modelBreakdown.count`, documented at AnalyticsModels.swift:423), with its own localized strings. VendorAnalyticsCardView.swift:190-197 copies the 7-line session-label block for models. That is minor duplication inside the fix's own scope and does not justify MUDANCAS.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:381",
+  "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:190"
+ ],
+ "lens": "QUALITY",
+ "_task": "af881c516bc3f00aa",
+ "batch": "B1-analytics"
+}

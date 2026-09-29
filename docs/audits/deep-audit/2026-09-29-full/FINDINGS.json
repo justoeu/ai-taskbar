@@ -236,7 +236,7 @@
     "fix": "Add a 30-day window to CostEstimate (usdLast30Days) from the scanners, or hide cost in .monthly. Never reuse usdLast7Days.",
     "failure_scenario": "At a steady 10 USD/day, Weekly shows ~70-80 USD, and Monthly still shows ~70-80 instead of ~300.",
     "test_red_green": {
-      "name": "monthlyTimeframeDoesNotReuseWeeklyCost",
+      "name": "AnalyticsAggregator#monthly_total_not_weekly_cost,AnalyticsAggregator#monthly_vendor_cost_not_weekly_cost,AnalyticsAggregator#monthly_breakdown_not_weekly_breakdown,AnalyticsAggregator#monthly_flags_cost_unavailable,AnalyticsAggregator#weekly_cost_available",
       "assert_before": "monthly totalCostUSD == usdLast7Days",
       "assert_after": "monthly cost hidden or a 30-day figure"
     },
@@ -245,10 +245,41 @@
     "cetico_evidence": "AnalyticsAggregator.swift:113-115: `case .weekly, .monthly: cost = estimate?.usdLast7Days`, while currentDuration for .monthly is 30*86400 (L85-86). CostEstimate has no 30-day field. The picker labels it 'Month' (Localizable.strings:326) and totalCostUSD and shares come from it. Downgraded from HIGH: the wrong number only appears in the secondary Analytics view, with no crash, data loss or effect on the main footer.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift",
     "id": "BUG-ART-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnalyticsAggregator#monthly_total_not_weekly_cost,AnalyticsAggregator#monthly_vendor_cost_not_weekly_cost,AnalyticsAggregator#monthly_breakdown_not_weekly_breakdown,AnalyticsAggregator#monthly_flags_cost_unavailable,AnalyticsAggregator#weekly_cost_available",
+    "resolved_at": "2026-09-29 12:37:49 UTC",
+    "resolved_note": "batch B1-analytics",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:37:48 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsAggregator#monthly_total_not_weekly_cost,AnalyticsAggregator#monthly_vendor_cost_not_weekly_cost,AnalyticsAggregator#monthly_breakdown_not_weekly_breakdown,AnalyticsAggregator#monthly_flags_cost_unavailable,AnalyticsAggregator#weekly_cost_available · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -263,7 +294,7 @@
     "fix": "Decode the date of each activity item and sum only the last 7 days. Show xAI cycle spend in its own field with a cycle label.",
     "failure_scenario": "OpenRouter at 1 USD/day for 30 days: the weekly card shows 30 USD where 7 is correct.",
     "test_red_green": {
-      "name": "openRouterWeeklyUsesOnlyLast7DaysOfActivity",
+      "name": "AnalyticsEstimatesMerge#openrouter_activity_not_in_last7,AnalyticsEstimatesMerge#openrouter_activity_does_not_overwrite_last7,AnalyticsEstimatesMerge#openrouter_activity_adds_no_breakdown_rows,AnalyticsEstimatesMerge#xai_cycle_spend_not_in_last7,AnalyticsEstimatesMerge#xai_cycle_spend_does_not_raise_last7",
       "assert_before": "usdLast7Days == 30",
       "assert_after": "usdLast7Days == 7"
     },
@@ -271,10 +302,41 @@
     "cetico_evidence": "AnalyticsStore.swift:161-166 sums topModels.rawUsage into usdLast7Days. topModels comes from /api/v1/activity, which OpenRouterWireTypes.swift:65-66 documents as 30 days, and it is summed with no date filter (L165-169). The xAI cycle spend also lands in usdLast7Days (L173-178).",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
     "id": "BUG-ART-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnalyticsEstimatesMerge#openrouter_activity_not_in_last7,AnalyticsEstimatesMerge#openrouter_activity_does_not_overwrite_last7,AnalyticsEstimatesMerge#openrouter_activity_adds_no_breakdown_rows,AnalyticsEstimatesMerge#xai_cycle_spend_not_in_last7,AnalyticsEstimatesMerge#xai_cycle_spend_does_not_raise_last7",
+    "resolved_at": "2026-09-29 12:37:49 UTC",
+    "resolved_note": "batch B1-analytics",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:37:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsEstimatesMerge#openrouter_activity_not_in_last7,AnalyticsEstimatesMerge#openrouter_activity_does_not_overwrite_last7,AnalyticsEstimatesMerge#openrouter_activity_adds_no_breakdown_rows,AnalyticsEstimatesMerge#xai_cycle_spend_not_in_last7,AnalyticsEstimatesMerge#xai_cycle_spend_does_not_raise_last7 · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -837,7 +899,7 @@
     "fix": "Count distinct transcript or rollout files in the window inside the scanners and expose that count, or drop the label.",
     "failure_scenario": "12 Claude sessions today on claude-opus-5-5 show as 1 session.",
     "test_red_green": {
-      "name": "sessionCountIsNotModelCount",
+      "name": "AnalyticsAggregator#models_are_not_sessions,AnalyticsAggregator#models_are_counted_as_models",
       "assert_before": "sessionCount == 1",
       "assert_after": "sessionCount == 12"
     },
@@ -846,10 +908,41 @@
     "cetico_evidence": "AnalyticsAggregator.swift:133-136 counts totalsByModel entries with inputTokens>0. totalsByModel is the TODAY bucket (ClaudeSessionScanner.swift:146, CodexSessionScanner.swift:182). VendorAnalyticsCardView.swift:178-181 renders it as 'active sessions'. Downgraded: it is a wrong label on an informational number, and cost is unaffected.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift",
     "id": "BUG-ART-007",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnalyticsAggregator#models_are_not_sessions,AnalyticsAggregator#models_are_counted_as_models",
+    "resolved_at": "2026-09-29 12:37:49 UTC",
+    "resolved_note": "batch B1-analytics",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:37:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsAggregator#models_are_not_sessions,AnalyticsAggregator#models_are_counted_as_models · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -944,7 +1037,7 @@
     "fix": "Return nil when onDemandUsed is missing.",
     "failure_scenario": "Balance 50 USD and weekly 40% produce 20 USD spent where the real figure is 0.",
     "test_red_green": {
-      "name": "grokPrepaidUsedNotDerivedFromWeeklyPercent",
+      "name": "XAIProviderTests#golden_grok_billing,XAIProviderTests#grok_prepaid_used_nil_without_on_demand,XAIProviderTests#grok_prepaid_used_is_reported_on_demand",
       "assert_before": "prepaidUsedUSD == 20",
       "assert_after": "prepaidUsedUSD == nil"
     },
@@ -952,10 +1045,41 @@
     "cetico_evidence": "XAIWireTypes.swift:286-291: when onDemandUsed is absent, prepaidUsedUSD = prepaidBalance * creditUsagePercent/100. creditUsagePercent is the weekly subscription utilization (L261) and prepaidBalance is the remaining balance, so the product has no meaning. AnalyticsStore.swift:173 displays it as spend.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/XAIWireTypes.swift",
     "id": "BUG-ART-011",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "XAIProviderTests#golden_grok_billing,XAIProviderTests#grok_prepaid_used_nil_without_on_demand,XAIProviderTests#grok_prepaid_used_is_reported_on_demand",
+    "resolved_at": "2026-09-29 12:37:49 UTC",
+    "resolved_note": "batch B1-analytics",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:37:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste XAIProviderTests#golden_grok_billing,XAIProviderTests#grok_prepaid_used_nil_without_on_demand,XAIProviderTests#grok_prepaid_used_is_reported_on_demand · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -1045,14 +1169,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "AnalyticsOpencodeMerge#no_zero_row_last7_existing_vendor,AnalyticsOpencodeMerge#no_zero_row_today_existing_vendor,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_last7,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_today",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnalyticsOpencodeMerge#no_zero_row_last7_existing_vendor,AnalyticsOpencodeMerge#no_zero_row_today_existing_vendor,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_last7,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_today",
+    "resolved_at": "2026-09-29 12:37:49 UTC",
+    "resolved_note": "batch B1-analytics",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:37:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsOpencodeMerge#no_zero_row_last7_existing_vendor,AnalyticsOpencodeMerge#no_zero_row_today_existing_vendor,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_last7,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_today · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "in_progress": false
   },
   {
     "title": "AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic",
@@ -1070,15 +1225,46 @@
     "cetico_evidence": "AnalyticsStore.swift:83-196: the default estimatesProvider closure nests loops, if/else and switch, and repeats the existing-or-default merge (opencode today/last7, openrouter, xai). Tests always inject their own estimatesProvider (AnalyticsStoreTests.swift:31,58), so the real merge is never exercised. Refactor/test debt, no bug shown.",
     "verification": "cetico",
     "domain": "complexity",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#*",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CPX-DED-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#*",
+    "resolved_at": "2026-09-29 12:37:49 UTC",
+    "resolved_note": "batch B1-analytics",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:37:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#* · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "in_progress": false
   },
   {
     "title": "VendorSectionView.extras(for:) switch measures over the cyclomatic ceiling but is a plain per-vendor dispatch, not tangled logic - real gap is duplicated openrouter/zai blocks with no test",
@@ -1195,14 +1381,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars",
+    "resolved_at": "2026-09-29 12:37:49 UTC",
+    "resolved_note": "batch B1-analytics",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:37:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "in_progress": false
   },
   {
     "title": "GitHub Actions checked out via floating major tag, not commit SHA",

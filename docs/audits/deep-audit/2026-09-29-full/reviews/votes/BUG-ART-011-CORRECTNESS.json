@@ -1,0 +1,14 @@
+{
+ "id": "BUG-ART-011",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarProviders/XAIWireTypes.swift:289-292: prepaidUsedUSD now comes only from onDemandUsed.usd>0 and is nil otherwise. The balance x weekly% guess is gone. The other xAI path (XAIWireTypes.swift:358) reads the real prepaidCreditsUsed from the invoice preview and is fine. Reversal check: restoring the HEAD file made XAIProviderTests.swift:163 and :178 go RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/XAIWireTypes.swift:289",
+  "Sources/AiTaskbarProviders/XAIWireTypes.swift:358"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "a55e442996e514b95",
+ "batch": "B1-analytics"
+}

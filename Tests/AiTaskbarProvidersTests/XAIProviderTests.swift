@@ -156,7 +156,26 @@ struct XAIProviderTests {
         expectTrue(snap.weekly?.resetsAt != nil)
         expectTrue(snap.balance?.detail == "$40.00 available")
         #expect(snap.prepaidUSD == 40.0)
+        // Deliberate schema decision (BUG-ART-011): the fixture reports
+        // `onDemandUsed: 0`, so nothing was spent from the prepaid balance.
+        // The old reference would have been 1.2 = remaining $40 x weekly 3%,
+        // a product of two unrelated numbers; there is no prepaid-used figure.
+        expectTrue(snap.prepaidUsedUSD == nil)
         expectTrue(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.")
+    }
+
+    @Test("Grok prepaidUsedUSD is the reported on-demand spend, never balance x weekly %")
+    func grok_prepaid_used_is_reported_on_demand() throws {
+        let json = #"{"config":{"creditUsagePercent":40,"prepaidBalance":{"val":5000},"onDemandUsed":{"val":250}}}"#
+        let resp = try SharedCoders.decoder.decode(GrokBillingResponse.self, from: Data(json.utf8))
+        #expect(resp.toSnapshot().prepaidUsedUSD == 2.5)
+    }
+
+    @Test("Grok prepaidUsedUSD is nil when on-demand spend is absent")
+    func grok_prepaid_used_nil_without_on_demand() throws {
+        let json = #"{"config":{"creditUsagePercent":40,"prepaidBalance":{"val":5000}}}"#
+        let resp = try SharedCoders.decoder.decode(GrokBillingResponse.self, from: Data(json.utf8))
+        expectTrue(resp.toSnapshot().prepaidUsedUSD == nil)
     }
 
     @Test("golden: Grok settings response decodes subscription tier")

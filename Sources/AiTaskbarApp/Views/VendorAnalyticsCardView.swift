@@ -96,7 +96,10 @@ public struct VendorAnalyticsCardView: View {
                         Spacer()
 
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text(AnalyticsMoneyFormatter.format(summary.totalCostUSD))
+                            // Month has no cost source: a dash, not "$0.00".
+                            Text(summary.isCostAvailable
+                                 ? AnalyticsMoneyFormatter.format(summary.totalCostUSD)
+                                 : "—")
                                 .font(.headline.monospacedDigit())
                             if summary.totalUsagePercent > 0 {
                                 Text("\(Int(summary.totalUsagePercent))% quota")
@@ -175,11 +178,20 @@ public struct VendorAnalyticsCardView: View {
 
                     // Session Stats & Delta
                     HStack(spacing: 12) {
+                        // Real sessions where a session counter exists; otherwise
+                        // the number of models, labelled as such.
                         if summary.sessionCount > 0 {
                             let sessionLabel = summary.sessionCount == 1
                                 ? "1 \(L10n.localizedString("analytics_session_single"))"
                                 : "\(summary.sessionCount) \(L10n.localizedString("analytics_sessions"))"
                             Label(sessionLabel, systemImage: "macwindow")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else if summary.modelCount > 0 {
+                            let modelLabel = summary.modelCount == 1
+                                ? "1 \(L10n.localizedString("analytics_model_single"))"
+                                : "\(summary.modelCount) \(L10n.localizedString("analytics_models"))"
+                            Label(modelLabel, systemImage: "macwindow")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -247,7 +259,7 @@ public struct VendorAnalyticsCardView: View {
                             }
                         }
                         .padding(.top, 4)
-                    } else if !summary.vendor.isPrepaidOnly && summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
+                    } else if summary.isCostAvailable && !summary.vendor.isPrepaidOnly && summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.callout)

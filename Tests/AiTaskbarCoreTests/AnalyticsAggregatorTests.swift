@@ -181,4 +181,91 @@ struct AnalyticsAggregatorTests {
         // Delta from 40 to 60 is +50%
         #expect(summary?.deltaPreviousPeriodPercent == 50.0)
     }
+
+    // MARK: - Month has no cost source (BUG-ART-003)
+
+    /// No `CostEstimate` carries a 30-day figure: the scanners keep today and
+    /// the last 7 days. The Month view must not relabel the 7-day number.
+    private static let weekOnlyEstimate = CostEstimate(
+        usdToday: 10,
+        usdLast7Days: 70,
+        modelBreakdownToday: ["claude-opus-5-5": 10],
+        modelBreakdownLast7Days: ["claude-opus-5-5": 70])
+
+    private static func monthly() -> GlobalAnalyticsSnapshot {
+        AnalyticsAggregator.aggregate(
+            timeframe: .monthly,
+            compareWithPrevious: false,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            estimates: [.anthropic: weekOnlyEstimate])
+    }
+
+    @Test("monthly total does not reuse the 7-day cost")
+    func monthly_total_not_weekly_cost() {
+        #expect(Self.monthly().totalCostUSD == 0)
+    }
+
+    @Test("monthly vendor cost does not reuse the 7-day cost")
+    func monthly_vendor_cost_not_weekly_cost() {
+        #expect(Self.monthly().vendorSummaries.first?.totalCostUSD == 0)
+    }
+
+    @Test("monthly model breakdown does not reuse the 7-day breakdown")
+    func monthly_breakdown_not_weekly_breakdown() {
+        #expect(Self.monthly().vendorSummaries.first?.costByModel == [:])
+    }
+
+    // MARK: - Model count is not a session count (BUG-ART-007)
+
+    /// Two models with tokens is two models, not two sessions. Only the
+    /// session counters (Gemini/xAI) may produce a session count.
+    @Test("models with tokens are not reported as sessions")
+    func models_are_not_sessions() {
+        let estimate = CostEstimate(
+            usdToday: 3, usdLast7Days: 3,
+            modelBreakdownToday: ["claude-opus-5-5": 2, "claude-sonnet-4-6": 1],
+            totalsByModel: [
+                "claude-opus-5-5": ModelUsage(inputTokens: 100),
+                "claude-sonnet-4-6": ModelUsage(inputTokens: 50)
+            ])
+        let snap = AnalyticsAggregator.aggregate(
+            timeframe: .daily, compareWithPrevious: false,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            estimates: [.anthropic: estimate])
+        #expect(snap.vendorSummaries.first?.sessionCount == 0)
+    }
+
+    @Test("models with cost in the window are reported as a model count")
+    func models_are_counted_as_models() {
+        let estimate = CostEstimate(
+            usdToday: 3, usdLast7Days: 3,
+            modelBreakdownToday: ["claude-opus-5-5": 2, "claude-sonnet-4-6": 1])
+        let snap = AnalyticsAggregator.aggregate(
+            timeframe: .daily, compareWithPrevious: false,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            estimates: [.anthropic: estimate])
+        #expect(snap.vendorSummaries.first?.modelCount == 2)
+    }
+
+    @Test("monthly snapshot is flagged as having no cost source")
+    func monthly_flags_cost_unavailable() {
+        let available = Self.monthly().isCostAvailable
+        #expect(!available)
+    }
+
+    @Test("monthly vendor summary is flagged as having no cost source")
+    func monthly_summary_flags_cost_unavailable() {
+        let flag = Self.monthly().vendorSummaries.first?.isCostAvailable
+        expectTrue(flag == false)
+    }
+
+    @Test("weekly snapshot keeps its 7-day cost source")
+    func weekly_cost_available() {
+        let snap = AnalyticsAggregator.aggregate(
+            timeframe: .weekly, compareWithPrevious: false,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            estimates: [.anthropic: Self.weekOnlyEstimate])
+        #expect(snap.isCostAvailable)
+        #expect(snap.totalCostUSD == 70)
+    }
 }

@@ -1,0 +1,66 @@
+{
+  "id": "BUG-ART-003",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 12:37:48 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:118-120: .monthly no longer reuses usdLast7Days or the 7-day breakdown. It now gives cost 0, an empty breakdown and isCostAvailable=false (L160, L191). The UI shows a dash in two places, AnalyticsView.swift:304 and VendorAnalyticsCardView.swift:100, and the subscription hint is suppressed (L262). No other route computes a monthly cost. Shares end up 0 and do not divide by zero because of the totalCostUSD>0 guard. Reversal check: I restored the old `.weekly, .monthly` branch and 3 tests went RED (AnalyticsAggregatorTests.swift:205/210/215: 70.0 != 0). Minor note: in Month a vendor with no usage% and no history now reaches the 'no recent usage' empty state (VendorAnalyticsCardView.swift:276). That fits the fact that there is no cost source.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:118",
+        "Sources/AiTaskbarApp/Views/AnalyticsView.swift:304",
+        "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:100"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "AnalyticsAggregator.swift:364-371 splits `.weekly` and `.monthly` into separate cases. Month now gets cost 0 and an empty breakdown, marked by a named flag `isCostAvailable` (AnalyticsModels.swift:425-428, doc says why it is false). The UI shows a dash instead of $0.00 (VendorAnalyticsCardView.swift:100, AnalyticsView.swift:239) and a localized notice in all three .lproj files. The 'fully used' seal is gated on the flag (VendorAnalyticsCardView.swift:262), so a missing cost is not read as zero spend. No error is swallowed and nesting did not grow. The new init params have defaults, so existing callers still compile. The Boolean assertions follow the CLAUDE.md rule: `expectTrue(flag == false)` for the optional, `#expect(!available)` for the non-optional. README was updated.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:364",
+        "Sources/AiTaskbarCore/Models/AnalyticsModels.swift:425",
+        "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:262",
+        "Sources/AiTaskbarApp/Views/AnalyticsView.swift:239"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:115-120 splits .monthly out of .weekly (cost 0, empty breakdown). The new isCostAvailable fields in AnalyticsModels.swift:39,106 use defaulted init params, and the models are not Codable, so nothing persisted or serialized changes. Two consumers were updated for the flag: AnalyticsView.swift:286,316 and VendorAnalyticsCardView.swift:100,262. The new key analytics_cost_7d_only appears in all three Localizable.strings files, and README.md:33 describes the Month behaviour.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:115",
+        "Sources/AiTaskbarCore/Models/AnalyticsModels.swift:39",
+        "Sources/AiTaskbarApp/Views/AnalyticsView.swift:286",
+        "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:100",
+        "README.md:33"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

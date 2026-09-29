@@ -1,0 +1,804 @@
+diff --git a/README.md b/README.md
+index df87ef0..efce5b4 100644
+--- a/README.md
++++ b/README.md
+@@ -30,6 +30,7 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
+ - **Daily + 7-day cost estimates** computed locally from your CLI logs
+ - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
+ - **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
++- **Consumption & Analytics view** — usage share and cost share across LLMs for Today / Week / Month. Cost covers only what the local scanners keep (today and the last 7 days), so **Month shows usage but no cost** rather than relabelling the 7-day figure. OpenRouter's 30-day activity and xAI's billing-cycle spend stay on their own cards, which name those windows, and are never counted as 7-day cost. Vendors without a session counter show the number of models used, not "sessions"
+ - **Service health & status monitor** — Live popover panel monitoring upstream operational status, active incidents, and scheduled maintenance across providers (Claude, OpenAI, Gemini, Grok, DeepSeek, Kimi, OpenRouter) with direct links to official status pages
+ - **Click the card header** (chevron + name + empty space) to expand/collapse; dashboard / reorder / refresh stay on the trailing buttons
+ - **Reorder cards** with ↑ / ↓ on each header (order saved on this Mac)
+diff --git a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+index b41ee2b..147528e 100644
+--- a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+@@ -324,6 +324,9 @@
+ "analytics_busiest_day" = "Busiest day";
+ "analytics_sessions" = "active sessions";
+ "analytics_session_single" = "active session";
++"analytics_models" = "models used";
++"analytics_model_single" = "model used";
++"analytics_cost_7d_only" = "Cost is only tracked for the last 7 days. Choose Week to see it.";
+ "timeframe_daily" = "Today";
+ "timeframe_weekly" = "Week";
+ "timeframe_monthly" = "Month";
+diff --git a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+index e297bb1..2e52a8f 100644
+--- a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+@@ -323,6 +323,9 @@
+ "analytics_busiest_day" = "Día con mayor uso";
+ "analytics_sessions" = "sesiones activas";
+ "analytics_session_single" = "sesión activa";
++"analytics_models" = "modelos usados";
++"analytics_model_single" = "modelo usado";
++"analytics_cost_7d_only" = "El costo solo se registra para los últimos 7 días. Elige Semana para verlo.";
+ "timeframe_daily" = "Hoy";
+ "timeframe_weekly" = "Semana";
+ "timeframe_monthly" = "Mes";
+diff --git a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+index 56cd80f..70a824d 100644
+--- a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+@@ -323,6 +323,9 @@
+ "analytics_busiest_day" = "Dia mais movimentado";
+ "analytics_sessions" = "sessões ativas";
+ "analytics_session_single" = "sessão ativa";
++"analytics_models" = "modelos usados";
++"analytics_model_single" = "modelo usado";
++"analytics_cost_7d_only" = "O custo só é registrado para os últimos 7 dias. Escolha Semana para vê-lo.";
+ "timeframe_daily" = "Hoje";
+ "timeframe_weekly" = "Semana";
+ "timeframe_monthly" = "Mês";
+diff --git a/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift b/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift
+index 890aaf7..7839b87 100644
+--- a/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift
++++ b/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift
+@@ -88,39 +88,62 @@ public final class AnalyticsStore: ObservableObject {
+         for (v, scan) in opencode {
+             // opencode is a client, not a vendor (see `CostEstimator.opencode`):
+             // its tokens are shown, its dollars are never added. OpenAI rides a
+-            // subscription; xAI/Z.AI/Gemini totals must not be restated. Models
+-            // keep a $0 entry so the breakdown still lists them.
+-            if dict[v] == nil {
+-                dict[v] = CostEstimate(
+-                    usdToday: 0,
+-                    usdLast7Days: 0,
+-                    modelBreakdownToday: scan.todayByModel.mapValues { _ in 0 },
+-                    modelBreakdownLast7Days: scan.last7DaysByModel.mapValues { _ in 0 },
+-                    totalsByModel: scan.last7DaysByModel
+-                )
+-            } else if let existing = dict[v] {
+-                var mergedToday = existing.modelBreakdownToday
+-                for m in scan.todayByModel.keys where mergedToday[m] == nil {
+-                    mergedToday[m] = 0
+-                }
+-                var mergedLast7 = existing.modelBreakdownLast7Days
+-                for m in scan.last7DaysByModel.keys where mergedLast7[m] == nil {
+-                    mergedLast7[m] = 0
+-                }
+-                var mergedTotals = existing.totalsByModel
+-                for (m, u) in scan.last7DaysByModel {
+-                    CostAggregator.add(u, into: &mergedTotals, model: m)
+-                }
+-                dict[v] = CostEstimate(
+-                    usdToday: existing.usdToday,
+-                    usdLast7Days: existing.usdLast7Days,
+-                    modelBreakdownToday: mergedToday,
+-                    modelBreakdownLast7Days: mergedLast7,
+-                    totalsByModel: mergedTotals,
+-                    computedAt: existing.computedAt,
+-                    isApproximate: existing.isApproximate,
+-                    note: existing.note
+-                )
++            // subscription; xAI/Z.AI/Gemini totals must not be restated. Its
++            // models get NO breakdown row either: a $0.00 row would contradict
++            // the popover footer, which shows opencode's recorded cost (or its
++            // tokens) in a separate section. Only the token totals merge.
++            guard let existing = dict[v] else {
++                dict[v] = CostEstimate(usdToday: 0, usdLast7Days: 0,
++                                       totalsByModel: scan.last7DaysByModel)
++                continue
++            }
++            var mergedTotals = existing.totalsByModel
++            for (m, u) in scan.last7DaysByModel {
++                CostAggregator.add(u, into: &mergedTotals, model: m)
++            }
++            dict[v] = CostEstimate(
++                usdToday: existing.usdToday,
++                usdLast7Days: existing.usdLast7Days,
++                modelBreakdownToday: existing.modelBreakdownToday,
++                modelBreakdownLast7Days: existing.modelBreakdownLast7Days,
++                totalsByModel: mergedTotals,
++                computedAt: existing.computedAt,
++                isApproximate: existing.isApproximate,
++                note: existing.note,
++                unpricedModelsToday: existing.unpricedModelsToday,
++                unpricedModelsLast7Days: existing.unpricedModelsLast7Days
++            )
++        }
++        return dict
++    }
++
++    /// The estimates Analytics shows: the cost scanners' per-vendor totals
++    /// with opencode's tokens folded in. Pure and static so the default
++    /// `estimatesProvider` is testable without a live `UsageStore` /
++    /// `CostEstimator`.
++    ///
++    /// `snapshots` is passed so the rule lives, and is tested, where the merge
++    /// happens: **no vendor snapshot contributes money here.** Every figure
++    /// lands in a fixed window (`usdToday`, `usdLast7Days`) and no snapshot
++    /// carries one: OpenRouter `/api/v1/activity` covers the last 30 days (no
++    /// per-item date is decoded), and xAI `spentUSD` / `prepaidUsedUSD` are
++    /// billing-cycle-to-date. Both were once written into `usdLast7Days`; they
++    /// stay on the vendor's popover card, which labels their real window.
++    nonisolated static func defaultEstimates(
++        byVendor: [VendorId: CostEstimate],
++        opencode: [VendorId: OpencodeScan],
++        snapshots _: [VendorId: VendorSnapshot]
++    ) -> [VendorId: CostEstimate] {
++        mergingOpencode(byVendor, opencode: opencode)
++    }
++
++    /// Latest good snapshot per vendor, as the popover currently shows it.
++    static func currentSnapshots(_ usageStore: UsageStore?) -> [VendorId: VendorSnapshot] {
++        guard let usageStore else { return [:] }
++        var dict: [VendorId: VendorSnapshot] = [:]
++        for v in usageStore.vendors {
++            if let outcome = v.state.outcome {
++                dict[v.vendorId] = outcome.snapshot
+             }
+         }
+         return dict
+@@ -130,61 +153,13 @@ public final class AnalyticsStore: ObservableObject {
+         self.init(
+             estimatesProvider: { [weak costEstimator, weak usageStore] in
+                 guard let costEstimator else { return [:] }
+-                var dict = AnalyticsStore.mergingOpencode(
+-                    costEstimator.byVendor, opencode: costEstimator.opencode)
+-                if let usageStore {
+-                    for v in usageStore.vendors {
+-                        let vid = v.vendorId
+-                        if let outcome = v.state.outcome {
+-                            switch outcome.snapshot {
+-                            case .openrouter(let s):
+-                                // totalUsageUSD is lifetime account usage, NOT today/weekly spend.
+-                                var breakdown: [String: Double] = [:]
+-                                if let top = s.topModels {
+-                                    for m in top {
+-                                        breakdown[m.model] = m.rawUsage
+-                                    }
+-                                }
+-                                let totalFromModels = breakdown.values.reduce(0, +)
+-                                if totalFromModels > 0 {
+-                                    let existing = dict[vid]
+-                                    dict[vid] = CostEstimate(
+-                                        usdToday: existing?.usdToday ?? 0,
+-                                        usdLast7Days: totalFromModels,
+-                                        modelBreakdownToday: existing?.modelBreakdownToday ?? [:],
+-                                        modelBreakdownLast7Days: breakdown,
+-                                        totalsByModel: existing?.totalsByModel ?? [:]
+-                                    )
+-                                }
+-                            case .xai(let s):
+-                                let used = (s.spentUSD ?? 0) + (s.prepaidUsedUSD ?? 0)
+-                                if used > 0 {
+-                                    let existing = dict[vid]
+-                                    dict[vid] = CostEstimate(
+-                                        usdToday: existing?.usdToday ?? 0,
+-                                        usdLast7Days: max(existing?.usdLast7Days ?? 0, used),
+-                                        modelBreakdownToday: existing?.modelBreakdownToday ?? [:],
+-                                        modelBreakdownLast7Days: existing?.modelBreakdownLast7Days ?? [:],
+-                                        totalsByModel: existing?.totalsByModel ?? [:]
+-                                    )
+-                                }
+-                            default:
+-                                break
+-                            }
+-                        }
+-                    }
+-                }
+-                return dict
++                return AnalyticsStore.defaultEstimates(
++                    byVendor: costEstimator.byVendor,
++                    opencode: costEstimator.opencode,
++                    snapshots: AnalyticsStore.currentSnapshots(usageStore))
+             },
+             snapshotsProvider: { [weak usageStore] in
+-                guard let usageStore else { return [:] }
+-                var dict: [VendorId: VendorSnapshot] = [:]
+-                for v in usageStore.vendors {
+-                    if let outcome = v.state.outcome {
+-                        dict[v.vendorId] = outcome.snapshot
+-                    }
+-                }
+-                return dict
++                AnalyticsStore.currentSnapshots(usageStore)
+             },
+             historyProvider: { vendor in
+                 (try? UsageHistoryStore.defaultFor(vendor))?.load(since: Date().addingTimeInterval(-90 * 86_400)) ?? []
+diff --git a/Sources/AiTaskbarApp/Views/AnalyticsView.swift b/Sources/AiTaskbarApp/Views/AnalyticsView.swift
+index 3fe60ad..c83bbac 100644
+--- a/Sources/AiTaskbarApp/Views/AnalyticsView.swift
++++ b/Sources/AiTaskbarApp/Views/AnalyticsView.swift
+@@ -283,6 +283,7 @@ public struct AnalyticsView: View {
+         }
+ 
+         let hoveredSlice = costSlices.first(where: { $0.id == hoveredCostVendor })
++        let costAvailable = analyticsStore.snapshot?.isCostAvailable ?? true
+ 
+         return VStack(alignment: .leading, spacing: 8) {
+             Text(L10n.localizedString("analytics_cost_distribution_title"))
+@@ -300,7 +301,7 @@ public struct AnalyticsView: View {
+                                 .font(.subheadline.weight(.bold).monospacedDigit())
+                                 .foregroundStyle(h.color)
+                         } else {
+-                            Text(AnalyticsMoneyFormatter.formatCompact(totalCost))
++                            Text(costAvailable ? AnalyticsMoneyFormatter.formatCompact(totalCost) : "—")
+                                 .font(.headline.weight(.bold).monospacedDigit())
+                             Text("USD")
+                                 .font(.system(size: 9))
+@@ -312,7 +313,14 @@ public struct AnalyticsView: View {
+                 .frame(width: 96, height: 96)
+ 
+                 VStack(alignment: .leading, spacing: 4) {
+-                    if shares.isEmpty {
++                    if !costAvailable {
++                        // Month: the scanners keep 7 days, so there is no
++                        // 30-day cost to show — say so instead of "$0".
++                        Text(L10n.localizedString("analytics_cost_7d_only"))
++                            .font(.callout)
++                            .foregroundStyle(.secondary)
++                            .fixedSize(horizontal: false, vertical: true)
++                    } else if shares.isEmpty {
+                         Text(L10n.localizedString("analytics_empty_data"))
+                             .font(.callout)
+                             .foregroundStyle(.secondary)
+diff --git a/Sources/AiTaskbarApp/Views/CostFooterView.swift b/Sources/AiTaskbarApp/Views/CostFooterView.swift
+index e99741a..82120ee 100644
+--- a/Sources/AiTaskbarApp/Views/CostFooterView.swift
++++ b/Sources/AiTaskbarApp/Views/CostFooterView.swift
+@@ -195,7 +195,7 @@ public struct CostFooterView: View {
+                     Spacer(minLength: 6)
+                 }
+                 ForEach(models.sorted(), id: \.self) { model in
+-                    let usd7d = scan.costLast7DaysByModel[model] ?? 0
++                    let usd7d = Self.opencodeRecordedDollars(model: model, in: scan)
+                     HStack(spacing: 0) {
+                         Text("•  ")
+                             .font(.callout)
+@@ -206,7 +206,7 @@ public struct CostFooterView: View {
+                             .lineLimit(1)
+                             .truncationMode(.middle)
+                         Spacer(minLength: 6)
+-                        if usd7d > 0 {
++                        if let usd7d {
+                             Text(String(format: "$%.2f", usd7d))
+                                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                 .foregroundStyle(.primary)
+@@ -222,6 +222,16 @@ public struct CostFooterView: View {
+         }
+     }
+ 
++    /// The dollar figure an opencode row may show, or nil when it must show
++    /// tokens instead. opencode records a cost only for pay-per-token traffic;
++    /// subscription traffic (ChatGPT-plan OpenAI models) is recorded at zero,
++    /// and printing "$0.00" or any re-priced figure for it would invent
++    /// spending that never happened (CLAUDE.md "Cost scanners").
++    static func opencodeRecordedDollars(model: String, in scan: OpencodeScan) -> Double? {
++        guard let usd = scan.costLast7DaysByModel[model], usd > 0 else { return nil }
++        return usd
++    }
++
+     /// "169M in · 2.7B cache · 12M out" — the three buckets that differ by
+     /// orders of magnitude, so a single total would hide the cache reads that
+     /// dominate. Cache is shown because it is usually the largest number and
+diff --git a/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift b/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
+index 545b7fe..5f0c766 100644
+--- a/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
+@@ -96,7 +96,10 @@ public struct VendorAnalyticsCardView: View {
+                         Spacer()
+ 
+                         VStack(alignment: .trailing, spacing: 2) {
+-                            Text(AnalyticsMoneyFormatter.format(summary.totalCostUSD))
++                            // Month has no cost source: a dash, not "$0.00".
++                            Text(summary.isCostAvailable
++                                 ? AnalyticsMoneyFormatter.format(summary.totalCostUSD)
++                                 : "—")
+                                 .font(.headline.monospacedDigit())
+                             if summary.totalUsagePercent > 0 {
+                                 Text("\(Int(summary.totalUsagePercent))% quota")
+@@ -175,6 +178,8 @@ public struct VendorAnalyticsCardView: View {
+ 
+                     // Session Stats & Delta
+                     HStack(spacing: 12) {
++                        // Real sessions where a session counter exists; otherwise
++                        // the number of models, labelled as such.
+                         if summary.sessionCount > 0 {
+                             let sessionLabel = summary.sessionCount == 1
+                                 ? "1 \(L10n.localizedString("analytics_session_single"))"
+@@ -182,6 +187,13 @@ public struct VendorAnalyticsCardView: View {
+                             Label(sessionLabel, systemImage: "macwindow")
+                                 .font(.callout)
+                                 .foregroundStyle(.secondary)
++                        } else if summary.modelCount > 0 {
++                            let modelLabel = summary.modelCount == 1
++                                ? "1 \(L10n.localizedString("analytics_model_single"))"
++                                : "\(summary.modelCount) \(L10n.localizedString("analytics_models"))"
++                            Label(modelLabel, systemImage: "macwindow")
++                                .font(.callout)
++                                .foregroundStyle(.secondary)
+                         }
+ 
+                         if compareWithPrevious {
+@@ -247,7 +259,7 @@ public struct VendorAnalyticsCardView: View {
+                             }
+                         }
+                         .padding(.top, 4)
+-                    } else if !summary.vendor.isPrepaidOnly && summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
++                    } else if summary.isCostAvailable && !summary.vendor.isPrepaidOnly && summary.totalCostUSD <= 0.0001 && summary.totalUsagePercent > 0 {
+                         HStack(spacing: 6) {
+                             Image(systemName: "checkmark.seal.fill")
+                                 .font(.callout)
+diff --git a/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift b/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift
+index bb298a2..4b9ffde 100644
+--- a/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift
++++ b/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift
+@@ -103,16 +103,21 @@ public enum AnalyticsAggregator {
+             let snapshot = snapshots[vendor]
+             let history = histories[vendor] ?? []
+ 
+-            // Determine cost and breakdown for timeframe
++            // Determine cost and breakdown for timeframe. `CostEstimate` has
++            // no 30-day figure (the scanners keep today + last 7 days), so
++            // Month has no cost rather than the 7-day number under its label.
+             let cost: Double
+             let modelBreakdown: [String: Double]
+             switch timeframe {
+             case .daily:
+                 cost = estimate?.usdToday ?? 0
+                 modelBreakdown = estimate?.modelBreakdownToday ?? [:]
+-            case .weekly, .monthly:
++            case .weekly:
+                 cost = estimate?.usdLast7Days ?? estimate?.usdToday ?? 0
+                 modelBreakdown = estimate?.modelBreakdownLast7Days ?? estimate?.modelBreakdownToday ?? [:]
++            case .monthly:
++                cost = 0
++                modelBreakdown = [:]
+             }
+ 
+             totalCostUSD += cost
+@@ -124,16 +129,13 @@ public enum AnalyticsAggregator {
+             let historyMax = history.map { $0.max }.max() ?? 0
+             let usagePct = snapshot?.maxUtilization ?? historyMax
+ 
+-            // Session count from local activity counters, model totals, or snapshot
++            // Sessions only from real session counters; other vendors report
++            // a model count instead (it used to be shown as "sessions").
+             var sessionCount = 0
+             if vendor == .gemini {
+                 sessionCount = SessionCounters.antigravityCount(since: Date(timeIntervalSince1970: currentStart))
+             } else if vendor == .xai {
+                 sessionCount = SessionCounters.grokCount(since: Date(timeIntervalSince1970: currentStart))
+-            } else if let totals = estimate?.totalsByModel {
+-                for usage in totals.values where usage.inputTokens > 0 {
+-                    sessionCount += 1
+-                }
+             }
+ 
+             // Delta computation if compareWithPrevious is requested
+@@ -154,6 +156,8 @@ public enum AnalyticsAggregator {
+                 totalCostUSD: cost,
+                 totalUsagePercent: usagePct,
+                 sessionCount: sessionCount,
++                modelCount: modelBreakdown.count,
++                isCostAvailable: timeframe != .monthly,
+                 peakDay: peakDay,
+                 costByModel: modelBreakdown,
+                 usageHistory: history,
+@@ -183,7 +187,8 @@ public enum AnalyticsAggregator {
+             totalCostUSD: totalCostUSD,
+             vendorShares: vendorShares,
+             vendorSummaries: vendorSummaries,
+-            computedAt: now
++            computedAt: now,
++            isCostAvailable: timeframe != .monthly
+         )
+     }
+ }
+diff --git a/Sources/AiTaskbarCore/Models/AnalyticsModels.swift b/Sources/AiTaskbarCore/Models/AnalyticsModels.swift
+index d3d4927..854ec11 100644
+--- a/Sources/AiTaskbarCore/Models/AnalyticsModels.swift
++++ b/Sources/AiTaskbarCore/Models/AnalyticsModels.swift
+@@ -28,7 +28,15 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
+     public let planLabel: String?
+     public let totalCostUSD: Double
+     public let totalUsagePercent: Double
++    /// Real sessions, from a session counter (Gemini/Antigravity, Grok CLI).
++    /// Zero for vendors that have none — never a model count in disguise.
+     public let sessionCount: Int
++    /// Distinct models with cost-window usage (the `costByModel` rows).
++    public let modelCount: Int
++    /// False when no cost source covers the timeframe (Month): the scanners
++    /// keep today and the last 7 days only, so `totalCostUSD` is 0 and
++    /// `costByModel` empty by construction, not because nothing was spent.
++    public let isCostAvailable: Bool
+     public let peakDay: PeakDayRecord?
+     public let costByModel: [String: Double]
+     public let usageHistory: [UsageHistoryStore.Sample]
+@@ -40,6 +48,8 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
+                 totalCostUSD: Double,
+                 totalUsagePercent: Double,
+                 sessionCount: Int = 0,
++                modelCount: Int = 0,
++                isCostAvailable: Bool = true,
+                 peakDay: PeakDayRecord? = nil,
+                 costByModel: [String: Double] = [:],
+                 usageHistory: [UsageHistoryStore.Sample] = [],
+@@ -50,6 +60,8 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
+         self.totalCostUSD = totalCostUSD
+         self.totalUsagePercent = totalUsagePercent
+         self.sessionCount = sessionCount
++        self.modelCount = modelCount
++        self.isCostAvailable = isCostAvailable
+         self.peakDay = peakDay
+         self.costByModel = costByModel
+         self.usageHistory = usageHistory
+@@ -81,6 +93,8 @@ public struct GlobalAnalyticsSnapshot: Sendable, Equatable {
+     public let vendorShares: [VendorShare]
+     public let vendorSummaries: [VendorAnalyticsSummary]
+     public let computedAt: Date
++    /// See `VendorAnalyticsSummary.isCostAvailable`.
++    public let isCostAvailable: Bool
+ 
+     public init(timeframe: AnalyticsTimeframe = .daily,
+                 compareWithPrevious: Bool = false,
+@@ -88,7 +102,8 @@ public struct GlobalAnalyticsSnapshot: Sendable, Equatable {
+                 totalCostUSD: Double,
+                 vendorShares: [VendorShare] = [],
+                 vendorSummaries: [VendorAnalyticsSummary] = [],
+-                computedAt: Date = Date()) {
++                computedAt: Date = Date(),
++                isCostAvailable: Bool = true) {
+         self.timeframe = timeframe
+         self.compareWithPrevious = compareWithPrevious
+         self.comparisonOffset = comparisonOffset
+@@ -96,5 +111,6 @@ public struct GlobalAnalyticsSnapshot: Sendable, Equatable {
+         self.vendorShares = vendorShares
+         self.vendorSummaries = vendorSummaries
+         self.computedAt = computedAt
++        self.isCostAvailable = isCostAvailable
+     }
+ }
+diff --git a/Sources/AiTaskbarProviders/XAIWireTypes.swift b/Sources/AiTaskbarProviders/XAIWireTypes.swift
+index 5f7286f..dc3644c 100644
+--- a/Sources/AiTaskbarProviders/XAIWireTypes.swift
++++ b/Sources/AiTaskbarProviders/XAIWireTypes.swift
+@@ -283,12 +283,12 @@ extension GrokBillingResponse {
+             )
+         }()
+ 
++        // Only the reported on-demand spend. `creditUsagePercent` is the weekly
++        // subscription utilization and `prepaidBalance` is what REMAINS, so
++        // their product is not money spent; with no report there is no figure.
+         let prepaidUsedUSD: Double? = {
+-            if let used = cfg.onDemandUsed?.usd, used > 0 { return used }
+-            if let pct = cfg.creditUsagePercent, let balance = prepaidUSD, pct > 0 {
+-                return (balance * pct) / 100.0
+-            }
+-            return nil
++            guard let used = cfg.onDemandUsed?.usd, used > 0 else { return nil }
++            return used
+         }()
+ 
+         return XAISnapshot(
+diff --git a/Sources/AiTaskbarValidate/main.swift b/Sources/AiTaskbarValidate/main.swift
+index 1539e66..db36f5f 100644
+--- a/Sources/AiTaskbarValidate/main.swift
++++ b/Sources/AiTaskbarValidate/main.swift
+@@ -279,6 +279,7 @@ section("Wire types: Grok CLI fixtures") {
+     expect(snap.weekly?.resetsAt != nil, "grok weekly resetsAt")
+     expect(snap.balance?.detail == "$40.00 available", "grok balance detail")
+     expect(snap.prepaidUSD == 40.0, "grok prepaid USD")
++    expect(snap.prepaidUsedUSD == nil, "grok prepaid used is not balance x weekly %")
+     expect(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.",
+            "grok disclaimer matches mandatory text")
+ 
+diff --git a/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift b/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift
+new file mode 100644
+index 0000000..a7218a5
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift
+@@ -0,0 +1,72 @@
++import Testing
++import Foundation
++@testable import AiTaskbarApp
++import AiTaskbarCore
++
++/// `AnalyticsStore.defaultEstimates` is the real merge behind the Analytics
++/// screen's default `estimatesProvider`. Every figure it produces lands in a
++/// slot with a fixed window: `usdToday` or `usdLast7Days`. No vendor snapshot
++/// carries a rolling 7-day dollar figure — OpenRouter `/api/v1/activity`
++/// covers 30 days, xAI spend is billing-cycle-to-date — so none of them may
++/// be written into those slots.
++@Suite("AnalyticsEstimatesMerge")
++struct AnalyticsEstimatesMergeTests {
++    private static let openRouter30Day = VendorSnapshot.openrouter(OpenRouterSnapshot(
++        topModels: [
++            ModelShare(model: "openai/gpt-4.1", percent: 60, rawUsage: 18),
++            ModelShare(model: "google/gemini-2.5-flash", percent: 40, rawUsage: 12)
++        ],
++        totalUsageUSD: 250))
++
++    private static let xaiCycle = VendorSnapshot.xai(XAISnapshot(
++        spentUSD: 40, prepaidUsedUSD: 5, billingCycleLabel: "2026-09"))
++
++    @Test("OpenRouter 30-day activity does not create a 7-day estimate")
++    func openrouter_activity_not_in_last7() {
++        let merged = AnalyticsStore.defaultEstimates(
++            byVendor: [:], opencode: [:], snapshots: [.openrouter: Self.openRouter30Day])
++        expectTrue(merged[.openrouter] == nil)
++    }
++
++    @Test("OpenRouter 30-day activity does not overwrite an existing 7-day estimate")
++    func openrouter_activity_does_not_overwrite_last7() {
++        let merged = AnalyticsStore.defaultEstimates(
++            byVendor: [.openrouter: CostEstimate(usdToday: 1, usdLast7Days: 7)],
++            opencode: [:], snapshots: [.openrouter: Self.openRouter30Day])
++        #expect(merged[.openrouter]?.usdLast7Days == 7)
++    }
++
++    @Test("OpenRouter 30-day activity adds no rows to the 7-day breakdown")
++    func openrouter_activity_adds_no_breakdown_rows() {
++        let merged = AnalyticsStore.defaultEstimates(
++            byVendor: [.openrouter: CostEstimate(usdToday: 1, usdLast7Days: 7)],
++            opencode: [:], snapshots: [.openrouter: Self.openRouter30Day])
++        #expect(merged[.openrouter]?.modelBreakdownLast7Days == [:])
++    }
++
++    @Test("xAI billing-cycle spend does not create a 7-day estimate")
++    func xai_cycle_spend_not_in_last7() {
++        let merged = AnalyticsStore.defaultEstimates(
++            byVendor: [:], opencode: [:], snapshots: [.xai: Self.xaiCycle])
++        expectTrue(merged[.xai] == nil)
++    }
++
++    @Test("xAI billing-cycle spend does not raise an existing 7-day estimate")
++    func xai_cycle_spend_does_not_raise_last7() {
++        let merged = AnalyticsStore.defaultEstimates(
++            byVendor: [.xai: CostEstimate(usdToday: 1, usdLast7Days: 3)],
++            opencode: [:], snapshots: [.xai: Self.xaiCycle])
++        #expect(merged[.xai]?.usdLast7Days == 3)
++    }
++
++    @Test("scanner estimates pass through the default merge unchanged")
++    func scanner_estimates_pass_through() {
++        let claude = CostEstimate(usdToday: 2, usdLast7Days: 9,
++                                  modelBreakdownLast7Days: ["claude-opus-5-5": 9],
++                                  computedAt: Date(timeIntervalSince1970: 1_700_000_000))
++        let merged = AnalyticsStore.defaultEstimates(
++            byVendor: [.anthropic: claude], opencode: [:],
++            snapshots: [.openrouter: Self.openRouter30Day, .xai: Self.xaiCycle])
++        #expect(merged[.anthropic] == claude)
++    }
++}
+diff --git a/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift b/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift
+index 47adde3..896b8cf 100644
+--- a/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift
++++ b/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift
+@@ -54,4 +54,45 @@ struct AnalyticsOpencodeMergeTests {
+         #expect(merged[.gemini]?.usdToday == 0)
+         #expect(merged[.gemini]?.totalsByModel["gemini-2.5-pro"]?.inputTokens == 1_000_000)
+     }
++
++    /// The popover footer lists opencode models in their own section, with
++    /// the cost opencode recorded (or tokens for subscription traffic).
++    /// Analytics cannot show that cost without adding it to the vendor total,
++    /// so it leaves the model out rather than contradict the footer with a
++    /// fabricated $0.00 row. Tokens still merge (see above).
++    @Test("opencode models add no $0 row to an existing vendor's 7-day breakdown")
++    func no_zero_row_last7_existing_vendor() {
++        let merged = AnalyticsStore.mergingOpencode(
++            [.xai: CostEstimate(usdToday: 1, usdLast7Days: 4,
++                                modelBreakdownToday: ["grok-5": 1],
++                                modelBreakdownLast7Days: ["grok-5": 4])],
++            opencode: [.xai: Self.scan(model: "grok-code-fast", tokens: 1_000, reportedCost: 2)])
++        #expect(merged[.xai]?.modelBreakdownLast7Days == ["grok-5": 4])
++    }
++
++    @Test("opencode models add no $0 row to an existing vendor's today breakdown")
++    func no_zero_row_today_existing_vendor() {
++        let merged = AnalyticsStore.mergingOpencode(
++            [.xai: CostEstimate(usdToday: 1, usdLast7Days: 4,
++                                modelBreakdownToday: ["grok-5": 1],
++                                modelBreakdownLast7Days: ["grok-5": 4])],
++            opencode: [.xai: Self.scan(model: "grok-code-fast", tokens: 1_000, reportedCost: 2)])
++        #expect(merged[.xai]?.modelBreakdownToday == ["grok-5": 1])
++    }
++
++    @Test("opencode-only vendor gets no $0 row in its 7-day breakdown")
++    func no_zero_rows_opencode_only_vendor_last7() {
++        let merged = AnalyticsStore.mergingOpencode(
++            [:],
++            opencode: [.gemini: Self.scan(model: "gemini-2.5-pro", tokens: 1_000, reportedCost: 4)])
++        #expect(merged[.gemini]?.modelBreakdownLast7Days == [:])
++    }
++
++    @Test("opencode-only vendor gets no $0 row in its today breakdown")
++    func no_zero_rows_opencode_only_vendor_today() {
++        let merged = AnalyticsStore.mergingOpencode(
++            [:],
++            opencode: [.gemini: Self.scan(model: "gemini-2.5-pro", tokens: 1_000, reportedCost: 4)])
++        #expect(merged[.gemini]?.modelBreakdownToday == [:])
++    }
+ }
+diff --git a/Tests/AiTaskbarAppTests/OpencodeFooterTests.swift b/Tests/AiTaskbarAppTests/OpencodeFooterTests.swift
+index abc59f9..2d2c8fc 100644
+--- a/Tests/AiTaskbarAppTests/OpencodeFooterTests.swift
++++ b/Tests/AiTaskbarAppTests/OpencodeFooterTests.swift
+@@ -18,6 +18,33 @@ struct OpencodeFooterTests {
+     }
+ 
+ 
++    /// CLAUDE.md: opencode's OpenAI traffic rides a subscription, so the
++    /// footer shows its tokens, never dollars. opencode records those turns at
++    /// cost 0 (measured on real data: 101,543 OpenAI assistant messages, none
++    /// with cost > 0); that zero must not be printed as money.
++    @Test("subscription (zero-cost) opencode traffic shows no dollar figure")
++    func subscription_opencode_shows_no_dollars() {
++        var scan = OpencodeScan()
++        scan.last7DaysByModel["gpt-5.6-sol"] = ModelUsage(inputTokens: 1_000_000)
++        scan.costLast7DaysByModel["gpt-5.6-sol"] = 0
++        expectTrue(CostFooterView.opencodeRecordedDollars(model: "gpt-5.6-sol", in: scan) == nil)
++    }
++
++    @Test("opencode traffic with no recorded cost shows no dollar figure")
++    func missing_cost_shows_no_dollars() {
++        var scan = OpencodeScan()
++        scan.last7DaysByModel["gpt-5.6-sol"] = ModelUsage(inputTokens: 1_000_000)
++        expectTrue(CostFooterView.opencodeRecordedDollars(model: "gpt-5.6-sol", in: scan) == nil)
++    }
++
++    @Test("pay-per-token opencode traffic shows the cost opencode recorded")
++    func pay_per_token_opencode_shows_recorded_dollars() {
++        var scan = OpencodeScan()
++        scan.last7DaysByModel["grok-code-fast"] = ModelUsage(inputTokens: 1_000)
++        scan.costLast7DaysByModel["grok-code-fast"] = 2.5
++        #expect(CostFooterView.opencodeRecordedDollars(model: "grok-code-fast", in: scan) == 2.5)
++    }
++
+     /// The three buckets differ by orders of magnitude on real data — 169M
+     /// input against 2.7B cache reads — so a single total would bury the
+     /// number that dominates. Cache has to survive into the string.
+diff --git a/Tests/AiTaskbarCoreTests/AnalyticsAggregatorTests.swift b/Tests/AiTaskbarCoreTests/AnalyticsAggregatorTests.swift
+index 9912238..c3604d4 100644
+--- a/Tests/AiTaskbarCoreTests/AnalyticsAggregatorTests.swift
++++ b/Tests/AiTaskbarCoreTests/AnalyticsAggregatorTests.swift
+@@ -181,4 +181,91 @@ struct AnalyticsAggregatorTests {
+         // Delta from 40 to 60 is +50%
+         #expect(summary?.deltaPreviousPeriodPercent == 50.0)
+     }
++
++    // MARK: - Month has no cost source (BUG-ART-003)
++
++    /// No `CostEstimate` carries a 30-day figure: the scanners keep today and
++    /// the last 7 days. The Month view must not relabel the 7-day number.
++    private static let weekOnlyEstimate = CostEstimate(
++        usdToday: 10,
++        usdLast7Days: 70,
++        modelBreakdownToday: ["claude-opus-5-5": 10],
++        modelBreakdownLast7Days: ["claude-opus-5-5": 70])
++
++    private static func monthly() -> GlobalAnalyticsSnapshot {
++        AnalyticsAggregator.aggregate(
++            timeframe: .monthly,
++            compareWithPrevious: false,
++            now: Date(timeIntervalSince1970: 1_700_000_000),
++            estimates: [.anthropic: weekOnlyEstimate])
++    }
++
++    @Test("monthly total does not reuse the 7-day cost")
++    func monthly_total_not_weekly_cost() {
++        #expect(Self.monthly().totalCostUSD == 0)
++    }
++
++    @Test("monthly vendor cost does not reuse the 7-day cost")
++    func monthly_vendor_cost_not_weekly_cost() {
++        #expect(Self.monthly().vendorSummaries.first?.totalCostUSD == 0)
++    }
++
++    @Test("monthly model breakdown does not reuse the 7-day breakdown")
++    func monthly_breakdown_not_weekly_breakdown() {
++        #expect(Self.monthly().vendorSummaries.first?.costByModel == [:])
++    }
++
++    // MARK: - Model count is not a session count (BUG-ART-007)
++
++    /// Two models with tokens is two models, not two sessions. Only the
++    /// session counters (Gemini/xAI) may produce a session count.
++    @Test("models with tokens are not reported as sessions")
++    func models_are_not_sessions() {
++        let estimate = CostEstimate(
++            usdToday: 3, usdLast7Days: 3,
++            modelBreakdownToday: ["claude-opus-5-5": 2, "claude-sonnet-4-6": 1],
++            totalsByModel: [
++                "claude-opus-5-5": ModelUsage(inputTokens: 100),
++                "claude-sonnet-4-6": ModelUsage(inputTokens: 50)
++            ])
++        let snap = AnalyticsAggregator.aggregate(
++            timeframe: .daily, compareWithPrevious: false,
++            now: Date(timeIntervalSince1970: 1_700_000_000),
++            estimates: [.anthropic: estimate])
++        #expect(snap.vendorSummaries.first?.sessionCount == 0)
++    }
++
++    @Test("models with cost in the window are reported as a model count")
++    func models_are_counted_as_models() {
++        let estimate = CostEstimate(
++            usdToday: 3, usdLast7Days: 3,
++            modelBreakdownToday: ["claude-opus-5-5": 2, "claude-sonnet-4-6": 1])
++        let snap = AnalyticsAggregator.aggregate(
++            timeframe: .daily, compareWithPrevious: false,
++            now: Date(timeIntervalSince1970: 1_700_000_000),
++            estimates: [.anthropic: estimate])
++        #expect(snap.vendorSummaries.first?.modelCount == 2)
++    }
++
++    @Test("monthly snapshot is flagged as having no cost source")
++    func monthly_flags_cost_unavailable() {
++        let available = Self.monthly().isCostAvailable
++        #expect(!available)
++    }
++
++    @Test("monthly vendor summary is flagged as having no cost source")
++    func monthly_summary_flags_cost_unavailable() {
++        let flag = Self.monthly().vendorSummaries.first?.isCostAvailable
++        expectTrue(flag == false)
++    }
++
++    @Test("weekly snapshot keeps its 7-day cost source")
++    func weekly_cost_available() {
++        let snap = AnalyticsAggregator.aggregate(
++            timeframe: .weekly, compareWithPrevious: false,
++            now: Date(timeIntervalSince1970: 1_700_000_000),
++            estimates: [.anthropic: Self.weekOnlyEstimate])
++        #expect(snap.isCostAvailable)
++        #expect(snap.totalCostUSD == 70)
++    }
+ }
+diff --git a/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift b/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
+index aff4706..f9d01d9 100644
+--- a/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
++++ b/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
+@@ -156,9 +156,28 @@ struct XAIProviderTests {
+         expectTrue(snap.weekly?.resetsAt != nil)
+         expectTrue(snap.balance?.detail == "$40.00 available")
+         #expect(snap.prepaidUSD == 40.0)
++        // Deliberate schema decision (BUG-ART-011): the fixture reports
++        // `onDemandUsed: 0`, so nothing was spent from the prepaid balance.
++        // The old reference would have been 1.2 = remaining $40 x weekly 3%,
++        // a product of two unrelated numbers; there is no prepaid-used figure.
++        expectTrue(snap.prepaidUsedUSD == nil)
+         expectTrue(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.")
+     }
+ 
++    @Test("Grok prepaidUsedUSD is the reported on-demand spend, never balance x weekly %")
++    func grok_prepaid_used_is_reported_on_demand() throws {
++        let json = #"{"config":{"creditUsagePercent":40,"prepaidBalance":{"val":5000},"onDemandUsed":{"val":250}}}"#
++        let resp = try SharedCoders.decoder.decode(GrokBillingResponse.self, from: Data(json.utf8))
++        #expect(resp.toSnapshot().prepaidUsedUSD == 2.5)
++    }
++
++    @Test("Grok prepaidUsedUSD is nil when on-demand spend is absent")
++    func grok_prepaid_used_nil_without_on_demand() throws {
++        let json = #"{"config":{"creditUsagePercent":40,"prepaidBalance":{"val":5000}}}"#
++        let resp = try SharedCoders.decoder.decode(GrokBillingResponse.self, from: Data(json.utf8))
++        expectTrue(resp.toSnapshot().prepaidUsedUSD == nil)
++    }
++
+     @Test("golden: Grok settings response decodes subscription tier")
+     func golden_grok_settings() throws {
+         let resp = try SharedCoders.decoder.decode(

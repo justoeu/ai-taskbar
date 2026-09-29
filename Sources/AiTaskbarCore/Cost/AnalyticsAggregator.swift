@@ -103,16 +103,21 @@ public enum AnalyticsAggregator {
             let snapshot = snapshots[vendor]
             let history = histories[vendor] ?? []
 
-            // Determine cost and breakdown for timeframe
+            // Determine cost and breakdown for timeframe. `CostEstimate` has
+            // no 30-day figure (the scanners keep today + last 7 days), so
+            // Month has no cost rather than the 7-day number under its label.
             let cost: Double
             let modelBreakdown: [String: Double]
             switch timeframe {
             case .daily:
                 cost = estimate?.usdToday ?? 0
                 modelBreakdown = estimate?.modelBreakdownToday ?? [:]
-            case .weekly, .monthly:
+            case .weekly:
                 cost = estimate?.usdLast7Days ?? estimate?.usdToday ?? 0
                 modelBreakdown = estimate?.modelBreakdownLast7Days ?? estimate?.modelBreakdownToday ?? [:]
+            case .monthly:
+                cost = 0
+                modelBreakdown = [:]
             }
 
             totalCostUSD += cost
@@ -124,16 +129,13 @@ public enum AnalyticsAggregator {
             let historyMax = history.map { $0.max }.max() ?? 0
             let usagePct = snapshot?.maxUtilization ?? historyMax
 
-            // Session count from local activity counters, model totals, or snapshot
+            // Sessions only from real session counters; other vendors report
+            // a model count instead (it used to be shown as "sessions").
             var sessionCount = 0
             if vendor == .gemini {
                 sessionCount = SessionCounters.antigravityCount(since: Date(timeIntervalSince1970: currentStart))
             } else if vendor == .xai {
                 sessionCount = SessionCounters.grokCount(since: Date(timeIntervalSince1970: currentStart))
-            } else if let totals = estimate?.totalsByModel {
-                for usage in totals.values where usage.inputTokens > 0 {
-                    sessionCount += 1
-                }
             }
 
             // Delta computation if compareWithPrevious is requested
@@ -154,6 +156,8 @@ public enum AnalyticsAggregator {
                 totalCostUSD: cost,
                 totalUsagePercent: usagePct,
                 sessionCount: sessionCount,
+                modelCount: modelBreakdown.count,
+                isCostAvailable: timeframe != .monthly,
                 peakDay: peakDay,
                 costByModel: modelBreakdown,
                 usageHistory: history,
@@ -183,7 +187,8 @@ public enum AnalyticsAggregator {
             totalCostUSD: totalCostUSD,
             vendorShares: vendorShares,
             vendorSummaries: vendorSummaries,
-            computedAt: now
+            computedAt: now,
+            isCostAvailable: timeframe != .monthly
         )
     }
 }

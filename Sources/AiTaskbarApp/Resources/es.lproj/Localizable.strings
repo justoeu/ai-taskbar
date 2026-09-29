@@ -323,6 +323,9 @@
 "analytics_busiest_day" = "Día con mayor uso";
 "analytics_sessions" = "sesiones activas";
 "analytics_session_single" = "sesión activa";
+"analytics_models" = "modelos usados";
+"analytics_model_single" = "modelo usado";
+"analytics_cost_7d_only" = "El costo solo se registra para los últimos 7 días. Elige Semana para verlo.";
 "timeframe_daily" = "Hoy";
 "timeframe_weekly" = "Semana";
 "timeframe_monthly" = "Mes";

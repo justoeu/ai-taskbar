@@ -283,6 +283,7 @@ public struct AnalyticsView: View {
         }
 
         let hoveredSlice = costSlices.first(where: { $0.id == hoveredCostVendor })
+        let costAvailable = analyticsStore.snapshot?.isCostAvailable ?? true
 
         return VStack(alignment: .leading, spacing: 8) {
             Text(L10n.localizedString("analytics_cost_distribution_title"))
@@ -300,7 +301,7 @@ public struct AnalyticsView: View {
                                 .font(.subheadline.weight(.bold).monospacedDigit())
                                 .foregroundStyle(h.color)
                         } else {
-                            Text(AnalyticsMoneyFormatter.formatCompact(totalCost))
+                            Text(costAvailable ? AnalyticsMoneyFormatter.formatCompact(totalCost) : "—")
                                 .font(.headline.weight(.bold).monospacedDigit())
                             Text("USD")
                                 .font(.system(size: 9))
@@ -312,7 +313,14 @@ public struct AnalyticsView: View {
                 .frame(width: 96, height: 96)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    if shares.isEmpty {
+                    if !costAvailable {
+                        // Month: the scanners keep 7 days, so there is no
+                        // 30-day cost to show — say so instead of "$0".
+                        Text(L10n.localizedString("analytics_cost_7d_only"))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if shares.isEmpty {
                         Text(L10n.localizedString("analytics_empty_data"))
                             .font(.callout)
                             .foregroundStyle(.secondary)

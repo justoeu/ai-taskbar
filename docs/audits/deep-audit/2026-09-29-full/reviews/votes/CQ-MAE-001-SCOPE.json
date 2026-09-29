@@ -1,0 +1,12 @@
+{
+ "id": "CQ-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "CostFooterView.swift:198,209,230-233 only moves the existing usd>0 rule into a testable static helper and does not change behaviour. No other file is touched for this id.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Views/CostFooterView.swift:230"
+ ],
+ "lens": "SCOPE",
+ "_task": "a52cfdd84a025720c",
+ "batch": "B1-analytics"
+}

@@ -1,0 +1,13 @@
+{
+ "id": "BUG-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:94-113: both mergingOpencode branches (new vendor and existing vendor) stopped inserting $0 rows into modelBreakdownToday and modelBreakdownLast7Days. Only the token totals merge. The fix also carries over unpricedModelsToday/Last7Days, which the old code dropped. Reversal check: putting the zero rows back in both branches gave 4 RED tests (AnalyticsOpencodeMergeTests.swift:70/80/88/96).",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:94"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "a55e442996e514b95",
+ "batch": "B1-analytics"
+}

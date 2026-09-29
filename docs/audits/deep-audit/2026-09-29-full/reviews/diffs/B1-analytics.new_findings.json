@@ -1,0 +1,26 @@
+[
+ [
+  "QUALITY",
+  "AnalyticsStore.swift:137-143 defaultEstimates ignores its `snapshots` parameter and only delegates to mergingOpencode. The estimatesProvider closure builds currentSnapshots on every refresh just for that ignored parameter. Low priority: if the seam is ever removed, move the BUG-ART-004 tests to a real contract test."
+ ],
+ [
+  "QUALITY",
+  "VendorAnalyticsCardView.swift:181-197 has two copies of the 'count + singular/plural localized label + Label(macwindow)' block (sessions and models). Low priority: a small helper countLabel(n:single:plural:) would remove the copy."
+ ],
+ [
+  "SCOPE",
+  "Minor: AnalyticsStore.defaultEstimates(snapshots _:) (AnalyticsStore.swift:136) takes a parameter it never uses, kept only as documentation, and the production closure builds currentSnapshots(usageStore) on every call only to discard it. This is cheap main-actor work, but it is dead input. A test pinning the rule could pass [:] just as well."
+ ],
+ [
+  "SCOPE",
+  "Edge case on Month: VendorAnalyticsCardView.swift:276-281 hasNoData now treats a vendor as idle when cost is structurally 0 and costByModel is empty, even though isCostAvailable == false. A vendor with 7-day cost but no utilization, peak day or lifetime figure (for example a pay-per-token vendor without a quota window) would show 'no recent usage' on Month. Suggest adding summary.isCostAvailable to that condition, or ignoring the cost terms when cost is unavailable. Pass this to the QUALITY/CORRECTNESS lenses as a follow-up."
+ ],
+ [
+  "CORRECTNESS",
+  "AnalyticsStore.swift:139 `snapshots _` in defaultEstimates is unused. It exists only to document the rule, and currentSnapshots(usageStore) is computed on every call for nothing. This is cosmetic and does not affect correctness."
+ ],
+ [
+  "CORRECTNESS",
+  "OpenRouter now has no cost in Analytics for any timeframe. Decoding the date of each /api/v1/activity item to build a real 7-day window is still open work, as the BUG-ART-004 fix suggested."
+ ]
+]

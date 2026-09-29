@@ -1,0 +1,16 @@
+{
+ "id": "BUG-ART-003",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:115-120 splits .monthly out of .weekly (cost 0, empty breakdown). The new isCostAvailable fields in AnalyticsModels.swift:39,106 use defaulted init params, and the models are not Codable, so nothing persisted or serialized changes. Two consumers were updated for the flag: AnalyticsView.swift:286,316 and VendorAnalyticsCardView.swift:100,262. The new key analytics_cost_7d_only appears in all three Localizable.strings files, and README.md:33 describes the Month behaviour.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:115",
+  "Sources/AiTaskbarCore/Models/AnalyticsModels.swift:39",
+  "Sources/AiTaskbarApp/Views/AnalyticsView.swift:286",
+  "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:100",
+  "README.md:33"
+ ],
+ "lens": "SCOPE",
+ "_task": "a52cfdd84a025720c",
+ "batch": "B1-analytics"
+}

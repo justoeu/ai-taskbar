@@ -324,6 +324,9 @@
 "analytics_busiest_day" = "Busiest day";
 "analytics_sessions" = "active sessions";
 "analytics_session_single" = "active session";
+"analytics_models" = "models used";
+"analytics_model_single" = "model used";
+"analytics_cost_7d_only" = "Cost is only tracked for the last 7 days. Choose Week to see it.";
 "timeframe_daily" = "Today";
 "timeframe_weekly" = "Week";
 "timeframe_monthly" = "Month";

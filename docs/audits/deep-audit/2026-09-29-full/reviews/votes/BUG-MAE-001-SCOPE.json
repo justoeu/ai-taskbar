@@ -1,0 +1,12 @@
+{
+ "id": "BUG-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "AnalyticsStore.swift:95-116 no longer adds $0 breakdown rows and still merges the token totals. It also passes through unpricedModelsToday/Last7Days, which the old code dropped. That field-preservation change sits on the same line and is consistent with the fix, not scope creep.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:95"
+ ],
+ "lens": "SCOPE",
+ "_task": "a52cfdd84a025720c",
+ "batch": "B1-analytics"
+}

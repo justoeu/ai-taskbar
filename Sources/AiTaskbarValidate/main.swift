@@ -279,6 +279,7 @@ section("Wire types: Grok CLI fixtures") {
     expect(snap.weekly?.resetsAt != nil, "grok weekly resetsAt")
     expect(snap.balance?.detail == "$40.00 available", "grok balance detail")
     expect(snap.prepaidUSD == 40.0, "grok prepaid USD")
+    expect(snap.prepaidUsedUSD == nil, "grok prepaid used is not balance x weekly %")
     expect(snap.disclaimer == "Para conseguir monitorar o Grok, é necessário ter o Grok instalado e autenticado.",
            "grok disclaimer matches mandatory text")
 

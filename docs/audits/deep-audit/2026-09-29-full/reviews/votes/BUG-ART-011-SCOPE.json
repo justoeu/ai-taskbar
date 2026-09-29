@@ -1,0 +1,15 @@
+{
+ "id": "BUG-ART-011",
+ "verdict": "APROVA",
+ "reasoning": "XAIWireTypes.swift:289-292 now takes only onDemandUsed. The XAISnapshot shape is unchanged (UsageSnapshot.swift:548, only the value differs), and CachedFetch caches the raw payload, so the change needs no migration. The Grok golden test (XAIProviderTests.swift:159-163) gets one new assertion with a comment saying why, and no earlier reference value was changed. AiTaskbarValidate/main.swift:282 is updated to match. The only app code that read prepaidUsedUSD was the Analytics merge that BUG-ART-004 removed. XAIProvider.swift:94 uses creditUsagePercent only for presence detection, so it is unaffected.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/XAIWireTypes.swift:289",
+  "Tests/AiTaskbarProvidersTests/XAIProviderTests.swift:159",
+  "Sources/AiTaskbarValidate/main.swift:282",
+  "Sources/AiTaskbarProviders/XAIProvider.swift:94"
+ ],
+ "lens": "SCOPE",
+ "_task": "a52cfdd84a025720c",
+ "batch": "B1-analytics"
+}
