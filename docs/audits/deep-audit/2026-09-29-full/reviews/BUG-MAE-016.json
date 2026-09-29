@@ -1,0 +1,67 @@
+{
+  "id": "BUG-MAE-016",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 20:11:04 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The duplicate \"done\" is gone. After the diff, each language defines it exactly once: en.lproj/Localizable.strings:183 \"Done\", es.lproj:182 \"Hecho\", pt-BR.lproj:182 \"Concluído\". The ratchet reaches the root cause, not just this key: check-source-ratchets.sh adds a per-file duplicate check ($first{$ARGV}{$key}), so any future duplicate key in any language fails the gate. Filtered tests pass (15 tests in 2 suites). Reversal: I put the three strings files back to their HEAD versions and kept the test. done_defined_once failed for en, pt-BR and es, and done_pt_br_value failed at DoneKeyLocalizationTests.swift:35. The self-test also flagged both duplicate-key plants as GATE IS BLIND.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:182",
+        "Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift:30",
+        "Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift:35",
+        "scripts/check-source-ratchets.sh:194"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The fix removes the first of the two \"done\" definitions in each of the three Localizable.strings files. Each file now has exactly one, and pt-BR keeps \"Concluído\" (pt-BR:182, en:183, es:182). Nothing new is swallowed and the change is as small as it can be. The repo now has a rule for this: check-source-ratchets.sh check 3 rejects a duplicate key and names the line where the key was first defined, so the fix does not depend on the test alone. The self-test in source-ratchet-selftest.sh [4/8] plants a duplicate with the same value and one with different values, and each plant must produce its own reason text. That shows the duplicate rule itself fired, not some other check. Each test in DoneKeyLocalizationTests.swift makes one non-optional assertion, which the Boolean-assertion rule allows. Its file-loading helper uses the same #filePath pattern already found in VendorNoticeLocalizationTests and OpenAIResetLocalizationTests, so it adds nothing new in kind. CLAUDE.md and AGENTS.md were updated together and match.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:182",
+        "scripts/check-source-ratchets.sh:300",
+        "Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift:205",
+        "scripts/source-ratchet-selftest.sh:437"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Each of the three Localizable.strings files loses exactly one line: the first \"done\" definition (en:89, es:88, pt-BR:88 'Concluir'). One definition per language is left: en:183 'Done', pt-BR:182 'Concluído', es:182 'Hecho'. The key name is unchanged, so no call site or public contract moves, and en/pt-BR/es parity holds. The new test Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift is an App-test file and adds no production surface. Duplicate-key detection was added to check 3 in scripts/check-source-ratchets.sh, which is the finding's own fix. CLAUDE.md and AGENTS.md were updated identically, so the cmp gate in ci.yml stays green.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:182",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:183",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings:182",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift:1",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/check-source-ratchets.sh:193"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

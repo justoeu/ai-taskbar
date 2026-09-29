@@ -1,0 +1,49 @@
+{
+ "findings": [
+  {
+   "lens": "tests",
+   "severity": "INFO",
+   "path": "scripts/check-source-ratchets.sh",
+   "line": 332,
+   "title": "Inline format ratchet (check 4) does not scan NSString(format:), String(format:locale:), .init(format:), formats held in a let, multi-line literals, or %x fed a Swift Int",
+   "evidence": "Raised by Ferreiro, Higia and Nemesis, remediation B21; no such case exists in Sources today",
+   "fix": "Widen check 4 to those forms with self-test plants",
+   "impact": "Latent gate gap",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B21",
+   "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance)."
+  },
+  {
+   "lens": "duplication",
+   "severity": "INFO",
+   "path": "Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift",
+   "line": 1,
+   "title": "Six App test files copy the same #filePath walk-up to read Localizable.strings",
+   "evidence": "Raised by Higia, remediation B21",
+   "fix": "Shared helper in the AppTests target",
+   "impact": "Test-code duplication only",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B21",
+   "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance)."
+  },
+  {
+   "lens": "quality",
+   "severity": "INFO",
+   "path": "scripts/check-source-ratchets.sh",
+   "line": 279,
+   "title": "Over-long comment line in check-source-ratchets.sh check 4 block",
+   "evidence": "Cosmetic (raised by Higia, remediation B21)",
+   "fix": "Rewrap",
+   "impact": "None",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B21",
+   "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance)."
+  }
+ ]
+}

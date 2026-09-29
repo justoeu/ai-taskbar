@@ -1,0 +1,18 @@
+[
+ [
+  "QUALITY",
+  "scripts/check-source-ratchets.sh:279-280: the new comment line runs past the width of the block around it ('...the same). If an argument is ever genuinely Int32,'). It is cosmetic; the fix is to rewrap it."
+ ],
+ [
+  "QUALITY",
+  "Tests/AiTaskbarAppTests/*Localization*Tests.swift and UpdateBannerTests: at least five files copy the same #filePath loop that goes up three levels and reads Localizable.strings. DoneKeyLocalizationTests adds one more. The fix is a shared helper in the AppTests target, handled as a separate refactor."
+ ],
+ [
+  "QUALITY",
+  "scripts/check-source-ratchets.sh:332: check 4 strips only comments that take up a whole line and does not see multi-line \"\"\" literals. A format string inside \"\"\" would not be checked. No such case was observed in Sources/."
+ ],
+ [
+  "CORRECTNESS",
+  "INFO: check 4 (scripts/check-source-ratchets.sh, inline String(format:)) only inspects single-line \"...\" literals passed directly as format:. A format held in a local let, or written as a multi-line \"\"\" literal, is not scanned. No such case exists in Sources today; this is a latent gap only."
+ ]
+]

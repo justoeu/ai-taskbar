@@ -2725,14 +2725,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B20",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-016",
-    "blocks_pr": false
+    "resolved_test": "DoneKeyLocalizationTests#done_defined_once(language:),DoneKeyLocalizationTests#done_pt_br_value",
+    "resolved_at": "2026-09-29 20:11:04 UTC",
+    "resolved_note": "batch B21-strings-tail",
+    "progress": [
+      "2026-09-29: resolvido · teste DoneKeyLocalizationTests#done_defined_once(language:),DoneKeyLocalizationTests#done_pt_br_value · revisão approved (3/3) · batch B21-strings-tail"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 20:11:04 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "in_progress": false
   },
   {
     "lens": "classic_bugs",
@@ -2748,14 +2779,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B20",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-017",
-    "blocks_pr": false
+    "resolved_test": "GoldenSnapshotTests#xai_cycle_label_is_64bit,GoldenSnapshotTests#xai_golden",
+    "resolved_at": "2026-09-29 20:11:04 UTC",
+    "resolved_note": "batch B21-strings-tail",
+    "progress": [
+      "2026-09-29: resolvido · teste GoldenSnapshotTests#xai_cycle_label_is_64bit,GoldenSnapshotTests#xai_golden · revisão approved (3/3) · batch B21-strings-tail"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 20:11:04 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "in_progress": false
   },
   {
     "title": "AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic",
@@ -8512,6 +8574,30 @@
     "in_progress": false
   },
   {
+    "lens": "quality",
+    "severity": "INFO",
+    "path": "scripts/check-source-ratchets.sh",
+    "line": 279,
+    "title": "Over-long comment line in check-source-ratchets.sh check 4 block",
+    "evidence": "Cosmetic (raised by Higia, remediation B21)",
+    "fix": "Rewrap",
+    "impact": "None",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B21",
+    "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance).",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-025",
+    "blocks_pr": false
+  },
+  {
     "lens": "deps",
     "severity": "INFO",
     "path": "Makefile",
@@ -8866,6 +8952,30 @@
       "test_reversal_checked": false
     },
     "in_progress": false
+  },
+  {
+    "lens": "duplication",
+    "severity": "INFO",
+    "path": "Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift",
+    "line": 1,
+    "title": "Six App test files copy the same #filePath walk-up to read Localizable.strings",
+    "evidence": "Raised by Higia, remediation B21",
+    "fix": "Shared helper in the AppTests target",
+    "impact": "Test-code duplication only",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B21",
+    "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance).",
+    "domain": "duplication",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "DUP-MAE-008",
+    "blocks_pr": false
   },
   {
     "agent": "Fantasma",
@@ -9655,13 +9765,68 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B20",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-012",
+    "resolved_test": "scripts/source-ratchet-selftest.sh [4/8] %u/%o/%x/%X/%hhx + duplicate plants,[6/8] missing-file message grep,[7/8]/[8/8] inline String(format:)",
+    "resolved_at": "2026-09-29 20:11:04 UTC",
+    "resolved_note": "batch B21-strings-tail",
+    "progress": [
+      "2026-09-29: resolvido · teste scripts/source-ratchet-selftest.sh [4/8] %u/%o/%x/%X/%hhx + duplicate plants,[6/8] missing-file message grep,[7/8]/[8/8] inline String(format:) · revisão approved (3/3) · batch B21-strings-tail"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 20:11:04 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "tests",
+    "severity": "INFO",
+    "path": "scripts/check-source-ratchets.sh",
+    "line": 332,
+    "title": "Inline format ratchet (check 4) does not scan NSString(format:), String(format:locale:), .init(format:), formats held in a let, multi-line literals, or %x fed a Swift Int",
+    "evidence": "Raised by Ferreiro, Higia and Nemesis, remediation B21; no such case exists in Sources today",
+    "fix": "Widen check 4 to those forms with self-test plants",
+    "impact": "Latent gate gap",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B21",
+    "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance).",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-013",
     "blocks_pr": false
   },
   {

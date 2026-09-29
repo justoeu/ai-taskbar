@@ -1,0 +1,16 @@
+{
+ "id": "BUG-MAE-016",
+ "verdict": "APROVA",
+ "reasoning": "The duplicate \"done\" is gone. After the diff, each language defines it exactly once: en.lproj/Localizable.strings:183 \"Done\", es.lproj:182 \"Hecho\", pt-BR.lproj:182 \"Concluído\". The ratchet reaches the root cause, not just this key: check-source-ratchets.sh adds a per-file duplicate check ($first{$ARGV}{$key}), so any future duplicate key in any language fails the gate. Filtered tests pass (15 tests in 2 suites). Reversal: I put the three strings files back to their HEAD versions and kept the test. done_defined_once failed for en, pt-BR and es, and done_pt_br_value failed at DoneKeyLocalizationTests.swift:35. The self-test also flagged both duplicate-key plants as GATE IS BLIND.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:182",
+  "Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift:30",
+  "Tests/AiTaskbarAppTests/DoneKeyLocalizationTests.swift:35",
+  "scripts/check-source-ratchets.sh:194"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "ac79daf137708152d",
+ "batch": "B21-strings-tail"
+}

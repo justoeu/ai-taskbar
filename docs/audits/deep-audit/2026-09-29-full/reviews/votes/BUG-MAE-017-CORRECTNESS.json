@@ -1,0 +1,16 @@
+{
+ "id": "BUG-MAE-017",
+ "verdict": "APROVA",
+ "reasoning": "XAIWireTypes.swift:360 now uses %04ld-%02ld, and year and month are Int (XAIWireTypes.swift:141-142). CostFooterView.swift:283 and :302 now use %ld, and todayPct and weekPct are Int(saturating:) at lines 259-260. A repo grep finds no other inline String(format:) with %d or %i in Sources, and the new check 4 is green on the tree. Reversal: with the HEAD version of XAIWireTypes.swift, xai_cycle_label_is_64bit failed, returning \"2026-07\" instead of \"4294969322-07\". With the HEAD ratchet, the 7 inline plants in self-test [7/8] were all blind. The CostFooterView change has no runtime test because it is SwiftUI, but check 4 guards it and its plants cover the ' (%d%%)' form.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/XAIWireTypes.swift:360",
+  "Sources/AiTaskbarApp/Views/CostFooterView.swift:283",
+  "Sources/AiTaskbarApp/Views/CostFooterView.swift:302",
+  "Tests/AiTaskbarProvidersTests/GoldenSnapshotTests.swift:245"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "ac79daf137708152d",
+ "batch": "B21-strings-tail"
+}
