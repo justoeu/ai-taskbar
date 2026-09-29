@@ -380,3 +380,19 @@
 "pin_limit_screen_message" = "Not enough space in the menu bar to pin another model without covering application menus. Unpin another model first.";
 "pin_limit_count_message" = "You have reached the maximum limit of 5 pinned models in the menu bar. Unpin another model first.";
 "pin_limit_reached_ok" = "Understood";
+
+// TypeSafe (Jev)
+"typesafe_key_ok_fmt" = "API key valid · %ld model(s)";
+"typesafe_updated_fmt" = "Model list updated %@";
+"typesafe_no_usage_api" = "TypeSafe has no usage API for API keys. Usage is shown in the TypeSafe console.";
+"typesafe_open_console" = "Open usage in the console";
+"typesafe_balance_fmt" = "Balance: %@";
+"typesafe_spent_fmt" = "Spent this cycle: %@";
+"typesafe_spent_cycle_fmt" = "Spent: %@ (%@)";
+"typesafe_plan_fmt" = "Plan: %@";
+"typesafe_cycle_ends_fmt" = "Billing cycle closes in %ld day(s)";
+"typesafe_credit_fmt" = "Credit: %@ of %@, expires %@";
+"typesafe_more_credits_fmt" = "+%ld more credit(s)";
+"typesafe_key_rejected" = "TypeSafe rejected the API key. Check it in Settings.";
+"pin_unavailable_no_usage" = "This provider reports no usage to show in the menu bar.";
+"settings_typesafe_footer" = "Off until you save an API key (create one at console.typesafe.ai). The key only lists models — it never runs a paid evaluation.";

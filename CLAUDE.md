@@ -1,7 +1,8 @@
 # Project: ai-taskbar
 
 Native macOS menu-bar app monitoring LLM usage across Anthropic, OpenAI/Codex,
-OpenRouter, Z.AI, and Kimi/Moonshot. Swift Package Manager, SwiftUI
+OpenRouter, Z.AI, Kimi/Moonshot, Gemini, DeepSeek, xAI and TypeSafe (Jev).
+Swift Package Manager, SwiftUI
 `MenuBarExtra`, targets macOS 13+.
 
 ## Validation policy (MANDATORY)
@@ -448,6 +449,33 @@ price, so a model with no `fastModeMultiplier` bills a fast-tagged request at
 standard rates; do not give it one. As of 2026-09-28 no local transcript
 carried `"speed":"fast"` (all 109k were `"standard"`); the `"fast"` value
 follows the API's `speed: "fast"` request parameter.
+
+### TypeSafe (Jev) — no usage API, never run an evaluation
+
+Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
+
+- The public API has **one** free call the app may make: `GET /v1/models`
+  (Bearer key). It lists aliases only (`jev-latest`, `jev-preview`), never the
+  version they resolve to. **Never call `POST /v1/systemone`** from the app —
+  every evaluation bills input tokens and shows up in the user's own usage.
+  `TypeSafeProviderTests` fails if any request leaves `/v1/models`.
+- There is no usage/billing endpoint for API keys (`/v1/usage`, `/v1/billing`,
+  `/v1/credits` are 404, routed before auth). Console usage/billing exist but
+  need the user's console session; that is SDD phase 2, not in the app yet.
+- 403 = missing key, 401 = invalid key; `TypeSafeProvider.normalize` folds an
+  `authentication_error` 403 into 401 so the card reads "key refused".
+- No utilization exists: `windows` is empty and `VendorId.reportsUtilization`
+  is false, so TypeSafe can't be pinned and is skipped by the rotating label.
+  Don't invent a percentage from balance or spend.
+- **Disabled by default, structurally** (`TypeSafeConfig.enabled = false`, the
+  snippet writes `enabled = false`). Saving a non-empty key in Settings enables
+  it in the same write (`SettingsViewModel.typeSafeAfterSave`); clearing the key
+  does not disable it.
+- Its status feed has one item per **update**. `RSSStatusDescriptor.typeSafe`
+  sets `groupsUpdatesByIncidentLink` (newest update decides, updates after
+  `now` ignored) and `staleUnresolvedAfter = 48 h` (an incident whose resolving
+  update was never published — "API issues", 21/09 — would read as degraded
+  forever). Other RSS descriptors keep per-item behavior.
 
 ### Pinned menu-bar items — measured macOS 26 behavior, not assumptions
 

@@ -379,3 +379,19 @@
 "pin_limit_screen_message" = "No hay suficiente espacio en la barra de menús para anclar otro modelo sin cubrir los menús de aplicaciones. Desancla otro modelo primero.";
 "pin_limit_count_message" = "Has alcanzado el límite máximo de 5 modelos anclados en la barra de menús. Desancla otro modelo primero.";
 "pin_limit_reached_ok" = "Entendido";
+
+// TypeSafe (Jev)
+"typesafe_key_ok_fmt" = "Clave de API válida · %ld modelo(s)";
+"typesafe_updated_fmt" = "Lista de modelos actualizada el %@";
+"typesafe_no_usage_api" = "TypeSafe no ofrece una API de uso para claves de API. El uso se muestra en la consola de TypeSafe.";
+"typesafe_open_console" = "Ver uso en la consola";
+"typesafe_balance_fmt" = "Saldo: %@";
+"typesafe_spent_fmt" = "Gastado en el ciclo: %@";
+"typesafe_spent_cycle_fmt" = "Gastado: %@ (%@)";
+"typesafe_plan_fmt" = "Plan: %@";
+"typesafe_cycle_ends_fmt" = "El ciclo de facturación cierra en %ld día(s)";
+"typesafe_credit_fmt" = "Crédito: %@ de %@, vence el %@";
+"typesafe_more_credits_fmt" = "+%ld crédito(s) más";
+"typesafe_key_rejected" = "TypeSafe rechazó la clave de API. Revísala en Ajustes.";
+"pin_unavailable_no_usage" = "Este proveedor no informa uso para mostrar en la barra de menús.";
+"settings_typesafe_footer" = "Desactivado hasta que guardes una clave de API (créala en console.typesafe.ai). La clave solo lista los modelos — nunca ejecuta una evaluación de pago.";

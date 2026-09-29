@@ -349,4 +349,18 @@ struct PinnedStatusItemTests {
         #expect(PinnedStatusItemManager.pinnedItemLength(forContentWidth: 10) == 42)
         #expect(PinnedStatusItemManager.pinnedItemLength(forContentWidth: 60) == 66)
     }
+
+    @Test("a provider without utilization can never be pinned")
+    func no_utilization_vendor_cannot_be_pinned() {
+        let name = "ai-taskbar.pinned.nousage.test.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        defer { suite.removePersistentDomain(forName: name) }
+        let ts = VendorViewModel(provider: MockUsageProvider(vendorId: .typesafe))
+        let store = UsageStore(vendors: [ts], primary: nil, preferredOrder: [.typesafe])
+        store.togglePinned(.typesafe, defaults: suite)
+        expectFalse(store.isPinned(.typesafe))
+        #expect(store.pinnedVendorOrder.isEmpty)
+        #expect(store.pinLimitAlert == nil)
+        #expect(suite.stringArray(forKey: UsageStore.pinnedDefaultsKey) == nil)
+    }
 }

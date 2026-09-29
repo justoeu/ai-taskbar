@@ -329,6 +329,33 @@ section("KimiConfig.validate") {
            "rejects garbage")
 }
 
+section("Wire types: TypeSafe (Jev) fixture") {
+    let parsed = try SharedCoders.decoder.decode(
+        TypeSafeModelsResponse.self,
+        from: Fixtures.data(Fixtures.typesafeModels200))
+    let s = parsed.toSnapshot()
+    expect(s.models.map(\.name) == ["jev-latest", "jev-preview"], "TypeSafe lists the two aliases")
+    expect(s.models.allSatisfy { $0.releaseDate != nil }, "TypeSafe microsecond release_date parses")
+    expect(s.billing == nil, "TypeSafe API key alone carries no billing")
+    let snap = VendorSnapshot.typesafe(s)
+    expect(snap.windows.isEmpty, "TypeSafe has no quota windows")
+    expect(snap.maxUtilization == 0, "TypeSafe never feeds the menu-bar percentage")
+    expect(!VendorId.typesafe.reportsUtilization, "TypeSafe cannot be pinned")
+    let err = try SharedCoders.decoder.decode(
+        TypeSafeErrorResponse.self,
+        from: Fixtures.data(Fixtures.typesafeMissingKey403))
+    expect(err.errorType == "authentication_error", "TypeSafe 403 error type decoded")
+}
+
+section("TypeSafeConfig.validate + default") {
+    expect(!TypeSafeConfig().enabled, "TypeSafe is disabled by default")
+    expect(TypeSafeConfig.validate("https://api.typesafe.ai") != nil, "accepts https://api.typesafe.ai")
+    expect(TypeSafeConfig.validate("http://api.typesafe.ai") == nil, "rejects http://")
+    expect(TypeSafeConfig.validate("https://evil.example.com") == nil, "rejects unknown host")
+    expect(TypeSafeConfig.validate("https://u:p@api.typesafe.ai") == nil, "rejects userinfo")
+    expect(TypeSafeConfig.validate("https://api.typesafe.ai:8443") == nil, "rejects non-443 port")
+}
+
 section("DeepSeekConfig.validate") {
     expect(DeepSeekConfig.validate("https://api.deepseek.com") != nil,
            "accepts https://api.deepseek.com")

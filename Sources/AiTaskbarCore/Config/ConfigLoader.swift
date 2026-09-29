@@ -128,6 +128,7 @@ public struct ConfigLoader: Sendable {
         try seal(&config.gemini.apiKey)
         try seal(&config.deepseek.apiKey)
         try seal(&config.xai.apiKey)
+        try seal(&config.typesafe.apiKey)
     }
 
     /// Surgical write path: applies a batch of changes to the existing file
@@ -244,6 +245,14 @@ public struct ConfigLoader: Sendable {
                 config.xai.apiKey = nil
             }
         }
+        if let enc = config.typesafe.apiKey, SecretBox.isEncrypted(enc) {
+            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
+                config.typesafe.apiKey = pt
+            } else {
+                AppLog.config.warning("typesafe.api_key encrypted but undecryptable — clearing")
+                config.typesafe.apiKey = nil
+            }
+        }
     }
 
     /// Idempotently appends any vendor section that's missing from the user's
@@ -317,7 +326,7 @@ public struct ConfigLoader: Sendable {
 
         [security]
         # TLS pinning (SPKI hash, Trust-On-First-Use). Empty list = no pinning.
-        # pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com", "management-api.x.ai"]
+        # pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com", "management-api.x.ai", "api.typesafe.ai"]
         # pin_audit_only = false
 
         """),
@@ -400,6 +409,16 @@ public struct ConfigLoader: Sendable {
         # api_key   = "xai-..."          # management key (NOT the inference key)
         # team_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
         # base_url  = "https://management-api.x.ai"
+
+        """),
+        ("[typesafe]", """
+
+        [typesafe]
+        # TypeSafe AI (Jev). Off until you save a key in Settings.
+        enabled     = false
+        api_key_env = "TYPESAFE_API_KEY"
+        # api_key   = "..."               # stored encrypted
+        # base_url  = "https://api.typesafe.ai"
 
         """),
     ]

@@ -119,3 +119,12 @@ api_key_env = "XAI_MANAGEMENT_KEY"
 # base_url = "https://management-api.x.ai"
 # Note: xAI usage/billing is only on the Management API. Surfaces prepaid
 # balance + current-cycle spend vs soft spending limit.
+
+[typesafe]
+# TypeSafe AI (Jev). Off until you save a key in Settings (or set enabled = true).
+enabled = false
+api_key_env = "TYPESAFE_API_KEY"
+# api_key = "..."               # inline fallback; encrypted at rest
+# base_url = "https://api.typesafe.ai"   # host-allowlisted; anything else falls back
+# Note: TypeSafe publishes no usage/billing API for keys. The card validates the
+# key with the free GET /v1/models; usage stays in console.typesafe.ai.

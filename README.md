@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Native macOS menu-bar tracker for LLM usage across 8 providers.</b><br/>
-  Anthropic Claude · OpenAI Codex/ChatGPT · OpenRouter · Z.AI (GLM) · Kimi (Moonshot) · Gemini · DeepSeek · xAI (Grok)
+  Anthropic Claude · OpenAI Codex/ChatGPT · OpenRouter · Z.AI (GLM) · Kimi (Moonshot) · Gemini · DeepSeek · xAI (Grok) · Jev (TypeSafe)
 </p>
 
 <p align="center">
@@ -104,6 +104,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 | **Kimi (Moonshot)** | API key | Add `api_key = "sk-..."` to `[kimi]` in config |
 | **DeepSeek** | API key | Add `api_key = "sk-..."` to `[deepseek]` in config |
 | **Gemini** | Antigravity CLI (`agy`) or API key | **Requires local CLI:** Run `agy` to authenticate (required for live quota/usage monitoring). Fallback: API key in `[gemini]` for heartbeat only. |
+| **Jev (TypeSafe)** | API key | Settings → Jev (TypeSafe) → paste the key (create it at [console.typesafe.ai](https://console.typesafe.ai)). Off until a key is saved. See [TypeSafe](#typesafe-jev--api-key-no-usage-api). |
 | **xAI (Grok)** | Grok CLI (`~/.grok/auth.json`) or Management API | **Requires local CLI:** Run `grok login` (required for SuperGrok quota & balance). Fallback: Management key + `team_id` in `[xai]` for team API billing. |
 
 > ⚠️ **macOS env vars footgun:** GUI apps launched from Finder do **not** inherit your shell environment. If you set `OPENROUTER_API_KEY=...` in `~/.zshrc`, the menu bar app **won't see it**. Three workarounds:
@@ -296,6 +297,16 @@ AI Taskbar supports two modes for xAI:
 
 ---
 
+### TypeSafe (Jev) — API key, no usage API
+
+[Jev](https://docs.typesafe.ai) is TypeSafe AI's "System One" model: it returns typed decisions (choice, score, yes/no probability), not chat text. The card is **off until you save an API key** in Settings → Jev (TypeSafe).
+
+- **What the card shows:** whether the key is accepted and which models it can call (`jev-latest`, `jev-preview`), from `GET /v1/models` — a call that costs nothing. The app never runs an evaluation (`/v1/systemone`), because every evaluation bills tokens and would appear in your own usage.
+- **No usage, tokens or spend yet:** TypeSafe's public API has no usage or billing endpoint for API keys; those numbers live in the [TypeSafe console](https://console.typesafe.ai/usage), and the card links there.
+- **No menu-bar percentage:** there is no quota to measure, so the provider can't be pinned and never moves the menu-bar gauge.
+- **Status:** incidents from [status.typesafe.ai](https://status.typesafe.ai). Its feed publishes one item per update, so updates are merged per incident, and an unresolved incident with no update for 48 h is treated as abandoned rather than ongoing.
+- **Pricing (for reference, not used by the app):** US$ 0.042 per million input tokens, output free ([docs.typesafe.ai/models](https://docs.typesafe.ai/models), checked 2026-09-29).
+
 ### Google Gemini — Antigravity CLI monitoring & heartbeat
 
 > ⚠️ **Important requirement:** Google does **not** provide a public REST API for personal Gemini subscription quotas (such as the 5-hour or weekly consumer limits on gemini.google.com). To monitor Gemini quotas and models, you **must have Google's Antigravity CLI (`agy`) installed and authenticated locally**.
@@ -342,6 +353,7 @@ AI Taskbar features an integrated **Service Status & Health Dashboard** that mon
 | **DeepSeek** | [status.deepseek.com](https://status.deepseek.com) | Status API |
 | **Kimi (Moonshot)** | [status.moonshot.cn](https://status.moonshot.cn) | Statuspage API |
 | **OpenRouter** | [status.openrouter.ai](https://status.openrouter.ai) | RSS Status Source |
+| **Jev (TypeSafe)** | [status.typesafe.ai](https://status.typesafe.ai) | RSS Status Source (one item per update, merged per incident) |
 | **Z.AI** | *(None)* | Unmonitored (no public status page) |
 
 Clicking any row in the status window opens the provider's official status page directly in your browser.
@@ -497,7 +509,7 @@ notify_at = [90, 100]                # percent thresholds that trigger a notific
 # include_prereleases = false        # true: also offer the newest beta/rc
 
 [security]
-# pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com", "management-api.x.ai"]
+# pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com", "management-api.x.ai", "api.typesafe.ai"]
 # pin_audit_only = false
 
 [anthropic]
@@ -539,6 +551,12 @@ enabled = true
 api_key_env = "DEEPSEEK_API_KEY"
 # api_key = "sk-..."
 # base_url = "https://api.deepseek.com"
+
+[typesafe]
+enabled = false                 # switched on when you save a key in Settings
+api_key_env = "TYPESAFE_API_KEY"
+# api_key = "..."               # stored encrypted
+# base_url = "https://api.typesafe.ai"   # only this host is accepted
 
 [xai]
 enabled = true

@@ -9,6 +9,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
     case gemini
     case deepseek
     case xai
+    case typesafe
 
     public var id: String { rawValue }
 
@@ -22,6 +23,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .gemini:     return "Gemini (Google AI)"
         case .deepseek:   return "DeepSeek"
         case .xai:        return "xAI (Grok)"
+        case .typesafe:   return "Jev (TypeSafe)"
         }
     }
 
@@ -36,6 +38,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .gemini:     return "sparkle"
         case .deepseek:   return "fish.fill"
         case .xai:        return "xmark"
+        case .typesafe:   return "t.square"
         }
     }
 
@@ -51,6 +54,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .gemini:     return URL(string: "https://aistudio.google.com/apikey")
         case .deepseek:   return URL(string: "https://platform.deepseek.com/usage")
         case .xai:        return URL(string: "https://console.x.ai/team/default/usage")
+        case .typesafe:   return URL(string: "https://console.typesafe.ai/usage")
         }
     }
 
@@ -58,7 +62,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
     /// subscription franchise or unmetered tier.
     public var isPrepaidOnly: Bool {
         switch self {
-        case .openrouter, .deepseek, .kimi:
+        case .openrouter, .deepseek, .kimi, .typesafe:
             return true
         case .anthropic, .openai, .gemini, .zai, .xai:
             return false
@@ -77,6 +81,19 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .gemini:     return "agy"
         case .xai:        return "grok login"
         default:          return nil
+        }
+    }
+
+    /// Whether the vendor reports a utilization percentage the menu bar can
+    /// show. TypeSafe publishes no quota: a pinned badge would read "0%"
+    /// forever, so pinning is refused and the vendor never feeds the
+    /// menu-bar aggregate.
+    public var reportsUtilization: Bool {
+        switch self {
+        case .typesafe:
+            return false
+        case .anthropic, .openai, .zai, .openrouter, .kimi, .gemini, .deepseek, .xai:
+            return true
         }
     }
 }

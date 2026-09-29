@@ -52,6 +52,19 @@ public final class SettingsViewModel: ObservableObject {
     /// Writes the diff between `draft` and `original` to disk via the
     /// comment-preserving surgical path. Throws on TOML errors so the form
     /// can surface them — does NOT clear `saveError` on partial failure.
+    /// TypeSafe starts disabled and is switched on by saving a key: a newly
+    /// entered, non-empty inline key enables it in the same write. Clearing
+    /// the key does NOT disable it (the user may rely on `TYPESAFE_API_KEY`);
+    /// the Enabled toggle does that.
+    static func typeSafeAfterSave(old: TypeSafeConfig, new: TypeSafeConfig) -> TypeSafeConfig {
+        var out = new
+        let key = new.apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !key.isEmpty, new.apiKey != old.apiKey {
+            out.enabled = true
+        }
+        return out
+    }
+
     public func save() throws {
         let changes = Self.diff(from: original, to: draft)
         if changes.isEmpty {
@@ -267,6 +280,22 @@ public final class SettingsViewModel: ObservableObject {
         }
         if old.deepseek.baseURL != new.deepseek.baseURL {
             out.append(.string(section: "deepseek", key: "base_url", value: new.deepseek.baseURL))
+        }
+
+        // [typesafe] — saving a key is what switches the provider on
+        // (docs/SDD-typesafe-jev.md §4.3).
+        let ts = Self.typeSafeAfterSave(old: old.typesafe, new: new.typesafe)
+        if old.typesafe.enabled != ts.enabled {
+            out.append(.bool(section: "typesafe", key: "enabled", value: ts.enabled))
+        }
+        if old.typesafe.apiKeyEnv != ts.apiKeyEnv {
+            out.append(.string(section: "typesafe", key: "api_key_env", value: ts.apiKeyEnv))
+        }
+        if old.typesafe.apiKey != ts.apiKey {
+            out.append(.secret(section: "typesafe", key: "api_key", plaintext: ts.apiKey))
+        }
+        if old.typesafe.baseURL != ts.baseURL {
+            out.append(.string(section: "typesafe", key: "base_url", value: ts.baseURL))
         }
 
         // [xai]

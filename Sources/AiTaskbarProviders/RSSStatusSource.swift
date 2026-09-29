@@ -8,11 +8,24 @@ public struct RSSStatusDescriptor: Sendable, Equatable {
     public let vendorId: VendorId
     public let statusPageURL: URL
     public let feedURL: URL
+    /// The feed has one item per incident UPDATE (Better Stack style), all
+    /// sharing the incident's link, instead of one item per incident. When
+    /// true, updates are merged per link and the newest one decides the phase.
+    public let groupsUpdatesByIncidentLink: Bool
+    /// An unresolved incident with no update for longer than this is dropped
+    /// instead of counted as ongoing. Needed where a feed never publishes the
+    /// resolving update: TypeSafe's "API issues" (21/09/2026) had only its
+    /// "investigating" update and would otherwise read as degraded forever.
+    public let staleUnresolvedAfter: TimeInterval?
 
-    public init(vendorId: VendorId, statusPageURL: URL, feedURL: URL) {
+    public init(vendorId: VendorId, statusPageURL: URL, feedURL: URL,
+                groupsUpdatesByIncidentLink: Bool = false,
+                staleUnresolvedAfter: TimeInterval? = nil) {
         self.vendorId = vendorId
         self.statusPageURL = statusPageURL
         self.feedURL = feedURL
+        self.groupsUpdatesByIncidentLink = groupsUpdatesByIncidentLink
+        self.staleUnresolvedAfter = staleUnresolvedAfter
     }
 
     public static let openRouter = RSSStatusDescriptor(
@@ -25,6 +38,17 @@ public struct RSSStatusDescriptor: Sendable, Equatable {
         vendorId: .xai,
         statusPageURL: URL(string: "https://status.x.ai")!,
         feedURL: URL(string: "https://status.x.ai/feed.xml")!
+    )
+
+    /// TypeSafe (Jev). Feed verified 2026-09-29: RSS 2.0, one item per
+    /// incident update (`Incident` / `Maintenance`), updates of one incident
+    /// share `…/incident/<id>` as link and differ only in the guid fragment.
+    public static let typeSafe = RSSStatusDescriptor(
+        vendorId: .typesafe,
+        statusPageURL: URL(string: "https://status.typesafe.ai")!,
+        feedURL: URL(string: "https://status.typesafe.ai/feed.rss")!,
+        groupsUpdatesByIncidentLink: true,
+        staleUnresolvedAfter: 48 * 60 * 60
     )
 }
 
@@ -76,10 +100,18 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         }
 
         let dateParser = try RSSStatusDateParser()
-        let mapped = try payload.items.map {
+        var mapped = try payload.items.map {
             try makeIncident($0, dateParser: dateParser)
         }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        if descriptor.groupsUpdatesByIncidentLink {
+            // The state "as of now" must not be decided by an update that has
+            // not been published yet relative to `now`.
+            mapped = Self.mergeUpdatesByIncidentLink(mapped.filter { $0.startedAt <= now })
+        }
+        if let staleAfter = descriptor.staleUnresolvedAfter {
+            mapped = Self.droppingStaleUnresolved(mapped, now: now, after: staleAfter)
+        }
+        mapped.sort { $0.updatedAt > $1.updatedAt }
         var ids = Set<String>()
         var titleStarts = Set<String>()
         var unique: [ServiceIncident] = []
@@ -126,6 +158,53 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
             sourceUpdatedAt: sourceUpdatedAt,
             incidents: recent
         )
+    }
+
+    /// Collapses per-update items into one incident per link (fragment
+    /// stripped). The newest update decides title, phase, level, message and
+    /// resolution; the oldest decides the start. Items without a link stay as
+    /// they are.
+    static func mergeUpdatesByIncidentLink(_ updates: [ServiceIncident]) -> [ServiceIncident] {
+        func key(_ i: ServiceIncident) -> String? {
+            guard let url = i.sourceURL,
+                  var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+            c.fragment = nil
+            c.query = nil
+            return c.string
+        }
+        var groups: [String: [ServiceIncident]] = [:]
+        var order: [String] = []
+        var loose: [ServiceIncident] = []
+        for u in updates {
+            guard let k = key(u) else { loose.append(u); continue }
+            if groups[k] == nil { order.append(k) }
+            groups[k, default: []].append(u)
+        }
+        let merged = order.compactMap { k -> ServiceIncident? in
+            guard let items = groups[k],
+                  let latest = items.max(by: { $0.updatedAt < $1.updatedAt }),
+                  let start = items.map(\.startedAt).min() else { return nil }
+            let components = Array(Set(items.flatMap(\.affectedComponents))).sorted()
+            return ServiceIncident(
+                id: k,
+                title: latest.title,
+                level: latest.level,
+                phase: latest.phase,
+                startedAt: start,
+                updatedAt: latest.updatedAt,
+                resolvedAt: latest.resolvedAt,
+                affectedComponents: components,
+                message: latest.message,
+                sourceURL: latest.sourceURL
+            )
+        }
+        return merged + loose
+    }
+
+    /// Drops unresolved incidents whose last update is older than `after`.
+    static func droppingStaleUnresolved(_ incidents: [ServiceIncident], now: Date,
+                                        after: TimeInterval) -> [ServiceIncident] {
+        incidents.filter { $0.resolvedAt != nil || now.timeIntervalSince($0.updatedAt) <= after }
     }
 
     public static func parse(_ data: Data) throws -> RSSStatusFeed {

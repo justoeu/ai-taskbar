@@ -177,6 +177,7 @@ public extension VendorId {
         case .gemini:     return URL(string: "https://aistudio.google.com/status")
         case .deepseek:   return URL(string: "https://status.deepseek.com")
         case .xai:        return URL(string: "https://status.x.ai")
+        case .typesafe:   return URL(string: "https://status.typesafe.ai")
         }
     }
 }

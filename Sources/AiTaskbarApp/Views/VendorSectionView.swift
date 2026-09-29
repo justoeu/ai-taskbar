@@ -261,7 +261,9 @@ public struct VendorSectionView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .labelsHidden()
+            .disabled(!vm.vendorId.reportsUtilization)
         }
+        .help(vm.vendorId.reportsUtilization ? "" : L10n.localizedString("pin_unavailable_no_usage"))
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(
@@ -688,6 +690,8 @@ public struct VendorSectionView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        case .typesafe(let s):
+            TypeSafeCardView(snapshot: s)
         case .xai(let s):
             VStack(alignment: .leading, spacing: 2) {
                 if let prepaid = s.prepaidUSD {

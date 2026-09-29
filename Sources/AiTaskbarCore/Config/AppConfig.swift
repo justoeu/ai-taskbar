@@ -14,6 +14,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
     public var gemini: GeminiConfig
     public var deepseek: DeepSeekConfig
     public var xai: XAIConfig
+    public var typesafe: TypeSafeConfig
 
     public init(ui: UIConfig = .init(),
                 thresholds: ThresholdsConfig = .init(),
@@ -27,7 +28,8 @@ public struct AppConfig: Codable, Sendable, Equatable {
                 kimi: KimiConfig = .init(),
                 gemini: GeminiConfig = .init(),
                 deepseek: DeepSeekConfig = .init(),
-                xai: XAIConfig = .init()) {
+                xai: XAIConfig = .init(),
+                typesafe: TypeSafeConfig = .init()) {
         self.ui = ui
         self.thresholds = thresholds
         self.notifications = notifications
@@ -41,6 +43,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         self.gemini = gemini
         self.deepseek = deepseek
         self.xai = xai
+        self.typesafe = typesafe
     }
 
     public init(from decoder: Decoder) throws {
@@ -58,6 +61,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         gemini         = try c.decodeIfPresent(GeminiConfig.self, forKey: .gemini) ?? .init()
         deepseek       = try c.decodeIfPresent(DeepSeekConfig.self, forKey: .deepseek) ?? .init()
         xai            = try c.decodeIfPresent(XAIConfig.self, forKey: .xai) ?? .init()
+        typesafe       = try c.decodeIfPresent(TypeSafeConfig.self, forKey: .typesafe) ?? .init()
     }
 }
 
@@ -737,6 +741,68 @@ public struct XAIConfig: Codable, Sendable, Equatable {
 extension AppConfig {
     enum CodingKeys: String, CodingKey {
         case ui, thresholds, notifications, security, updates,
-             anthropic, openai, zai, openrouter, kimi, gemini, deepseek, xai
+             anthropic, openai, zai, openrouter, kimi, gemini, deepseek, xai, typesafe
+    }
+}
+
+/// TypeSafe AI (Jev). **Disabled by default**: every new provider starts off
+/// and is switched on when the user saves a key in Settings
+/// (docs/SDD-typesafe-jev.md §4.3). A `[typesafe]` table without `enabled`
+/// decodes as disabled too, so the safe default is structural.
+public struct TypeSafeConfig: Codable, Sendable, Equatable {
+    public var enabled: Bool = false
+    public var apiKeyEnv: String = "TYPESAFE_API_KEY"
+    public var apiKey: String?
+    /// Only `https://api.typesafe.ai` is accepted: a user-controlled URL would
+    /// send the API key to whoever runs that host.
+    public var baseURL: String = TypeSafeConfig.defaultBaseURL
+
+    public static let allowedHosts: Set<String> = ["api.typesafe.ai"]
+    public static let defaultBaseURL = "https://api.typesafe.ai"
+
+    public init(enabled: Bool = false,
+                apiKeyEnv: String = "TYPESAFE_API_KEY",
+                apiKey: String? = nil,
+                baseURL: String = defaultBaseURL) {
+        self.enabled = enabled
+        self.apiKeyEnv = apiKeyEnv
+        self.apiKey = apiKey
+        self.baseURL = Self.validate(baseURL) ?? Self.defaultBaseURL
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        apiKeyEnv = try c.decodeIfPresent(String.self, forKey: .apiKeyEnv) ?? "TYPESAFE_API_KEY"
+        apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey)
+        let raw = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? Self.defaultBaseURL
+        if let validated = Self.validate(raw) {
+            baseURL = validated
+        } else {
+            AppLog.config.warning("TypeSafeConfig.base_url \(raw, privacy: .public) rejected (must be https:// to an allowed TypeSafe host) — falling back to default")
+            baseURL = Self.defaultBaseURL
+        }
+    }
+
+    /// `raw` when it is `https://` to an allow-listed host, with no userinfo,
+    /// no port other than 443, and no path beyond `/`; otherwise nil.
+    public static func validate(_ raw: String) -> String? {
+        guard let url = URL(string: raw),
+              url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(),
+              allowedHosts.contains(host),
+              url.user == nil, url.password == nil,
+              url.port == nil || url.port == 443,
+              url.path.isEmpty || url.path == "/",
+              url.query == nil, url.fragment == nil
+        else { return nil }
+        return raw
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case apiKeyEnv = "api_key_env"
+        case apiKey = "api_key"
+        case baseURL = "base_url"
     }
 }
