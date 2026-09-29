@@ -28,6 +28,12 @@ public final class VendorViewModel: ObservableObject, Identifiable {
             }
         }
 
+        /// True while a refresh is in flight.
+        public var isLoading: Bool {
+            if case .loading = self { return true }
+            return false
+        }
+
         /// True when the current state represents the Claude Keychain ACL
         /// block, including CachedFetch's stale-success shape. A live fetch
         /// failure with a cached payload is returned as `.ok(isStale: true)`
@@ -54,6 +60,11 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     let openAIReset = OpenAIResetController()
 
     @Published public private(set) var state: State = .idle
+    /// When the in-flight refresh started, on the clock of whoever started
+    /// it (the scheduler passes its own). Meaningful only while `state` is
+    /// `.loading`; `UsageStore.refreshIdleVendors` reads it to bound how long
+    /// a hung fetch can keep a vendor out of the scheduled ticks.
+    public private(set) var loadingSince: Date?
     @Published public private(set) var history: [UsageHistoryStore.Sample] = []
     @Published public private(set) var lastNetworkFetch: Date?
     @Published public private(set) var rateLimitRetryAt: Date?
@@ -243,13 +254,14 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     /// work does not stack (RACE-HER-002 / BP-HYD-003).
     private var refreshTask: Task<Void, Never>?
 
-    public func refresh(forceRefresh: Bool) {
+    public func refresh(forceRefresh: Bool, now: Date = .now) {
         // A manual refresh bypasses the disk cache, but must not bypass a
         // server-imposed cooldown: repeated clicks otherwise amplify a 429.
         if let retryAt = rateLimitRetryAt, Date.now < retryAt { return }
         epoch += 1
         let myEpoch = epoch
         let previous = state.outcome
+        loadingSince = now
         state = .loading(previous: previous)
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in

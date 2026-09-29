@@ -2,10 +2,16 @@ import Foundation
 
 public struct FetchError: Sendable, Equatable, Codable {
     public let status: Int
+    /// English diagnostic, for logs and `.last_error`. Not user-facing text.
     public let body: String
-    public init(status: Int, body: String) {
+    /// Set when the failure was an `AppError.guidance`, so the UI can render
+    /// the localized guidance instead of `body`'s "guidance: …" diagnostic.
+    /// In memory only: `DiskCache.lastError()` does not persist it.
+    public let guidance: VendorGuidance?
+    public init(status: Int, body: String, guidance: VendorGuidance? = nil) {
         self.status = status
         self.body = body
+        self.guidance = guidance
     }
 }
 

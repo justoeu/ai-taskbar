@@ -1,6 +1,9 @@
 # ai-taskbar config
 # Lives at: ~/Library/Application Support/ai-taskbar/config.toml
 # Missing file or missing sections fall back to the defaults below.
+# Missing sections are appended to this file on launch. If config.toml is a
+# symlink (e.g. into a dotfiles repo) the app reads it but never writes
+# through it: the append is skipped (logged) and Settings cannot save.
 
 [ui]
 # primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi | gemini | deepseek | xai

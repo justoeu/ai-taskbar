@@ -30,7 +30,7 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
 - **Daily + 7-day cost estimates** computed locally from your CLI logs (7 days = today plus the six previous local days, the same window for every source)
 - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
 - **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
-- **Consumption & Analytics view** — usage share and cost share across LLMs for Today / Week / Month. Cost covers only what the local scanners keep (today and the last 7 days), so **Month shows usage but no cost** rather than relabelling the 7-day figure. OpenRouter's 30-day activity and xAI's billing-cycle spend stay on their own cards, which name those windows, and are never counted as 7-day cost. Vendors without a session counter show the number of models used, not "sessions"
+- **Consumption & Analytics view** — usage share and cost share across LLMs for Today / Week / Month. Cost covers only what the local scanners keep (today and the last 7 days), so **Month shows usage but no cost** rather than relabelling the 7-day figure, and never calls a vendor idle ("no recent usage") for lack of a cost it cannot see. Today and Week, including sessions and the "vs previous period" delta, use the same local calendar days as the cost (today since midnight; today plus the six previous days). OpenRouter's 30-day activity and xAI's billing-cycle spend stay on their own cards, which name those windows, and are never counted as 7-day cost. Vendors without a session counter show the number of models used, not "sessions"
 - **Service health & status monitor** — Live popover panel monitoring upstream operational status, active incidents, and scheduled maintenance across providers (Claude, OpenAI, Gemini, Grok, DeepSeek, Kimi, OpenRouter) with direct links to official status pages
 - **Click the card header** (chevron + name + empty space) to expand/collapse; dashboard / reorder / refresh stay on the trailing buttons
 - **Reorder cards** with ↑ / ↓ on each header (order saved on this Mac)
@@ -528,7 +528,7 @@ the same item. No telemetry, no remote logging.
 - Optional **TLS pinning** with Trust-On-First-Use SPKI hashes for paranoid setups.
 - Hardened-runtime entitlements ready for Developer ID signing (see [`Resources/entitlements.plist`](Resources/entitlements.plist)).
 - TOCTOU symlink refusal on cache + support directories.
-- Credential, config and cache writes (`AtomicFileWrite`) refuse a symlinked destination file: the write fails and both the link and its target are left untouched.
+- Credential, config and cache writes (`AtomicFileWrite`) refuse a symlinked destination file: the write fails and both the link and its target are left untouched. For a symlinked `config.toml` this means new vendor sections are not appended on launch (the refusal is logged) and Settings cannot save; edit the link's target by hand.
 - All audit findings from a 5-agent code review are tracked and addressed; see `CLAUDE.md` for the policy.
 
 ## Build from source

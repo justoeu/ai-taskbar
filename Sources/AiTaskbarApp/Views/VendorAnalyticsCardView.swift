@@ -273,14 +273,7 @@ public struct VendorAnalyticsCardView: View {
                     }
 
                     // Empty state when there is no usage data
-                    let hasNoData = summary.costByModel.isEmpty
-                        && summary.sessionCount == 0
-                        && summary.peakDay == nil
-                        && (summary.lifetimeCostUSD == nil || summary.lifetimeCostUSD == 0)
-                        && summary.totalCostUSD <= 0.0001
-                        && summary.totalUsagePercent <= 0.0001
-
-                    if hasNoData {
+                    if summary.showsNoRecentUsage {
                         HStack(spacing: 6) {
                             Image(systemName: "clock.arrow.circlepath")
                                 .font(.callout)

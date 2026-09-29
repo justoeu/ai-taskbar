@@ -54,11 +54,18 @@ public enum AnalyticsAggregator {
         )
     }
 
+    /// DST-safe day arithmetic, as in `CostWindow`.
+    private static func addingDays(_ days: Int, to date: Date, calendar: Calendar) -> Date {
+        calendar.date(byAdding: .day, value: days, to: date)
+            ?? date.addingTimeInterval(Double(days) * 86_400)
+    }
+
     public static func aggregate(
         timeframe: AnalyticsTimeframe,
         compareWithPrevious: Bool,
         comparisonOffset: Int = 1,
         now: Date = Date(),
+        calendar: Calendar = .current,
         histories: [VendorId: [UsageHistoryStore.Sample]] = [:],
         estimates: [VendorId: CostEstimate] = [:],
         snapshots: [VendorId: VendorSnapshot] = [:]
@@ -66,33 +73,31 @@ public enum AnalyticsAggregator {
         var vendorSummaries: [VendorAnalyticsSummary] = []
         var totalCostUSD: Double = 0
 
-        // Time intervals for current and comparison periods
-        let currentDuration: TimeInterval
-        let compareOffsetDuration: TimeInterval
-        let compareDuration: TimeInterval
-
-        switch timeframe {
-        case .daily:
-            currentDuration = 86_400
-            let daysBack = Double(max(1, comparisonOffset))
-            compareOffsetDuration = daysBack * 86_400
-            compareDuration = 86_400
-        case .weekly:
-            currentDuration = 7 * 86_400
-            let weeksBack = Double(max(1, comparisonOffset))
-            compareOffsetDuration = weeksBack * 7 * 86_400
-            compareDuration = 7 * 86_400
-        case .monthly:
-            currentDuration = 30 * 86_400
-            let monthsBack = Double(max(1, comparisonOffset))
-            compareOffsetDuration = monthsBack * 30 * 86_400
-            compareDuration = 30 * 86_400
-        }
-
+        // Current and comparison periods. Day and Week use the same local
+        // calendar days as the cost they sit next to (`CostWindow`: today
+        // since midnight; today plus the six previous days), so sessions and
+        // the delta cover the period the dollar figure covers (BUG-MAE-005).
+        // Month has no cost source and stays a rolling 30 days.
         let nowTs = now.timeIntervalSince1970
-        let currentStart = nowTs - currentDuration
-        let compareStart = nowTs - compareOffsetDuration - compareDuration
-        let compareEnd = nowTs - compareOffsetDuration
+        let offset = max(1, comparisonOffset)
+        let currentStart: TimeInterval
+        let compareStart: TimeInterval
+        let compareEnd: TimeInterval
+        switch timeframe {
+        case .daily, .weekly:
+            let window = CostWindow(now: now, calendar: calendar)
+            let start = timeframe == .daily ? window.startOfToday : window.startOfLast7Days
+            let periodDays = timeframe == .daily ? 1 : 7
+            let end = Self.addingDays(-(offset - 1) * periodDays, to: start, calendar: calendar)
+            currentStart = start.timeIntervalSince1970
+            compareEnd = end.timeIntervalSince1970
+            compareStart = Self.addingDays(-periodDays, to: end, calendar: calendar).timeIntervalSince1970
+        case .monthly:
+            let duration: TimeInterval = 30 * 86_400
+            currentStart = nowTs - duration
+            compareEnd = nowTs - Double(offset) * duration
+            compareStart = compareEnd - duration
+        }
 
         // Gather all participating vendors
         let allVendors = Set(estimates.keys).union(snapshots.keys).union(histories.keys)
@@ -142,7 +147,7 @@ public enum AnalyticsAggregator {
             var deltaPercent: Double? = nil
             if compareWithPrevious, !history.isEmpty {
                 let currentSamples = history.filter { $0.at >= currentStart && $0.at <= nowTs }
-                let compareSamples = history.filter { $0.at >= compareStart && $0.at <= compareEnd }
+                let compareSamples = history.filter { $0.at >= compareStart && $0.at < compareEnd }
                 if !currentSamples.isEmpty, !compareSamples.isEmpty {
                     let currAvg = currentSamples.map(\.max).reduce(0, +) / Double(currentSamples.count)
                     let compAvg = compareSamples.map(\.max).reduce(0, +) / Double(compareSamples.count)

@@ -38,4 +38,16 @@ public enum VendorNoticeText {
         }
         return error.localizedDescription
     }
+
+    /// Tooltip for a stale card: why the live fetch failed. Localized for a
+    /// guidance failure (CQ-MAE-005: it used to show the English
+    /// "guidance: …" diagnostic), the stored diagnostic for anything else,
+    /// and the generic stale hint when no error was captured.
+    public static func staleDetail(for error: FetchError?) -> String {
+        guard let error else { return L10n.localizedString("stale_help") }
+        if let guidance = error.guidance {
+            return L10n.localizedString(key(for: guidance))
+        }
+        return error.body
+    }
 }

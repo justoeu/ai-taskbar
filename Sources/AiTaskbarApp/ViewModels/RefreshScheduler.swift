@@ -24,6 +24,11 @@ public final class RefreshScheduler: ObservableObject {
     /// on cancellation is fine: the loop re-checks `Task.isCancelled`.
     typealias Sleeper = @MainActor (TimeInterval) async -> Void
     private let sleeper: Sleeper
+    /// The time a tick is dispatched at, which bounds how long a hung fetch
+    /// is skipped (`UsageStore.maxInFlightAge`). Tests advance it with the
+    /// scripted sleeper instead of waiting on the wall clock.
+    typealias Clock = @MainActor () -> Date
+    private let clock: Clock
 
     static func taskSleep(_ seconds: TimeInterval) async {
         // Best-effort: a cancelled sleep simply returns and the loop's own
@@ -47,9 +52,11 @@ public final class RefreshScheduler: ObservableObject {
          interval: TimeInterval,
          minimumInterval: TimeInterval,
          minimumStatusInterval: TimeInterval,
-         sleeper: @escaping Sleeper = RefreshScheduler.taskSleep) {
+         sleeper: @escaping Sleeper = RefreshScheduler.taskSleep,
+         clock: @escaping Clock = { .now }) {
         self.store = store
         self.sleeper = sleeper
+        self.clock = clock
         self.statusStore = statusStore
         self.costEstimator = costEstimator
         self.updates = updates
@@ -107,7 +114,7 @@ public final class RefreshScheduler: ObservableObject {
                 // update their state. Only AFTER waking do we sample
                 // `hasRateLimitedVendor`, because if we sampled before the
                 // sleep the state we'd read is the synchronous `.loading`
-                // that `refreshAll` just set — wiping any `.failed(429)`
+                // that `refreshIdleVendors` just set — wiping any `.failed(429)`
                 // or stale-`.ok(429-lastError)` from the cycle we're
                 // trying to back off from.
                 await sleeper(interval)
@@ -140,12 +147,14 @@ public final class RefreshScheduler: ObservableObject {
     ///
     /// Single-flight per vendor: a vendor whose previous fetch is still in
     /// flight is skipped (BP-HYD-005) while every other vendor refreshes, so
-    /// one hung fetch cannot stall the whole cycle (RACE-CRO-003).
-    /// Cancel-on-supersede in VendorViewModel covers manual refreshes.
+    /// one hung fetch cannot stall the whole cycle (RACE-CRO-003), until the
+    /// fetch is `UsageStore.maxInFlightAge` old; then this tick supersedes it
+    /// (RACE-MAE-001). Cancel-on-supersede in VendorViewModel covers manual
+    /// refreshes.
     private func dispatchScheduledTick() {
         guard let store else { return }
         store.markScheduledTick()
-        store.refreshIdleVendors(forceRefresh: false)
+        store.refreshIdleVendors(forceRefresh: false, now: clock())
         costEstimator?.refresh()
     }
 

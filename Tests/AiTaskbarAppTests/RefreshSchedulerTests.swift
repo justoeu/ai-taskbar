@@ -68,6 +68,27 @@ private final class HangingProvider: UsageProvider, @unchecked Sendable {
     func release() { continuation.finish() }
 }
 
+/// A fetch that parks until its task is cancelled (a superseding refresh
+/// cancels it). Counts calls and cancellations. Unlike `HangingProvider` it
+/// tolerates overlapping calls, which a restart produces.
+private final class ParkingProvider: UsageProvider, @unchecked Sendable {
+    let vendorId: VendorId = .anthropic
+    let calls = CallCounter()
+    let cancellations = CallCounter()
+    var displayName: String { vendorId.displayName }
+    var credentialFileURL: URL? { nil }
+    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
+        calls.increment()
+        do {
+            try await Task.sleep(for: .seconds(3_600))   // ends on cancellation
+        } catch {
+            cancellations.increment()
+            throw error
+        }
+        throw CancellationError()
+    }
+}
+
 private struct NoHistory: Error {}
 
 /// Stands in for `Task.sleep` in the refresh loop. Before each sleep it waits
@@ -78,6 +99,9 @@ private struct NoHistory: Error {}
 @MainActor
 private final class ScriptedSleeper {
     private(set) var durations: [TimeInterval] = []
+    /// Fake time: the sum of every requested sleep. Feed it to the
+    /// scheduler's clock so a tick "happens" `interval` after the previous one.
+    private(set) var elapsed: TimeInterval = 0
     private(set) var backoffFlags: [Bool] = []
     weak var store: UsageStore?
     private let returningSleeps: Int
@@ -100,6 +124,7 @@ private final class ScriptedSleeper {
             spins += 1
         }
         durations.append(seconds)
+        elapsed += seconds
         backoffFlags.append(store?.isInRateLimitBackoff ?? false)
         let count = durations.count
         waiters.removeAll { waiter in
@@ -152,8 +177,7 @@ final class RefreshSchedulerTests {
     }
 
     private static func isLoading(_ vm: VendorViewModel) -> Bool {
-        if case .loading = vm.state { return true }
-        return false
+        vm.state.isLoading
     }
 
     @Test("start() triggers an update check through the injected, non-network client")
@@ -234,6 +258,59 @@ final class RefreshSchedulerTests {
         #expect(healthy.calls.count == 4)
         // Single-flight per vendor: the hung fetch is never stacked/superseded.
         #expect(hung.calls.count == 1)
+    }
+
+    /// RACE-MAE-001: a fetch that never returns used to keep its vendor out
+    /// of every later scheduled tick until a manual refresh.
+    @Test("a fetch in flight for maxInFlightAge is superseded by the next tick")
+    func hung_vendor_is_restarted_after_max_age() async throws {
+        let parked = ParkingProvider()
+        let vm = vendor(parked)
+        let usage = store([vm])
+        let sleeper = ScriptedSleeper(returningSleeps: 3)
+        sleeper.store = usage
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        let scheduler = RefreshScheduler(
+            store: usage, statusStore: nil, interval: 300,
+            minimumInterval: 15, minimumStatusInterval: 300,
+            sleeper: sleeper.sleeper,
+            clock: { [sleeper] in base.addingTimeInterval(sleeper.elapsed) })
+        scheduler.start()
+        // Ticks at t = 0, 300, 600, 900. The fetch started at 0 is 600 s old
+        // at the third tick, so that tick restarts it; at 900 the new fetch
+        // is 300 s old and is left alone.
+        await sleeper.waitForSleeps(4)
+        scheduler.stop()
+        // Condition wait for the restarted fetch task to start, bounded so a
+        // missing restart fails instead of hanging.
+        for _ in 0..<2_000 where parked.calls.count < 2 {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+
+        #expect(parked.calls.count == 2)
+    }
+
+    @Test("a fetch younger than maxInFlightAge is not superseded")
+    func young_in_flight_fetch_is_skipped() {
+        let parked = ParkingProvider()
+        let vm = vendor(parked)
+        let usage = store([vm])
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        usage.refreshIdleVendors(now: start)
+        usage.refreshIdleVendors(now: start.addingTimeInterval(UsageStore.maxInFlightAge - 1))
+        #expect(vm.loadingSince == start)
+    }
+
+    @Test("a fetch at maxInFlightAge is superseded with a new start time")
+    func old_in_flight_fetch_is_restarted() {
+        let parked = ParkingProvider()
+        let vm = vendor(parked)
+        let usage = store([vm])
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let later = start.addingTimeInterval(UsageStore.maxInFlightAge)
+        usage.refreshIdleVendors(now: start)
+        usage.refreshIdleVendors(now: later)
+        #expect(vm.loadingSince == later)
     }
 
     @Test("dropping the last reference releases a started scheduler (LEAK-FAN-008)")

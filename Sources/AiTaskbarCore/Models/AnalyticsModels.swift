@@ -68,6 +68,21 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
         self.deltaPreviousPeriodPercent = deltaPreviousPeriodPercent
         self.lifetimeCostUSD = lifetimeCostUSD
     }
+
+    /// True when the card may say "no recent usage": nothing in the
+    /// timeframe shows activity. Evidence of idleness requires a cost source
+    /// for the timeframe — on Month (`isCostAvailable == false`) the cost is 0
+    /// by construction, so a pay-per-token vendor with no quota window would
+    /// otherwise be called idle while it spent money this week (BUG-MAE-002).
+    public var showsNoRecentUsage: Bool {
+        isCostAvailable
+            && costByModel.isEmpty
+            && sessionCount == 0
+            && peakDay == nil
+            && (lifetimeCostUSD ?? 0) == 0
+            && totalCostUSD <= 0.0001
+            && totalUsagePercent <= 0.0001
+    }
 }
 
 public struct VendorShare: Sendable, Equatable, Identifiable {

@@ -264,14 +264,26 @@ public final class UsageStore: ObservableObject {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
     }
 
+    /// Longest a fetch may stay in flight before a scheduled tick gives up on
+    /// it and restarts the vendor (RACE-MAE-001). Far beyond any legitimate
+    /// fetch (HTTP and `agy` budgets are well under a minute) and two default
+    /// intervals, so only a truly hung fetch is superseded.
+    public static let maxInFlightAge: TimeInterval = 600
+
     /// Scheduled-tick fan-out: refreshes every vendor except those whose
     /// previous fetch is still in flight. Skipping only the busy vendor keeps
     /// single-flight per vendor without letting one hung fetch (e.g. a child
     /// process that never exits) stall every other vendor (RACE-CRO-003).
-    public func refreshIdleVendors(forceRefresh: Bool = false) {
+    /// A fetch in flight for `maxInFlightAge` or longer no longer counts as
+    /// busy: the refresh supersedes (cancels) it, so a hung vendor recovers
+    /// without a manual refresh. `now` is the scheduler's clock.
+    public func refreshIdleVendors(forceRefresh: Bool = false, now: Date = .now) {
         for v in vendors {
-            if case .loading = v.state { continue }
-            v.refresh(forceRefresh: forceRefresh)
+            if v.state.isLoading, let since = v.loadingSince,
+               now.timeIntervalSince(since) < Self.maxInFlightAge {
+                continue
+            }
+            v.refresh(forceRefresh: forceRefresh, now: now)
         }
     }
 

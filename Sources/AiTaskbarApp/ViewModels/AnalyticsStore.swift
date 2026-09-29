@@ -128,17 +128,16 @@ public final class AnalyticsStore: ObservableObject {
     /// `estimatesProvider` is testable without a live `UsageStore` /
     /// `CostEstimator`.
     ///
-    /// `snapshots` is passed so the rule lives, and is tested, where the merge
-    /// happens: **no vendor snapshot contributes money here.** Every figure
-    /// lands in a fixed window (`usdToday`, `usdLast7Days`) and no snapshot
-    /// carries one: OpenRouter `/api/v1/activity` covers the last 30 days (no
-    /// per-item date is decoded), and xAI `spentUSD` / `prepaidUsedUSD` are
+    /// It takes no snapshots on purpose: **no vendor snapshot contributes
+    /// money here.** Every figure lands in a fixed window (`usdToday`,
+    /// `usdLast7Days`) and no snapshot carries one: OpenRouter
+    /// `/api/v1/activity` covers the last 30 days (no per-item date is
+    /// decoded), and xAI `spentUSD` / `prepaidUsedUSD` are
     /// billing-cycle-to-date. Both were once written into `usdLast7Days`; they
     /// stay on the vendor's popover card, which labels their real window.
     nonisolated static func defaultEstimates(
         byVendor: [VendorId: CostEstimate],
-        opencode: [VendorId: OpencodeScan],
-        snapshots _: [VendorId: VendorSnapshot]
+        opencode: [VendorId: OpencodeScan]
     ) -> [VendorId: CostEstimate] {
         mergingOpencode(byVendor, opencode: opencode)
     }
@@ -157,8 +156,28 @@ public final class AnalyticsStore: ObservableObject {
 
     /// Production history source: the vendor's on-disk JSONL, last 90 days.
     public nonisolated static func diskHistory(_ vendor: VendorId) -> [UsageHistoryStore.Sample] {
-        (try? UsageHistoryStore.defaultFor(vendor))?
-            .load(since: Date().addingTimeInterval(-90 * 86_400)) ?? []
+        diskHistory(vendor, makeStore: UsageHistoryStore.defaultFor, onFailure: logHistoryUnavailable)
+    }
+
+    /// Analytics has no history for a vendor whose store cannot be created;
+    /// that must be visible in the log, as it is for `VendorViewModel`
+    /// (BEST-ATE-006 / CQ-MAE-006), not an empty chart with no reason.
+    nonisolated static func diskHistory(
+        _ vendor: VendorId,
+        makeStore: (VendorId) throws -> UsageHistoryStore,
+        onFailure: (VendorId, Error) -> Void
+    ) -> [UsageHistoryStore.Sample] {
+        do {
+            return try makeStore(vendor).load(since: Date().addingTimeInterval(-90 * 86_400))
+        } catch {
+            onFailure(vendor, error)
+            return []
+        }
+    }
+
+    nonisolated static func logHistoryUnavailable(_ vendor: VendorId, _ error: Error) {
+        AppLog.lifecycle.error(
+            "analytics history unavailable for \(vendor.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
     }
 
     public convenience init(
@@ -167,12 +186,11 @@ public final class AnalyticsStore: ObservableObject {
         historyProvider: @escaping @Sendable (VendorId) -> [UsageHistoryStore.Sample] = AnalyticsStore.diskHistory
     ) {
         self.init(
-            estimatesProvider: { [weak costEstimator, weak usageStore] in
+            estimatesProvider: { [weak costEstimator] in
                 guard let costEstimator else { return [:] }
                 return AnalyticsStore.defaultEstimates(
                     byVendor: costEstimator.byVendor,
-                    opencode: costEstimator.opencode,
-                    snapshots: AnalyticsStore.currentSnapshots(usageStore))
+                    opencode: costEstimator.opencode)
             },
             snapshotsProvider: { [weak usageStore] in
                 AnalyticsStore.currentSnapshots(usageStore)

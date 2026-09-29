@@ -481,8 +481,7 @@ public struct PopoverContentView: View {
         } else if let tick = store.lastScheduledTickAt {
             let elapsed = now.timeIntervalSince(tick)
             let remaining = max(0, store.refreshIntervalSeconds - elapsed)
-            let minutes = Int(remaining) / 60
-            let seconds = Int(remaining) % 60
+            let (minutes, seconds) = DurationParts.minutesSeconds(remaining)
             // Manual concat avoids String(format:) machinery + a temporary
             // String allocation per tick. With the popover open for 5 min
             // that's ~300 saved Format scans + alloc/release cycles.

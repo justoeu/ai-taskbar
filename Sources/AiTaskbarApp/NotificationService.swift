@@ -136,6 +136,17 @@ struct NotificationThresholdTracker {
     /// dropped below every threshold.
     private(set) var highestNotified: [Key: Double] = [:]
 
+    /// Consecutive snapshots of the key's vendor that did not report it.
+    private var missedSnapshots: [Key: Int] = [:]
+
+    /// A window must be absent this many consecutive snapshots of its vendor
+    /// before its key is forgotten. One missing snapshot (a vendor omitting a
+    /// window for one poll) no longer re-arms it, so its return does not
+    /// repeat a notification already shown (BUG-MAE-007). A rolled label
+    /// (xAI "Monthly (YYYY-MM)") never returns, so it is still pruned:
+    /// about an hour later at the default 300 s cadence.
+    static let pruneAfterMissedSnapshots = 12
+
     /// Folds one snapshot's windows in and returns the crossings to notify.
     mutating func crossings(vendor: VendorId, windows: [UsageWindow],
                             sortedThresholds: [Double]) -> [(window: UsageWindow, threshold: Double)] {
@@ -147,6 +158,7 @@ struct NotificationThresholdTracker {
             // Window dropped below all thresholds → reset so a new cycle re-arms.
             if percent < minThreshold {
                 highestNotified.removeValue(forKey: key)
+                missedSnapshots.removeValue(forKey: key)
                 continue
             }
             // Find the highest threshold this reading has reached.
@@ -157,9 +169,19 @@ struct NotificationThresholdTracker {
             }
         }
         // Prune this vendor's keys for windows no longer reported (xAI's
-        // "Monthly (YYYY-MM)" label rolls every cycle and would orphan one).
+        // "Monthly (YYYY-MM)" label rolls every cycle and would orphan one),
+        // but only after `pruneAfterMissedSnapshots` consecutive absences.
         let current = Set(windows.map { Key(vendor: vendor, label: $0.label) })
-        highestNotified = highestNotified.filter { $0.key.vendor != vendor || current.contains($0.key) }
+        for key in current { missedSnapshots.removeValue(forKey: key) }
+        for key in highestNotified.keys where key.vendor == vendor && !current.contains(key) {
+            let misses = missedSnapshots[key, default: 0] + 1
+            if misses >= Self.pruneAfterMissedSnapshots {
+                highestNotified.removeValue(forKey: key)
+                missedSnapshots.removeValue(forKey: key)
+            } else {
+                missedSnapshots[key] = misses
+            }
+        }
         return fired
     }
 }

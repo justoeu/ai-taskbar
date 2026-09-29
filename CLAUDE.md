@@ -521,7 +521,11 @@ that came out of fixing that:
   fetch finished within ~5 s of dispatch (ticks are spaced from dispatch, so
   a slower fetch can be served from cache once, then refetched). A scheduled
   tick skips only vendors whose own fetch is still in flight; it never skips
-  the whole cycle, so one hung vendor cannot freeze the others.
+  the whole cycle, so one hung vendor cannot freeze the others. A fetch in
+  flight for `UsageStore.maxInFlightAge` (600 s) or longer is no longer
+  skipped: the next tick supersedes (cancels) it, so a hung vendor recovers
+  without a manual refresh. The age is measured on `RefreshScheduler`'s
+  injected clock, which tests advance with the scripted sleeper.
 - **`AiTaskbarValidate`** — runtime test runner, see "Validation policy".
 - **`AiTaskbarTesting`** — fixtures + StubURLProtocol, shared by tests +
   validate.
@@ -634,7 +638,11 @@ that came out of fixing that:
 
 `~/Library/Application Support/ai-taskbar/config.toml`. Missing sections are
 auto-appended on launch by `ConfigLoader.ensureAllVendorSections`, preserving
-user edits. See `config.example.toml` for the full schema.
+user edits. See `config.example.toml` for the full schema. A **symlinked**
+`config.toml` (e.g. managed from a dotfiles repo) is read normally but never
+written: `AtomicFileWrite` refuses symlinked destinations, so the launch
+top-up is skipped and logged as an error (`AppEnvironment.topUpConfigSections`,
+never `try?`), and saving from Settings reports the failure.
 
 ## Known limitations / future work
 

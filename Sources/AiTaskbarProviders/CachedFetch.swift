@@ -56,9 +56,12 @@ public struct CachedFetch: Sendable {
             } else {
                 // `.guidance` may stand for a 401/503 (agy not signed in /
                 // unavailable); keep that status so the stale-card re-login
-                // banner still fires.
+                // banner still fires, and the case so its tooltip is localized.
+                var guidance: VendorGuidance?
+                if case .guidance(let g) = appErr { guidance = g }
                 fe = FetchError(status: appErr.httpStatus ?? 0,
-                                body: PIIScrub.scrub(diagnostic: appErr.description))
+                                body: PIIScrub.scrub(diagnostic: appErr.description),
+                                guidance: guidance)
             }
             cache.markFailed(fe)
             return try fallback(error: appErr, decode: decode, lastError: fe)

@@ -291,7 +291,7 @@ public struct VendorSectionView: View {
             // Tooltip now surfaces WHY the data is stale (last error message)
             // when available — credential ACL mismatch, schema drift, etc.
             // Falls back to the generic "stale" hint if no error captured.
-            let detail = outcome.lastError?.body ?? L10n.localizedString("stale_help")
+            let detail = VendorNoticeText.staleDetail(for: outcome.lastError)
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
                 .help(detail)

@@ -18,11 +18,7 @@ public final class AppEnvironment {
         do {
             let loader = try ConfigLoader()
             let cfg = try loader.load()
-            // Top up the user's file with any sections we added since they
-            // first ran the app (e.g. new vendors). Preserves their edits.
-            if let appended = try? loader.ensureAllVendorSections(), !appended.isEmpty {
-                AppLog.lifecycle.info("appended missing config sections: \(appended.joined(separator: ", "), privacy: .public)")
-            }
+            topUpConfigSections(loader)
             // Build HTTP client with TLS pinning if configured.
             // Fail closed: if pin_hosts is set but PinStore cannot open, do
             // not silently fall back to an unpinned client.
@@ -47,6 +43,34 @@ public final class AppEnvironment {
                                   configLoader: loader,
                                   config: AppConfig())
         }
+    }
+
+    /// Tops up the user's file with any sections added since they first ran
+    /// the app (e.g. new vendors), preserving their edits. Best-effort: the
+    /// loaded config is already in memory, so a failed write must not stop
+    /// the launch — but it must not be silent either (CQ-MAE-007). A
+    /// symlinked `config.toml` is the common case: `AtomicFileWrite` refuses
+    /// to write through a symlink. Returns the failure for tests.
+    @discardableResult
+    static func topUpConfigSections(
+        _ loader: ConfigLoader,
+        onFailure: (Error) -> Void = logConfigTopUpFailure
+    ) -> Error? {
+        do {
+            let appended = try loader.ensureAllVendorSections()
+            if !appended.isEmpty {
+                AppLog.lifecycle.info("appended missing config sections: \(appended.joined(separator: ", "), privacy: .public)")
+            }
+            return nil
+        } catch {
+            onFailure(error)
+            return error
+        }
+    }
+
+    nonisolated static func logConfigTopUpFailure(_ error: Error) {
+        AppLog.lifecycle.error(
+            "could not append missing config sections (a symlinked config.toml is refused): \(String(describing: error), privacy: .public)")
     }
 
     /// Build the set of providers indicated as enabled by the live config.
