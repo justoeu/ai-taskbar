@@ -1,0 +1,811 @@
+diff --git a/README.md b/README.md
+index 8553846..7674307 100644
+--- a/README.md
++++ b/README.md
+@@ -26,7 +26,7 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
+ - **Plan label** ("Claude Max 20x", "ChatGPT Plus", "GLM Lite")
+ - **Per-window utilization** with color thresholds (green → yellow → red) — for Claude this includes the 5-hour session, 7-day weekly, any **per-model weekly windows** (e.g. Fable), and a **usage-credits** meter (shown with the money spent/limit, e.g. `R$556.68 / R$600.00`). Model windows are parsed generically from the API's `limits[]`, so a newly-launched model appears without an app update.
+ - **Reset countdown** ("resets 4 hrs, 12 min"; once the reset passes it shows "reset due — awaiting auto-refresh…" instead of counting back up)
+-- **24-hour sparkline** with dashed threshold lines, current value, and peak marker
++- **24-hour sparkline** with dashed threshold lines, current value, and peak marker (one sample per live network reading; cached or stale replays are not re-plotted)
+ - **Daily + 7-day cost estimates** computed locally from your CLI logs (7 days = today plus the six previous local days, the same window for every source)
+ - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
+ - **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
+diff --git a/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift b/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift
+index 7839b87..cdc023e 100644
+--- a/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift
++++ b/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift
+@@ -62,12 +62,18 @@ public final class AnalyticsStore: ObservableObject {
+ 
+     private let estimatesProvider: () -> [VendorId: CostEstimate]
+     private let snapshotsProvider: () -> [VendorId: VendorSnapshot]
+-    private let historyProvider: (VendorId) -> [UsageHistoryStore.Sample]
++    private let historyProvider: @Sendable (VendorId) -> [UsageHistoryStore.Sample]
++    /// Last histories loaded off the MainActor. `recompute()` aggregates from
++    /// these synchronously, so a timeframe switch never waits on disk.
++    private var histories: [VendorId: [UsageHistoryStore.Sample]] = [:]
++    /// The in-flight off-main history load. Superseded on every trigger, so a
++    /// burst of triggers loads each vendor once. Internal so tests can await it.
++    private(set) var historyReloadTask: Task<Void, Never>?
+ 
+     public init(
+         estimatesProvider: @escaping () -> [VendorId: CostEstimate] = { [:] },
+         snapshotsProvider: @escaping () -> [VendorId: VendorSnapshot] = { [:] },
+-        historyProvider: @escaping (VendorId) -> [UsageHistoryStore.Sample] = { _ in [] },
++        historyProvider: @escaping @Sendable (VendorId) -> [UsageHistoryStore.Sample] = { _ in [] },
+         defaults: UserDefaults = .standard
+     ) {
+         self.estimatesProvider = estimatesProvider
+@@ -149,7 +155,17 @@ public final class AnalyticsStore: ObservableObject {
+         return dict
+     }
+ 
+-    public convenience init(usageStore: UsageStore, costEstimator: CostEstimator) {
++    /// Production history source: the vendor's on-disk JSONL, last 90 days.
++    public nonisolated static func diskHistory(_ vendor: VendorId) -> [UsageHistoryStore.Sample] {
++        (try? UsageHistoryStore.defaultFor(vendor))?
++            .load(since: Date().addingTimeInterval(-90 * 86_400)) ?? []
++    }
++
++    public convenience init(
++        usageStore: UsageStore,
++        costEstimator: CostEstimator,
++        historyProvider: @escaping @Sendable (VendorId) -> [UsageHistoryStore.Sample] = AnalyticsStore.diskHistory
++    ) {
+         self.init(
+             estimatesProvider: { [weak costEstimator, weak usageStore] in
+                 guard let costEstimator else { return [:] }
+@@ -161,9 +177,7 @@ public final class AnalyticsStore: ObservableObject {
+             snapshotsProvider: { [weak usageStore] in
+                 AnalyticsStore.currentSnapshots(usageStore)
+             },
+-            historyProvider: { vendor in
+-                (try? UsageHistoryStore.defaultFor(vendor))?.load(since: Date().addingTimeInterval(-90 * 86_400)) ?? []
+-            }
++            historyProvider: historyProvider
+         )
+         self.usageStore = usageStore
+         self.costEstimator = costEstimator
+@@ -205,28 +219,58 @@ public final class AnalyticsStore: ObservableObject {
+         }
+     }
+ 
++    /// Publishes a snapshot from the in-memory inputs right away, then reloads
++    /// the 90-day histories off the MainActor and publishes again when they
++    /// land. The load used to run synchronously here, on the MainActor, for
++    /// every vendor on every trigger (PERF-FLU-001 / LEAK-FAN-003).
+     private func recompute() {
+-        isLoading = true
+-        defer { isLoading = false }
++        let vendors = publishSnapshot()
++        reloadHistories(for: vendors)
++    }
+ 
++    /// Aggregates from the cached histories. Returns the vendors in scope.
++    @discardableResult
++    private func publishSnapshot() -> Set<VendorId> {
+         let estimates = estimatesProvider()
+         let snapshots = snapshotsProvider()
+         let vendors = Set(estimates.keys).union(snapshots.keys)
+-
+-        var histories: [VendorId: [UsageHistoryStore.Sample]] = [:]
+-        for v in vendors {
+-            histories[v] = historyProvider(v)
+-        }
+-
+         self.snapshot = AnalyticsAggregator.aggregate(
+             timeframe: timeframe,
+             compareWithPrevious: compareWithPrevious,
+             comparisonOffset: comparisonOffset,
+             now: Date(),
+-            histories: histories,
++            histories: histories.filter { vendors.contains($0.key) },
+             estimates: estimates,
+             snapshots: snapshots
+         )
++        return vendors
++    }
++
++    private func reloadHistories(for vendors: Set<VendorId>) {
++        historyReloadTask?.cancel()
++        isLoading = true
++        let provider = historyProvider
++        historyReloadTask = Task { @MainActor [weak self] in
++            // A synchronous burst of triggers cancels this before it runs.
++            guard !Task.isCancelled else { return }
++            let load = Task.detached(priority: .utility) { () -> [VendorId: [UsageHistoryStore.Sample]]? in
++                var loaded: [VendorId: [UsageHistoryStore.Sample]] = [:]
++                for vendor in vendors {
++                    if Task.isCancelled { return nil }
++                    loaded[vendor] = provider(vendor)
++                }
++                return loaded
++            }
++            let loaded = await withTaskCancellationHandler {
++                await load.value
++            } onCancel: {
++                load.cancel()
++            }
++            guard let loaded, !Task.isCancelled, let self else { return }
++            self.histories = loaded
++            self.isLoading = false
++            self.publishSnapshot()
++        }
+     }
+ 
+     public func displayIndex(of id: VendorId) -> Int {
+diff --git a/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift b/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift
+index b9c2da1..b545b34 100644
+--- a/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift
++++ b/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift
+@@ -141,8 +141,13 @@ public final class CostEstimator: ObservableObject {
+             }
+             await MainActor.run { [self] in
+                 guard self.generation == gen else { return }
+-                self.byVendor[.anthropic] = claudeEstimate
+-                self.byVendor[.openai] = codexEstimate
++                // One assignment, one emission: two subscript writes on the
++                // @Published dictionary fired every subscriber twice per scan
++                // (PERF-FLU-001).
++                var updated = self.byVendor
++                updated[.anthropic] = claudeEstimate
++                updated[.openai] = codexEstimate
++                self.byVendor = updated
+                 self.lastComputedAt = .now
+                 self.isLoading = false
+                 self.inFlight = nil
+diff --git a/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift b/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
+index 814232b..c155d8d 100644
+--- a/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
++++ b/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
+@@ -76,8 +76,7 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+     @Published public var isExpanded: Bool {
+         didSet {
+             guard isExpanded != oldValue else { return }
+-            UserDefaults.standard.set(isExpanded,
+-                                      forKey: Self.expansionKey(for: vendorId))
++            defaults.set(isExpanded, forKey: Self.expansionKey(for: vendorId))
+         }
+     }
+ 
+@@ -136,23 +135,50 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+     private var credWatcher: DispatchSourceFileSystemObject?
+     private var credDebounce: Task<Void, Never>?
+ 
++    /// Loads the initial 24 h history window. Injectable so a test can hold
++    /// the load open and order it against a refresh (RACE-CRO-011).
++    public typealias HistoryLoader = @Sendable (UsageHistoryStore, Date) async -> [UsageHistoryStore.Sample]
++
++    /// Production loader: decodes the JSONL off the MainActor so a
++    /// multi-vendor launch does not block the popover (N1-NEX-006).
++    public nonisolated static let detachedHistoryLoad: HistoryLoader = { store, cutoff in
++        await Task.detached(priority: .utility) { store.load(since: cutoff) }.value
++    }
++
++    /// True when the history store could not be created, so this vendor has
++    /// no sparkline and contributes nothing to Analytics this session.
++    public let historyUnavailable: Bool
++
++    /// Backs `isExpanded`. Injected so tests never touch `.standard`.
++    private let defaults: UserDefaults
++
+     public init(provider: any UsageProvider,
+-                notifications: NotificationService? = nil) {
++                notifications: NotificationService? = nil,
++                defaults: UserDefaults = .standard,
++                historyStoreFactory: (VendorId) throws -> UsageHistoryStore = UsageHistoryStore.defaultFor,
++                historyLoader: @escaping HistoryLoader = VendorViewModel.detachedHistoryLoad) {
+         self.vendorId = provider.vendorId
+         self.provider = provider
+         self.notifications = notifications
+-        self.isExpanded = (UserDefaults.standard
++        self.defaults = defaults
++        self.isExpanded = (defaults
+             .object(forKey: Self.expansionKey(for: provider.vendorId)) as? Bool) ?? true
+-        self.historyStore = try? UsageHistoryStore.defaultFor(provider.vendorId)
+-        // Load history off the MainActor so multi-vendor launch does not
+-        // block the popover on JSONL decode (N1-NEX-006).
+-        if let store = historyStore {
++        // History is best-effort, but a store that cannot be created must not
++        // vanish silently: log it and expose the flag (BEST-ATE-006).
++        var store: UsageHistoryStore?
++        do {
++            store = try historyStoreFactory(provider.vendorId)
++        } catch {
++            AppLog.lifecycle.error(
++                "history store unavailable for \(provider.vendorId.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
++        }
++        self.historyStore = store
++        self.historyUnavailable = store == nil
++        if let store {
+             let cutoff = Date.now.addingTimeInterval(-24 * 3600)
+             Task { @MainActor [weak self] in
+-                let samples = await Task.detached(priority: .utility) {
+-                    store.load(since: cutoff)
+-                }.value
+-                self?.history = samples
++                let samples = await historyLoader(store, cutoff)
++                self?.mergeLoadedHistory(samples)
+             }
+         }
+         if let credPath = provider.credentialFileURL {
+@@ -228,11 +254,17 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+                 guard myEpoch == self.epoch else { return }   // newer refresh wins
+                 self.state = .ok(outcome)
+                 self.observeRateLimit(status: outcome.lastError?.status)
+-                if (outcome.cacheAge ?? .greatestFiniteMagnitude) <= 1 {
++                if Self.isNetworkOutcome(outcome) {
+                     self.lastNetworkFetch = .now
+                 }
+                 self.notifications?.observe(vendor: self.vendorId, snapshot: outcome.snapshot)
+-                self.recordHistory(outcome.snapshot.maxUtilization)
++                // Only a real network reading is a new sample. A stale
++                // fallback or a cache replay re-serves an old number, and
++                // stamping it `now` would plot a pre-outage percent past a
++                // window reset (BUG-ART-010).
++                if Self.isFreshNetworkOutcome(outcome) {
++                    self.recordHistory(outcome.snapshot.maxUtilization)
++                }
+             } catch is CancellationError {
+                 return
+             } catch {
+@@ -284,6 +316,31 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+         history = current.filter { $0.at >= cutoff }
+     }
+ 
++    /// "Network, not cache": `CachedFetch` stamps a live fetch `cacheAge: 0`
++    /// and a replay with the entry's age. Drives `lastNetworkFetch`.
++    static func isNetworkOutcome(_ outcome: FetchOutcome) -> Bool {
++        (outcome.cacheAge ?? .greatestFiniteMagnitude) <= 1
++    }
++
++    /// A network reading that is not a stale fallback: the only outcome that
++    /// counts as a new history sample.
++    static func isFreshNetworkOutcome(_ outcome: FetchOutcome) -> Bool {
++        !outcome.isStale && isNetworkOutcome(outcome)
++    }
++
++    /// Folds the initial disk load into `history` instead of replacing it, so
++    /// a sample recorded while the load was in flight survives (RACE-CRO-011).
++    /// A sample both appended in memory and read back from the file is kept
++    /// once.
++    private func mergeLoadedHistory(_ loaded: [UsageHistoryStore.Sample]) {
++        let cutoff = Date.now.addingTimeInterval(-24 * 3600).timeIntervalSince1970
++        let loadedStamps = Set(loaded.map(\.at))
++        let recordedMeanwhile = history.filter { !loadedStamps.contains($0.at) }
++        history = (loaded + recordedMeanwhile)
++            .filter { $0.at >= cutoff }
++            .sorted { $0.at < $1.at }
++    }
++
+     public func compactHistory() {
+         historyStore?.compact()
+     }
+diff --git a/Sources/AiTaskbarCore/History/UsageHistoryStore.swift b/Sources/AiTaskbarCore/History/UsageHistoryStore.swift
+index b4387ee..a90c3b8 100644
+--- a/Sources/AiTaskbarCore/History/UsageHistoryStore.swift
++++ b/Sources/AiTaskbarCore/History/UsageHistoryStore.swift
+@@ -21,6 +21,8 @@ public final class UsageHistoryStore: @unchecked Sendable {
+     /// unfair lock so concurrent `append`s serialize cleanly.
+     private struct LockedState {
+         var writeHandle: FileHandle?
++        /// True while appends keep failing; gates the one-shot log.
++        var appendFailing = false
+     }
+     private let state = OSAllocatedUnfairLock(initialState: LockedState())
+     public static let defaultRetention: TimeInterval = 90 * 86_400 // 90 days
+@@ -65,24 +67,50 @@ public final class UsageHistoryStore: @unchecked Sendable {
+ 
+     // MARK: - Append
+ 
+-    public func append(maxUtilization: Double, at: Date = .init()) {
++    /// Best-effort: a failed append never throws or crashes (history is
++    /// telemetry), but it is no longer silent. Returns `false` when the sample
++    /// did not reach disk, and logs the first failure of a streak so a broken
++    /// history dir shows up in Console.app without one line per refresh
++    /// (CQ-AUR-003).
++    @discardableResult
++    public func append(maxUtilization: Double, at: Date = .init()) -> Bool {
+         let sample = Sample(at: at.timeIntervalSince1970, max: maxUtilization)
+-        guard var encoded = try? SharedCoders.encoder.encode(sample) else { return }
+-        encoded.append(0x0a)
+-        // Bind to an immutable local so the `withLock` autoclosure captures a
+-        // sendable value (Swift 6 strict-concurrency rejects `var` capture).
+-        let line = encoded
+-        state.withLock { s in
+-            guard let handle = ensureWriteHandleLocked(&s.writeHandle) else { return }
++        let line: Data
++        do {
++            line = try SharedCoders.encoder.encode(sample) + [0x0a]
++        } catch {
++            return recordAppendOutcome(failure: "encode: \(error)")
++        }
++        let failure: String? = state.withLock { s in
++            guard let handle = ensureWriteHandleLocked(&s.writeHandle) else {
++                return "cannot open \(fileURL.lastPathComponent) for writing"
++            }
+             do {
+                 try handle.seekToEnd()
+                 try handle.write(contentsOf: line)
++                return nil
+             } catch {
+                 // If the file got moved out from under us, drop and lazily reopen.
+                 try? handle.close()
+                 s.writeHandle = nil
++                return "write: \(error)"
+             }
+         }
++        return recordAppendOutcome(failure: failure)
++    }
++
++    /// Tracks the failure streak and logs only its first failure.
++    private func recordAppendOutcome(failure: String?) -> Bool {
++        let firstOfStreak = state.withLock { s -> Bool in
++            let first = failure != nil && !s.appendFailing
++            s.appendFailing = failure != nil
++            return first
++        }
++        if firstOfStreak, let failure {
++            AppLog.lifecycle.error(
++                "history append failed for \(self.vendor.rawValue, privacy: .public): \(failure, privacy: .public)")
++        }
++        return failure == nil
+     }
+ 
+     /// Lazily opens the write handle on first append. Creates the file with
+diff --git a/Sources/AiTaskbarCore/Networking/PinStore.swift b/Sources/AiTaskbarCore/Networking/PinStore.swift
+index a712739..12ef0d9 100644
+--- a/Sources/AiTaskbarCore/Networking/PinStore.swift
++++ b/Sources/AiTaskbarCore/Networking/PinStore.swift
+@@ -53,17 +53,41 @@ public final class PinStore: @unchecked Sendable {
+         return s
+     }
+ 
+-    public func set(host: String, hash: String) {
++    /// Returns `false` when the pin could not be persisted. The in-memory memo
++    /// is updated regardless, so this session stays pinned; only the next
++    /// launch would re-learn it (TOFU). Logged so a broken pins dir is visible
++    /// instead of only inferable from repeated first use (CQ-AUR-004).
++    @discardableResult
++    public func set(host: String, hash: String) -> Bool {
+         let key = host.lowercased()
+         memo.withLock { $0[key] = hash }
+-        try? AtomicFileWrite.write(Data(hash.utf8), to: fileURL(for: key),
+-                                   permissions: 0o600)
++        do {
++            try AtomicFileWrite.write(Data(hash.utf8), to: fileURL(for: key),
++                                      permissions: 0o600)
++            return true
++        } catch {
++            AppLog.pinning.error(
++                "pin persist failed for \(key, privacy: .public): \(String(describing: error), privacy: .public)")
++            return false
++        }
+     }
+ 
+-    public func clear(host: String) {
++    /// Returns `false` when an existing pin file could not be removed. A host
++    /// that was never pinned is not a failure.
++    @discardableResult
++    public func clear(host: String) -> Bool {
+         let key = host.lowercased()
+         _ = memo.withLock { $0.removeValue(forKey: key) }
+-        try? FileManager.default.removeItem(at: fileURL(for: key))
++        do {
++            try FileManager.default.removeItem(at: fileURL(for: key))
++            return true
++        } catch CocoaError.fileNoSuchFile {
++            return true
++        } catch {
++            AppLog.pinning.error(
++                "pin removal failed for \(key, privacy: .public): \(String(describing: error), privacy: .public)")
++            return false
++        }
+     }
+ 
+     private func fileURL(for host: String) -> URL {
+diff --git a/Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift b/Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift
+new file mode 100644
+index 0000000..e071944
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift
+@@ -0,0 +1,111 @@
++import Testing
++import Foundation
++import os.lock
++@testable import AiTaskbarApp
++import AiTaskbarCore
++import AiTaskbarProviders
++
++/// Records every history load: which vendor, and whether it ran on the main
++/// thread. The provider closure is synchronous, so `pthread_main_np` reports
++/// the thread the load actually ran on.
++private final class LoadRecorder: Sendable {
++    private let state = OSAllocatedUnfairLock(initialState: (counts: [VendorId: Int](), onMain: 0))
++
++    func record(_ vendor: VendorId) {
++        let main = pthread_main_np() != 0
++        state.withLock {
++            $0.counts[vendor, default: 0] += 1
++            if main { $0.onMain += 1 }
++        }
++    }
++    func count(_ vendor: VendorId) -> Int { state.withLock { $0.counts[vendor] ?? 0 } }
++    var loadsOnMain: Int { state.withLock { $0.onMain } }
++    var total: Int { state.withLock { $0.counts.values.reduce(0, +) } }
++
++    var provider: @Sendable (VendorId) -> [UsageHistoryStore.Sample] {
++        { [self] vendor in
++            record(vendor)
++            return [UsageHistoryStore.Sample(at: Date().timeIntervalSince1970, max: 40)]
++        }
++    }
++}
++
++/// PERF-FLU-001 / LEAK-FAN-003: `recompute()` used to decode 90 days of
++/// history JSONL per vendor synchronously on the MainActor, twice per cost
++/// refresh (and on every other trigger), even with Analytics closed.
++@MainActor
++@Suite("AnalyticsStore history loading", .serialized)
++struct AnalyticsStoreHistoryLoadTests {
++    private func settle(_ store: AnalyticsStore) async {
++        // Let queued `receive(on: .main)` deliveries run, then await the load.
++        try? await Task.sleep(nanoseconds: 100_000_000)
++        await store.historyReloadTask?.value
++    }
++
++    private func makeStore(_ recorder: LoadRecorder) -> AnalyticsStore {
++        AnalyticsStore(
++            estimatesProvider: {
++                [.anthropic: CostEstimate(usdToday: 1, usdLast7Days: 2),
++                 .openai: CostEstimate(usdToday: 3, usdLast7Days: 4)]
++            },
++            snapshotsProvider: { [:] },
++            historyProvider: recorder.provider)
++    }
++
++    @Test("history loads run off the main thread")
++    func history_load_is_off_main() async {
++        let recorder = LoadRecorder()
++        let store = makeStore(recorder)
++        store.refresh()
++        await settle(store)
++        #expect(recorder.total > 0)
++        #expect(recorder.loadsOnMain == 0)
++    }
++
++    @Test("a synchronous burst of recompute triggers loads each vendor once")
++    func burst_loads_each_vendor_once() async {
++        let recorder = LoadRecorder()
++        let store = makeStore(recorder)
++        store.refresh()
++        store.refresh()
++        store.timeframe = .weekly
++        await settle(store)
++        #expect(recorder.count(.anthropic) == 1)
++        #expect(recorder.count(.openai) == 1)
++    }
++
++    @Test("loaded histories reach the published snapshot")
++    func loaded_history_reaches_snapshot() async {
++        let recorder = LoadRecorder()
++        let store = makeStore(recorder)
++        store.refresh()
++        await settle(store)
++        let summary = store.snapshot?.vendorSummaries.first { $0.vendor == .anthropic }
++        let samples = summary?.usageHistory.count ?? 0
++        #expect(samples == 1)
++    }
++
++    @Test("one CostEstimator refresh loads each vendor's history at most once")
++    func cost_refresh_loads_history_once_per_vendor() async throws {
++        let recorder = LoadRecorder()
++        let estimator = CostEstimator(
++            claudeEstimate: { CostEstimate(usdToday: 1, usdLast7Days: 2) },
++            codexEstimate: { CostEstimate(usdToday: 3, usdLast7Days: 4) },
++            opencodeScan: { _ in [:] })
++        let usage = UsageStore(vendors: [], primary: nil, preferredOrder: [])
++        let store = AnalyticsStore(usageStore: usage, costEstimator: estimator,
++                                   historyProvider: recorder.provider)
++        await settle(store)
++        let before = (recorder.count(.anthropic), recorder.count(.openai))
++
++        estimator.refresh(force: true)
++        for _ in 0..<400 where estimator.lastComputedAt == nil {
++            try await Task.sleep(nanoseconds: 5_000_000)
++        }
++        await settle(store)
++
++        #expect(recorder.count(.anthropic) - before.0 <= 1)
++        #expect(recorder.count(.openai) - before.1 <= 1)
++        #expect(recorder.loadsOnMain == 0)
++    }
++}
+diff --git a/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift b/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
+index 4532f36..182f0a1 100644
+--- a/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
++++ b/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
+@@ -101,6 +101,21 @@ struct CostEstimatorLoadingTests {
+         #expect(e.opencode[.openai]?.last7DaysByModel["gpt-5.5"]?.inputTokens == 42)
+     }
+ 
++    /// PERF-FLU-001: the two vendor estimates used to be written as two
++    /// separate `byVendor[...] =` statements, so every subscriber (Analytics
++    /// among them) saw two emissions and recomputed twice per scan.
++    @MainActor
++    @Test("a completed refresh publishes byVendor exactly once")
++    func refresh_publishes_by_vendor_once() async throws {
++        let e = makeEstimator()
++        var emissions = 0
++        let sub = e.$byVendor.dropFirst().sink { _ in emissions += 1 }
++        e.refresh(force: true)
++        try await settle(e)
++        #expect(emissions == 1)
++        sub.cancel()
++    }
++
+     // REMOVED: two tests that read as coverage and were not. One claimed to
+     // guard the generation token, the other opencode's independence; both kept
+     // passing with the protection deleted, because the races they describe
+diff --git a/Tests/AiTaskbarAppTests/VendorViewModelHistoryTests.swift b/Tests/AiTaskbarAppTests/VendorViewModelHistoryTests.swift
+new file mode 100644
+index 0000000..f3a9888
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/VendorViewModelHistoryTests.swift
+@@ -0,0 +1,170 @@
++import Testing
++import Foundation
++import os.lock
++@testable import AiTaskbarApp
++@testable import AiTaskbarCore
++import AiTaskbarProviders
++
++/// Returns one fixed outcome, so a test chooses fresh / cache-hit / stale.
++private struct FixedOutcomeProvider: UsageProvider {
++    let vendorId: VendorId = .anthropic
++    let outcome: FetchOutcome
++    var displayName: String { vendorId.displayName }
++    var credentialFileURL: URL? { nil }
++    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome { outcome }
++}
++
++/// Holds a loader open until the test releases it.
++private final class Gate: Sendable {
++    private let open = OSAllocatedUnfairLock(initialState: false)
++    var isOpen: Bool { open.withLock { $0 } }
++    func release() { open.withLock { $0 = true } }
++}
++
++private struct FactoryFailure: Error {}
++
++private func outcome(percent: Double, isStale: Bool = false,
++                     cacheAge: TimeInterval?) -> FetchOutcome {
++    FetchOutcome(
++        snapshot: .anthropic(AnthropicSnapshot(
++            session: UsageWindow(label: "Session 5h", utilizationPercent: percent))),
++        isStale: isStale,
++        lastError: isStale ? FetchError(status: 0, body: "offline") : nil,
++        cacheAge: cacheAge)
++}
++
++@MainActor
++@Suite("VendorViewModel history recording")
++struct VendorViewModelHistoryTests {
++    let tmp: URL
++    let suiteName: String
++    let defaults: UserDefaults
++
++    init() throws {
++        tmp = URL(fileURLWithPath: NSTemporaryDirectory())
++            .appendingPathComponent("ai-taskbar-vvm-\(UUID().uuidString)")
++        try Paths.ensureDir(tmp)
++        suiteName = "ai-taskbar.vvm.test.\(UUID().uuidString)"
++        defaults = UserDefaults(suiteName: suiteName)!
++    }
++
++    private func cleanup() {
++        defaults.removePersistentDomain(forName: suiteName)
++        try? FileManager.default.removeItem(at: tmp)
++    }
++
++    private func makeVM(_ outcome: FetchOutcome,
++                        loader: @escaping VendorViewModel.HistoryLoader = VendorViewModel.detachedHistoryLoad
++    ) -> VendorViewModel {
++        let dir = tmp
++        return VendorViewModel(
++            provider: FixedOutcomeProvider(outcome: outcome),
++            defaults: defaults,
++            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) },
++            historyLoader: loader)
++    }
++
++    private func waitUntil(_ condition: () -> Bool) async {
++        for _ in 0..<400 where !condition() {
++            try? await Task.sleep(nanoseconds: 5_000_000)
++        }
++    }
++
++    private func settledOK(_ vm: VendorViewModel) -> Bool {
++        if case .ok = vm.state { return true }
++        return false
++    }
++
++    // MARK: ARCH-ATL-003
++
++    @Test("isExpanded is seeded from the injected defaults")
++    func expanded_seeded_from_injected_defaults() {
++        defaults.set(false, forKey: VendorViewModel.expansionKey(for: .anthropic))
++        let vm = makeVM(outcome(percent: 1, cacheAge: 0))
++        #expect(!vm.isExpanded)
++        cleanup()
++    }
++
++    @Test("toggling isExpanded persists to the injected defaults")
++    func expanded_persists_to_injected_defaults() {
++        let vm = makeVM(outcome(percent: 1, cacheAge: 0))
++        vm.isExpanded = false
++        let stored = defaults.object(forKey: VendorViewModel.expansionKey(for: .anthropic)) as? Bool
++        expectTrue(stored == false)
++        cleanup()
++    }
++
++    // MARK: BEST-ATE-006
++
++    @Test("a throwing history-store factory is reported, not silent")
++    func throwing_factory_sets_history_unavailable() {
++        let vm = VendorViewModel(
++            provider: FixedOutcomeProvider(outcome: outcome(percent: 1, cacheAge: 0)),
++            defaults: defaults,
++            historyStoreFactory: { _ in throw FactoryFailure() })
++        #expect(vm.historyUnavailable)
++        cleanup()
++    }
++
++    @Test("a working history-store factory is not flagged")
++    func working_factory_not_flagged() {
++        let vm = makeVM(outcome(percent: 1, cacheAge: 0))
++        #expect(!vm.historyUnavailable)
++        cleanup()
++    }
++
++    // MARK: BUG-ART-010
++
++    @Test("a fresh network outcome is recorded once")
++    func fresh_outcome_recorded() async {
++        let vm = makeVM(outcome(percent: 42, cacheAge: 0))
++        vm.refresh(forceRefresh: true)
++        await waitUntil { settledOK(vm) }
++        let onDisk = vm.historyStore?.load(since: .distantPast).count ?? -1
++        #expect(onDisk == 1)
++        cleanup()
++    }
++
++    @Test("a stale-fallback outcome is not recorded as a new sample")
++    func stale_outcome_not_recorded() async {
++        let vm = makeVM(outcome(percent: 95, isStale: true, cacheAge: 6 * 3600))
++        vm.refresh(forceRefresh: true)
++        await waitUntil { settledOK(vm) }
++        let onDisk = vm.historyStore?.load(since: .distantPast).count ?? -1
++        #expect(onDisk == 0)
++        #expect(vm.history.isEmpty)
++        cleanup()
++    }
++
++    @Test("a cache-hit replay is not recorded as a new sample")
++    func cache_hit_not_recorded() async {
++        let vm = makeVM(outcome(percent: 30, cacheAge: 120))
++        vm.refresh(forceRefresh: false)
++        await waitUntil { settledOK(vm) }
++        let onDisk = vm.historyStore?.load(since: .distantPast).count ?? -1
++        #expect(onDisk == 0)
++        #expect(vm.history.isEmpty)
++        cleanup()
++    }
++
++    // MARK: RACE-CRO-011
++
++    @Test("the initial history load does not drop a sample recorded meanwhile")
++    func initial_load_merges_with_recorded_sample() async {
++        let gate = Gate()
++        let old = UsageHistoryStore.Sample(at: Date.now.addingTimeInterval(-3600).timeIntervalSince1970,
++                                           max: 10)
++        let vm = makeVM(outcome(percent: 42, cacheAge: 0)) { _, _ in
++            while !gate.isOpen { try? await Task.sleep(nanoseconds: 2_000_000) }
++            return [old]
++        }
++        vm.refresh(forceRefresh: true)
++        await waitUntil { vm.history.count == 1 }
++        gate.release()
++        await waitUntil { vm.history.contains(old) }
++        #expect(vm.history.count == 2)
++        #expect(vm.history.last?.max == 42)
++        #expect(vm.history.first == old)
++        cleanup()
++    }
++}
+diff --git a/Tests/AiTaskbarCoreTests/PinStoreTests.swift b/Tests/AiTaskbarCoreTests/PinStoreTests.swift
+index 6a1092f..e9a2a57 100644
+--- a/Tests/AiTaskbarCoreTests/PinStoreTests.swift
++++ b/Tests/AiTaskbarCoreTests/PinStoreTests.swift
+@@ -28,6 +28,49 @@ struct PinStoreTests {
+         try? FileManager.default.removeItem(at: tmp)
+     }
+ 
++    /// CQ-AUR-004: a pin that never reached disk used to be indistinguishable
++    /// from one that did. The in-memory memo still serves the session.
++    @Test("set into an unwritable directory reports the persistence failure")
++    func set_unwritable_dir_reports_failure() throws {
++        let blocker = tmp.appendingPathComponent("not-a-dir")
++        try Data("x".utf8).write(to: blocker)
++        let store = PinStore(baseDir: blocker.appendingPathComponent("pins"))
++        let persisted = store.set(host: "api.example.com", hash: "sha256/abc==")
++        #expect(!persisted)
++        #expect(store.get(host: "api.example.com") == "sha256/abc==")
++        try? FileManager.default.removeItem(at: tmp)
++    }
++
++    @Test("set into a writable directory reports success")
++    func set_writable_dir_reports_success() {
++        let store = PinStore(baseDir: tmp)
++        let persisted = store.set(host: "api.example.com", hash: "sha256/abc==")
++        #expect(persisted)
++        try? FileManager.default.removeItem(at: tmp)
++    }
++
++    @Test("clear of a host that was never pinned is not a failure")
++    func clear_missing_pin_is_success() {
++        let store = PinStore(baseDir: tmp)
++        let ok = store.clear(host: "never.example.com")
++        #expect(ok)
++        try? FileManager.default.removeItem(at: tmp)
++    }
++
++    @Test("clear that cannot remove the pin file reports failure")
++    func clear_unremovable_pin_reports_failure() throws {
++        let store = PinStore(baseDir: tmp)
++        // A read-only parent directory makes the unlink fail with EACCES.
++        store.set(host: "api.example.com", hash: "sha256/abc==")
++        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o500)],
++                                              ofItemAtPath: tmp.path)
++        let ok = store.clear(host: "api.example.com")
++        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o700)],
++                                              ofItemAtPath: tmp.path)
++        #expect(!ok)
++        try? FileManager.default.removeItem(at: tmp)
++    }
++
+     @Test("set then get round-trips the hash")
+     func set_then_get_round_trip() {
+         let store = PinStore(baseDir: tmp)
+diff --git a/Tests/AiTaskbarCoreTests/UsageHistoryStoreTests.swift b/Tests/AiTaskbarCoreTests/UsageHistoryStoreTests.swift
+index 1612143..91c22a0 100644
+--- a/Tests/AiTaskbarCoreTests/UsageHistoryStoreTests.swift
++++ b/Tests/AiTaskbarCoreTests/UsageHistoryStoreTests.swift
+@@ -12,6 +12,27 @@ struct UsageHistoryStoreTests {
+         try Paths.ensureDir(tmp)
+     }
+ 
++    /// CQ-AUR-003: a failing append used to vanish without trace. It stays
++    /// best-effort (no throw, no crash) but the failure is now observable.
++    @Test("append into an unwritable directory reports failure without crashing")
++    func append_unwritable_dir_reports_failure() throws {
++        let blocker = tmp.appendingPathComponent("not-a-dir")
++        try Data("x".utf8).write(to: blocker)
++        let store = UsageHistoryStore(vendor: .anthropic,
++                                      baseDir: blocker.appendingPathComponent("history"))
++        let ok = store.append(maxUtilization: 12)
++        #expect(!ok)
++        try? FileManager.default.removeItem(at: tmp)
++    }
++
++    @Test("append into a writable directory reports success")
++    func append_writable_dir_reports_success() {
++        let store = UsageHistoryStore(vendor: .anthropic, baseDir: tmp)
++        let ok = store.append(maxUtilization: 12)
++        #expect(ok)
++        try? FileManager.default.removeItem(at: tmp)
++    }
++
+     @Test("append then load returns the same sample")
+     func append_then_load_returns_sample() async throws {
+         let store = UsageHistoryStore(vendor: .anthropic, baseDir: tmp)

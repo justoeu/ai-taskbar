@@ -1,0 +1,60 @@
+{
+  "id": "CQ-AUR-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 14:06:16 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "PinStore.swift: set and clear now use do/catch with AppLog.pinning.error and return false on failure. The in-memory memo is still updated first, as before. In clear, CocoaError.fileNoSuchFile counts as success, so clearing a host that was never pinned is not reported as a failure, and a test covers that. Reversal check: forcing true on the failure paths made the tests at PinStoreTests.swift:39 and :70 fail.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/PinStore.swift:61",
+        "Sources/AiTaskbarCore/Networking/PinStore.swift:79"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "PinStore.swift:56-91. The two `try?` calls became do/catch with AppLog.pinning.error and a @discardableResult Bool, so the PinningDelegate.swift:67/91 call sites are unchanged. Treating CocoaError.fileNoSuchFile as success in clear() is the right semantics, and the doc comment says so. The write keeps AtomicFileWrite.write(..., permissions: 0o600), which satisfies the hard rule on secret files. The added doc comments explain intent rather than repeating the code.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/PinStore.swift:56",
+        "Sources/AiTaskbarCore/Networking/PinStore.swift:73"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "PinStore.set and clear now return @discardableResult Bool. Callers are PinningDelegate.swift:67 and :91 plus main.swift:1290-1304, and all compile as they are. Pins are still written with AtomicFileWrite at 0o600, so the secret-permission rule still holds. clear treats a missing pin file (fileNoSuchFile) as success. It logs to AppLog.pinning, which already exists. Pin format and path are unchanged.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/PinStore.swift:61",
+        "Sources/AiTaskbarCore/Networking/PinningDelegate.swift:91"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

@@ -1,0 +1,58 @@
+{
+  "id": "LEAK-FAN-003",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 14:06:15 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "This has the same root cause as PERF-FLU-001, and the same fix handles it. One emission per scan plus a load that is cancelled when superseded means one full 90-day decode per vendor per burst, run off the main thread. I reproduced the failure: with the fix reverted, cost_refresh_loads_history_once_per_vendor fails with openai at 2 loads and main-thread loads at 4.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:250",
+        "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:147"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "AnalyticsStore.swift:246. This is the same mechanism as PERF-FLU-001: historyReloadTask?.cancel() before each new load collapses a burst of triggers into one load per vendor. There is no second copy of the rule. historyReloadTask is private(set) and internal only so tests can await it, and the doc comment says so. That is reasonable test visibility, not leaked API.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:246"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Same change as PERF-FLU-001: historyReloadTask?.cancel() in reloadHistories means a burst of triggers loads each vendor once. No other file is touched for this id.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:250"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

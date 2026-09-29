@@ -76,8 +76,7 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     @Published public var isExpanded: Bool {
         didSet {
             guard isExpanded != oldValue else { return }
-            UserDefaults.standard.set(isExpanded,
-                                      forKey: Self.expansionKey(for: vendorId))
+            defaults.set(isExpanded, forKey: Self.expansionKey(for: vendorId))
         }
     }
 
@@ -136,23 +135,50 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     private var credWatcher: DispatchSourceFileSystemObject?
     private var credDebounce: Task<Void, Never>?
 
+    /// Loads the initial 24 h history window. Injectable so a test can hold
+    /// the load open and order it against a refresh (RACE-CRO-011).
+    public typealias HistoryLoader = @Sendable (UsageHistoryStore, Date) async -> [UsageHistoryStore.Sample]
+
+    /// Production loader: decodes the JSONL off the MainActor so a
+    /// multi-vendor launch does not block the popover (N1-NEX-006).
+    public nonisolated static let detachedHistoryLoad: HistoryLoader = { store, cutoff in
+        await Task.detached(priority: .utility) { store.load(since: cutoff) }.value
+    }
+
+    /// True when the history store could not be created, so this vendor has
+    /// no sparkline and contributes nothing to Analytics this session.
+    public let historyUnavailable: Bool
+
+    /// Backs `isExpanded`. Injected so tests never touch `.standard`.
+    private let defaults: UserDefaults
+
     public init(provider: any UsageProvider,
-                notifications: NotificationService? = nil) {
+                notifications: NotificationService? = nil,
+                defaults: UserDefaults = .standard,
+                historyStoreFactory: (VendorId) throws -> UsageHistoryStore = UsageHistoryStore.defaultFor,
+                historyLoader: @escaping HistoryLoader = VendorViewModel.detachedHistoryLoad) {
         self.vendorId = provider.vendorId
         self.provider = provider
         self.notifications = notifications
-        self.isExpanded = (UserDefaults.standard
+        self.defaults = defaults
+        self.isExpanded = (defaults
             .object(forKey: Self.expansionKey(for: provider.vendorId)) as? Bool) ?? true
-        self.historyStore = try? UsageHistoryStore.defaultFor(provider.vendorId)
-        // Load history off the MainActor so multi-vendor launch does not
-        // block the popover on JSONL decode (N1-NEX-006).
-        if let store = historyStore {
+        // History is best-effort, but a store that cannot be created must not
+        // vanish silently: log it and expose the flag (BEST-ATE-006).
+        var store: UsageHistoryStore?
+        do {
+            store = try historyStoreFactory(provider.vendorId)
+        } catch {
+            AppLog.lifecycle.error(
+                "history store unavailable for \(provider.vendorId.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+        self.historyStore = store
+        self.historyUnavailable = store == nil
+        if let store {
             let cutoff = Date.now.addingTimeInterval(-24 * 3600)
             Task { @MainActor [weak self] in
-                let samples = await Task.detached(priority: .utility) {
-                    store.load(since: cutoff)
-                }.value
-                self?.history = samples
+                let samples = await historyLoader(store, cutoff)
+                self?.mergeLoadedHistory(samples)
             }
         }
         if let credPath = provider.credentialFileURL {
@@ -228,11 +254,17 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 guard myEpoch == self.epoch else { return }   // newer refresh wins
                 self.state = .ok(outcome)
                 self.observeRateLimit(status: outcome.lastError?.status)
-                if (outcome.cacheAge ?? .greatestFiniteMagnitude) <= 1 {
+                if Self.isNetworkOutcome(outcome) {
                     self.lastNetworkFetch = .now
                 }
                 self.notifications?.observe(vendor: self.vendorId, snapshot: outcome.snapshot)
-                self.recordHistory(outcome.snapshot.maxUtilization)
+                // Only a real network reading is a new sample. A stale
+                // fallback or a cache replay re-serves an old number, and
+                // stamping it `now` would plot a pre-outage percent past a
+                // window reset (BUG-ART-010).
+                if Self.isFreshNetworkOutcome(outcome) {
+                    self.recordHistory(outcome.snapshot.maxUtilization)
+                }
             } catch is CancellationError {
                 return
             } catch {
@@ -282,6 +314,31 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         var current = history
         current.append(sample)
         history = current.filter { $0.at >= cutoff }
+    }
+
+    /// "Network, not cache": `CachedFetch` stamps a live fetch `cacheAge: 0`
+    /// and a replay with the entry's age. Drives `lastNetworkFetch`.
+    static func isNetworkOutcome(_ outcome: FetchOutcome) -> Bool {
+        (outcome.cacheAge ?? .greatestFiniteMagnitude) <= 1
+    }
+
+    /// A network reading that is not a stale fallback: the only outcome that
+    /// counts as a new history sample.
+    static func isFreshNetworkOutcome(_ outcome: FetchOutcome) -> Bool {
+        !outcome.isStale && isNetworkOutcome(outcome)
+    }
+
+    /// Folds the initial disk load into `history` instead of replacing it, so
+    /// a sample recorded while the load was in flight survives (RACE-CRO-011).
+    /// A sample both appended in memory and read back from the file is kept
+    /// once.
+    private func mergeLoadedHistory(_ loaded: [UsageHistoryStore.Sample]) {
+        let cutoff = Date.now.addingTimeInterval(-24 * 3600).timeIntervalSince1970
+        let loadedStamps = Set(loaded.map(\.at))
+        let recordedMeanwhile = history.filter { !loadedStamps.contains($0.at) }
+        history = (loaded + recordedMeanwhile)
+            .filter { $0.at >= cutoff }
+            .sorted { $0.at < $1.at }
     }
 
     public func compactHistory() {

@@ -1,0 +1,12 @@
+{
+ "id": "LEAK-FAN-003",
+ "verdict": "APROVA",
+ "reasoning": "AnalyticsStore.swift:246. This is the same mechanism as PERF-FLU-001: historyReloadTask?.cancel() before each new load collapses a burst of triggers into one load per vendor. There is no second copy of the rule. historyReloadTask is private(set) and internal only so tests can await it, and the doc comment says so. That is reasonable test visibility, not leaked API.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:246"
+ ],
+ "lens": "QUALITY",
+ "_task": "a5b262606991321e7",
+ "batch": "B5-history"
+}

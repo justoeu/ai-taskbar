@@ -1,0 +1,13 @@
+{
+ "id": "CQ-AUR-003",
+ "verdict": "APROVA",
+ "reasoning": "UsageHistoryStore.append now returns a @discardableResult Bool. This is source-compatible for all callers (main.swift:939-949, AnalyticsModelsTests, NumericConversionTrapTests, VendorViewModel.recordHistory), and the on-disk JSONL format is unchanged. A lock-guarded flag logs only the first failure in a streak, so there is no per-refresh log spam.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:76",
+  "Sources/AiTaskbarValidate/main.swift:939"
+ ],
+ "lens": "SCOPE",
+ "_task": "aa64e09af4202d95c",
+ "batch": "B5-history"
+}

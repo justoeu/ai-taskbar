@@ -1,0 +1,13 @@
+{
+ "id": "CQ-AUR-004",
+ "verdict": "APROVA",
+ "reasoning": "PinStore.swift: set and clear now use do/catch with AppLog.pinning.error and return false on failure. The in-memory memo is still updated first, as before. In clear, CocoaError.fileNoSuchFile counts as success, so clearing a host that was never pinned is not reported as a failure, and a test covers that. Reversal check: forcing true on the failure paths made the tests at PinStoreTests.swift:39 and :70 fail.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/PinStore.swift:61",
+  "Sources/AiTaskbarCore/Networking/PinStore.swift:79"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a48d2dbe2497de1ac",
+ "batch": "B5-history"
+}

@@ -1,0 +1,60 @@
+{
+  "id": "ARCH-ATL-003",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 14:06:15 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "VendorViewModel.swift: the init and the isExpanded didSet now use the injected `defaults`, and historyStoreFactory and historyLoader are injectable. The default arguments keep production behavior the same. The new tests call vm.refresh against a temporary directory and a temporary defaults suite. Reversal check: pointing back to UserDefaults.standard made both defaults tests fail.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:79",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:156"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "VendorViewModel.swift:79 and :160-162. UserDefaults is injected with a .standard default, so production call sites do not change and init and didSet read the same instance. One cosmetic nit: after `UserDefaults.standard.set(` became `defaults.set(`, the continuation line `forKey:` at :80 kept its old indent and no longer lines up with the argument. It does not break any repo rule.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:79",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:160"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "VendorViewModel.swift:79 and the init now use an injected defaults store. The default is .standard, so the production key expanded_<vendor> and the rule that the aggregate reads isExpanded both stay the same. The new init parameters all have defaults, so existing callers are unaffected.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:79",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:156"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

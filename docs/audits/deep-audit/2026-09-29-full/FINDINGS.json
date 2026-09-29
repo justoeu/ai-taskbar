@@ -552,7 +552,7 @@
     "impact": "Every ~60s (CostEstimator.minRecomputeInterval) the main thread performs 2x(N vendors) blocking file reads + per-line JSON decodes of up to 90 days of history (up to ~25,920 samples/vendor at the default 300s cadence), even while the Analytics screen is closed. This is the exact pattern VendorViewModel already avoids for its own 24h history (loads once off-MainActor at init, then appends in-memory - VendorViewModel.swift:145-155, recordHistory at 274-285); AnalyticsStore re-reads from disk from scratch on every trigger with no cache, on MainActor. On a long-running install with several vendors configured this is a repeating, measurable UI-thread hitch, doubled by the split @Published assignment.",
     "fix": "1) Merge the two CostEstimator assignments into one dictionary update before setting byVendor once (or debounce recompute triggering). 2) Move AnalyticsStore.recompute() history loads off the MainActor (Task.detached, mirroring VendorViewModel pattern) and only recompute when AnalyticsView is visible, or cache each vendor 90-day sample set in memory and append the incremental tail instead of re-reading the whole file every call.",
     "test_red_green": {
-      "name": "AnalyticsStoreRecomputeTests.doesNotDoubleReadOnSplitByVendorAssignment",
+      "name": "AnalyticsStoreHistoryLoadTests#history_load_is_off_main,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once,AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot,CostEstimatorLoadingTests#refresh_publishes_by_vendor_once",
       "assert_before": "A spy historyProvider counting invocations shows count == 2 for one CostEstimator-style two-key dictionary update (expected 1) - test fails.",
       "assert_after": "After coalescing the byVendor update into a single assignment (or debouncing recompute), the spy invocation count is exactly 1 per estimate cycle."
     },
@@ -561,10 +561,41 @@
     "cetico_evidence": "AnalyticsStore is created in App.init (AiTaskbarApp.swift:75) and always subscribed (L209-221). recompute() on MainActor calls historyProvider for every vendor (L255-256), a full load(since:-90d) with one JSONDecoder call per line (UsageHistoryStore.swift:92-124). CostEstimator.swift:138-139 performs two @Published writes, so it runs twice per scheduler cost tick (RefreshScheduler.swift:83/121, gated at 60 s). Measured sizes: lines are about 34 bytes. Today this machine has about 3.2k lines per vendor, 21.4k total (860 KB). At the 90-day cap that is about 25.9k per vendor, roughly 200k decodes (~7 MB) per recompute, about 0.2-0.5 s of main thread twice every 5 min. At current sizes it is tens of ms. Real, but a periodic hitch rather than a hang, so downgraded to MEDIUM.",
     "verification": "cetico",
     "domain": "performance",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
     "id": "PERF-FLU-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnalyticsStoreHistoryLoadTests#history_load_is_off_main,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once,AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot,CostEstimatorLoadingTests#refresh_publishes_by_vendor_once",
+    "resolved_at": "2026-09-29 14:06:14 UTC",
+    "resolved_note": "batch B5-history",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:06:12 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsStoreHistoryLoadTests#history_load_is_off_main,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once,AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot,CostEstimatorLoadingTests#refresh_publishes_by_vendor_once · revisão approved (3/3) · batch B5-history"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cérbero",
@@ -741,7 +772,7 @@
     "impact": "The core per-vendor flow (loading to ok/failed, stale handling, the per-vendor 429 cooldown that scheduler back-off depends on, history recording, notification trigger) cannot be exercised without appending samples to the real user history JSONL, so it is untested. App is also outside the coverage gate.",
     "fix": "Inject historyStore and defaults into VendorViewModel.init, built at the composition root (AiTaskbarApp.init / AppEnvironment); have AnalyticsStore read VendorViewModel.historyStore instead of constructing new instances.",
     "test_red_green": {
-      "name": "VendorViewModelRefreshTests.rate_limited_refresh_sets_cooldown_and_records_no_history",
+      "name": "VendorViewModelHistoryTests#expanded_seeded_from_injected_defaults,VendorViewModelHistoryTests#expanded_persists_to_injected_defaults",
       "assert_before": "No seam to supply a temp-dir history store; a refresh test would write into the real Application Support path",
       "assert_after": "VendorViewModel(provider: Mock429, historyStore: tmpStore, defaults: suite).refresh gives a failed + isRateLimited state; tmpStore.load() is empty"
     },
@@ -750,10 +781,41 @@
     "cetico_evidence": "VendorViewModel.swift:143-145 hard-binds UserDefaults.standard and UsageHistoryStore.defaultFor(real path). No test calls VendorViewModel.refresh (the only refreshAll calls are ServiceStatusAppTests.swift:119,195,219). Downgraded: this is a missing test seam in the App target, which is excluded from the coverage gate by policy. No behavior defect is shown.",
     "verification": "cetico",
     "domain": "architecture",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
     "id": "ARCH-ATL-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "VendorViewModelHistoryTests#expanded_seeded_from_injected_defaults,VendorViewModelHistoryTests#expanded_persists_to_injected_defaults",
+    "resolved_at": "2026-09-29 14:06:15 UTC",
+    "resolved_note": "batch B5-history",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:06:15 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#expanded_seeded_from_injected_defaults,VendorViewModelHistoryTests#expanded_persists_to_injected_defaults · revisão approved (3/3) · batch B5-history"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Atlas",
@@ -989,7 +1051,7 @@
     "fix": "do/catch with AppLog.lifecycle.error, plus a historyUnavailable flag. Inject the factory so tests can make it throw.",
     "confidence": "medium",
     "test_red_green": {
-      "name": "historyStoreFailureIsReported",
+      "name": "VendorViewModelHistoryTests#throwing_factory_sets_history_unavailable,VendorViewModelHistoryTests#working_factory_not_flagged",
       "assert_before": "throwing factory -> indistinguishable from empty history",
       "assert_after": "flag/log set"
     },
@@ -997,10 +1059,41 @@
     "cetico_evidence": "VendorViewModel.swift:146 try? UsageHistoryStore.defaultFor(...) disables history with no log (:275 guard). The feature is best-effort, but the failure is silent, which the no-silent-try? rule forbids.",
     "verification": "cetico",
     "domain": "best_practices",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
     "id": "BEST-ATE-006",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "VendorViewModelHistoryTests#throwing_factory_sets_history_unavailable,VendorViewModelHistoryTests#working_factory_not_flagged",
+    "resolved_at": "2026-09-29 14:06:15 UTC",
+    "resolved_note": "batch B5-history",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:06:15 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#throwing_factory_sets_history_unavailable,VendorViewModelHistoryTests#working_factory_not_flagged · revisão approved (3/3) · batch B5-history"
+    ],
+    "in_progress": false
   },
   {
     "lens": "backpressure",
@@ -1259,7 +1352,7 @@
     "fix": "Record only real network fetches (not stale, cacheAge <= 1), or stamp the sample with outcome.fetchedAt and dedupe on it.",
     "failure_scenario": "At 95%, the network drops for 6 h and the window resets. History logs 95% every 5 min.",
     "test_red_green": {
-      "name": "staleOutcomeNotRecordedInHistory",
+      "name": "VendorViewModelHistoryTests#stale_outcome_not_recorded,VendorViewModelHistoryTests#cache_hit_not_recorded,VendorViewModelHistoryTests#fresh_outcome_recorded",
       "assert_before": "history grows on stale outcome",
       "assert_after": "history unchanged"
     },
@@ -1267,10 +1360,41 @@
     "cetico_evidence": "VendorViewModel.swift:235 calls recordHistory for every .ok outcome, including CachedFetch stale fallbacks and fresh-cache replays. It stamps Date.now (L277) and ignores outcome.isStale and fetchedAt, while the same function already knows cacheAge (L231).",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
     "id": "BUG-ART-010",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "VendorViewModelHistoryTests#stale_outcome_not_recorded,VendorViewModelHistoryTests#cache_hit_not_recorded,VendorViewModelHistoryTests#fresh_outcome_recorded",
+    "resolved_at": "2026-09-29 14:06:16 UTC",
+    "resolved_note": "batch B5-history",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:06:16 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#stale_outcome_not_recorded,VendorViewModelHistoryTests#cache_hit_not_recorded,VendorViewModelHistoryTests#fresh_outcome_recorded · revisão approved (3/3) · batch B5-history"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -1642,15 +1766,46 @@
     "cetico_evidence": "UsageHistoryStore.swift:58 and :86 use try? with no log, and the write-catch path at :69-72 is silent too. Downgraded from MEDIUM: history is best-effort telemetry (CLAUDE.md allows try? for best-effort), and encoding a two-Double struct cannot realistically fail. The real gap is only diagnosability of a failing open.",
     "verification": "cetico",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/History/UsageHistoryStore.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "UsageHistoryStoreTests#append_unwritable_dir_reports_failure,UsageHistoryStoreTests#append_writable_dir_reports_success",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-AUR-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "UsageHistoryStoreTests#append_unwritable_dir_reports_failure,UsageHistoryStoreTests#append_writable_dir_reports_success",
+    "resolved_at": "2026-09-29 14:06:16 UTC",
+    "resolved_note": "batch B5-history",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:06:16 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste UsageHistoryStoreTests#append_unwritable_dir_reports_failure,UsageHistoryStoreTests#append_writable_dir_reports_success · revisão approved (3/3) · batch B5-history"
+    ],
+    "in_progress": false
   },
   {
     "title": "PinStore.set/clear swallow TLS-pin persistence failures with no log",
@@ -1667,15 +1822,46 @@
     "cetico_evidence": "PinStore.swift:59-60 and :66 use try? with no log. The in-memory memo keeps the session correct.",
     "verification": "cetico",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Networking/PinStore.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "PinStoreTests#set_unwritable_dir_reports_failure,PinStoreTests#clear_unremovable_pin_reports_failure,PinStoreTests#clear_missing_pin_is_success,PinStoreTests#set_writable_dir_reports_success",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-AUR-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "PinStoreTests#set_unwritable_dir_reports_failure,PinStoreTests#clear_unremovable_pin_reports_failure,PinStoreTests#clear_missing_pin_is_success,PinStoreTests#set_writable_dir_reports_success",
+    "resolved_at": "2026-09-29 14:06:16 UTC",
+    "resolved_note": "batch B5-history",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:06:16 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste PinStoreTests#set_unwritable_dir_reports_failure,PinStoreTests#clear_unremovable_pin_reports_failure,PinStoreTests#clear_missing_pin_is_success,PinStoreTests#set_writable_dir_reports_success · revisão approved (3/3) · batch B5-history"
+    ],
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -2136,7 +2322,7 @@
     "impact": "Not retained, but it causes periodic MB-scale allocation bursts and main-thread stalls that grow linearly with history size up to the 90-day retention cap.",
     "fix": "Cache samples per vendor and append incrementally (VendorViewModel already has the live tail), or load in Task.detached. Coalesce the two byVendor writes.",
     "test_red_green": {
-      "name": "AnalyticsStoreTests.recomputeDoesNotReloadHistoryPerEmission",
+      "name": "AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once",
       "assert_before": "counting historyProvider called 2 x vendors times per CostEstimator publish",
       "assert_after": "<= 1 per vendor per cycle"
     },
@@ -2144,10 +2330,41 @@
     "cetico_evidence": "Same root cause as PERF-FLU-001 (AnalyticsStore.swift:202-204, 255-256; CostEstimator.swift:138-139). The allocations are transient and not retained. Fold it into PERF-FLU-001.",
     "verification": "cetico",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
     "id": "LEAK-FAN-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once",
+    "resolved_at": "2026-09-29 14:06:15 UTC",
+    "resolved_note": "batch B5-history",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:06:15 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once · revisão approved (3/3) · batch B5-history"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Fantasma",
@@ -2452,7 +2669,7 @@
     "fix": "Merge instead of assigning: `self.history = (samples + self.history)`, deduplicated and sorted. Or record that the load has completed and have recordHistory append only after it.",
     "failure_scenario": "The detached load reads the JSONL at t=5 ms. A cache-hit refresh completes at t=8 ms, appends to the file and sets history=[..., s_new]. The load returns at t=20 ms with samples that lack s_new, and history=samples drops it.",
     "test_red_green": {
-      "name": "vendorVM_initialLoad_doesNotDropRecordedSample",
+      "name": "VendorViewModelHistoryTests#initial_load_merges_with_recorded_sample",
       "assert_before": "Stub a history store whose load() blocks on a barrier. Trigger a refresh so recordHistory runs, then release the load. Expect history.last == s_new. FAILS today.",
       "assert_after": "history contains both the loaded samples and s_new."
     },
@@ -2460,9 +2677,40 @@
     "cetico_evidence": "VendorViewModel.swift:151-155 assigns history = samples after the detached load, while recordHistory (:275-284) appends on its own. On a fast cache-hit launch, the load can read the file before the append, so the new sample is lost. The effect is transient and UI-only.",
     "verification": "cetico",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "id": "RACE-CRO-011",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "VendorViewModelHistoryTests#initial_load_merges_with_recorded_sample",
+    "resolved_at": "2026-09-29 14:06:16 UTC",
+    "resolved_note": "batch B5-history",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:06:16 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#initial_load_merges_with_recorded_sample · revisão approved (3/3) · batch B5-history"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cérbero",

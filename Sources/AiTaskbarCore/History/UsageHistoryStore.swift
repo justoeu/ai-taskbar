@@ -21,6 +21,8 @@ public final class UsageHistoryStore: @unchecked Sendable {
     /// unfair lock so concurrent `append`s serialize cleanly.
     private struct LockedState {
         var writeHandle: FileHandle?
+        /// True while appends keep failing; gates the one-shot log.
+        var appendFailing = false
     }
     private let state = OSAllocatedUnfairLock(initialState: LockedState())
     public static let defaultRetention: TimeInterval = 90 * 86_400 // 90 days
@@ -65,24 +67,50 @@ public final class UsageHistoryStore: @unchecked Sendable {
 
     // MARK: - Append
 
-    public func append(maxUtilization: Double, at: Date = .init()) {
+    /// Best-effort: a failed append never throws or crashes (history is
+    /// telemetry), but it is no longer silent. Returns `false` when the sample
+    /// did not reach disk, and logs the first failure of a streak so a broken
+    /// history dir shows up in Console.app without one line per refresh
+    /// (CQ-AUR-003).
+    @discardableResult
+    public func append(maxUtilization: Double, at: Date = .init()) -> Bool {
         let sample = Sample(at: at.timeIntervalSince1970, max: maxUtilization)
-        guard var encoded = try? SharedCoders.encoder.encode(sample) else { return }
-        encoded.append(0x0a)
-        // Bind to an immutable local so the `withLock` autoclosure captures a
-        // sendable value (Swift 6 strict-concurrency rejects `var` capture).
-        let line = encoded
-        state.withLock { s in
-            guard let handle = ensureWriteHandleLocked(&s.writeHandle) else { return }
+        let line: Data
+        do {
+            line = try SharedCoders.encoder.encode(sample) + [0x0a]
+        } catch {
+            return recordAppendOutcome(failure: "encode: \(error)")
+        }
+        let failure: String? = state.withLock { s in
+            guard let handle = ensureWriteHandleLocked(&s.writeHandle) else {
+                return "cannot open \(fileURL.lastPathComponent) for writing"
+            }
             do {
                 try handle.seekToEnd()
                 try handle.write(contentsOf: line)
+                return nil
             } catch {
                 // If the file got moved out from under us, drop and lazily reopen.
                 try? handle.close()
                 s.writeHandle = nil
+                return "write: \(error)"
             }
         }
+        return recordAppendOutcome(failure: failure)
+    }
+
+    /// Tracks the failure streak and logs only its first failure.
+    private func recordAppendOutcome(failure: String?) -> Bool {
+        let firstOfStreak = state.withLock { s -> Bool in
+            let first = failure != nil && !s.appendFailing
+            s.appendFailing = failure != nil
+            return first
+        }
+        if firstOfStreak, let failure {
+            AppLog.lifecycle.error(
+                "history append failed for \(self.vendor.rawValue, privacy: .public): \(failure, privacy: .public)")
+        }
+        return failure == nil
     }
 
     /// Lazily opens the write handle on first append. Creates the file with

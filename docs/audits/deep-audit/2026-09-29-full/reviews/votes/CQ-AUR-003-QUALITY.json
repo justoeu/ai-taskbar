@@ -1,0 +1,13 @@
+{
+ "id": "CQ-AUR-003",
+ "verdict": "APROVA",
+ "reasoning": "UsageHistoryStore.swift:70-113. The `try?` on encode and the silent handle-open failure now become a Bool return marked @discardableResult, so callers do not change, plus one log per failure streak (the appendFailing flag). That respects the best-effort policy in CLAUDE.md and does not log on every refresh in a hot path. The `try? handle.close()` in the catch is best-effort cleanup, which the policy allows. recordAppendOutcome takes the lock a second time per append. That costs little and keeps the logging outside the critical section.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:70",
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:100"
+ ],
+ "lens": "QUALITY",
+ "_task": "a5b262606991321e7",
+ "batch": "B5-history"
+}

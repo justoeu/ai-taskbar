@@ -101,6 +101,21 @@ struct CostEstimatorLoadingTests {
         #expect(e.opencode[.openai]?.last7DaysByModel["gpt-5.5"]?.inputTokens == 42)
     }
 
+    /// PERF-FLU-001: the two vendor estimates used to be written as two
+    /// separate `byVendor[...] =` statements, so every subscriber (Analytics
+    /// among them) saw two emissions and recomputed twice per scan.
+    @MainActor
+    @Test("a completed refresh publishes byVendor exactly once")
+    func refresh_publishes_by_vendor_once() async throws {
+        let e = makeEstimator()
+        var emissions = 0
+        let sub = e.$byVendor.dropFirst().sink { _ in emissions += 1 }
+        e.refresh(force: true)
+        try await settle(e)
+        #expect(emissions == 1)
+        sub.cancel()
+    }
+
     // REMOVED: two tests that read as coverage and were not. One claimed to
     // guard the generation token, the other opencode's independence; both kept
     // passing with the protection deleted, because the races they describe

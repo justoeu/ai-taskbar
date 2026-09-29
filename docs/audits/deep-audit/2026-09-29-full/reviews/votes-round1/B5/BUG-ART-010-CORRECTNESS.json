@@ -1,0 +1,16 @@
+{
+ "id": "BUG-ART-010",
+ "verdict": "APROVA",
+ "reasoning": "VendorViewModel.swift: a sample is recorded only when isFreshNetworkOutcome is true, meaning not stale and cacheAge <= 1. That is the same test lastNetworkFetch already uses. CachedFetch.swift:37 stamps a live fetch with cacheAge 0. The stale fallback at CachedFetch.swift:110 and cache hits at :28 carry their real age. Sparkline starvation check: RefreshScheduler.swift:93 sleeps `interval` after refreshAll is dispatched, and the DiskCache TTL is interval-5 (AppEnvironment.swift:62). A scheduled tick therefore sees a cache age of about interval minus fetch duration, which is above the TTL whenever the fetch takes under 5 s, so normally it is a network fetch and gets recorded. Edge case: a fetch slower than 5 s turns the next tick into a cache hit. The tick after that hits the network again, because a cache hit does not rewrite the mtime. The effect is at most half the sampling rate, never starvation, and lastNetworkFetch already had this behavior. The samples that are no longer recorded are the ones the finding says are wrong. Reversal check: with the gate removed, the stale and cache-hit tests got onDisk 1 instead of 0.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:266",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:322",
+  "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:93",
+  "Sources/AiTaskbarApp/AppEnvironment.swift:62",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:28"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a48d2dbe2497de1ac",
+ "batch": "B5-history"
+}

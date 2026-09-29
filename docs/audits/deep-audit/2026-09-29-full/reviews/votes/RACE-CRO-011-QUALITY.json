@@ -1,0 +1,13 @@
+{
+ "id": "RACE-CRO-011",
+ "verdict": "APROVA",
+ "reasoning": "VendorViewModel.swift:326-333. mergeLoadedHistory is 7 lines with no nesting: it dedups by timestamp, filters to the 24 h window and sorts. The name matches what it does, merging rather than replacing. HistoryLoader is a typealias with a single production implementation (detachedHistoryLoad). It exists because the tests need a loader they can hold open, and the doc comment says so, so it is justified test injection rather than speculative abstraction.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:326",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:139"
+ ],
+ "lens": "QUALITY",
+ "_task": "a5b262606991321e7",
+ "batch": "B5-history"
+}

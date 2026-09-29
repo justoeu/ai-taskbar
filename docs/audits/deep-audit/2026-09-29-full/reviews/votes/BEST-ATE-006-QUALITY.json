@@ -1,0 +1,13 @@
+{
+ "id": "BEST-ATE-006",
+ "verdict": "APROVA",
+ "reasoning": "VendorViewModel.swift:170-177. The `try?` on UsageHistoryStore.defaultFor became do/catch, with an AppLog.lifecycle.error that uses privacy: .public and a historyUnavailable flag. That matches the CLAUDE.md hard rule 'Don't swallow errors with try? unless it's truly best-effort': history is best-effort, and the failure is now logged. The injectable historyStoreFactory has a production default and does not change existing call sites. historyUnavailable has no reader in the UI yet (grep finds only the declaration and assignment). That is noted as a new finding, not required here.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:170",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:151"
+ ],
+ "lens": "QUALITY",
+ "_task": "a5b262606991321e7",
+ "batch": "B5-history"
+}

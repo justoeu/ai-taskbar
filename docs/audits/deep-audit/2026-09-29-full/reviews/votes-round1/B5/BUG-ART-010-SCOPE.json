@@ -1,0 +1,14 @@
+{
+ "id": "BUG-ART-010",
+ "verdict": "APROVA",
+ "reasoning": "VendorViewModel.swift:262-268 now records a history sample only when isFreshNetworkOutcome is true. That test reuses the same cacheAge<=1 check as lastNetworkFetch. Every provider builds its FetchOutcome through CachedFetch (a live fetch gets cacheAge 0 at CachedFetch.swift:38, a replay gets the entry's age at :28 and :110), so no provider leaves cacheAge nil and silently stops recording. The user-visible change is documented in README.md:29, which keeps docs in step.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:262",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:38",
+  "README.md:29"
+ ],
+ "lens": "SCOPE",
+ "_task": "aa64e09af4202d95c",
+ "batch": "B5-history"
+}

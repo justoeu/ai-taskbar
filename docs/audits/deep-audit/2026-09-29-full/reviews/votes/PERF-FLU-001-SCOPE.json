@@ -1,0 +1,14 @@
+{
+ "id": "PERF-FLU-001",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:222-273 moves the 90-day history load off the MainActor and cancels older loads when a new one starts. Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:144-150 now writes byVendor once, so subscribers fire once per scan. The historyProvider closure became @Sendable, but its only production caller (AiTaskbarApp.swift:75) uses the default, and AnalyticsStoreTests passes non-capturing closures, so nothing breaks at the boundary. No new dependency, host or file.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:222",
+  "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:144",
+  "Sources/AiTaskbarApp/AiTaskbarApp.swift:75"
+ ],
+ "lens": "SCOPE",
+ "_task": "aa64e09af4202d95c",
+ "batch": "B5-history"
+}

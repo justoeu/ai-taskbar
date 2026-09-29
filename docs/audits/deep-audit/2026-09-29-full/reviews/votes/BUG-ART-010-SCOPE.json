@@ -1,0 +1,18 @@
+{
+ "id": "BUG-ART-010",
+ "verdict": "APROVA",
+ "reasoning": "The round-2 delta stays inside the finding and inside one file. At Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:321 there is now one internal (non-public) predicate, `static func isNetworkOutcome`, which holds the `cacheAge <= 1` rule. Both `lastNetworkFetch` (:257) and `isFreshNetworkOutcome` (:327) call it, so the rule exists once, as QUALITY asked. The only other change is the one-line alignment fix at :79 (`defaults.set`). No public contract changed: the helpers have default (internal) access and nothing outside VendorViewModel.swift references them (grep of Sources and Tests returned nothing). No new dependency, host, permission or file on disk. No extra cost: the check is a pure comparison run once per refresh. Every provider builds its outcome through CachedFetch, which always sets cacheAge (a live fetch gets 0, a cache replay gets the entry's age). So no provider silently stops recording history. The docs are in step: README.md:29 describes the new one-sample-per-live-reading behaviour. I confirmed the working-tree diff is byte-identical to reviews/diffs/B5-history-r2.diff. The other files in the batch (PinStore, AnalyticsStore, CostEstimator, UsageHistoryStore, and the `defaults`/`historyStoreFactory`/`historyLoader` init parameters) belong to the other batch ids (BEST-ATE-006, RACE-CRO-011, N1-NEX-006, and others). They are not counted as unrelated to this id.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:79",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:257",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:265",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:321",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:327",
+  "README.md:29",
+  "docs/audits/deep-audit/2026-09-29-full/reviews/diffs/B5-history-r2.diff"
+ ],
+ "lens": "SCOPE",
+ "_task": "a125f631addf36cc3",
+ "batch": "B5-history-r2"
+}

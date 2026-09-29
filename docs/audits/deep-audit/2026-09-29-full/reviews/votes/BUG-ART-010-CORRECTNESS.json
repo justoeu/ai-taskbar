@@ -1,0 +1,21 @@
+{
+ "id": "BUG-ART-010",
+ "verdict": "APROVA",
+ "reasoning": "The round-2 refactor keeps the old behavior. The helper VendorViewModel.isNetworkOutcome (VendorViewModel.swift:321-323) is `(outcome.cacheAge ?? .greatestFiniteMagnitude) <= 1`, the same expression that used to sit inline at the lastNetworkFetch site (:257), so lastNetworkFetch works as before. isFreshNetworkOutcome (:327-329) is now `!isStale && isNetworkOutcome`, the same predicate as round 1, and it gates the only recordHistory call (:265-267). recordHistory has no other caller. In CachedFetch, a live fetch returns isStale:false with cacheAge:0 (CachedFetch.swift:37-38), a cache hit returns cacheAge:hit.1 (:28), and the stale fallback returns isStale:true with cacheAge:hit.1 (:110). So both routes that re-serve an old number are shut out of history, not just the one route a test covers. Tests: `--filter VendorViewModelHistory` passes 8/8. Reversal: in a copy saved to the scratchpad, I replaced `if Self.isFreshNetworkOutcome(outcome) {` with `if true {`. stale_outcome_not_recorded failed with (onDisk → 1) == 0 and a non-empty history. cache_hit_not_recorded failed with (onDisk → 1) == 0 and a non-empty history. fresh_outcome_recorded still passed. I then restored the file. The working-tree diff is byte-identical to reviews/diffs/B5-history-r2.diff (cmp SAME), and the suite is green again (8/8). One note that does not block: the fix covers the fix's first option (record only real network fetches). It does not stamp fetchedAt, so a real network sample is still stamped Date.now, which is correct for a live fetch.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:257",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:265",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:321",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:327",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:28",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:37",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:110",
+  "Tests/AiTaskbarAppTests/VendorViewModelHistoryTests.swift:134",
+  "Tests/AiTaskbarAppTests/VendorViewModelHistoryTests.swift:145"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "ae61c30d8a836a767",
+ "batch": "B5-history-r2"
+}

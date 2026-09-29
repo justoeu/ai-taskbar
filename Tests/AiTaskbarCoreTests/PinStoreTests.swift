@@ -28,6 +28,49 @@ struct PinStoreTests {
         try? FileManager.default.removeItem(at: tmp)
     }
 
+    /// CQ-AUR-004: a pin that never reached disk used to be indistinguishable
+    /// from one that did. The in-memory memo still serves the session.
+    @Test("set into an unwritable directory reports the persistence failure")
+    func set_unwritable_dir_reports_failure() throws {
+        let blocker = tmp.appendingPathComponent("not-a-dir")
+        try Data("x".utf8).write(to: blocker)
+        let store = PinStore(baseDir: blocker.appendingPathComponent("pins"))
+        let persisted = store.set(host: "api.example.com", hash: "sha256/abc==")
+        #expect(!persisted)
+        #expect(store.get(host: "api.example.com") == "sha256/abc==")
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    @Test("set into a writable directory reports success")
+    func set_writable_dir_reports_success() {
+        let store = PinStore(baseDir: tmp)
+        let persisted = store.set(host: "api.example.com", hash: "sha256/abc==")
+        #expect(persisted)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    @Test("clear of a host that was never pinned is not a failure")
+    func clear_missing_pin_is_success() {
+        let store = PinStore(baseDir: tmp)
+        let ok = store.clear(host: "never.example.com")
+        #expect(ok)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    @Test("clear that cannot remove the pin file reports failure")
+    func clear_unremovable_pin_reports_failure() throws {
+        let store = PinStore(baseDir: tmp)
+        // A read-only parent directory makes the unlink fail with EACCES.
+        store.set(host: "api.example.com", hash: "sha256/abc==")
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o500)],
+                                              ofItemAtPath: tmp.path)
+        let ok = store.clear(host: "api.example.com")
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o700)],
+                                              ofItemAtPath: tmp.path)
+        #expect(!ok)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
     @Test("set then get round-trips the hash")
     func set_then_get_round_trip() {
         let store = PinStore(baseDir: tmp)

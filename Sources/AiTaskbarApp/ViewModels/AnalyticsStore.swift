@@ -62,12 +62,18 @@ public final class AnalyticsStore: ObservableObject {
 
     private let estimatesProvider: () -> [VendorId: CostEstimate]
     private let snapshotsProvider: () -> [VendorId: VendorSnapshot]
-    private let historyProvider: (VendorId) -> [UsageHistoryStore.Sample]
+    private let historyProvider: @Sendable (VendorId) -> [UsageHistoryStore.Sample]
+    /// Last histories loaded off the MainActor. `recompute()` aggregates from
+    /// these synchronously, so a timeframe switch never waits on disk.
+    private var histories: [VendorId: [UsageHistoryStore.Sample]] = [:]
+    /// The in-flight off-main history load. Superseded on every trigger, so a
+    /// burst of triggers loads each vendor once. Internal so tests can await it.
+    private(set) var historyReloadTask: Task<Void, Never>?
 
     public init(
         estimatesProvider: @escaping () -> [VendorId: CostEstimate] = { [:] },
         snapshotsProvider: @escaping () -> [VendorId: VendorSnapshot] = { [:] },
-        historyProvider: @escaping (VendorId) -> [UsageHistoryStore.Sample] = { _ in [] },
+        historyProvider: @escaping @Sendable (VendorId) -> [UsageHistoryStore.Sample] = { _ in [] },
         defaults: UserDefaults = .standard
     ) {
         self.estimatesProvider = estimatesProvider
@@ -149,7 +155,17 @@ public final class AnalyticsStore: ObservableObject {
         return dict
     }
 
-    public convenience init(usageStore: UsageStore, costEstimator: CostEstimator) {
+    /// Production history source: the vendor's on-disk JSONL, last 90 days.
+    public nonisolated static func diskHistory(_ vendor: VendorId) -> [UsageHistoryStore.Sample] {
+        (try? UsageHistoryStore.defaultFor(vendor))?
+            .load(since: Date().addingTimeInterval(-90 * 86_400)) ?? []
+    }
+
+    public convenience init(
+        usageStore: UsageStore,
+        costEstimator: CostEstimator,
+        historyProvider: @escaping @Sendable (VendorId) -> [UsageHistoryStore.Sample] = AnalyticsStore.diskHistory
+    ) {
         self.init(
             estimatesProvider: { [weak costEstimator, weak usageStore] in
                 guard let costEstimator else { return [:] }
@@ -161,9 +177,7 @@ public final class AnalyticsStore: ObservableObject {
             snapshotsProvider: { [weak usageStore] in
                 AnalyticsStore.currentSnapshots(usageStore)
             },
-            historyProvider: { vendor in
-                (try? UsageHistoryStore.defaultFor(vendor))?.load(since: Date().addingTimeInterval(-90 * 86_400)) ?? []
-            }
+            historyProvider: historyProvider
         )
         self.usageStore = usageStore
         self.costEstimator = costEstimator
@@ -205,28 +219,58 @@ public final class AnalyticsStore: ObservableObject {
         }
     }
 
+    /// Publishes a snapshot from the in-memory inputs right away, then reloads
+    /// the 90-day histories off the MainActor and publishes again when they
+    /// land. The load used to run synchronously here, on the MainActor, for
+    /// every vendor on every trigger (PERF-FLU-001 / LEAK-FAN-003).
     private func recompute() {
-        isLoading = true
-        defer { isLoading = false }
+        let vendors = publishSnapshot()
+        reloadHistories(for: vendors)
+    }
 
+    /// Aggregates from the cached histories. Returns the vendors in scope.
+    @discardableResult
+    private func publishSnapshot() -> Set<VendorId> {
         let estimates = estimatesProvider()
         let snapshots = snapshotsProvider()
         let vendors = Set(estimates.keys).union(snapshots.keys)
-
-        var histories: [VendorId: [UsageHistoryStore.Sample]] = [:]
-        for v in vendors {
-            histories[v] = historyProvider(v)
-        }
-
         self.snapshot = AnalyticsAggregator.aggregate(
             timeframe: timeframe,
             compareWithPrevious: compareWithPrevious,
             comparisonOffset: comparisonOffset,
             now: Date(),
-            histories: histories,
+            histories: histories.filter { vendors.contains($0.key) },
             estimates: estimates,
             snapshots: snapshots
         )
+        return vendors
+    }
+
+    private func reloadHistories(for vendors: Set<VendorId>) {
+        historyReloadTask?.cancel()
+        isLoading = true
+        let provider = historyProvider
+        historyReloadTask = Task { @MainActor [weak self] in
+            // A synchronous burst of triggers cancels this before it runs.
+            guard !Task.isCancelled else { return }
+            let load = Task.detached(priority: .utility) { () -> [VendorId: [UsageHistoryStore.Sample]]? in
+                var loaded: [VendorId: [UsageHistoryStore.Sample]] = [:]
+                for vendor in vendors {
+                    if Task.isCancelled { return nil }
+                    loaded[vendor] = provider(vendor)
+                }
+                return loaded
+            }
+            let loaded = await withTaskCancellationHandler {
+                await load.value
+            } onCancel: {
+                load.cancel()
+            }
+            guard let loaded, !Task.isCancelled, let self else { return }
+            self.histories = loaded
+            self.isLoading = false
+            self.publishSnapshot()
+        }
     }
 
     public func displayIndex(of id: VendorId) -> Int {

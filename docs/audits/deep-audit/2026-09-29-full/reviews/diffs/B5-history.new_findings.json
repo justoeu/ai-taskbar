@@ -1,0 +1,38 @@
+[
+ [
+  "QUALITY",
+  "AnalyticsStore.swift:158-161 diskHistory: the `(try? UsageHistoryStore.defaultFor(vendor))` was moved here unchanged. A store that cannot be created still turns silently into [] in Analytics, the same pattern BEST-ATE-006 fixed in VendorViewModel. The pre-existing clone is still alive."
+ ],
+ [
+  "QUALITY",
+  "VendorViewModel.swift:151 historyUnavailable is public but no view reads it. The flag has no UI surface yet (e.g. a card hint when there is no sparkline)."
+ ],
+ [
+  "QUALITY",
+  "Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift settle() uses a fixed 100 ms Task.sleep to drain receive(on: .main) before awaiting historyReloadTask. This could be flaky on a slow CI."
+ ],
+ [
+  "QUALITY",
+  "VendorViewModel.swift:80 the `forKey:` continuation is misaligned after the edit on line 79 (cosmetic)."
+ ],
+ [
+  "SCOPE",
+  "AnalyticsStore.diskHistory (Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:159) still uses (try? UsageHistoryStore.defaultFor(vendor)) ?? [], a sibling of BEST-ATE-006: a store that cannot be created returns [] silently here, even though VendorViewModel now logs and flags it. This is low severity because VendorViewModel already logs the same error per vendor."
+ ],
+ [
+  "SCOPE",
+  "The PinningDelegate.swift:67 and :91 callers throw away the new Bool results. The log covers visibility, but no one acts on a failed persist. Noted for information only."
+ ],
+ [
+  "SCOPE",
+  "Performance lens: AnalyticsStore.recompute now publishes twice per trigger, once with the cached histories and again after the off-main load. That is two snapshot publishes per timeframe or toggle change, which is expected but worth confirming against UI churn."
+ ],
+ [
+  "CORRECTNESS",
+  "The 63 filtered tests pass on the fixed tree. I reverted each fix while keeping its test, and each test failed as expected; the detailed results are in each vote's reasoning. I then restored the fixed files and compared the working-tree diff byte for byte: it matches both my pre-reversal copy and reviews/diffs/B5-history.diff. Backups are in scratchpad/review-B5-history/."
+ ],
+ [
+  "CORRECTNESS",
+  "The comments at RefreshScheduler.swift:106-112 and AppEnvironment.swift:53-59 say a scheduled tick 'ALWAYS' finds an expired cache. That is only true when the fetch takes under 5 s, because the sleep starts when refreshAll is dispatched, not when the fetch finishes. With BUG-ART-010 in place, a slow vendor records half as many samples. This is not a regression, but the comment is wrong. Starting the sleep after the refresh completes, or setting the cache mtime at the tick instead, would make the claim true."
+ ]
+]

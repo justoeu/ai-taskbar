@@ -1,0 +1,13 @@
+{
+ "id": "CQ-AUR-003",
+ "verdict": "APROVA",
+ "reasoning": "UsageHistoryStore.swift append: failures to encode, open, or write now return false. A streak of failures is logged once, and the flag clears on the next success. append stays @discardableResult and does not throw, so callers are unaffected. The unwritable-directory test exercises the open failure. Reversal check: forcing the return to true made the test fail. The one-log-per-streak behavior is not asserted by any test, which I note only.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:76",
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:103"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a48d2dbe2497de1ac",
+ "batch": "B5-history"
+}

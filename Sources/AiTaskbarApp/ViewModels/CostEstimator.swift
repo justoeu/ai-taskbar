@@ -141,8 +141,13 @@ public final class CostEstimator: ObservableObject {
             }
             await MainActor.run { [self] in
                 guard self.generation == gen else { return }
-                self.byVendor[.anthropic] = claudeEstimate
-                self.byVendor[.openai] = codexEstimate
+                // One assignment, one emission: two subscript writes on the
+                // @Published dictionary fired every subscriber twice per scan
+                // (PERF-FLU-001).
+                var updated = self.byVendor
+                updated[.anthropic] = claudeEstimate
+                updated[.openai] = codexEstimate
+                self.byVendor = updated
                 self.lastComputedAt = .now
                 self.isLoading = false
                 self.inFlight = nil

@@ -1,0 +1,62 @@
+{
+  "id": "PERF-FLU-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 14:06:12 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "AnalyticsStore.swift reloadHistories: the history provider now runs inside Task.detached(priority: .utility). Results are assigned to self.histories only in the @MainActor outer task, and only after the check `guard let loaded, !Task.isCancelled, let self`. Each trigger cancels historyReloadTask on the MainActor before it starts a new one. Because that post-await check also runs on the MainActor, a superseded load can never overwrite a newer one. The inner detached loop also stops early through withTaskCancellationHandler. publishSnapshot aggregates synchronously from the cached histories, filtered to the vendors in scope. CostEstimator.swift now copies byVendor, sets both keys, and assigns once. Tests pass. Reversal check: I made reloadHistories synchronous on main again and restored HEAD CostEstimator. Result: loadsOnMain 2, the burst test counted 3 loads per vendor, the cost refresh loaded each vendor twice, and emissions was 2. Minor note: the first publish after launch has empty histories until the off-main load lands. isLoading has no view consumers, so this is not a regression.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:250",
+        "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:147"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "AnalyticsStore.swift:222-273. recompute() is split into publishSnapshot(), which aggregates the cached histories synchronously, and reloadHistories(for:), which runs one detached utility load that later calls cancel. This follows the rule the fix exists for: no JSONL decode on the MainActor. The nesting is at most 3 levels (Task > detached Task > for) and every function is under 30 lines. The cancellation handler is needed so the inner detached task gets cancelled; it is not ceremony. CostEstimator.swift:144-147 now builds the dictionary in a local and assigns it once, so each scan emits once. That is the smallest possible change. Moving the production loader into the static diskHistory lets tests inject a loader without adding a new abstraction. No new warnings: the Ferreiro report shows validate green with warnings=0, and this lens does not rebuild.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:222",
+        "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:245",
+        "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:144"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:222-273 moves the 90-day history load off the MainActor and cancels older loads when a new one starts. Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:144-150 now writes byVendor once, so subscribers fire once per scan. The historyProvider closure became @Sendable, but its only production caller (AiTaskbarApp.swift:75) uses the default, and AnalyticsStoreTests passes non-capturing closures, so nothing breaks at the boundary. No new dependency, host or file.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:222",
+        "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:144",
+        "Sources/AiTaskbarApp/AiTaskbarApp.swift:75"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

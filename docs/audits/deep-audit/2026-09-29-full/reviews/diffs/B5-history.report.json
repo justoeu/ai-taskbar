@@ -1,0 +1,109 @@
+{
+ "batch": "B5-history",
+ "results": [
+  {
+   "id": "PERF-FLU-001",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsStoreHistoryLoadTests#history_load_is_off_main",
+    "AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once",
+    "AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor",
+    "AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot",
+    "CostEstimatorLoadingTests#refresh_publishes_by_vendor_once"
+   ],
+   "red": "Expectation failed: (recorder.loadsOnMain → 2) == 0 | (recorder.count(.anthropic) → 3) == 1 | (recorder.count(.anthropic) - before.0 → 2) <= 1 | (emissions → 2) == 1",
+   "reversal": "ok"
+  },
+  {
+   "id": "LEAK-FAN-003",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor",
+    "AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once"
+   ],
+   "red": "(recorder.count(.openai) - before.1 → 2) <= 1",
+   "reversal": "ok"
+  },
+  {
+   "id": "ARCH-ATL-003",
+   "outcome": "fixed",
+   "tests": [
+    "VendorViewModelHistoryTests#expanded_seeded_from_injected_defaults",
+    "VendorViewModelHistoryTests#expanded_persists_to_injected_defaults"
+   ],
+   "red": "mutation: init/didSet back to UserDefaults.standard -> Expectation failed: !((vm).isExpanded → true)",
+   "reversal": "ok"
+  },
+  {
+   "id": "BEST-ATE-006",
+   "outcome": "fixed",
+   "tests": [
+    "VendorViewModelHistoryTests#throwing_factory_sets_history_unavailable",
+    "VendorViewModelHistoryTests#working_factory_not_flagged"
+   ],
+   "red": "Expectation failed: (vm).historyUnavailable → false",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-010",
+   "outcome": "fixed",
+   "tests": [
+    "VendorViewModelHistoryTests#stale_outcome_not_recorded",
+    "VendorViewModelHistoryTests#cache_hit_not_recorded",
+    "VendorViewModelHistoryTests#fresh_outcome_recorded"
+   ],
+   "red": "Expectation failed: (onDisk → 1) == 0",
+   "reversal": "ok"
+  },
+  {
+   "id": "RACE-CRO-011",
+   "outcome": "fixed",
+   "tests": [
+    "VendorViewModelHistoryTests#initial_load_merges_with_recorded_sample"
+   ],
+   "red": "Expectation failed: (vm.history.count → 1) == 2 ; (vm.history.last?.max → 10.0) == (42 → 42.0)",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-AUR-003",
+   "outcome": "fixed",
+   "tests": [
+    "UsageHistoryStoreTests#append_unwritable_dir_reports_failure",
+    "UsageHistoryStoreTests#append_writable_dir_reports_success"
+   ],
+   "red": "UsageHistoryStoreTests.swift:24 Expectation failed: (ok → true) == false",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-AUR-004",
+   "outcome": "fixed",
+   "tests": [
+    "PinStoreTests#set_unwritable_dir_reports_failure",
+    "PinStoreTests#clear_unremovable_pin_reports_failure",
+    "PinStoreTests#clear_missing_pin_is_success",
+    "PinStoreTests#set_writable_dir_reports_success"
+   ],
+   "red": "PinStoreTests.swift:39 Expectation failed: (persisted → true) == false ; :70 (ok → true) == false",
+   "reversal": "ok"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 976,
+  "coverage": "92.06%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinStore.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/VendorViewModelHistoryTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/UsageHistoryStoreTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/PinStoreTests.swift"
+ ]
+}

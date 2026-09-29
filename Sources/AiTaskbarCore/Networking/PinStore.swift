@@ -53,17 +53,41 @@ public final class PinStore: @unchecked Sendable {
         return s
     }
 
-    public func set(host: String, hash: String) {
+    /// Returns `false` when the pin could not be persisted. The in-memory memo
+    /// is updated regardless, so this session stays pinned; only the next
+    /// launch would re-learn it (TOFU). Logged so a broken pins dir is visible
+    /// instead of only inferable from repeated first use (CQ-AUR-004).
+    @discardableResult
+    public func set(host: String, hash: String) -> Bool {
         let key = host.lowercased()
         memo.withLock { $0[key] = hash }
-        try? AtomicFileWrite.write(Data(hash.utf8), to: fileURL(for: key),
-                                   permissions: 0o600)
+        do {
+            try AtomicFileWrite.write(Data(hash.utf8), to: fileURL(for: key),
+                                      permissions: 0o600)
+            return true
+        } catch {
+            AppLog.pinning.error(
+                "pin persist failed for \(key, privacy: .public): \(String(describing: error), privacy: .public)")
+            return false
+        }
     }
 
-    public func clear(host: String) {
+    /// Returns `false` when an existing pin file could not be removed. A host
+    /// that was never pinned is not a failure.
+    @discardableResult
+    public func clear(host: String) -> Bool {
         let key = host.lowercased()
         _ = memo.withLock { $0.removeValue(forKey: key) }
-        try? FileManager.default.removeItem(at: fileURL(for: key))
+        do {
+            try FileManager.default.removeItem(at: fileURL(for: key))
+            return true
+        } catch CocoaError.fileNoSuchFile {
+            return true
+        } catch {
+            AppLog.pinning.error(
+                "pin removal failed for \(key, privacy: .public): \(String(describing: error), privacy: .public)")
+            return false
+        }
     }
 
     private func fileURL(for host: String) -> URL {

@@ -1,0 +1,12 @@
+{
+ "id": "RACE-CRO-011",
+ "verdict": "APROVA",
+ "reasoning": "VendorViewModel.swift mergeLoadedHistory: the disk load is merged with samples recorded in memory instead of replacing them. Duplicates are removed by exact `at` timestamp, which is safe because JSONEncoder round-trips Double exactly. The result is limited to the last 24 h and sorted, and it is applied on the MainActor. The gated-loader test orders the load against a refresh deterministically. Reversal check: going back to `history = samples` gave count 1 instead of 2 and last.max 10 instead of 42.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:329"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a48d2dbe2497de1ac",
+ "batch": "B5-history"
+}

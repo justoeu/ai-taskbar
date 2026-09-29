@@ -1,0 +1,12 @@
+{
+ "id": "LEAK-FAN-003",
+ "verdict": "APROVA",
+ "reasoning": "Same change as PERF-FLU-001: historyReloadTask?.cancel() in reloadHistories means a burst of triggers loads each vendor once. No other file is touched for this id.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:250"
+ ],
+ "lens": "SCOPE",
+ "_task": "aa64e09af4202d95c",
+ "batch": "B5-history"
+}
