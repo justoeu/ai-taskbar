@@ -1,0 +1,34 @@
+[
+ [
+  "SCOPE",
+  "Bookkeeping files: docs/audits/deep-audit/2026-09-29-full/FINDINGS.json (a re-merge of about 12.9k lines), run-meta.json and the untracked agent-maestro-remediation-followups.json (33 new findings) are audit-pack output, not part of the B13 fix. Commit them separately from the gate/CI change so the fix diff stays small and reviewable."
+ ],
+ [
+  "SCOPE",
+  "DEP-PRI-001 follow-up: SHA pins go stale unless something bumps them. The repo has no .github/dependabot.yml, so add one with package-ecosystem: github-actions. Without it, v7.0.1 and v3.0.2 stay frozen even if a security fix is released."
+ ],
+ [
+  "SCOPE",
+  "DEP-PRI-003 (wontfix): I agree it is a trade-off. DMGs are built locally, and ci.yml and release.yml share select-swift, so they cannot drift apart. A cheap improvement short of pinning: have select-swift print the chosen Xcode version, and have CI warn, not fail, when it is newer than a recorded last-verified version."
+ ],
+ [
+  "QUALITY",
+  "TEST-MAE-004 residual: check-source-ratchets.sh:103 `next if /radix:/` still exempts the whole line, so `Int(s, radix: 16) + Int(d)` on one line passes. The script's own comment documents this limit and the self-test does not plant it. That is a correctness gap for the next round, not a problem with this change's form."
+ ],
+ [
+  "QUALITY",
+  "Cosmetic: validate.sh prints the check script's plain ✓/✗ lines alongside its own colored ok()/fail() output, so the format mixes. Not a blocker."
+ ],
+ [
+  "QUALITY",
+  "DEP-PRI-003 won't-fix: no objection. The trade-off is documented with a reopen_if condition, and DMGs are built locally."
+ ],
+ [
+  "CORRECTNESS",
+  "Not blocking: coverage.sh exits before running tests when given a malformed floor. An empty argument still falls back to 0 via ${1:-0}, so an empty COVERAGE_FLOOR silently means report-only. This is the same as HEAD and outside this batch's scope."
+ ],
+ [
+  "CORRECTNESS",
+  "DEP-PRI-003 (wontfix): no disagreement. DMGs are built locally, and the shared select-swift action keeps ci.yml and release.yml from drifting apart."
+ ]
+]

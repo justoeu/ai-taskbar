@@ -1,0 +1,57 @@
+{
+  "id": "TEST-ARG-009",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 17:07:14 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "coverage.sh builds PROFDATA and BINARY from `swift build --show-bin-path`. That is the same debug configuration and toolchain as the preceding swift test, and it replaces the ambiguous `find | head -1`. The check is now `[ ! -f \"$PROFDATA\" ]`; before, only an empty string was checked. The 99.5 run above found both files and reported a real percentage. No regression: a missing path fails loudly.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/coverage.sh"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "`find | head -1` is replaced by `swift build --show-bin-path`, which uses the same default configuration (debug) as the `swift test` call just above it. The error message now names both expected paths. The test is now `-f` on PROFDATA instead of `-z`, which is stricter. If show-bin-path fails, set -e aborts the script, so no silent default is introduced.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/coverage.sh:56-65"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "scripts/coverage.sh:59-65 now takes paths from swift build --show-bin-path. That runs under the same toolchain the caller selected: with-test-toolchain.sh locally, select-swift in CI. There is no new surface, and the error message now names both expected paths.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/coverage.sh:59"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

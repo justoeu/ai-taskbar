@@ -1,0 +1,14 @@
+{
+ "id": "DEP-PRI-001",
+ "verdict": "APROVA",
+ "reasoning": "All three workflows pin checkout to the same full SHA with a `# v7.0.1` comment. This follows the convention release.yml already uses for softprops/action-gh-release. The pin is identical in all three places, so there is no drift.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.github/workflows/auto-tag.yml:46",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.github/workflows/ci.yml:23",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.github/workflows/release.yml:47"
+ ],
+ "lens": "QUALITY",
+ "_task": "a8ecb2923bdb153f3",
+ "batch": "B13-gates-ci"
+}

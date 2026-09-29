@@ -1,0 +1,63 @@
+{
+  "id": "DEP-PRI-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 17:07:14 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "`git ls-remote https://github.com/actions/checkout 'refs/tags/v7*'` returns 3d3c42e5aac5ba805825da76410c181273ba90b1 for both refs/tags/v7 and refs/tags/v7.0.1. They are lightweight tags with no ^{} peel, so the SHA is the commit. The same pin is used in ci.yml, release.yml and auto-tag.yml, and all three parse as YAML (ruby YAML.load_file). No other unpinned third-party `uses:` remains; action-gh-release was already SHA-pinned.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/ci.yml",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/release.yml",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/auto-tag.yml"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "All three workflows pin checkout to the same full SHA with a `# v7.0.1` comment. This follows the convention release.yml already uses for softprops/action-gh-release. The pin is identical in all three places, so there is no drift.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.github/workflows/auto-tag.yml:46",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.github/workflows/ci.yml:23",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.github/workflows/release.yml:47"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "All three actions/checkout uses are pinned to 3d3c42e5 # v7.0.1: auto-tag.yml:46, release.yml:47 and ci.yml:23. That matches the existing softprops pin at release.yml:197. grep finds no other uses: line in .github that is not a local action.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/auto-tag.yml:46",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/release.yml:47",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/ci.yml:23"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

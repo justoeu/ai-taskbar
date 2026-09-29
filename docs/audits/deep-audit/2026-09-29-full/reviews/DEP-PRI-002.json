@@ -1,0 +1,57 @@
+{
+  "id": "DEP-PRI-002",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 17:07:14 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "ci.yml now has a top-level `permissions: contents: read`, and it parses. Its steps are checkout, the local select-swift action, cmp, the ratchet scripts, the warnings ratchet and coverage. None of them uses secrets, gh, GITHUB_TOKEN writes, uploads or caches (grep is empty), so read access is enough. release.yml and auto-tag.yml keep contents: write, which they need to tag and release.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/ci.yml"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "ci.yml gets a top-level `permissions: contents: read` with a one-line explanation, matching the explicit scoping in auto-tag.yml and release.yml. Nothing more was added than needed.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/ci.yml:11-14"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "ci.yml:11-14 adds workflow-level permissions: contents: read. The steps are checkout, select-swift and scripts, and none of them writes to the repo. CI is not called as a reusable workflow; auto-tag calls release.yml, not ci.yml. So no caller loses a scope it needed.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/ci.yml:11"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

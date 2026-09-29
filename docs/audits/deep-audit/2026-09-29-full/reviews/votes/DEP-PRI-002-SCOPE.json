@@ -1,0 +1,12 @@
+{
+ "id": "DEP-PRI-002",
+ "verdict": "APROVA",
+ "reasoning": "ci.yml:11-14 adds workflow-level permissions: contents: read. The steps are checkout, select-swift and scripts, and none of them writes to the repo. CI is not called as a reusable workflow; auto-tag calls release.yml, not ci.yml. So no caller loses a scope it needed.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/ci.yml:11"
+ ],
+ "lens": "SCOPE",
+ "_task": "a3047d92efbe9f138",
+ "batch": "B13-gates-ci"
+}

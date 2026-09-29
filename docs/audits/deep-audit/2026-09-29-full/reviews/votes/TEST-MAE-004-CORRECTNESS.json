@@ -1,0 +1,12 @@
+{
+ "id": "TEST-MAE-004",
+ "verdict": "APROVA",
+ "reasoning": "The second perl pattern in check-source-ratchets.sh rejects the point-free `Int.init` unless a labeled initializer follows it. In a scratch FooWireTypes.swift, `.map(Int.init)` was flagged (exit 1), while `Int(saturating:)` and `Int64.init(exactly:)` passed. The HEAD bare-int regex finds 0 hits on `.map(Int.init)`, so the reversal fails as expected. Self-test [3/4] covers this. A missing directory fails closed through pipefail on find (self-test [4/4]).",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/check-source-ratchets.sh"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "acc9861fb43841962",
+ "batch": "B13-gates-ci"
+}

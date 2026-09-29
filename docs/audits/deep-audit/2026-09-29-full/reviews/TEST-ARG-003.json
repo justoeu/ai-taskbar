@@ -1,0 +1,67 @@
+{
+  "id": "TEST-ARG-003",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 17:07:13 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "scripts/check-source-ratchets.sh reads each macro's full argument list with balanced parens across lines, blanks string literals and comments, and rejects ==/!= true|false with the literal on either side, ?? true|false, and == Optional(/.some(. Run on the repo: source-ratchet-selftest.sh passes 4/4 and the check exits 0. Planted `#expect(opt == false, \"m\")` in a scratch copy (PinStoreTests.swift:395): exit 1. Also planted and caught: an #expect nested in a closure, a multi-line `try #require(o != false)`, `o==false`, and a raw-string/'a (' message that caused no false positive. Reversal: the HEAD regex finds 0 of `== false, \"m\"` and `!= true`. PinStoreTests.swift:362 now uses expectFalse(pin?.isEmpty ?? true). The filtered PinStoreTests|PinBaselineTests run is green (30 tests). Mutating PinBaseline.swift:63 to return \"\" failed with 'empty baseline pin for api.anthropic.com'. The file was restored and the tree diff matches the saved diff.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/check-source-ratchets.sh",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/source-ratchet-selftest.sh",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/PinStoreTests.swift:362",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/validate.sh"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The fix removes the copied regex instead of patching both copies: validate.sh (-440..-448) and ci.yml:50 both now call scripts/check-source-ratchets.sh, so there is one definition. The script uses set -euo pipefail and quotes every variable. It deliberately has no `|| true`, and the comment gives the reason: under pipefail a find/perl failure (missing dir) ends the gate with exit 1 instead of passing silently. So no error is swallowed, and self-test [4/4] proves it. It also uses only macOS-portable tools: BSD sort -z, xargs -0, and the system perl with recursive/possessive regex. Nesting in the perl block stays at 2 levels in about 25 lines. The self-test counts a hit only when three things hold: non-zero exit, the check's own marker, and the planted path. A crash therefore cannot count as a detection. Both sides are planted: 15 forms that must fail and 1 file of forms that must pass. PinStoreTests.swift:362 now uses expectFalse(pin?.isEmpty ?? true, msg), which is what CLAUDE.md requires for an optional Bool. CLAUDE.md/AGENTS.md were updated in the same change.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/check-source-ratchets.sh:34-69",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/source-ratchet-selftest.sh:17-49",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/PinStoreTests.swift:362",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/ci.yml:41-47"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Every file in the diff maps to this finding: the new shared scripts/check-source-ratchets.sh and scripts/source-ratchet-selftest.sh; scripts/validate.sh:106-117 swaps its inline regex for those scripts; .github/workflows/ci.yml:41-46 drops the copy-pasted grep and calls the same scripts; Tests/AiTaskbarCoreTests/PinStoreTests.swift:362 rewrites the live vacuous assert to expectFalse(pin?.isEmpty ?? true, ...), as the finding's fix asks. CLAUDE.md:136-141 and AGENTS.md got the same edit, so cmp -s still matches. No public contract, dependency, host or permission changed. perl, find -print0 and mktemp are already on macos-15. Nothing else refers to the removed vacuous_re.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/check-source-ratchets.sh:47",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/validate.sh:106",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/.github/workflows/ci.yml:41",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/PinStoreTests.swift:362",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md:136"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

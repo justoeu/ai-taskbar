@@ -210,7 +210,7 @@
     "impact": "Violates the CLAUDE.md rule: Never build a user-facing sentence inside a wire type; emit structure and let the localized view render it. That rule was written after a pt-BR card showed English; this is the same bug in reverse. Every en/es user with Gemini or Grok enabled sees a Portuguese info line on each card, and Portuguese error text when a credential is missing. Because the Snapshot contract carries prose instead of structure, the App cannot localize it.",
     "fix": "Replace disclaimer: String? on GeminiSnapshot/XAISnapshot with a structured flag/enum (requiresAntigravity / requiresGrokCLI) resolved in the view via the existing L10n keys; model credential-missing errors as typed AppError cases localized by the view; update golden tests.",
     "test_red_green": {
-      "name": "same as CQ-AUR-001 (duplicate, merged)",
+      "name": "ProvidersEmitNoNaturalLanguageTests.no_portuguese_literals + GoldenSnapshotTests.gemini_disclaimer_is_structured",
       "assert_before": "A source scan of Sources/AiTaskbarProviders for Para conseguir / Para monitorar finds matches, and GeminiSnapshot.disclaimer is a Portuguese String: FAIL",
       "assert_after": "No matches; the snapshot exposes a Bool/enum, and a view test resolves it to the en string under languageOverride=en"
     },
@@ -221,10 +221,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/GeminiWireTypes.swift",
     "id": "ARCH-ATL-001",
-    "blocks_pr": false,
     "resolved_test": "same as CQ-AUR-001 (duplicate, merged)",
     "resolved_at": "2026-09-29 13:40:41 UTC",
     "resolved_note": "batch B4-i18n",
+    "progress": [
+      "2026-09-29: resolvido · teste same as CQ-AUR-001 (duplicate, merged) · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:40:41 UTC",
@@ -249,9 +252,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste same as CQ-AUR-001 (duplicate, merged) · revisão approved (3/3) · batch B4-i18n"
-    ],
     "in_progress": false
   },
   {
@@ -267,7 +267,7 @@
     "fix": "Add a 30-day window to CostEstimate (usdLast30Days) from the scanners, or hide cost in .monthly. Never reuse usdLast7Days.",
     "failure_scenario": "At a steady 10 USD/day, Weekly shows ~70-80 USD, and Monthly still shows ~70-80 instead of ~300.",
     "test_red_green": {
-      "name": "AnalyticsAggregator#monthly_total_not_weekly_cost,AnalyticsAggregator#monthly_vendor_cost_not_weekly_cost,AnalyticsAggregator#monthly_breakdown_not_weekly_breakdown,AnalyticsAggregator#monthly_flags_cost_unavailable,AnalyticsAggregator#weekly_cost_available",
+      "name": "monthlyTimeframeDoesNotReuseWeeklyCost",
       "assert_before": "monthly totalCostUSD == usdLast7Days",
       "assert_after": "monthly cost hidden or a 30-day figure"
     },
@@ -279,10 +279,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift",
     "id": "BUG-ART-003",
-    "blocks_pr": false,
     "resolved_test": "AnalyticsAggregator#monthly_total_not_weekly_cost,AnalyticsAggregator#monthly_vendor_cost_not_weekly_cost,AnalyticsAggregator#monthly_breakdown_not_weekly_breakdown,AnalyticsAggregator#monthly_flags_cost_unavailable,AnalyticsAggregator#weekly_cost_available",
     "resolved_at": "2026-09-29 12:37:49 UTC",
     "resolved_note": "batch B1-analytics",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsAggregator#monthly_total_not_weekly_cost,AnalyticsAggregator#monthly_vendor_cost_not_weekly_cost,AnalyticsAggregator#monthly_breakdown_not_weekly_breakdown,AnalyticsAggregator#monthly_flags_cost_unavailable,AnalyticsAggregator#weekly_cost_available · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:37:48 UTC",
@@ -307,9 +310,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnalyticsAggregator#monthly_total_not_weekly_cost,AnalyticsAggregator#monthly_vendor_cost_not_weekly_cost,AnalyticsAggregator#monthly_breakdown_not_weekly_breakdown,AnalyticsAggregator#monthly_flags_cost_unavailable,AnalyticsAggregator#weekly_cost_available · revisão approved (3/3) · batch B1-analytics"
-    ],
     "in_progress": false
   },
   {
@@ -325,7 +325,7 @@
     "fix": "Decode the date of each activity item and sum only the last 7 days. Show xAI cycle spend in its own field with a cycle label.",
     "failure_scenario": "OpenRouter at 1 USD/day for 30 days: the weekly card shows 30 USD where 7 is correct.",
     "test_red_green": {
-      "name": "AnalyticsEstimatesMerge#openrouter_activity_not_in_last7,AnalyticsEstimatesMerge#openrouter_activity_does_not_overwrite_last7,AnalyticsEstimatesMerge#openrouter_activity_adds_no_breakdown_rows,AnalyticsEstimatesMerge#xai_cycle_spend_not_in_last7,AnalyticsEstimatesMerge#xai_cycle_spend_does_not_raise_last7",
+      "name": "openRouterWeeklyUsesOnlyLast7DaysOfActivity",
       "assert_before": "usdLast7Days == 30",
       "assert_after": "usdLast7Days == 7"
     },
@@ -336,10 +336,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
     "id": "BUG-ART-004",
-    "blocks_pr": false,
     "resolved_test": "AnalyticsEstimatesMerge#openrouter_activity_not_in_last7,AnalyticsEstimatesMerge#openrouter_activity_does_not_overwrite_last7,AnalyticsEstimatesMerge#openrouter_activity_adds_no_breakdown_rows,AnalyticsEstimatesMerge#xai_cycle_spend_not_in_last7,AnalyticsEstimatesMerge#xai_cycle_spend_does_not_raise_last7",
     "resolved_at": "2026-09-29 12:37:49 UTC",
     "resolved_note": "batch B1-analytics",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsEstimatesMerge#openrouter_activity_not_in_last7,AnalyticsEstimatesMerge#openrouter_activity_does_not_overwrite_last7,AnalyticsEstimatesMerge#openrouter_activity_adds_no_breakdown_rows,AnalyticsEstimatesMerge#xai_cycle_spend_not_in_last7,AnalyticsEstimatesMerge#xai_cycle_spend_does_not_raise_last7 · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:37:49 UTC",
@@ -364,9 +367,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnalyticsEstimatesMerge#openrouter_activity_not_in_last7,AnalyticsEstimatesMerge#openrouter_activity_does_not_overwrite_last7,AnalyticsEstimatesMerge#openrouter_activity_adds_no_breakdown_rows,AnalyticsEstimatesMerge#xai_cycle_spend_not_in_last7,AnalyticsEstimatesMerge#xai_cycle_spend_does_not_raise_last7 · revisão approved (3/3) · batch B1-analytics"
-    ],
     "in_progress": false
   },
   {
@@ -382,7 +382,7 @@
     "fix": "Decode total_token_usage, track the previous total per file, and skip an event whose total did not increase.",
     "failure_scenario": "Two consecutive identical token_count lines (last input 10000, total_tokens 50000) book 20,000 input where 10,000 is correct.",
     "test_red_green": {
-      "name": "CodexSessionScannerTests#repeated_token_count_is_billed_once,CodexSessionScannerTests#same_last_with_advanced_total_is_billed,CodexSessionScannerTests#events_without_total_are_not_deduped",
+      "name": "codexScannerSkipsRepeatedTokenCount",
       "assert_before": "inputTokens == 20000",
       "assert_after": "inputTokens == 10000"
     },
@@ -393,10 +393,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift",
     "id": "BUG-ART-005",
-    "blocks_pr": false,
     "resolved_test": "CodexSessionScannerTests#repeated_token_count_is_billed_once,CodexSessionScannerTests#same_last_with_advanced_total_is_billed,CodexSessionScannerTests#events_without_total_are_not_deduped",
     "resolved_at": "2026-09-29 12:56:50 UTC",
     "resolved_note": "batch B2-scanners",
+    "progress": [
+      "2026-09-29: resolvido · teste CodexSessionScannerTests#repeated_token_count_is_billed_once,CodexSessionScannerTests#same_last_with_advanced_total_is_billed,CodexSessionScannerTests#events_without_total_are_not_deduped · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:56:50 UTC",
@@ -421,9 +424,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste CodexSessionScannerTests#repeated_token_count_is_billed_once,CodexSessionScannerTests#same_last_with_advanced_total_is_billed,CodexSessionScannerTests#events_without_total_are_not_deduped · revisão approved (3/3) · batch B2-scanners"
-    ],
     "in_progress": false
   },
   {
@@ -439,7 +439,7 @@
     "fix": "Use cal.date(byAdding: .day, value: -6, to: startOfToday) everywhere, opencode included.",
     "failure_scenario": "now = Tue 10:00. A turn from last Tue 09:00 (8 calendar days back) is counted by the Claude/Codex scanners but not by opencode.",
     "test_red_green": {
-      "name": "ClaudeSessionScannerTests#seven_day_window_boundary,CodexSessionScannerEstimateTests#seven_day_window_boundary,OpencodeScannerTests#seven_day_window_boundary,CodexLogScannerSQLiteTests#seven_day_window_boundary,CostWindowTests#spans_seven_calendar_days,CostWindowTests#dst_keeps_midnight",
+      "name": "sevenDayWindowIsSevenCalendarDays",
       "assert_before": "record at startOfToday-7d+1h counted",
       "assert_after": "excluded; startOfToday-6d counted"
     },
@@ -450,10 +450,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
     "id": "BUG-ART-006",
-    "blocks_pr": false,
     "resolved_test": "ClaudeSessionScannerTests#seven_day_window_boundary,CodexSessionScannerEstimateTests#seven_day_window_boundary,OpencodeScannerTests#seven_day_window_boundary,CodexLogScannerSQLiteTests#seven_day_window_boundary,CostWindowTests#spans_seven_calendar_days,CostWindowTests#dst_keeps_midnight",
     "resolved_at": "2026-09-29 12:56:50 UTC",
     "resolved_note": "batch B2-scanners",
+    "progress": [
+      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#seven_day_window_boundary,CodexSessionScannerEstimateTests#seven_day_window_boundary,OpencodeScannerTests#seven_day_window_boundary,CodexLogScannerSQLiteTests#seven_day_window_boundary,CostWindowTests#spans_seven_calendar_days,CostWindowTests#dst_keeps_midnight · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:56:50 UTC",
@@ -478,9 +481,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#seven_day_window_boundary,CodexSessionScannerEstimateTests#seven_day_window_boundary,OpencodeScannerTests#seven_day_window_boundary,CodexLogScannerSQLiteTests#seven_day_window_boundary,CostWindowTests#spans_seven_calendar_days,CostWindowTests#dst_keeps_midnight · revisão approved (3/3) · batch B2-scanners"
-    ],
     "in_progress": false
   },
   {
@@ -502,15 +502,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/GeminiWireTypes.swift",
     "test_red_green": {
-      "name": "GeminiXAILocaleNeutralTests#providers_sources_carry_no_portuguese_prose,XAIProviderTests#grok_missing_auth_throws_disclaimer,GoldenSnapshotTests#gemini_antigravity_golden,VendorNoticeLocalizationTests#gemini_disclaimer_english,VendorNoticeLocalizationTests#guidance_resolves_everywhere,AppErrorTests#guidance_not_authenticated_is_unauthorized,GeminiXAILocaleNeutralTests#stale_guidance_keeps_401_status",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-AUR-001",
-    "blocks_pr": false,
     "resolved_test": "GeminiXAILocaleNeutralTests#providers_sources_carry_no_portuguese_prose,XAIProviderTests#grok_missing_auth_throws_disclaimer,GoldenSnapshotTests#gemini_antigravity_golden,VendorNoticeLocalizationTests#gemini_disclaimer_english,VendorNoticeLocalizationTests#guidance_resolves_everywhere,AppErrorTests#guidance_not_authenticated_is_unauthorized,GeminiXAILocaleNeutralTests#stale_guidance_keeps_401_status",
     "resolved_at": "2026-09-29 13:40:41 UTC",
     "resolved_note": "batch B4-i18n",
+    "progress": [
+      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#providers_sources_carry_no_portuguese_prose,XAIProviderTests#grok_missing_auth_throws_disclaimer,GoldenSnapshotTests#gemini_antigravity_golden,VendorNoticeLocalizationTests#gemini_disclaimer_english,VendorNoticeLocalizationTests#guidance_resolves_everywhere,AppErrorTests#guidance_not_authenticated_is_unauthorized,GeminiXAILocaleNeutralTests#stale_guidance_keeps_401_status · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:40:40 UTC",
@@ -535,9 +538,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#providers_sources_carry_no_portuguese_prose,XAIProviderTests#grok_missing_auth_throws_disclaimer,GoldenSnapshotTests#gemini_antigravity_golden,VendorNoticeLocalizationTests#gemini_disclaimer_english,VendorNoticeLocalizationTests#guidance_resolves_everywhere,AppErrorTests#guidance_not_authenticated_is_unauthorized,GeminiXAILocaleNeutralTests#stale_guidance_keeps_401_status · revisão approved (3/3) · batch B4-i18n"
-    ],
     "in_progress": false
   },
   {
@@ -552,7 +552,7 @@
     "impact": "Every ~60s (CostEstimator.minRecomputeInterval) the main thread performs 2x(N vendors) blocking file reads + per-line JSON decodes of up to 90 days of history (up to ~25,920 samples/vendor at the default 300s cadence), even while the Analytics screen is closed. This is the exact pattern VendorViewModel already avoids for its own 24h history (loads once off-MainActor at init, then appends in-memory - VendorViewModel.swift:145-155, recordHistory at 274-285); AnalyticsStore re-reads from disk from scratch on every trigger with no cache, on MainActor. On a long-running install with several vendors configured this is a repeating, measurable UI-thread hitch, doubled by the split @Published assignment.",
     "fix": "1) Merge the two CostEstimator assignments into one dictionary update before setting byVendor once (or debounce recompute triggering). 2) Move AnalyticsStore.recompute() history loads off the MainActor (Task.detached, mirroring VendorViewModel pattern) and only recompute when AnalyticsView is visible, or cache each vendor 90-day sample set in memory and append the incremental tail instead of re-reading the whole file every call.",
     "test_red_green": {
-      "name": "AnalyticsStoreHistoryLoadTests#history_load_is_off_main,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once,AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot,CostEstimatorLoadingTests#refresh_publishes_by_vendor_once",
+      "name": "AnalyticsStoreRecomputeTests.doesNotDoubleReadOnSplitByVendorAssignment",
       "assert_before": "A spy historyProvider counting invocations shows count == 2 for one CostEstimator-style two-key dictionary update (expected 1) - test fails.",
       "assert_after": "After coalescing the byVendor update into a single assignment (or debouncing recompute), the spy invocation count is exactly 1 per estimate cycle."
     },
@@ -564,10 +564,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
     "id": "PERF-FLU-001",
-    "blocks_pr": false,
     "resolved_test": "AnalyticsStoreHistoryLoadTests#history_load_is_off_main,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once,AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot,CostEstimatorLoadingTests#refresh_publishes_by_vendor_once",
     "resolved_at": "2026-09-29 14:06:14 UTC",
     "resolved_note": "batch B5-history",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsStoreHistoryLoadTests#history_load_is_off_main,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once,AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot,CostEstimatorLoadingTests#refresh_publishes_by_vendor_once · revisão approved (3/3) · batch B5-history"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:06:12 UTC",
@@ -592,9 +595,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnalyticsStoreHistoryLoadTests#history_load_is_off_main,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once,AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot,CostEstimatorLoadingTests#refresh_publishes_by_vendor_once · revisão approved (3/3) · batch B5-history"
-    ],
     "in_progress": false
   },
   {
@@ -643,7 +643,7 @@
       }
     },
     "test_red_green": {
-      "name": "NumericConversionTrapTests#history_sanitizes_append_and_load,NumericConversionTrapAppTests#peak_day_text_huge_utilization",
+      "name": "TBD",
       "assert_before": "exploit or deny-path fails open",
       "assert_after": "exploit blocked; legitimate path unchanged"
     },
@@ -653,6 +653,9 @@
     "resolved_test": "NumericConversionTrapTests#history_sanitizes_append_and_load,NumericConversionTrapAppTests#peak_day_text_huge_utilization",
     "resolved_at": "2026-09-29 13:18:16 UTC",
     "resolved_note": "batch B3-numeric",
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#history_sanitizes_append_and_load,NumericConversionTrapAppTests#peak_day_text_huge_utilization · revisão approved (3/3) · batch B3-numeric"
+    ],
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:18:16 UTC",
@@ -677,9 +680,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste NumericConversionTrapTests#history_sanitizes_append_and_load,NumericConversionTrapAppTests#peak_day_text_huge_utilization · revisão approved (3/3) · batch B3-numeric"
-    ],
     "in_progress": false
   },
   {
@@ -694,7 +694,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "AtomicFileWriteTests#existing_loose_destination_is_tightened,AtomicFileWriteTests#symlinked_destination_is_refused",
+      "name": "AtomicFileWriteTests.overwrite_tightens_loose_mode",
       "assert_before": "dest 0o644; write(permissions:0o600); #expect(mode==0o600) -> RED today (644)",
       "assert_after": "GREEN after fix"
     },
@@ -706,10 +706,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift",
     "id": "TEST-ARG-001",
-    "blocks_pr": false,
     "resolved_test": "AtomicFileWriteTests#existing_loose_destination_is_tightened,AtomicFileWriteTests#symlinked_destination_is_refused",
     "resolved_at": "2026-09-29 14:35:00 UTC",
     "resolved_note": "batch B6-files-tests",
+    "progress": [
+      "2026-09-29: resolvido · teste AtomicFileWriteTests#existing_loose_destination_is_tightened,AtomicFileWriteTests#symlinked_destination_is_refused · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:35:00 UTC",
@@ -734,9 +737,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AtomicFileWriteTests#existing_loose_destination_is_tightened,AtomicFileWriteTests#symlinked_destination_is_refused · revisão approved (3/3) · batch B6-files-tests"
-    ],
     "in_progress": false
   },
   {
@@ -751,7 +751,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated",
+      "name": "fallback_credential_is_never_rotated",
       "assert_before": "RED under guard-removal mutation",
       "assert_after": "GREEN with guard"
     },
@@ -763,10 +763,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AnthropicProvider.swift",
     "id": "TEST-ARG-002",
-    "blocks_pr": false,
     "resolved_test": "AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated",
     "resolved_at": "2026-09-29 14:35:00 UTC",
     "resolved_note": "batch B6-files-tests",
+    "progress": [
+      "2026-09-29: resolvido · teste AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:35:00 UTC",
@@ -791,9 +794,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated · revisão approved (3/3) · batch B6-files-tests"
-    ],
     "in_progress": false
   },
   {
@@ -808,7 +808,7 @@
     "impact": "If the API returns seven_day_opus together with a weekly_scoped entry whose display_name is Opus, the result is duplicate SwiftUI ForEach ids (rows dropped or mis-diffed) and two windows sharing one notification-dedupe slot, so alerts re-fire whenever the two percentages alternate. Tying identity to English prose also blocks localizing labels without breaking dedupe.",
     "fix": "Seed seenScoped with the flat labels, or better, add a stable id to UsageWindow, use it for ForEach and notification keys, and keep label display-only.",
     "test_red_green": {
-      "name": "AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat",
+      "name": "AnthropicGoldenTests.scoped_opus_does_not_duplicate_flat_opus",
       "assert_before": "A fixture with seven_day_opus plus weekly_scoped display_name Opus yields windows with Opus (7d) twice; Set(labels).count != labels.count: FAIL",
       "assert_after": "Labels/ids are unique"
     },
@@ -820,10 +820,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AnthropicWireTypes.swift",
     "id": "ARCH-ATL-002",
-    "blocks_pr": false,
     "resolved_test": "AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat",
     "resolved_at": "2026-09-29 16:28:05 UTC",
     "resolved_note": "batch B11-app-lows",
+    "progress": [
+      "2026-09-29: resolvido · teste AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:28:05 UTC",
@@ -848,9 +851,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat · revisão approved (3/3) · batch B11-app-lows"
-    ],
     "in_progress": false
   },
   {
@@ -865,7 +865,7 @@
     "impact": "The core per-vendor flow (loading to ok/failed, stale handling, the per-vendor 429 cooldown that scheduler back-off depends on, history recording, notification trigger) cannot be exercised without appending samples to the real user history JSONL, so it is untested. App is also outside the coverage gate.",
     "fix": "Inject historyStore and defaults into VendorViewModel.init, built at the composition root (AiTaskbarApp.init / AppEnvironment); have AnalyticsStore read VendorViewModel.historyStore instead of constructing new instances.",
     "test_red_green": {
-      "name": "VendorViewModelHistoryTests#expanded_seeded_from_injected_defaults,VendorViewModelHistoryTests#expanded_persists_to_injected_defaults",
+      "name": "VendorViewModelRefreshTests.rate_limited_refresh_sets_cooldown_and_records_no_history",
       "assert_before": "No seam to supply a temp-dir history store; a refresh test would write into the real Application Support path",
       "assert_after": "VendorViewModel(provider: Mock429, historyStore: tmpStore, defaults: suite).refresh gives a failed + isRateLimited state; tmpStore.load() is empty"
     },
@@ -877,10 +877,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
     "id": "ARCH-ATL-003",
-    "blocks_pr": false,
     "resolved_test": "VendorViewModelHistoryTests#expanded_seeded_from_injected_defaults,VendorViewModelHistoryTests#expanded_persists_to_injected_defaults",
     "resolved_at": "2026-09-29 14:06:15 UTC",
     "resolved_note": "batch B5-history",
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#expanded_seeded_from_injected_defaults,VendorViewModelHistoryTests#expanded_persists_to_injected_defaults · revisão approved (3/3) · batch B5-history"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:06:15 UTC",
@@ -905,9 +908,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#expanded_seeded_from_injected_defaults,VendorViewModelHistoryTests#expanded_persists_to_injected_defaults · revisão approved (3/3) · batch B5-history"
-    ],
     "in_progress": false
   },
   {
@@ -922,7 +922,7 @@
     "impact": "Any pin_hosts entry that covers the GitHub release/asset hosts is silently ignored for the update check and DMG download. The composition root security policy does not reach this consumer, and the comment claims it does. Mitigated by size/SHA256 checks when the release provides them.",
     "fix": "Pass http: env.http in AiTaskbarApp.init, or remove the default parameter so omission fails to compile.",
     "test_red_green": {
-      "name": "UpdateBannerTests#composition_root_injects_environment_http",
+      "name": "CompositionRootTests.update_checker_uses_environment_http",
       "assert_before": "Source scan: AiTaskbarApp.swift constructs UpdateChecker without http: FAIL",
       "assert_after": "UpdateChecker.init has no default http; call site passes env.http"
     },
@@ -933,10 +933,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/AiTaskbarApp.swift",
     "id": "ARCH-ATL-004",
-    "blocks_pr": false,
     "resolved_test": "UpdateBannerTests#composition_root_injects_environment_http",
     "resolved_at": "2026-09-29 15:29:49 UTC",
     "resolved_note": "batch B8-updater",
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateBannerTests#composition_root_injects_environment_http · revisão approved (3/3) · batch B8-updater"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:29:49 UTC",
@@ -961,9 +964,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste UpdateBannerTests#composition_root_injects_environment_http · revisão approved (3/3) · batch B8-updater"
-    ],
     "in_progress": false
   },
   {
@@ -978,7 +978,7 @@
     "impact": "The store-level integration of the notch/space limit, which took four fix PRs (#26-#29), cannot be tested: tests always see allowed, and a configured manager would read the live menu bar of the test machine. The pure evaluateSpaceMath is tested; its wiring into togglePinned is not.",
     "fix": "Inject a pinSpaceChecker closure/protocol into UsageStore, defaulted at the composition root to PinnedStatusItemManager.shared.canAddPinnedStatusItem.",
     "test_red_green": {
-      "name": "PinnedStatusItemTests#toggle_pinned_respects_denied_space_check",
+      "name": "UsageStorePinTests.toggle_respects_denied_space_check",
       "assert_before": "No way to make togglePinned see a denied geometry result without a live screen",
       "assert_after": "With a checker that always denies, togglePinned(.openai) leaves pinnedVendorIds empty and sets pinLimitAlert"
     },
@@ -989,10 +989,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/UsageStore.swift",
     "id": "ARCH-ATL-005",
-    "blocks_pr": false,
     "resolved_test": "PinnedStatusItemTests#toggle_pinned_respects_denied_space_check",
     "resolved_at": "2026-09-29 16:28:05 UTC",
     "resolved_note": "batch B11-app-lows",
+    "progress": [
+      "2026-09-29: resolvido · teste PinnedStatusItemTests#toggle_pinned_respects_denied_space_check · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:28:05 UTC",
@@ -1017,9 +1020,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste PinnedStatusItemTests#toggle_pinned_respects_denied_space_check · revisão approved (3/3) · batch B11-app-lows"
-    ],
     "in_progress": false
   },
   {
@@ -1034,7 +1034,7 @@
     "impact": "When a decoder changes on upgrade (e.g. the XAICachedPayload envelope or the Gemini schema-throwing branch), a still-fresh cache entry makes each tick fail for up to the TTL (~5 min) without trying the network. last_error is not recorded, so the stale tooltip cannot explain it. It self-heals, so impact is limited.",
     "fix": "On a fresh-hit decode failure, discard the entry and fall through to fetch, inside CachedFetch (extend, do not fork).",
     "test_red_green": {
-      "name": "CachedFetchEdgeTests#fresh_undecodable_cache_falls_through_to_fetch",
+      "name": "CachedFetchTests.fresh_undecodable_cache_falls_through_to_fetch",
       "assert_before": "Seed a fresh cache with bytes that make decode throw and a fetch that returns valid bytes: run() throws",
       "assert_after": "run() returns the fetched snapshot with isStale false and overwrites the cache"
     },
@@ -1045,10 +1045,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/CachedFetch.swift",
     "id": "ARCH-ATL-006",
-    "blocks_pr": false,
     "resolved_test": "CachedFetchEdgeTests#fresh_undecodable_cache_falls_through_to_fetch",
     "resolved_at": "2026-09-29 16:28:05 UTC",
     "resolved_note": "batch B11-app-lows",
+    "progress": [
+      "2026-09-29: resolvido · teste CachedFetchEdgeTests#fresh_undecodable_cache_falls_through_to_fetch · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:28:05 UTC",
@@ -1073,9 +1076,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste CachedFetchEdgeTests#fresh_undecodable_cache_falls_through_to_fetch · revisão approved (3/3) · batch B11-app-lows"
-    ],
     "in_progress": false
   },
   {
@@ -1092,7 +1092,7 @@
     "fix": "Add authorizeOffPool() (continuation + DispatchQueue.global) next to readOffPool() and call it from `Task { @MainActor }`. Wrap OpenAIResetService the same way. Think about releasing the gate around the interactive prompt.",
     "confidence": "medium",
     "test_red_green": {
-      "name": "OAuthKeychainConcurrencyTests#authorize_runs_off_cooperative_pool,SingleFlightTests#offpool_leaves_cooperative_pool,SingleFlightTests#offpool_rethrows",
+      "name": "authorizeDoesNotBlockConcurrentRead",
       "assert_before": "stub authorizer sleeping 2s; concurrent readOffPool() >= 2s",
       "assert_after": "authorize runs on a GCD thread; read not serialized behind the prompt"
     },
@@ -1104,10 +1104,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
     "id": "BEST-ATE-001",
-    "blocks_pr": false,
     "resolved_test": "OAuthKeychainConcurrencyTests#authorize_runs_off_cooperative_pool,SingleFlightTests#offpool_leaves_cooperative_pool,SingleFlightTests#offpool_rethrows",
     "resolved_at": "2026-09-29 16:10:11 UTC",
     "resolved_note": "batch B10-oauth-keychain",
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#authorize_runs_off_cooperative_pool,SingleFlightTests#offpool_leaves_cooperative_pool,SingleFlightTests#offpool_rethrows · revisão approved (3/3) · batch B10-oauth-keychain"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:10:11 UTC",
@@ -1132,9 +1135,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#authorize_runs_off_cooperative_pool,SingleFlightTests#offpool_leaves_cooperative_pool,SingleFlightTests#offpool_rethrows · revisão approved (3/3) · batch B10-oauth-keychain"
-    ],
     "in_progress": false
   },
   {
@@ -1151,7 +1151,7 @@
     "fix": "Add `Int.checked(_ d: Double) -> Int?` / saturating variant in AiTaskbarCore/Util (finite + range guard or Int(exactly: d.rounded(.towardZero))). Replace every Int(/Int64( over a decoded Double with it. Add a validate.sh grep ratchet for wire types.",
     "confidence": "high",
     "test_red_green": {
-      "name": "NumericConversionTrapTests#jwt_huge_int_claim_is_nil,NumericConversionTrapTests#jwt_huge_int64_claim_is_nil,NumericConversionTrapTests#anthropic_credentials_huge_expiry_saturates,NumericConversionTrapTests#anthropic_rotated_huge_expiry_saturates,SafeNumericTests#*",
+      "name": "jwtHugeExpDoesNotTrap",
       "assert_before": "payload {\"exp\":1e300}; claim as Int crashes the process",
       "assert_after": "returns nil/saturated; test passes"
     },
@@ -1163,10 +1163,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Util/JWT.swift",
     "id": "BEST-ATE-003",
-    "blocks_pr": false,
     "resolved_test": "NumericConversionTrapTests#jwt_huge_int_claim_is_nil,NumericConversionTrapTests#jwt_huge_int64_claim_is_nil,NumericConversionTrapTests#anthropic_credentials_huge_expiry_saturates,NumericConversionTrapTests#anthropic_rotated_huge_expiry_saturates,SafeNumericTests#*",
     "resolved_at": "2026-09-29 13:18:17 UTC",
     "resolved_note": "batch B3-numeric",
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#jwt_huge_int_claim_is_nil,NumericConversionTrapTests#jwt_huge_int64_claim_is_nil,NumericConversionTrapTests#anthropic_credentials_huge_expiry_saturates,NumericConversionTrapTests#anthropic_rotated_huge_expiry_saturates,SafeNumericTests#* · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:18:17 UTC",
@@ -1191,9 +1194,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste NumericConversionTrapTests#jwt_huge_int_claim_is_nil,NumericConversionTrapTests#jwt_huge_int64_claim_is_nil,NumericConversionTrapTests#anthropic_credentials_huge_expiry_saturates,NumericConversionTrapTests#anthropic_rotated_huge_expiry_saturates,SafeNumericTests#* · revisão approved (3/3) · batch B3-numeric"
-    ],
     "in_progress": false
   },
   {
@@ -1210,7 +1210,7 @@
     "fix": "Branch on the payload source (tag it in fetch) or a discriminator key via JSONValue. On the agy branch, rethrow AppError.schema(\"agy usage decode: \\(error)\").",
     "confidence": "high",
     "test_red_green": {
-      "name": "GeminiXAILocaleNeutralTests#agy_schema_drift_reports_agy_decode_error,GeminiXAILocaleNeutralTests#non_json_payload_is_schema_error,GeminiXAILocaleNeutralTests#json_array_is_not_agy",
+      "name": "agyDriftSurfacesAgyError",
       "assert_before": "agy fixture with renamed groups -> message contains 'base_url may be wrong'",
       "assert_after": "message contains 'agy usage decode'"
     },
@@ -1221,10 +1221,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/GeminiProvider.swift",
     "id": "BEST-ATE-004",
-    "blocks_pr": false,
     "resolved_test": "GeminiXAILocaleNeutralTests#agy_schema_drift_reports_agy_decode_error,GeminiXAILocaleNeutralTests#non_json_payload_is_schema_error,GeminiXAILocaleNeutralTests#json_array_is_not_agy",
     "resolved_at": "2026-09-29 13:40:41 UTC",
     "resolved_note": "batch B4-i18n",
+    "progress": [
+      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#agy_schema_drift_reports_agy_decode_error,GeminiXAILocaleNeutralTests#non_json_payload_is_schema_error,GeminiXAILocaleNeutralTests#json_array_is_not_agy · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:40:41 UTC",
@@ -1249,9 +1252,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#agy_schema_drift_reports_agy_decode_error,GeminiXAILocaleNeutralTests#non_json_payload_is_schema_error,GeminiXAILocaleNeutralTests#json_array_is_not_agy · revisão approved (3/3) · batch B4-i18n"
-    ],
     "in_progress": false
   },
   {
@@ -1268,7 +1268,7 @@
     "fix": "do/catch with AppLog.lifecycle.error, plus a historyUnavailable flag. Inject the factory so tests can make it throw.",
     "confidence": "medium",
     "test_red_green": {
-      "name": "VendorViewModelHistoryTests#throwing_factory_sets_history_unavailable,VendorViewModelHistoryTests#working_factory_not_flagged",
+      "name": "historyStoreFailureIsReported",
       "assert_before": "throwing factory -> indistinguishable from empty history",
       "assert_after": "flag/log set"
     },
@@ -1279,10 +1279,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
     "id": "BEST-ATE-006",
-    "blocks_pr": false,
     "resolved_test": "VendorViewModelHistoryTests#throwing_factory_sets_history_unavailable,VendorViewModelHistoryTests#working_factory_not_flagged",
     "resolved_at": "2026-09-29 14:06:15 UTC",
     "resolved_note": "batch B5-history",
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#throwing_factory_sets_history_unavailable,VendorViewModelHistoryTests#working_factory_not_flagged · revisão approved (3/3) · batch B5-history"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:06:15 UTC",
@@ -1307,9 +1310,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#throwing_factory_sets_history_unavailable,VendorViewModelHistoryTests#working_factory_not_flagged · revisão approved (3/3) · batch B5-history"
-    ],
     "in_progress": false
   },
   {
@@ -1328,15 +1328,18 @@
     "domain": "backpressure",
     "status": "resolved",
     "test_red_green": {
-      "name": "TeamSignatureDMGVerifierDetachTests#no_mount_point_detaches_device,#timed_out_attach_detaches_leftover_mount,#failed_attach_without_mount_detaches_nothing,#mounted_image_detached_by_mount_point",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BP-MAE-001",
-    "blocks_pr": false,
     "resolved_test": "TeamSignatureDMGVerifierDetachTests#no_mount_point_detaches_device,#timed_out_attach_detaches_leftover_mount,#failed_attach_without_mount_detaches_nothing,#mounted_image_detached_by_mount_point",
     "resolved_at": "2026-09-29 15:29:49 UTC",
     "resolved_note": "batch B8-updater",
+    "progress": [
+      "2026-09-29: resolvido · teste TeamSignatureDMGVerifierDetachTests#no_mount_point_detaches_device,#timed_out_attach_detaches_leftover_mount,#failed_attach_without_mount_detaches_nothing,#mounted_image_detached_by_mount_point · revisão approved (3/3) · batch B8-updater"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:29:49 UTC",
@@ -1361,9 +1364,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste TeamSignatureDMGVerifierDetachTests#no_mount_point_detaches_device,#timed_out_attach_detaches_leftover_mount,#failed_attach_without_mount_detaches_nothing,#mounted_image_detached_by_mount_point · revisão approved (3/3) · batch B8-updater"
-    ],
     "in_progress": false
   },
   {
@@ -1379,7 +1379,7 @@
     "impact": "A compromised, misconfigured, or MITM-proxied vendor endpoint (or a misbehaving CDN edge) returning a multi-GB body causes URLSession to buffer the entire response into memory before send() returns; timeoutIntervalForResource=30s bounds duration but not size. This runs inside the process-wide refreshAll() fan-out for every vendor card, so one bad response can spike RSS enough to get the LSUIElement menu-bar app killed by jetsam, taking every vendor usage display down with it.",
     "fix": "Route AnthropicProvider/OpenAIProvider/ZAIProvider/KimiProvider/DeepSeekProvider/GeminiProvider/OpenRouterProvider/XAIProvider/OAuthRefresher through sendBounded (or add a fetchPayload(maximumResponseBytes:) overload) with a small cap (2-4 MiB), matching StatuspageSource/RSSStatusSource.",
     "test_red_green": {
-      "name": "HTTPClientTests#send_rejects_oversized_body,HTTPClientTests#sendDecoding_rejects_oversized_body,HTTPClientTests#default_cap_is_generous,HTTPClientTests#send_accepts_fixture,HTTPClientTests#send_follows_cross_origin_redirect",
+      "name": "vendorFetchRejectsOversizedResponse",
       "assert_before": "StubURLProtocol streams a 500 MB body for a vendor usage endpoint; AnthropicProvider.fetch()/http.fetchPayload(req) completes successfully with the whole body materialized in Data, no cap.",
       "assert_after": "The same stub response causes fetchPayload/sendDecoding to throw AppError.transport once N bytes have been read, and peak memory growth stays bounded near N regardless of body size."
     },
@@ -1390,10 +1390,13 @@
     "domain": "backpressure",
     "status": "resolved",
     "id": "BP-REP-001",
-    "blocks_pr": false,
     "resolved_test": "HTTPClientTests#send_rejects_oversized_body,HTTPClientTests#sendDecoding_rejects_oversized_body,HTTPClientTests#default_cap_is_generous,HTTPClientTests#send_accepts_fixture,HTTPClientTests#send_follows_cross_origin_redirect",
     "resolved_at": "2026-09-29 15:46:59 UTC",
     "resolved_note": "batch B9-bounded-io",
+    "progress": [
+      "2026-09-29: resolvido · teste HTTPClientTests#send_rejects_oversized_body,HTTPClientTests#sendDecoding_rejects_oversized_body,HTTPClientTests#default_cap_is_generous,HTTPClientTests#send_accepts_fixture,HTTPClientTests#send_follows_cross_origin_redirect · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:46:59 UTC",
@@ -1418,9 +1421,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste HTTPClientTests#send_rejects_oversized_body,HTTPClientTests#sendDecoding_rejects_oversized_body,HTTPClientTests#default_cap_is_generous,HTTPClientTests#send_accepts_fixture,HTTPClientTests#send_follows_cross_origin_redirect · revisão approved (3/3) · batch B9-bounded-io"
-    ],
     "in_progress": false
   },
   {
@@ -1436,7 +1436,7 @@
     "impact": "Runs on every scheduled Gemini/Antigravity refresh (300 s cadence). A verbose agy stderr dump exceeding the pipe buffer, combined with a slow stdout writer, stalls a DispatchQueue.global thread until SIGTERM succeeds (only if agy does not trap it) or never resolves, leaving that provider card stuck loading. A malicious agy build could emit unbounded stdout with no memory ceiling before the timer fires.",
     "fix": "Drain stdout and stderr concurrently on separate queues (same pattern as SecurityToolCredentialReader), cap each stream captured size (e.g. 4 MiB), and escalate the timeout handler to SIGKILL after a short grace period.",
     "test_red_green": {
-      "name": "AntigravityExecutorProcessTests#large_stderr_completes_promptly,AntigravityExecutorProcessTests#oversized_stdout_rejected",
+      "name": "antigravityExecutorSurvivesOversizedStderr",
       "assert_before": "A stub agy script writing 10 MB to stderr before any stdout output causes fetchUsageJSON() to hang past the 35 s deadline.",
       "assert_after": "The same stub completes within a bounded time and returns captured output or a timeout error, with the child guaranteed killed via SIGKILL."
     },
@@ -1447,10 +1447,13 @@
     "domain": "backpressure",
     "status": "resolved",
     "id": "BP-REP-002",
-    "blocks_pr": false,
     "resolved_test": "AntigravityExecutorProcessTests#large_stderr_completes_promptly,AntigravityExecutorProcessTests#oversized_stdout_rejected",
     "resolved_at": "2026-09-29 15:47:00 UTC",
     "resolved_note": "batch B9-bounded-io",
+    "progress": [
+      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#large_stderr_completes_promptly,AntigravityExecutorProcessTests#oversized_stdout_rejected · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:46:59 UTC",
@@ -1475,9 +1478,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#large_stderr_completes_promptly,AntigravityExecutorProcessTests#oversized_stdout_rejected · revisão approved (3/3) · batch B9-bounded-io"
-    ],
     "in_progress": false
   },
   {
@@ -1493,7 +1493,7 @@
     "impact": "If api.github.com or a githubusercontent asset host is compromised, DNS-hijacked, or proxied maliciously, the JSON/text body has no upper bound before being fully buffered. Runs on a 24 h timer, low-frequency, but still the exact GitHub-releases-API-in-UpdateChecker antipattern with no defense despite sendBounded existing in the same client.",
     "fix": "Use http.sendBounded(req, maximumResponseBytes: 256*1024) for both fetchLatest and fetchChecksum.",
     "test_red_green": {
-      "name": "UpdateCheckerFetchTests#oversized_release_json_fails,#oversized_checksums_dropped,#checksums_redirect_to_cdn_followed,#checksums_redirect_off_github_refused,HTTPClientTests#bounded_send_follows_allowed_redirect,#bounded_send_refuses_rejected_redirect",
+      "name": "updateCheckerRejectsOversizedReleaseResponse",
       "assert_before": "StubURLProtocol returns a 200 MB body for releases/latest; fetchLatest() fully buffers it before decode fails.",
       "assert_after": "fetchLatest()/fetchChecksum() throw a bounded-size transport error once the response exceeds a small cap, without buffering the full body."
     },
@@ -1504,10 +1504,13 @@
     "domain": "backpressure",
     "status": "resolved",
     "id": "BP-REP-003",
-    "blocks_pr": false,
     "resolved_test": "UpdateCheckerFetchTests#oversized_release_json_fails,#oversized_checksums_dropped,#checksums_redirect_to_cdn_followed,#checksums_redirect_off_github_refused,HTTPClientTests#bounded_send_follows_allowed_redirect,#bounded_send_refuses_rejected_redirect",
     "resolved_at": "2026-09-29 15:29:48 UTC",
     "resolved_note": "batch B8-updater",
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerFetchTests#oversized_release_json_fails,#oversized_checksums_dropped,#checksums_redirect_to_cdn_followed,#checksums_redirect_off_github_refused,HTTPClientTests#bounded_send_follows_allowed_redirect,#bounded_send_refuses_rejected_redirect · revisão approved (3/3) · batch B8-updater"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:29:48 UTC",
@@ -1532,9 +1535,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste UpdateCheckerFetchTests#oversized_release_json_fails,#oversized_checksums_dropped,#checksums_redirect_to_cdn_followed,#checksums_redirect_off_github_refused,HTTPClientTests#bounded_send_follows_allowed_redirect,#bounded_send_refuses_rejected_redirect · revisão approved (3/3) · batch B8-updater"
-    ],
     "in_progress": false
   },
   {
@@ -1550,7 +1550,7 @@
     "fix": "Count distinct transcript or rollout files in the window inside the scanners and expose that count, or drop the label.",
     "failure_scenario": "12 Claude sessions today on claude-opus-5-5 show as 1 session.",
     "test_red_green": {
-      "name": "AnalyticsAggregator#models_are_not_sessions,AnalyticsAggregator#models_are_counted_as_models",
+      "name": "sessionCountIsNotModelCount",
       "assert_before": "sessionCount == 1",
       "assert_after": "sessionCount == 12"
     },
@@ -1562,10 +1562,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift",
     "id": "BUG-ART-007",
-    "blocks_pr": false,
     "resolved_test": "AnalyticsAggregator#models_are_not_sessions,AnalyticsAggregator#models_are_counted_as_models",
     "resolved_at": "2026-09-29 12:37:49 UTC",
     "resolved_note": "batch B1-analytics",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsAggregator#models_are_not_sessions,AnalyticsAggregator#models_are_counted_as_models · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:37:49 UTC",
@@ -1590,9 +1593,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnalyticsAggregator#models_are_not_sessions,AnalyticsAggregator#models_are_counted_as_models · revisão approved (3/3) · batch B1-analytics"
-    ],
     "in_progress": false
   },
   {
@@ -1620,7 +1620,6 @@
     "status": "accepted",
     "path": "Sources/AiTaskbarCore/Models/UsageSnapshot.swift",
     "id": "BUG-ART-008",
-    "blocks_pr": false,
     "accept": {
       "type": "intencional",
       "what": "Anthropic Usage credits keep driving maxUtilization and notifications",
@@ -1632,6 +1631,7 @@
     "progress": [
       "2026-09-29: aceito (intencional) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
     ],
+    "blocks_pr": false,
     "in_progress": false
   },
   {
@@ -1647,7 +1647,7 @@
     "fix": "Treat a missing fraction as unknown (skip the window or flag it), never as fully available. Add a fixture with no remaining_fraction.",
     "failure_scenario": "The bucket {id: gemini-5h, window: 5h, reset_time: ...} has no fraction, and the UI shows Gemini (5h) 0%.",
     "test_red_green": {
-      "name": "GeminiXAILocaleNeutralTests#antigravity_missing_remaining_fraction_is_unknown,WireTypesEdgeTests#antigravity_nil_remaining_fraction",
+      "name": "antigravityMissingFractionIsNotZeroUsed",
       "assert_before": "utilizationPercent == 0",
       "assert_after": "window nil or unknown"
     },
@@ -1659,10 +1659,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/GeminiWireTypes.swift",
     "id": "BUG-ART-009",
-    "blocks_pr": false,
     "resolved_test": "GeminiXAILocaleNeutralTests#antigravity_missing_remaining_fraction_is_unknown,WireTypesEdgeTests#antigravity_nil_remaining_fraction",
     "resolved_at": "2026-09-29 13:40:42 UTC",
     "resolved_note": "batch B4-i18n",
+    "progress": [
+      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#antigravity_missing_remaining_fraction_is_unknown,WireTypesEdgeTests#antigravity_nil_remaining_fraction · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:40:42 UTC",
@@ -1687,9 +1690,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#antigravity_missing_remaining_fraction_is_unknown,WireTypesEdgeTests#antigravity_nil_remaining_fraction · revisão approved (3/3) · batch B4-i18n"
-    ],
     "in_progress": false
   },
   {
@@ -1705,7 +1705,7 @@
     "fix": "Record only real network fetches (not stale, cacheAge <= 1), or stamp the sample with outcome.fetchedAt and dedupe on it.",
     "failure_scenario": "At 95%, the network drops for 6 h and the window resets. History logs 95% every 5 min.",
     "test_red_green": {
-      "name": "VendorViewModelHistoryTests#stale_outcome_not_recorded,VendorViewModelHistoryTests#cache_hit_not_recorded,VendorViewModelHistoryTests#fresh_outcome_recorded",
+      "name": "staleOutcomeNotRecordedInHistory",
       "assert_before": "history grows on stale outcome",
       "assert_after": "history unchanged"
     },
@@ -1716,10 +1716,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
     "id": "BUG-ART-010",
-    "blocks_pr": false,
     "resolved_test": "VendorViewModelHistoryTests#stale_outcome_not_recorded,VendorViewModelHistoryTests#cache_hit_not_recorded,VendorViewModelHistoryTests#fresh_outcome_recorded",
     "resolved_at": "2026-09-29 14:06:16 UTC",
     "resolved_note": "batch B5-history",
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#stale_outcome_not_recorded,VendorViewModelHistoryTests#cache_hit_not_recorded,VendorViewModelHistoryTests#fresh_outcome_recorded · revisão approved (3/3) · batch B5-history"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:06:16 UTC",
@@ -1744,9 +1747,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#stale_outcome_not_recorded,VendorViewModelHistoryTests#cache_hit_not_recorded,VendorViewModelHistoryTests#fresh_outcome_recorded · revisão approved (3/3) · batch B5-history"
-    ],
     "in_progress": false
   },
   {
@@ -1762,7 +1762,7 @@
     "fix": "Return nil when onDemandUsed is missing.",
     "failure_scenario": "Balance 50 USD and weekly 40% produce 20 USD spent where the real figure is 0.",
     "test_red_green": {
-      "name": "XAIProviderTests#golden_grok_billing,XAIProviderTests#grok_prepaid_used_nil_without_on_demand,XAIProviderTests#grok_prepaid_used_is_reported_on_demand",
+      "name": "grokPrepaidUsedNotDerivedFromWeeklyPercent",
       "assert_before": "prepaidUsedUSD == 20",
       "assert_after": "prepaidUsedUSD == nil"
     },
@@ -1773,10 +1773,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/XAIWireTypes.swift",
     "id": "BUG-ART-011",
-    "blocks_pr": false,
     "resolved_test": "XAIProviderTests#golden_grok_billing,XAIProviderTests#grok_prepaid_used_nil_without_on_demand,XAIProviderTests#grok_prepaid_used_is_reported_on_demand",
     "resolved_at": "2026-09-29 12:37:49 UTC",
     "resolved_note": "batch B1-analytics",
+    "progress": [
+      "2026-09-29: resolvido · teste XAIProviderTests#golden_grok_billing,XAIProviderTests#grok_prepaid_used_nil_without_on_demand,XAIProviderTests#grok_prepaid_used_is_reported_on_demand · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:37:49 UTC",
@@ -1801,9 +1804,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste XAIProviderTests#golden_grok_billing,XAIProviderTests#grok_prepaid_used_nil_without_on_demand,XAIProviderTests#grok_prepaid_used_is_reported_on_demand · revisão approved (3/3) · batch B1-analytics"
-    ],
     "in_progress": false
   },
   {
@@ -1819,7 +1819,7 @@
     "fix": "Keep the Optional through: on nil, keep the previous value and log.",
     "failure_scenario": "opencode holds a write lock during a refresh, so the scan returns nil and the Models section loses its opencode rows.",
     "test_red_green": {
-      "name": "CostEstimatorLoadingTests#failed_opencode_scan_keeps_previous_rows",
+      "name": "opencodeNilScanKeepsPreviousRows",
       "assert_before": "opencode empty",
       "assert_after": "opencode unchanged"
     },
@@ -1830,10 +1830,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift",
     "id": "BUG-ART-013",
-    "blocks_pr": false,
     "resolved_test": "CostEstimatorLoadingTests#failed_opencode_scan_keeps_previous_rows",
     "resolved_at": "2026-09-29 12:56:51 UTC",
     "resolved_note": "batch B2-scanners",
+    "progress": [
+      "2026-09-29: resolvido · teste CostEstimatorLoadingTests#failed_opencode_scan_keeps_previous_rows · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:56:51 UTC",
@@ -1858,9 +1861,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste CostEstimatorLoadingTests#failed_opencode_scan_keeps_previous_rows · revisão approved (3/3) · batch B2-scanners"
-    ],
     "in_progress": false
   },
   {
@@ -1876,7 +1876,7 @@
     "fix": "When the flag is set, query /releases?per_page=10, drop drafts, and pick the max by Semver.",
     "failure_scenario": "v0.24.0-beta1 is published with include_prereleases = true, and the checker still says up to date.",
     "test_red_green": {
-      "name": "UpdateCheckerFetchTests#prerelease_opt_in_offers_newest_beta,#prerelease_opt_in_path,#prerelease_list_skips_drafts,#stable_beats_own_prerelease_in_list,#empty_release_list_fails,#stable_only_uses_latest",
+      "name": "prereleaseOptInQueriesReleasesList",
       "assert_before": "path == /releases/latest",
       "assert_after": "path == /releases, beta offered"
     },
@@ -1887,10 +1887,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
     "id": "BUG-ART-014",
-    "blocks_pr": false,
     "resolved_test": "UpdateCheckerFetchTests#prerelease_opt_in_offers_newest_beta,#prerelease_opt_in_path,#prerelease_list_skips_drafts,#stable_beats_own_prerelease_in_list,#empty_release_list_fails,#stable_only_uses_latest",
     "resolved_at": "2026-09-29 15:29:48 UTC",
     "resolved_note": "batch B8-updater",
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerFetchTests#prerelease_opt_in_offers_newest_beta,#prerelease_opt_in_path,#prerelease_list_skips_drafts,#stable_beats_own_prerelease_in_list,#empty_release_list_fails,#stable_only_uses_latest · revisão approved (3/3) · batch B8-updater"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:29:48 UTC",
@@ -1915,9 +1918,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste UpdateCheckerFetchTests#prerelease_opt_in_offers_newest_beta,#prerelease_opt_in_path,#prerelease_list_skips_drafts,#stable_beats_own_prerelease_in_list,#empty_release_list_fails,#stable_only_uses_latest · revisão approved (3/3) · batch B8-updater"
-    ],
     "in_progress": false
   },
   {
@@ -1935,15 +1935,18 @@
     "domain": "classic_bugs",
     "status": "resolved",
     "test_red_green": {
-      "name": "NumericConversionTrapTests#codex_reconciliation_huge_exp",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-CET-001",
-    "blocks_pr": false,
     "resolved_test": "NumericConversionTrapTests#codex_reconciliation_huge_exp",
     "resolved_at": "2026-09-29 13:18:17 UTC",
     "resolved_note": "batch B3-numeric",
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#codex_reconciliation_huge_exp · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:18:17 UTC",
@@ -1968,9 +1971,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste NumericConversionTrapTests#codex_reconciliation_huge_exp · revisão approved (3/3) · batch B3-numeric"
-    ],
     "in_progress": false
   },
   {
@@ -1989,15 +1989,18 @@
     "domain": "classic_bugs",
     "status": "resolved",
     "test_red_green": {
-      "name": "AnalyticsOpencodeMerge#no_zero_row_last7_existing_vendor,AnalyticsOpencodeMerge#no_zero_row_today_existing_vendor,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_last7,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_today",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-001",
-    "blocks_pr": false,
     "resolved_test": "AnalyticsOpencodeMerge#no_zero_row_last7_existing_vendor,AnalyticsOpencodeMerge#no_zero_row_today_existing_vendor,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_last7,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_today",
     "resolved_at": "2026-09-29 12:37:49 UTC",
     "resolved_note": "batch B1-analytics",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsOpencodeMerge#no_zero_row_last7_existing_vendor,AnalyticsOpencodeMerge#no_zero_row_today_existing_vendor,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_last7,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_today · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:37:49 UTC",
@@ -2022,10 +2025,145 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnalyticsOpencodeMerge#no_zero_row_last7_existing_vendor,AnalyticsOpencodeMerge#no_zero_row_today_existing_vendor,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_last7,AnalyticsOpencodeMerge#no_zero_rows_opencode_only_vendor_today · revisão approved (3/3) · batch B1-analytics"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift",
+    "line": 276,
+    "title": "Month: hasNoData treats a vendor as idle when cost is unavailable (VendorAnalyticsCardView hasNoData)",
+    "evidence": "Month: hasNoData treats a vendor as idle when cost is unavailable (VendorAnalyticsCardView hasNoData) (raised by the 3-lens review panel during remediation batch B1)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B1",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-002",
+    "blocks_pr": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarProviders/OpenRouterWireTypes.swift",
+    "line": 65,
+    "title": "OpenRouter has no Analytics cost in any timeframe; activity items not decoded by date",
+    "evidence": "OpenRouter has no Analytics cost in any timeframe; activity items not decoded by date (raised by the 3-lens review panel during remediation batch B1)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B1",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-003",
+    "blocks_pr": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift",
+    "line": 264,
+    "title": "Codex total_token_usage decoded strictly; a non-integer field would turn the whole token_count line into a decode failure",
+    "evidence": "Codex total_token_usage decoded strictly; a non-integer field would turn the whole token_count line into a decode failure (raised by the 3-lens review panel during remediation batch B2)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B2",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-004",
+    "blocks_pr": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift",
+    "line": 81,
+    "title": "AnalyticsAggregator Week uses rolling 7x86400 while cost uses CostWindow calendar days",
+    "evidence": "AnalyticsAggregator Week uses rolling 7x86400 while cost uses CostWindow calendar days (raised by the 3-lens review panel during remediation batch B2)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B2",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-005",
+    "blocks_pr": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/Views/StatusPanelView.swift",
+    "line": 342,
+    "title": "Remaining bare Double->Int on external data: StatusPanelView.swift:342,401 (feed dates), PopoverContentView.swift:484-485",
+    "evidence": "Remaining bare Double->Int on external data: StatusPanelView.swift:342,401 (feed dates), PopoverContentView.swift:484-485 (raised by the 3-lens review panel during remediation batch B3)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B3",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-006",
+    "blocks_pr": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/NotificationService.swift",
+    "line": 155,
+    "title": "Threshold prune drops a key when a window is missing from one snapshot; the same notification re-fires when it returns",
+    "evidence": "Threshold prune drops a key when a window is missing from one snapshot; the same notification re-fires when it returns (raised by the 3-lens review panel during remediation batch B11)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B11",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-007",
+    "blocks_pr": false
   },
   {
     "title": "AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic",
@@ -2046,15 +2184,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
     "test_red_green": {
-      "name": "AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#*",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CPX-DED-003",
-    "blocks_pr": false,
     "resolved_test": "AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#*",
     "resolved_at": "2026-09-29 12:37:49 UTC",
     "resolved_note": "batch B1-analytics",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#* · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:37:49 UTC",
@@ -2079,9 +2220,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#* · revisão approved (3/3) · batch B1-analytics"
-    ],
     "in_progress": false
   },
   {
@@ -2102,15 +2240,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
     "test_red_green": {
-      "name": "n/a",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CPX-DED-004",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:29 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:29 UTC",
@@ -2135,9 +2276,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -2158,15 +2296,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift",
     "test_red_green": {
-      "name": "SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CPX-DED-005",
-    "blocks_pr": false,
     "resolved_test": "SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty",
     "resolved_at": "2026-09-29 16:43:29 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:29 UTC",
@@ -2191,9 +2332,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -2215,15 +2353,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/History/UsageHistoryStore.swift",
     "test_red_green": {
-      "name": "UsageHistoryStoreTests#append_unwritable_dir_reports_failure,UsageHistoryStoreTests#append_writable_dir_reports_success",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-AUR-003",
-    "blocks_pr": false,
     "resolved_test": "UsageHistoryStoreTests#append_unwritable_dir_reports_failure,UsageHistoryStoreTests#append_writable_dir_reports_success",
     "resolved_at": "2026-09-29 14:06:16 UTC",
     "resolved_note": "batch B5-history",
+    "progress": [
+      "2026-09-29: resolvido · teste UsageHistoryStoreTests#append_unwritable_dir_reports_failure,UsageHistoryStoreTests#append_writable_dir_reports_success · revisão approved (3/3) · batch B5-history"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:06:16 UTC",
@@ -2248,9 +2389,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste UsageHistoryStoreTests#append_unwritable_dir_reports_failure,UsageHistoryStoreTests#append_writable_dir_reports_success · revisão approved (3/3) · batch B5-history"
-    ],
     "in_progress": false
   },
   {
@@ -2271,15 +2409,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Networking/PinStore.swift",
     "test_red_green": {
-      "name": "PinStoreTests#set_unwritable_dir_reports_failure,PinStoreTests#clear_unremovable_pin_reports_failure,PinStoreTests#clear_missing_pin_is_success,PinStoreTests#set_writable_dir_reports_success",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-AUR-004",
-    "blocks_pr": false,
     "resolved_test": "PinStoreTests#set_unwritable_dir_reports_failure,PinStoreTests#clear_unremovable_pin_reports_failure,PinStoreTests#clear_missing_pin_is_success,PinStoreTests#set_writable_dir_reports_success",
     "resolved_at": "2026-09-29 14:06:16 UTC",
     "resolved_note": "batch B5-history",
+    "progress": [
+      "2026-09-29: resolvido · teste PinStoreTests#set_unwritable_dir_reports_failure,PinStoreTests#clear_unremovable_pin_reports_failure,PinStoreTests#clear_missing_pin_is_success,PinStoreTests#set_writable_dir_reports_success · revisão approved (3/3) · batch B5-history"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:06:16 UTC",
@@ -2304,9 +2445,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste PinStoreTests#set_unwritable_dir_reports_failure,PinStoreTests#clear_unremovable_pin_reports_failure,PinStoreTests#clear_missing_pin_is_success,PinStoreTests#set_writable_dir_reports_success · revisão approved (3/3) · batch B5-history"
-    ],
     "in_progress": false
   },
   {
@@ -2325,15 +2463,18 @@
     "domain": "quality",
     "status": "resolved",
     "test_red_green": {
-      "name": "OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-001",
-    "blocks_pr": false,
     "resolved_test": "OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars",
     "resolved_at": "2026-09-29 12:37:49 UTC",
     "resolved_note": "batch B1-analytics",
+    "progress": [
+      "2026-09-29: resolvido · teste OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars · revisão approved (3/3) · batch B1-analytics"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:37:49 UTC",
@@ -2358,10 +2499,191 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars · revisão approved (3/3) · batch B1-analytics"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "CLAUDE.md",
+    "line": 1,
+    "title": "CLAUDE.md cost-scanner section lacks the Codex unchanged-total rule and the shared CostWindow definition",
+    "evidence": "CLAUDE.md cost-scanner section lacks the Codex unchanged-total rule and the shared CostWindow definition (raised by the 3-lens review panel during remediation batch B2)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B2",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-002",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift",
+    "line": 62,
+    "title": "OpencodeScanner returns the same nil for four causes; doc says nil means not installed; CostEstimator re-probes fileExists",
+    "evidence": "OpencodeScanner returns the same nil for four causes; doc says nil means not installed; CostEstimator re-probes fileExists (raised by the 3-lens review panel during remediation batch B2)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B2",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-003",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
+    "line": 294,
+    "title": "Stale-card tooltip shows lastError.body raw: guidance errors appear as English diagnostic with internal prefix, not localized",
+    "evidence": "Stale-card tooltip shows lastError.body raw: guidance errors appear as English diagnostic with internal prefix, not localized (raised by the 3-lens review panel during remediation batch B4)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B4",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-005",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
+    "line": 159,
+    "title": "AnalyticsStore.diskHistory still swallows UsageHistoryStore creation failure with try? (sibling of BEST-ATE-006); historyUnavailable has no",
+    "evidence": "AnalyticsStore.diskHistory still swallows UsageHistoryStore creation failure with try? (sibling of BEST-ATE-006); historyUnavailable has no UI reader (raised by the 3-lens review panel during remediation batch B5)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B5",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-006",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/AppEnvironment.swift",
+    "line": 23,
+    "title": "Symlinked config.toml now fails writes; at launch ensureAllVendorSections runs via try? in AppEnvironment.swift:23 so the refusal is silent;",
+    "evidence": "Symlinked config.toml now fails writes; at launch ensureAllVendorSections runs via try? in AppEnvironment.swift:23 so the refusal is silent; config.example.toml/CLAUDE.md Config schema do not mention it (raised by the 3-lens review panel during remediation batch B6)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B6",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-007",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "README.md",
+    "line": 300,
+    "title": "README says agy runs with a 15-second budget; code uses 35 s; README/CLAUDE.md do not mention the 8 MiB send cap and agy output caps",
+    "evidence": "README says agy runs with a 15-second budget; code uses 35 s; README/CLAUDE.md do not mention the 8 MiB send cap and agy output caps (raised by the 3-lens review panel during remediation batch B9)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B9",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-009",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarProviders/CachedFetch.swift",
+    "line": 29,
+    "title": "CachedFetch fresh-cache decode failure is not logged when the network then succeeds; fallback throws decode error instead of the network cau",
+    "evidence": "CachedFetch fresh-cache decode failure is not logged when the network then succeeds; fallback throws decode error instead of the network cause (raised by the 3-lens review panel during remediation batch B11)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B11",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-010",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "config.example.toml",
+    "line": 1,
+    "title": "config.example.toml does not document gemini.prefer_antigravity, xai.prefer_grok_cli, xai.grok_base_url (README and decoder do); Settings UI",
+    "evidence": "config.example.toml does not document gemini.prefer_antigravity, xai.prefer_grok_cli, xai.grok_base_url (README and decoder do); Settings UI has no control for them (raised by the 3-lens review panel during remediation batch B12)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B12",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-011",
+    "blocks_pr": false
   },
   {
     "title": "GitHub Actions checked out via floating major tag, not commit SHA",
@@ -2379,7 +2701,7 @@
     "bump": "none (pin form change only)",
     "confidence": "high",
     "test_red_green": {
-      "name": "TBD",
+      "name": "n/a",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
@@ -2388,10 +2710,41 @@
     "cetico_evidence": "actions/checkout@v7 at ci.yml:18, release.yml:47 and auto-tag.yml:46. release.yml:197 pins softprops by SHA. It runs under contents: write (auto-tag.yml:24-25, release.yml:27-28). First-party action, so the risk is low.",
     "verification": "cetico",
     "domain": "deps",
-    "status": "open",
+    "status": "resolved",
     "path": ".github/workflows/auto-tag.yml",
     "id": "DEP-PRI-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 17:07:14 UTC",
+    "resolved_note": "batch B13-gates-ci",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:07:14 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "in_progress": false
   },
   {
     "title": "ci.yml has no explicit permissions block (relies on repo/org default token scope)",
@@ -2409,7 +2762,7 @@
     "bump": "none",
     "confidence": "high",
     "test_red_green": {
-      "name": "TBD",
+      "name": "n/a",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
@@ -2418,10 +2771,41 @@
     "cetico_evidence": "ci.yml has no permissions key (grep finds none). auto-tag.yml:24 and release.yml:27 do declare one. The category 'abandoned' is mislabeled.",
     "verification": "cetico",
     "domain": "deps",
-    "status": "open",
+    "status": "resolved",
     "path": ".github/workflows/ci.yml",
     "id": "DEP-PRI-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 17:07:15 UTC",
+    "resolved_note": "batch B13-gates-ci",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:07:14 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "in_progress": false
   },
   {
     "title": "select-swift action has no upper bound: always builds with the newest Xcode on the runner image",
@@ -2449,10 +2833,22 @@
     "cetico_evidence": "action.yml:42 picks the newest Xcode and only enforces a floor (:64-71). Downgraded: ci and release share the action, so they no longer drift from each other (the documented failure mode), and shipped DMGs are built locally, not in CI (CLAUDE.md Releasing). A newer Xcode can only turn CI red visibly; it cannot silently change a shipped binary.",
     "verification": "cetico",
     "domain": "deps",
-    "status": "open",
+    "status": "accepted",
     "path": ".github/actions/select-swift/action.yml",
     "id": "DEP-PRI-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "accept": {
+      "type": "trade-off",
+      "what": "select-swift keeps a floor (>= 6.2) and no ceiling. It uses the newest Xcode on macos-15 and logs which one it chose.",
+      "consequence": "When GitHub updates the image, CI can go red with no change in the repo. ci.yml and release.yml share the action, so they cannot drift apart, and DMGs are built locally, so a shipped binary does not change.",
+      "reopen_if": "CI or release starts building or attaching shipped binaries, or a CI result disagrees with local make validate because of an image Xcode bump.",
+      "ratified_by": "user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    },
+    "accepted_at": "2026-09-29 17:07:15 UTC",
+    "progress": [
+      "2026-09-29: aceito (trade-off) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    ],
+    "in_progress": false
   },
   {
     "title": "Last 7 days cost window computed with different semantics in ClaudeSessionScanner/CodexSessionScanner (calendar, up to 8 days) vs OpencodeScanner (rolling 168h)",
@@ -2473,15 +2869,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
     "test_red_green": {
-      "name": "same as BUG-ART-006 (same root cause, one fix)",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-ECO-001",
-    "blocks_pr": false,
     "resolved_test": "same as BUG-ART-006 (same root cause, one fix)",
     "resolved_at": "2026-09-29 12:56:50 UTC",
     "resolved_note": "batch B2-scanners",
+    "progress": [
+      "2026-09-29: resolvido · teste same as BUG-ART-006 (same root cause, one fix) · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:56:50 UTC",
@@ -2506,9 +2905,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste same as BUG-ART-006 (same root cause, one fix) · revisão approved (3/3) · batch B2-scanners"
-    ],
     "in_progress": false
   },
   {
@@ -2530,15 +2926,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift",
     "test_red_green": {
-      "name": "OpencodeScannerTests#output_plus_reasoning_saturates",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-ECO-002",
-    "blocks_pr": false,
     "resolved_test": "OpencodeScannerTests#output_plus_reasoning_saturates",
     "resolved_at": "2026-09-29 12:56:51 UTC",
     "resolved_note": "batch B2-scanners",
+    "progress": [
+      "2026-09-29: resolvido · teste OpencodeScannerTests#output_plus_reasoning_saturates · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:56:51 UTC",
@@ -2563,9 +2962,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste OpencodeScannerTests#output_plus_reasoning_saturates · revisão approved (3/3) · batch B2-scanners"
-    ],
     "in_progress": false
   },
   {
@@ -2587,15 +2983,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AntigravityExecutor.swift",
     "test_red_green": {
-      "name": "AntigravityExecutorProcessTests#sigterm_ignored_escalates_to_sigkill,BoundedProcessTests#stderr_captured_with_cap",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-ECO-004",
-    "blocks_pr": false,
     "resolved_test": "AntigravityExecutorProcessTests#sigterm_ignored_escalates_to_sigkill,BoundedProcessTests#stderr_captured_with_cap",
     "resolved_at": "2026-09-29 15:47:00 UTC",
     "resolved_note": "batch B9-bounded-io",
+    "progress": [
+      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#sigterm_ignored_escalates_to_sigkill,BoundedProcessTests#stderr_captured_with_cap · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:47:00 UTC",
@@ -2620,9 +3019,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#sigterm_ignored_escalates_to_sigkill,BoundedProcessTests#stderr_captured_with_cap · revisão approved (3/3) · batch B9-bounded-io"
-    ],
     "in_progress": false
   },
   {
@@ -2644,15 +3040,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/ZAIWireTypes.swift",
     "test_red_green": {
-      "name": "NumericConversionTrapTests#zai_huge_unit_and_number_are_dropped,NumericConversionTrapTests#openai_huge_window_seconds_uses_default_label,NumericConversionTrapTests#gemini_huge_remaining_fraction_is_clamped",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-ECO-005",
-    "blocks_pr": false,
     "resolved_test": "NumericConversionTrapTests#zai_huge_unit_and_number_are_dropped,NumericConversionTrapTests#openai_huge_window_seconds_uses_default_label,NumericConversionTrapTests#gemini_huge_remaining_fraction_is_clamped",
     "resolved_at": "2026-09-29 13:18:17 UTC",
     "resolved_note": "batch B3-numeric",
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#zai_huge_unit_and_number_are_dropped,NumericConversionTrapTests#openai_huge_window_seconds_uses_default_label,NumericConversionTrapTests#gemini_huge_remaining_fraction_is_clamped · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:18:17 UTC",
@@ -2677,9 +3076,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste NumericConversionTrapTests#zai_huge_unit_and_number_are_dropped,NumericConversionTrapTests#openai_huge_window_seconds_uses_default_label,NumericConversionTrapTests#gemini_huge_remaining_fraction_is_clamped · revisão approved (3/3) · batch B3-numeric"
-    ],
     "in_progress": false
   },
   {
@@ -2698,15 +3094,18 @@
     "domain": "duplication",
     "status": "resolved",
     "test_red_green": {
-      "name": "CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-MAE-001",
-    "blocks_pr": false,
     "resolved_test": "CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails",
     "resolved_at": "2026-09-29 15:29:49 UTC",
     "resolved_note": "batch B8-updater",
+    "progress": [
+      "2026-09-29: resolvido · teste CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails · revisão approved (3/3) · batch B8-updater"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:29:49 UTC",
@@ -2731,9 +3130,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails · revisão approved (3/3) · batch B8-updater"
-    ],
     "in_progress": false
   },
   {
@@ -2748,7 +3144,7 @@
     "impact": "Starves DispatchQueue.global (also used by the SecurityToolCredentialReader drain) and leaks fds and child processes over long uptime. Even without the descendant case, a stderr-heavy agy turns every Gemini refresh into a 35 s timeout.",
     "fix": "Drain stdout and stderr concurrently (readabilityHandler or two async reads), each capped at a byte limit (e.g. 1 MiB). Wrap the continuation in withTaskCancellationHandler so cancellation terminates the child and resumes once. On timeout, close the parent read ends and SIGKILL after SIGTERM, ideally for the whole process group.",
     "test_red_green": {
-      "name": "AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child",
+      "name": "AntigravityExecutorTests.stderrFloodDoesNotDeadlock + cancelTerminatesChild",
       "assert_before": "A customPath script writing 200 KB to stderr first takes >= 35 s; one that backgrounds sleep 600 holding stdout never returns; after Task.cancel the child pid is still alive",
       "assert_after": "Both return in < 2 s with a bounded error; after cancel, kill(pid,0) == ESRCH within 1 s; fd count unchanged after 50 iterations"
     },
@@ -2760,10 +3156,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AntigravityExecutor.swift",
     "id": "LEAK-FAN-001",
-    "blocks_pr": false,
     "resolved_test": "AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child",
     "resolved_at": "2026-09-29 15:47:00 UTC",
     "resolved_note": "batch B9-bounded-io",
+    "progress": [
+      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:47:00 UTC",
@@ -2788,9 +3187,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child · revisão approved (3/3) · batch B9-bounded-io"
-    ],
     "in_progress": false
   },
   {
@@ -2805,7 +3201,7 @@
     "impact": "Bounded (7-day window), not a leak. But the next pass re-parses cold (the file comment measures 191 MB / 839 files, 2-6 s CPU) and briefly maps large Data again, so supersession churn means repeated cold scans and RSS spikes.",
     "fix": "Only prune when the walk finished: `if !Task.isCancelled { memo.retain(paths: seenPaths) }` in both scanners.",
     "test_red_green": {
-      "name": "ClaudeSessionScannerTests#cancelled_scan_keeps_memo,CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo",
+      "name": "ScanMemoTests.cancelledScanKeepsUnvisitedEntries",
       "assert_before": "memo seeded with N files; scan cancelled after the first file -> memo.count == 1",
       "assert_after": "memo.count == N; a completed scan still prunes aged-out paths"
     },
@@ -2816,10 +3212,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
     "id": "LEAK-FAN-002",
-    "blocks_pr": false,
     "resolved_test": "ClaudeSessionScannerTests#cancelled_scan_keeps_memo,CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo",
     "resolved_at": "2026-09-29 12:56:51 UTC",
     "resolved_note": "batch B2-scanners",
+    "progress": [
+      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#cancelled_scan_keeps_memo,CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:56:51 UTC",
@@ -2844,9 +3243,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#cancelled_scan_keeps_memo,CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo · revisão approved (3/3) · batch B2-scanners"
-    ],
     "in_progress": false
   },
   {
@@ -2861,7 +3257,7 @@
     "impact": "Not retained, but it causes periodic MB-scale allocation bursts and main-thread stalls that grow linearly with history size up to the 90-day retention cap.",
     "fix": "Cache samples per vendor and append incrementally (VendorViewModel already has the live tail), or load in Task.detached. Coalesce the two byVendor writes.",
     "test_red_green": {
-      "name": "AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once",
+      "name": "AnalyticsStoreTests.recomputeDoesNotReloadHistoryPerEmission",
       "assert_before": "counting historyProvider called 2 x vendors times per CostEstimator publish",
       "assert_after": "<= 1 per vendor per cycle"
     },
@@ -2872,10 +3268,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
     "id": "LEAK-FAN-003",
-    "blocks_pr": false,
     "resolved_test": "AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once",
     "resolved_at": "2026-09-29 14:06:15 UTC",
     "resolved_note": "batch B5-history",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once · revisão approved (3/3) · batch B5-history"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:06:15 UTC",
@@ -2900,9 +3299,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnalyticsStoreHistoryLoadTests#cost_refresh_loads_history_once_per_vendor,AnalyticsStoreHistoryLoadTests#burst_loads_each_vendor_once · revisão approved (3/3) · batch B5-history"
-    ],
     "in_progress": false
   },
   {
@@ -2917,7 +3313,7 @@
     "impact": "Each failed update attempt leaves a DMG-sized file in the temp dir. User-triggered, so growth is per click.",
     "fix": "`defer { try? FileManager.default.removeItem(at: tmp) }` after download (a no-op once moved), plus cleanup in the HTTPClient.download throw paths.",
     "test_red_green": {
-      "name": "UpdateCheckerDownloadTests#http_status_failure_removes_temp,#size_mismatch_removes_temp,#checksum_mismatch_removes_temp,#signature_rejection_removes_temp,HTTPClientTests#download_non_http_response_removes_temp",
+      "name": "UpdateCheckerTests.checksumMismatchRemovesTempFile",
       "assert_before": "fileExists(tmp) == true after .failed",
       "assert_after": "fileExists(tmp) == false"
     },
@@ -2928,10 +3324,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
     "id": "LEAK-FAN-004",
-    "blocks_pr": false,
     "resolved_test": "UpdateCheckerDownloadTests#http_status_failure_removes_temp,#size_mismatch_removes_temp,#checksum_mismatch_removes_temp,#signature_rejection_removes_temp,HTTPClientTests#download_non_http_response_removes_temp",
     "resolved_at": "2026-09-29 15:29:48 UTC",
     "resolved_note": "batch B8-updater",
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerDownloadTests#http_status_failure_removes_temp,#size_mismatch_removes_temp,#checksum_mismatch_removes_temp,#signature_rejection_removes_temp,HTTPClientTests#download_non_http_response_removes_temp · revisão approved (3/3) · batch B8-updater"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:29:48 UTC",
@@ -2956,9 +3355,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste UpdateCheckerDownloadTests#http_status_failure_removes_temp,#size_mismatch_removes_temp,#checksum_mismatch_removes_temp,#signature_rejection_removes_temp,HTTPClientTests#download_non_http_response_removes_temp · revisão approved (3/3) · batch B8-updater"
-    ],
     "in_progress": false
   },
   {
@@ -2973,7 +3369,7 @@
     "impact": "Grows by one process tree per abandoned retry, bounded by clicks. Duplicate listeners can also make later logins fail.",
     "fix": "Keep the Process on VendorViewModel; do not re-spawn while it isRunning (or terminate the old one first); terminate it when needsReauth flips false.",
     "test_red_green": {
-      "name": "ReloginProcessTrackerTests#second_spawn_terminates_first,#passes_command,#stop_terminates,#exited_child_not_terminated,#failed_spawn",
+      "name": "ReloginSpawnerTests.secondClickDoesNotStackProcesses",
       "assert_before": "two spawns of sleep 600 -> 2 live pids",
       "assert_after": "1 live pid; the old pid is ESRCH"
     },
@@ -2984,10 +3380,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
     "id": "LEAK-FAN-005",
-    "blocks_pr": false,
     "resolved_test": "ReloginProcessTrackerTests#second_spawn_terminates_first,#passes_command,#stop_terminates,#exited_child_not_terminated,#failed_spawn",
     "resolved_at": "2026-09-29 16:28:06 UTC",
     "resolved_note": "batch B11-app-lows",
+    "progress": [
+      "2026-09-29: resolvido · teste ReloginProcessTrackerTests#second_spawn_terminates_first,#passes_command,#stop_terminates,#exited_child_not_terminated,#failed_spawn · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:28:06 UTC",
@@ -3012,9 +3411,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste ReloginProcessTrackerTests#second_spawn_terminates_first,#passes_command,#stop_terminates,#exited_child_not_terminated,#failed_spawn · revisão approved (3/3) · batch B11-app-lows"
-    ],
     "in_progress": false
   },
   {
@@ -3029,7 +3425,7 @@
     "impact": "Transient, not retained: an oversized body from an allowlisted or compromised endpoint forces an arbitrarily large allocation per 300 s refresh and the same bytes are written to the disk cache.",
     "fix": "Route provider, OAuth and update JSON through sendBounded (2-4 MiB), or give send() a default cap.",
     "test_red_green": {
-      "name": "HTTPClientTests#sendDecoding_rejects_oversized_body",
+      "name": "HTTPClientTests.sendRejectsOversizedBody",
       "assert_before": "64 MiB stub body -> data.count == 64 MiB",
       "assert_after": "throws exceeds; peak <= cap"
     },
@@ -3040,10 +3436,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Networking/HTTPClient.swift",
     "id": "LEAK-FAN-006",
-    "blocks_pr": false,
     "resolved_test": "HTTPClientTests#sendDecoding_rejects_oversized_body",
     "resolved_at": "2026-09-29 15:46:59 UTC",
     "resolved_note": "batch B9-bounded-io",
+    "progress": [
+      "2026-09-29: resolvido · teste HTTPClientTests#sendDecoding_rejects_oversized_body · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:46:59 UTC",
@@ -3068,9 +3467,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste HTTPClientTests#sendDecoding_rejects_oversized_body · revisão approved (3/3) · batch B9-bounded-io"
-    ],
     "in_progress": false
   },
   {
@@ -3089,15 +3485,18 @@
     "domain": "memleak",
     "status": "resolved",
     "test_red_green": {
-      "name": "KeyedUsageCompactTests#stride_is_compact,KeyedUsageCompactTests#standard_round_trips,KeyedUsageCompactTests#fast_round_trips,KeyedUsageCompactTests#other_shapes_round_trip",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "LEAK-MAE-001",
-    "blocks_pr": false,
     "resolved_test": "KeyedUsageCompactTests#stride_is_compact,KeyedUsageCompactTests#standard_round_trips,KeyedUsageCompactTests#fast_round_trips,KeyedUsageCompactTests#other_shapes_round_trip",
     "resolved_at": "2026-09-29 12:56:52 UTC",
     "resolved_note": "batch B2-scanners",
+    "progress": [
+      "2026-09-29: resolvido · teste KeyedUsageCompactTests#stride_is_compact,KeyedUsageCompactTests#standard_round_trips,KeyedUsageCompactTests#fast_round_trips,KeyedUsageCompactTests#other_shapes_round_trip · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:56:52 UTC",
@@ -3122,10 +3521,76 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste KeyedUsageCompactTests#stride_is_compact,KeyedUsageCompactTests#standard_round_trips,KeyedUsageCompactTests#fast_round_trips,KeyedUsageCompactTests#other_shapes_round_trip · revisão approved (3/3) · batch B2-scanners"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "memleak",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Util/BoundedProcess.swift",
+    "line": 147,
+    "title": "BoundedProcess drain threads stay blocked if a grandchild inherits the pipe; only the direct child is killed (no process-group kill); duplic",
+    "evidence": "BoundedProcess drain threads stay blocked if a grandchild inherits the pipe; only the direct child is killed (no process-group kill); duplicate guard maximumResponseBytes>=0 in send/sendBounded; timedOut = stop?() != true unexplained (raised by the 3-lens review panel during remediation batch B9)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B9",
+    "domain": "memleak",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "LEAK-MAE-002",
+    "blocks_pr": false
+  },
+  {
+    "lens": "performance",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Networking/HTTPClient.swift",
+    "line": 177,
+    "title": "HTTPClient.readBounded iterates AsyncBytes one byte at a time with checkCancellation per byte; now on every vendor fetch (1 MiB: 0.18ms -> 2",
+    "evidence": "HTTPClient.readBounded iterates AsyncBytes one byte at a time with checkCancellation per byte; now on every vendor fetch (1 MiB: 0.18ms -> 21.4ms); read in chunks (raised by the 3-lens review panel during remediation batch B9)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B9",
+    "domain": "performance",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "PERF-MAE-002",
+    "blocks_pr": false
+  },
+  {
+    "lens": "performance",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarProviders/AnthropicProvider.swift",
+    "line": 55,
+    "title": "Anthropic label priming reads Keychain twice on cold fetch and retries every tick when it keeps failing (no negative memo); OpenAIProvider r",
+    "evidence": "Anthropic label priming reads Keychain twice on cold fetch and retries every tick when it keeps failing (no negative memo); OpenAIProvider re-read inside flight is sync file I/O on the pool; DMGVerifier.swift:60 and OpenAIResetController.swift:57 still use Task.detached for blocking work (raised by the 3-lens review panel during remediation batch B10)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B10",
+    "domain": "performance",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "PERF-MAE-003",
+    "blocks_pr": false
   },
   {
     "agent": "Cronos",
@@ -3141,7 +3606,7 @@
     "fix": "Create and store the Task inside one withLock critical section: return the existing Task, or create the new one and store it in the same closure. In the defer, clear the slot only if it still holds this task (compare handles). Apply to both providers.",
     "failure_scenario": "A scheduled tick starts fetch A (token within refreshBuffer). 50 ms later the user clicks refresh. VendorViewModel cancels A's Task, but that cancel does not reach the code between read() and refreshAndWriteBack, and the refresh Task is unstructured anyway. A and B both read slot==nil at L106 and both create Tasks at L109, so two OpenAIOAuth.refresh POSTs go out with the same RT. A installs its task. B finds A's task and awaits its value, but B's orphan Task keeps running, exchanges the already-consumed RT, and its defer sets slot=nil.",
     "test_red_green": {
-      "name": "OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears",
+      "name": "refreshFlight_concurrentCallers_exchangeOnce",
       "assert_before": "StubURLProtocol counts POSTs to the token endpoint and holds each response on a barrier. Start two fetchUsage(forceRefresh:true) calls concurrently with an expiring id_token and manageOAuthRefresh=true, then release the barrier. Expect tokenEndpointHits == 1. FAILS today (2).",
       "assert_after": "tokenEndpointHits == 1; the auth.json RT equals the single response's refresh_token; both callers return the same access token."
     },
@@ -3152,10 +3617,13 @@
     "domain": "race",
     "status": "resolved",
     "id": "RACE-CRO-001",
-    "blocks_pr": false,
     "resolved_test": "OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears",
     "resolved_at": "2026-09-29 16:10:10 UTC",
     "resolved_note": "batch B10-oauth-keychain",
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears · revisão approved (3/3) · batch B10-oauth-keychain"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:10:10 UTC",
@@ -3180,9 +3648,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears · revisão approved (3/3) · batch B10-oauth-keychain"
-    ],
     "in_progress": false
   },
   {
@@ -3199,7 +3664,7 @@
     "fix": "Inside the single-flight task, re-read the credential. If its refresh_token differs from the one the caller passed in, someone already rotated it: return the fresh credential and skip the exchange. Alternatively, key the flight by the RT being rotated and memoize the result for that RT.",
     "failure_scenario": "Fetches A and B run with the same access token (A from the scheduled tick, B from the auth.json watcher or scheduleReauthRetry). A gets a 401 at t=300 ms, refreshes, writes back, and clears the slot at t=700 ms. B's 401 arrives at t=750 ms because of network jitter. The slot is nil, so B calls refreshAndWriteBack(authOld) and runs a second exchange with RT_old, which is already consumed.",
     "test_red_green": {
-      "name": "OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token",
+      "name": "reactive401_lateCaller_doesNotReuseRotatedRT",
       "assert_before": "Stub the usage endpoint to return 401 to two requests, releasing the second only after the first refresh has finished. Stub the token endpoint to return invalid_grant for any RT it has already seen. Expect B to succeed. FAILS today: B throws invalid_grant and the token endpoint is hit twice.",
       "assert_after": "The token endpoint is hit exactly once; B retries the usage call with the rotated access token and succeeds."
     },
@@ -3210,10 +3675,13 @@
     "domain": "race",
     "status": "resolved",
     "id": "RACE-CRO-002",
-    "blocks_pr": false,
     "resolved_test": "OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token",
     "resolved_at": "2026-09-29 16:10:11 UTC",
     "resolved_note": "batch B10-oauth-keychain",
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token · revisão approved (3/3) · batch B10-oauth-keychain"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:10:10 UTC",
@@ -3238,9 +3706,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token · revisão approved (3/3) · batch B10-oauth-keychain"
-    ],
     "in_progress": false
   },
   {
@@ -3257,7 +3722,7 @@
     "fix": "Make the gate per-vendor: skip only vendors whose own refresh is in flight (VendorViewModel already cancels on supersede), or limit the skip by a maximum in-flight age. In AntigravityExecutor, escalate from terminate to SIGKILL after a grace period, close the read ends on timeout, drain stdout and stderr concurrently, and use withTaskCancellationHandler to terminate the child and resume the continuation on cancel.",
     "failure_scenario": "At the t=0 tick, agy spawns a helper that inherits stdout and stays alive. readDataToEndOfFile never returns and the vendor's state stays .loading. At t=300, 600, ... isAnyVendorLoading is true, so the loop hits continue. Anthropic, OpenAI and the rest never refresh again until relaunch.",
     "test_red_green": {
-      "name": "RefreshScheduler#hung_vendor_does_not_starve_others",
+      "name": "scheduler_hungVendor_doesNotStarveOthers",
       "assert_before": "UsageStore with two stub providers: A's fetchUsage awaits a continuation that is never resumed, B counts its calls. RefreshScheduler(minimumInterval: 0.05). After 0.3 s expect B.calls >= 3. FAILS today (1).",
       "assert_after": "B keeps being refreshed every interval; A is skipped or timed out on its own."
     },
@@ -3268,10 +3733,13 @@
     "domain": "race",
     "status": "resolved",
     "id": "RACE-CRO-003",
-    "blocks_pr": false,
     "resolved_test": "RefreshScheduler#hung_vendor_does_not_starve_others",
     "resolved_at": "2026-09-29 14:58:02 UTC",
     "resolved_note": "batch B7-scheduler",
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#hung_vendor_does_not_starve_others · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:58:02 UTC",
@@ -3296,9 +3764,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste RefreshScheduler#hung_vendor_does_not_starve_others · revisão approved (3/3) · batch B7-scheduler"
-    ],
     "in_progress": false
   },
   {
@@ -3315,7 +3780,7 @@
     "fix": "Never read credentials from decode. Pass in the label computed in the fetch closure (primeLabelCache already runs there), or make planLabel return only the memoized value. Alternatively, call readOffPool before decode from an async context.",
     "failure_scenario": "Launch within the cache TTL: fetchUsage -> freshPayloadWithAge hit -> decodeSnapshot -> planLabel -> read() -> direct read fails with -25308 -> security tool subprocess runs for 5 s on a cooperative thread. Meanwhile the status store and the other providers' tasks queue on the reduced pool.",
     "test_red_green": {
-      "name": "OAuthKeychainConcurrencyTests#anthropic_cache_hit_plan_label_reads_off_pool",
+      "name": "planLabel_cacheHit_doesNotCallBlockingRead",
       "assert_before": "Reader stub whose read() sleeps 2 s and records the calling thread and call count. Seed a fresh DiskCache and call fetchUsage(forceRefresh:false). Expect read() call count == 0 on the cache-hit path. FAILS today (1 call, on a pool thread).",
       "assert_after": "decode never calls read(); the label is nil or memoized; the fetch returns in < 50 ms."
     },
@@ -3326,10 +3791,13 @@
     "domain": "race",
     "status": "resolved",
     "id": "RACE-CRO-004",
-    "blocks_pr": false,
     "resolved_test": "OAuthKeychainConcurrencyTests#anthropic_cache_hit_plan_label_reads_off_pool",
     "resolved_at": "2026-09-29 16:10:11 UTC",
     "resolved_note": "batch B10-oauth-keychain",
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#anthropic_cache_hit_plan_label_reads_off_pool · revisão approved (3/3) · batch B10-oauth-keychain"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:10:11 UTC",
@@ -3354,9 +3822,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#anthropic_cache_hit_plan_label_reads_off_pool · revisão approved (3/3) · batch B10-oauth-keychain"
-    ],
     "in_progress": false
   },
   {
@@ -3373,7 +3838,7 @@
     "fix": "Drain stderr concurrently, using a readabilityHandler or a second DispatchQueue read, as SecurityToolCredentialReader already does for stdout.",
     "failure_scenario": "agy writes 100 KB to stderr, then JSON to stdout, then exits. Its stderr write blocks at 64 KB while our thread waits for stdout EOF. The timer terminates the child at 35 s and the call fails with timedOut.",
     "test_red_green": {
-      "name": "AntigravityExecutorProcessTests#large_stderr_completes_promptly",
+      "name": "antigravity_largeStderr_noDeadlock",
       "assert_before": "Point the executor at a script that prints 200 KB to stderr and '{}' to stdout. Expect completion in < 2 s. FAILS today (~35 s, timeout error).",
       "assert_after": "Returns stdout promptly."
     },
@@ -3383,10 +3848,13 @@
     "domain": "race",
     "status": "resolved",
     "id": "RACE-CRO-008",
-    "blocks_pr": false,
     "resolved_test": "AntigravityExecutorProcessTests#large_stderr_completes_promptly",
     "resolved_at": "2026-09-29 15:47:00 UTC",
     "resolved_note": "batch B9-bounded-io",
+    "progress": [
+      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#large_stderr_completes_promptly · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:47:00 UTC",
@@ -3411,9 +3879,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#large_stderr_completes_promptly · revisão approved (3/3) · batch B9-bounded-io"
-    ],
     "in_progress": false
   },
   {
@@ -3430,7 +3895,7 @@
     "fix": "Create the tmp file with open(O_CREAT|O_EXCL|O_WRONLY, 0o600), or FileManager.createFile(atPath:contents:attributes:[.posixPermissions: 0o600]), write through that fd, then rename.",
     "failure_scenario": "The writer calls data.write, so the tmp file exists at 0644 with the token in it. A reader running as another account opens it. The writer then chmods it to 0600, but the reader's open fd keeps access.",
     "test_red_green": {
-      "name": "AtomicFileWriteTests#temp_file_never_holds_payload_with_loose_mode,AtomicFileWriteTests#symlinked_destination_is_refused",
+      "name": "atomicWrite_tmpNeverWorldReadable",
       "assert_before": "Run a watcher that stats every new '.auth.json.*.tmp' in the directory during 1000 writes. Expect no mode other than 0600. FAILS today.",
       "assert_after": "Every tmp file observed has mode 0600 from creation."
     },
@@ -3440,10 +3905,13 @@
     "domain": "race",
     "status": "resolved",
     "id": "RACE-CRO-010",
-    "blocks_pr": false,
     "resolved_test": "AtomicFileWriteTests#temp_file_never_holds_payload_with_loose_mode,AtomicFileWriteTests#symlinked_destination_is_refused",
     "resolved_at": "2026-09-29 14:35:00 UTC",
     "resolved_note": "batch B6-files-tests",
+    "progress": [
+      "2026-09-29: resolvido · teste AtomicFileWriteTests#temp_file_never_holds_payload_with_loose_mode,AtomicFileWriteTests#symlinked_destination_is_refused · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:35:00 UTC",
@@ -3468,9 +3936,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AtomicFileWriteTests#temp_file_never_holds_payload_with_loose_mode,AtomicFileWriteTests#symlinked_destination_is_refused · revisão approved (3/3) · batch B6-files-tests"
-    ],
     "in_progress": false
   },
   {
@@ -3487,7 +3952,7 @@
     "fix": "Merge instead of assigning: `self.history = (samples + self.history)`, deduplicated and sorted. Or record that the load has completed and have recordHistory append only after it.",
     "failure_scenario": "The detached load reads the JSONL at t=5 ms. A cache-hit refresh completes at t=8 ms, appends to the file and sets history=[..., s_new]. The load returns at t=20 ms with samples that lack s_new, and history=samples drops it.",
     "test_red_green": {
-      "name": "VendorViewModelHistoryTests#initial_load_merges_with_recorded_sample",
+      "name": "vendorVM_initialLoad_doesNotDropRecordedSample",
       "assert_before": "Stub a history store whose load() blocks on a barrier. Trigger a refresh so recordHistory runs, then release the load. Expect history.last == s_new. FAILS today.",
       "assert_after": "history contains both the loaded samples and s_new."
     },
@@ -3497,10 +3962,13 @@
     "domain": "race",
     "status": "resolved",
     "id": "RACE-CRO-011",
-    "blocks_pr": false,
     "resolved_test": "VendorViewModelHistoryTests#initial_load_merges_with_recorded_sample",
     "resolved_at": "2026-09-29 14:06:16 UTC",
     "resolved_note": "batch B5-history",
+    "progress": [
+      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#initial_load_merges_with_recorded_sample · revisão approved (3/3) · batch B5-history"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:06:16 UTC",
@@ -3525,10 +3993,53 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste VendorViewModelHistoryTests#initial_load_merges_with_recorded_sample · revisão approved (3/3) · batch B5-history"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "race",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/ViewModels/UsageStore.swift",
+    "line": 272,
+    "title": "A truly hung vendor stays .loading and is skipped by every later tick until a manual refresh; no max in-flight age",
+    "evidence": "A truly hung vendor stays .loading and is skipped by every later tick until a manual refresh; no max in-flight age (raised by the 3-lens review panel during remediation batch B7)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B7",
+    "domain": "race",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "RACE-MAE-001",
+    "blocks_pr": false
+  },
+  {
+    "lens": "race",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Util/SingleFlight.swift",
+    "line": 28,
+    "title": "SingleFlight flights are unstructured: caller cancellation never cancels the flight, so the in-flight checkCancellation cannot fire; authori",
+    "evidence": "SingleFlight flights are unstructured: caller cancellation never cancels the flight, so the in-flight checkCancellation cannot fire; authorize still holds credentialMutationGate for the whole dialog; OffPool tests sit in SingleFlightTests; VendorSectionView Task.detached now redundant (raised by the 3-lens review panel during remediation batch B10)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B10",
+    "domain": "race",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "RACE-MAE-002",
+    "blocks_pr": false
   },
   {
     "agent": "Cérbero",
@@ -3576,7 +4087,7 @@
       }
     },
     "test_red_green": {
-      "name": "NumericConversionTrapTests#anthropic_huge_utilization_is_clamped,NumericConversionTrapAppTests#tooltip_huge_anthropic_utilization,NumericConversionTrapTests#usage_window_sanitizes_init,NumericConversionTrapTests#usage_window_sanitizes_decode",
+      "name": "TBD",
       "assert_before": "exploit or deny-path fails open",
       "assert_after": "exploit blocked; legitimate path unchanged"
     },
@@ -3586,6 +4097,9 @@
     "resolved_test": "NumericConversionTrapTests#anthropic_huge_utilization_is_clamped,NumericConversionTrapAppTests#tooltip_huge_anthropic_utilization,NumericConversionTrapTests#usage_window_sanitizes_init,NumericConversionTrapTests#usage_window_sanitizes_decode",
     "resolved_at": "2026-09-29 13:18:17 UTC",
     "resolved_note": "batch B3-numeric",
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#anthropic_huge_utilization_is_clamped,NumericConversionTrapAppTests#tooltip_huge_anthropic_utilization,NumericConversionTrapTests#usage_window_sanitizes_init,NumericConversionTrapTests#usage_window_sanitizes_decode · revisão approved (3/3) · batch B3-numeric"
+    ],
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:18:17 UTC",
@@ -3610,9 +4124,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste NumericConversionTrapTests#anthropic_huge_utilization_is_clamped,NumericConversionTrapAppTests#tooltip_huge_anthropic_utilization,NumericConversionTrapTests#usage_window_sanitizes_init,NumericConversionTrapTests#usage_window_sanitizes_decode · revisão approved (3/3) · batch B3-numeric"
-    ],
     "in_progress": false
   },
   {
@@ -3662,7 +4173,7 @@
       }
     },
     "test_red_green": {
-      "name": "NumericConversionTrapTests#history_sanitizes_append_and_load",
+      "name": "TBD",
       "assert_before": "exploit or deny-path fails open",
       "assert_after": "exploit blocked; legitimate path unchanged"
     },
@@ -3672,6 +4183,9 @@
     "resolved_test": "NumericConversionTrapTests#history_sanitizes_append_and_load",
     "resolved_at": "2026-09-29 13:18:17 UTC",
     "resolved_note": "batch B3-numeric",
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#history_sanitizes_append_and_load · revisão approved (3/3) · batch B3-numeric"
+    ],
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:18:17 UTC",
@@ -3696,9 +4210,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste NumericConversionTrapTests#history_sanitizes_append_and_load · revisão approved (3/3) · batch B3-numeric"
-    ],
     "in_progress": false
   },
   {
@@ -3747,7 +4258,7 @@
       }
     },
     "test_red_green": {
-      "name": "NumericConversionTrapTests#zai_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#openrouter_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#model_share_sanitizes",
+      "name": "TBD",
       "assert_before": "exploit or deny-path fails open",
       "assert_after": "exploit blocked; legitimate path unchanged"
     },
@@ -3757,6 +4268,9 @@
     "resolved_test": "NumericConversionTrapTests#zai_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#openrouter_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#model_share_sanitizes",
     "resolved_at": "2026-09-29 13:18:17 UTC",
     "resolved_note": "batch B3-numeric",
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#zai_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#openrouter_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#model_share_sanitizes · revisão approved (3/3) · batch B3-numeric"
+    ],
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:18:17 UTC",
@@ -3781,10 +4295,30 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste NumericConversionTrapTests#zai_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#openrouter_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#model_share_sanitizes · revisão approved (3/3) · batch B3-numeric"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "security",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
+    "line": 373,
+    "title": "DMG download (HTTPClient.download) follows redirects with no host allow-list (mitigated by SHA256 + team check); isAllowedDownloadURL ignore",
+    "evidence": "DMG download (HTTPClient.download) follows redirects with no host allow-list (mitigated by SHA256 + team check); isAllowedDownloadURL ignores port (raised by the 3-lens review panel during remediation batch B8)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B8",
+    "domain": "security",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "SEC-MAE-001",
+    "blocks_pr": false
   },
   {
     "title": "The vacuous-#expect grep misses the Optional-Bool form when a message argument follows, and a live instance guards TLS pins",
@@ -3798,7 +4332,7 @@
     "confidence": "medium",
     "agent": "Argus",
     "test_red_green": {
-      "name": "vacuous-grep selftest",
+      "name": "scripts/source-ratchet-selftest.sh#[1/4]+[2/4],PinStoreTests#all_vendor_hosts_pinned",
       "assert_before": "planted `#expect(x == false, \"m\")` -> gate exits 0 (RED)",
       "assert_after": "exits 1"
     },
@@ -3807,10 +4341,41 @@
     "cetico_evidence": "The regex gap is real: scripts/validate.sh:118 and ci.yml:37 require ')' right after true/false, so `#expect(opt == false, \"msg\")` is not caught. But the live instance is NOT vacuous today. A scratch package on the current bundled Testing (Xcode.app) made `#expect(s?.isEmpty == false, \"msg\")`, `#expect(x == false)` with x:Bool?=true, and `#expect(false == true)` all FAIL correctly. The vacuity was a former-toolchain artifact (CLAUDE.md). The 'empty TLS pin may pass' impact is also refuted: PinStoreTests.swift:329 `#expect(pin.count == 44)` is a non-optional Int comparison and fails on an empty pin. Left: gate-hardening debt.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "scripts/validate.sh",
     "id": "TEST-ARG-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "scripts/source-ratchet-selftest.sh#[1/4]+[2/4],PinStoreTests#all_vendor_hosts_pinned",
+    "resolved_at": "2026-09-29 17:07:13 UTC",
+    "resolved_note": "batch B13-gates-ci",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:07:13 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste scripts/source-ratchet-selftest.sh#[1/4]+[2/4],PinStoreTests#all_vendor_hosts_pinned · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "in_progress": false
   },
   {
     "title": "coverage.sh stops enforcing the floor, and passes, when the floor is fractional",
@@ -3824,7 +4389,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "floor parsing",
+      "name": "scripts/coverage.sh 99.5 (manual)",
       "assert_before": "FLOOR=99.5 -> exit 0 (RED)",
       "assert_after": "exit 1"
     },
@@ -3833,10 +4398,41 @@
     "cetico_evidence": "scripts/coverage.sh:55 `[ \"$FLOOR\" -gt 0 ]` with FLOOR=91.5 prints 'integer expected', takes the else branch and exits 0 (reproduced under set -euo pipefail). The sub-claim 'BELOW is never read' is false: line 56 reads it. Downgraded: the script documents floor as an integer (line 7) and the active floor is 90, so the bug is latent.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "scripts/coverage.sh",
     "id": "TEST-ARG-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "scripts/coverage.sh 99.5 (manual)",
+    "resolved_at": "2026-09-29 17:07:14 UTC",
+    "resolved_note": "batch B13-gates-ci",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:07:14 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste scripts/coverage.sh 99.5 (manual) · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "in_progress": false
   },
   {
     "title": "Error-mapping tests put their only assert inside if case, so a wrong error variant passes",
@@ -3850,7 +4446,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "FetchPayloadTests#throws_http_on_5xx,OAuthRefresherTests#bare_error_string_shape,OAuthRefresherTests#non_json_error_falls_through,FileCredentialReaderTests#missing_tokens_object_throws_schema,FileCredentialReaderTests#missing_access_token_throws_schema",
+      "name": "throws_http_on_5xx",
       "assert_before": "mutation GREEN",
       "assert_after": "RED"
     },
@@ -3862,10 +4458,13 @@
     "status": "resolved",
     "path": "Tests/AiTaskbarProvidersTests/FetchPayloadTests.swift",
     "id": "TEST-ARG-005",
-    "blocks_pr": false,
     "resolved_test": "FetchPayloadTests#throws_http_on_5xx,OAuthRefresherTests#bare_error_string_shape,OAuthRefresherTests#non_json_error_falls_through,FileCredentialReaderTests#missing_tokens_object_throws_schema,FileCredentialReaderTests#missing_access_token_throws_schema",
     "resolved_at": "2026-09-29 14:35:01 UTC",
     "resolved_note": "batch B6-files-tests",
+    "progress": [
+      "2026-09-29: resolvido · teste FetchPayloadTests#throws_http_on_5xx,OAuthRefresherTests#bare_error_string_shape,OAuthRefresherTests#non_json_error_falls_through,FileCredentialReaderTests#missing_tokens_object_throws_schema,FileCredentialReaderTests#missing_access_token_throws_schema · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:35:01 UTC",
@@ -3890,9 +4489,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste FetchPayloadTests#throws_http_on_5xx,OAuthRefresherTests#bare_error_string_shape,OAuthRefresherTests#non_json_error_falls_through,FileCredentialReaderTests#missing_tokens_object_throws_schema,FileCredentialReaderTests#missing_access_token_throws_schema · revisão approved (3/3) · batch B6-files-tests"
-    ],
     "in_progress": false
   },
   {
@@ -3907,7 +4503,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "RefreshScheduler#rateLimited_cycle_backs_off,RefreshScheduler#healthy_cycle_has_no_backoff",
+      "name": "backoff_adds_60s_after_429",
       "assert_before": "no seam",
       "assert_after": "RED if branch removed"
     },
@@ -3919,10 +4515,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift",
     "id": "TEST-ARG-006",
-    "blocks_pr": false,
     "resolved_test": "RefreshScheduler#rateLimited_cycle_backs_off,RefreshScheduler#healthy_cycle_has_no_backoff",
     "resolved_at": "2026-09-29 14:58:02 UTC",
     "resolved_note": "batch B7-scheduler",
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#rateLimited_cycle_backs_off,RefreshScheduler#healthy_cycle_has_no_backoff · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:58:02 UTC",
@@ -3947,9 +4546,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste RefreshScheduler#rateLimited_cycle_backs_off,RefreshScheduler#healthy_cycle_has_no_backoff · revisão approved (3/3) · batch B7-scheduler"
-    ],
     "in_progress": false
   },
   {
@@ -3964,7 +4560,7 @@
     "confidence": "medium",
     "agent": "Argus",
     "test_red_green": {
-      "name": "RefreshScheduler#scheduler_triggers_update_check",
+      "name": "scheduler_triggers_update_check",
       "assert_before": "intermittent RED offline",
       "assert_after": "deterministic"
     },
@@ -3976,10 +4572,13 @@
     "status": "resolved",
     "path": "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift",
     "id": "TEST-ARG-007",
-    "blocks_pr": false,
     "resolved_test": "RefreshScheduler#scheduler_triggers_update_check",
     "resolved_at": "2026-09-29 14:58:01 UTC",
     "resolved_note": "batch B7-scheduler",
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#scheduler_triggers_update_check · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:58:01 UTC",
@@ -4004,9 +4603,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste RefreshScheduler#scheduler_triggers_update_check · revisão approved (3/3) · batch B7-scheduler"
-    ],
     "in_progress": false
   },
   {
@@ -4021,7 +4617,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "AnthropicProviderE2ETests#default_init_never_refreshes_expired_token,OpenAIProviderE2ETests#default_init_never_refreshes_expired_token",
+      "name": "default_init_is_read_only",
       "assert_before": "flip GREEN",
       "assert_after": "RED"
     },
@@ -4032,10 +4628,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AnthropicProvider.swift",
     "id": "TEST-ARG-008",
-    "blocks_pr": false,
     "resolved_test": "AnthropicProviderE2ETests#default_init_never_refreshes_expired_token,OpenAIProviderE2ETests#default_init_never_refreshes_expired_token",
     "resolved_at": "2026-09-29 14:35:00 UTC",
     "resolved_note": "batch B6-files-tests",
+    "progress": [
+      "2026-09-29: resolvido · teste AnthropicProviderE2ETests#default_init_never_refreshes_expired_token,OpenAIProviderE2ETests#default_init_never_refreshes_expired_token · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:35:00 UTC",
@@ -4060,9 +4659,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste AnthropicProviderE2ETests#default_init_never_refreshes_expired_token,OpenAIProviderE2ETests#default_init_never_refreshes_expired_token · revisão approved (3/3) · batch B6-files-tests"
-    ],
     "in_progress": false
   },
   {
@@ -4077,7 +4673,7 @@
     "confidence": "low",
     "agent": "Argus",
     "test_red_green": {
-      "name": "coverage path",
+      "name": "scratch demo009",
       "assert_before": "stale profdata read",
       "assert_after": "active only"
     },
@@ -4085,10 +4681,41 @@
     "cetico_evidence": "coverage.sh:31-33 does use find | head -1. In this worktree only one candidate exists (.build/arm64-apple-macosx/debug/{codecov/default.profdata, ai-taskbarPackageTests.xctest}). A stale read needs a second test-build tree (e.g. x86_64), which was not observed.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "scripts/coverage.sh",
     "id": "TEST-ARG-009",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "scratch demo009",
+    "resolved_at": "2026-09-29 17:07:14 UTC",
+    "resolved_note": "batch B13-gates-ci",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:07:14 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste scratch demo009 · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "in_progress": false
   },
   {
     "title": "The CachedFetch cancellation test accepts AppError.other and depends on 50 ms timing",
@@ -4102,7 +4729,7 @@
     "confidence": "low",
     "agent": "Argus",
     "test_red_green": {
-      "name": "CachedFetchEdgeTests#cancelled_task_raises_cancellation",
+      "name": "cancelled_task_raises",
       "assert_before": "GREEN on decode error",
       "assert_after": "RED"
     },
@@ -4113,10 +4740,13 @@
     "status": "resolved",
     "path": "Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift",
     "id": "TEST-ARG-011",
-    "blocks_pr": false,
     "resolved_test": "CachedFetchEdgeTests#cancelled_task_raises_cancellation",
     "resolved_at": "2026-09-29 14:35:01 UTC",
     "resolved_note": "batch B6-files-tests",
+    "progress": [
+      "2026-09-29: resolvido · teste CachedFetchEdgeTests#cancelled_task_raises_cancellation · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:35:01 UTC",
@@ -4141,9 +4771,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste CachedFetchEdgeTests#cancelled_task_raises_cancellation · revisão approved (3/3) · batch B6-files-tests"
-    ],
     "in_progress": false
   },
   {
@@ -4158,7 +4785,7 @@
     "confidence": "medium",
     "agent": "Argus",
     "test_red_green": {
-      "name": "DiskCacheTests#age_equal_to_ttl_is_fresh,DiskCacheTests#age_past_ttl_is_not_fresh,DiskCacheTests#max_stale_boundary,DiskCacheTests#payload_age_uses_injected_clock",
+      "name": "ttl_boundary",
       "assert_before": "not expressible",
       "assert_after": "pinned"
     },
@@ -4169,10 +4796,13 @@
     "status": "resolved",
     "path": "Tests/AiTaskbarCoreTests/DiskCacheTests.swift",
     "id": "TEST-ARG-012",
-    "blocks_pr": false,
     "resolved_test": "DiskCacheTests#age_equal_to_ttl_is_fresh,DiskCacheTests#age_past_ttl_is_not_fresh,DiskCacheTests#max_stale_boundary,DiskCacheTests#payload_age_uses_injected_clock",
     "resolved_at": "2026-09-29 14:35:01 UTC",
     "resolved_note": "batch B6-files-tests",
+    "progress": [
+      "2026-09-29: resolvido · teste DiskCacheTests#age_equal_to_ttl_is_fresh,DiskCacheTests#age_past_ttl_is_not_fresh,DiskCacheTests#max_stale_boundary,DiskCacheTests#payload_age_uses_injected_clock · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:35:01 UTC",
@@ -4197,9 +4827,6 @@
       ],
       "test_reversal_checked": true
     },
-    "progress": [
-      "2026-09-29: resolvido · teste DiskCacheTests#age_equal_to_ttl_is_fresh,DiskCacheTests#age_past_ttl_is_not_fresh,DiskCacheTests#max_stale_boundary,DiskCacheTests#payload_age_uses_injected_clock · revisão approved (3/3) · batch B6-files-tests"
-    ],
     "in_progress": false
   },
   {
@@ -4218,15 +4845,18 @@
     "domain": "tests",
     "status": "resolved",
     "test_red_green": {
-      "name": "ClaudeSessionScannerTests#duplicate_key_across_files_with_memo_replay",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-001",
-    "blocks_pr": false,
     "resolved_test": "ClaudeSessionScannerTests#duplicate_key_across_files_with_memo_replay",
     "resolved_at": "2026-09-29 12:56:51 UTC",
     "resolved_note": "batch B2-scanners",
+    "progress": [
+      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#duplicate_key_across_files_with_memo_replay · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 12:56:51 UTC",
@@ -4251,9 +4881,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#duplicate_key_across_files_with_memo_replay · revisão approved (3/3) · batch B2-scanners"
-    ],
     "in_progress": false
   },
   {
@@ -4272,15 +4899,18 @@
     "domain": "tests",
     "status": "resolved",
     "test_red_green": {
-      "name": "scripts/coverage.sh (planted PlantedFailureTests in scratch clone)",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-002",
-    "blocks_pr": false,
     "resolved_test": "scripts/coverage.sh (planted PlantedFailureTests in scratch clone)",
     "resolved_at": "2026-09-29 14:58:02 UTC",
     "resolved_note": "batch B7-scheduler",
+    "progress": [
+      "2026-09-29: resolvido · teste scripts/coverage.sh (planted PlantedFailureTests in scratch clone) · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:58:01 UTC",
@@ -4305,10 +4935,84 @@
       ],
       "test_reversal_checked": false
     },
+    "in_progress": false
+  },
+  {
+    "lens": "tests",
+    "severity": "LOW",
+    "path": "scripts/validate.sh",
+    "line": 129,
+    "title": "WireTypes Int-conversion ratchet in validate.sh has no committed self-test (gate not proven able to fail); gaps: point-free Int.init, split-",
+    "evidence": "WireTypes Int-conversion ratchet in validate.sh has no committed self-test (gate not proven able to fail); gaps: point-free Int.init, split-line calls, radix: exempts whole line (raised by the 3-lens review panel during remediation batch B3)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B3",
+    "domain": "tests",
+    "status": "resolved",
+    "test_red_green": {
+      "name": "scripts/source-ratchet-selftest.sh#[3/4]",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-004",
+    "blocks_pr": false,
+    "resolved_test": "scripts/source-ratchet-selftest.sh#[3/4]",
+    "resolved_at": "2026-09-29 17:07:13 UTC",
+    "resolved_note": "batch B13-gates-ci",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:07:13 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
     "progress": [
-      "2026-09-29: resolvido · teste scripts/coverage.sh (planted PlantedFailureTests in scratch clone) · revisão approved (3/3) · batch B7-scheduler"
+      "2026-09-29: resolvido · teste scripts/source-ratchet-selftest.sh#[3/4] · revisão approved (3/3) · batch B13-gates-ci"
     ],
     "in_progress": false
+  },
+  {
+    "lens": "tests",
+    "severity": "LOW",
+    "path": "Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift",
+    "line": 1,
+    "title": "Per-vendor idle check duplicated 3x (refreshIdleVendors, computeAggregates, test helper); stale comment RefreshScheduler.swift:110 mentions",
+    "evidence": "Per-vendor idle check duplicated 3x (refreshIdleVendors, computeAggregates, test helper); stale comment RefreshScheduler.swift:110 mentions refreshAll; UpdateCheckerCadenceTests builds UpdateChecker without http: (real network) (raised by the 3-lens review panel during remediation batch B7)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B7",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-006",
+    "blocks_pr": false
   },
   {
     "title": "GrokLocalCache.readSubscriptionTierDisplay is never called in production",
@@ -4322,7 +5026,7 @@
     "impact": "Dead production surface: it parses a live user cache file format but the output (subscription tier display string) never reaches the UI or XAIProvider snapshot. Removing it changes no user-visible behavior; if it was meant to feed the xAI cards plan label, that wiring is missing (a functional gap, outside this lens).",
     "fix": "Delete GrokLocalCache and Paths.defaultGrokSettingsCache() plus their test if the tier display is not wanted, or wire readSubscriptionTierDisplay() into XAIProvider snapshot construction if it was meant to surface the plan name.",
     "test_red_green": {
-      "name": "n/a",
+      "name": "characterization test before deletion",
       "assert_before": "GrokCredentialsTests still calls GrokLocalCache.readSubscriptionTierDisplay(at:) directly and passes",
       "assert_after": "test removed with the deleted code; if wired into XAIProvider instead, a new golden test asserts the snapshot plan label reflects subscription_tier_display"
     },
@@ -4333,10 +5037,13 @@
     "domain": "verbosity",
     "status": "resolved",
     "id": "VERB-LAC-001",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:27 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:27 UTC",
@@ -4361,9 +5068,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -4378,7 +5082,7 @@
     "impact": "7-line public method (stat and mtime diff under the I/O lock) that duplicates logic already inlined in freshPayloadWithAge(). No reader benefit; it reads as a still-supported API but nothing calls it.",
     "fix": "Delete payloadAge(). If a caller resurfaces a need for the age alone without the payload, have it call freshPayloadWithAge() and discard the data half instead of maintaining two stat-and-mtime code paths.",
     "test_red_green": {
-      "name": "DiskCacheTests#payload_age_uses_injected_clock",
+      "name": "n/a, no existing test exercises payloadAge()",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4389,10 +5093,13 @@
     "domain": "verbosity",
     "status": "resolved",
     "id": "VERB-LAC-003",
-    "blocks_pr": false,
     "resolved_test": "DiskCacheTests#payload_age_uses_injected_clock",
     "resolved_at": "2026-09-29 16:43:28 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste DiskCacheTests#payload_age_uses_injected_clock · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:28 UTC",
@@ -4417,9 +5124,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste DiskCacheTests#payload_age_uses_injected_clock · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -4434,7 +5138,7 @@
     "impact": "18 lines (doc plus body) implementing a silent-decrypt probe that nothing invokes; authorize() and KeychainCredentialReader do their own SecItemCopyMatching calls instead of reusing this probe. A future reader wiring up the Authorize banner may reasonably assume this is the sanctioned check-before-prompting helper and be surprised it is dead.",
     "fix": "Delete canReadSilently, or if the intent was for KeychainCredentialReader ACL-blocked detection to call it before falling back to SecurityToolCredentialReader, wire that call in and add a test pinning the true and false cases.",
     "test_red_green": {
-      "name": "n/a",
+      "name": "n/a, no existing test exercises canReadSilently",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4445,10 +5149,13 @@
     "domain": "verbosity",
     "status": "resolved",
     "id": "VERB-LAC-004",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:28 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:28 UTC",
@@ -4473,9 +5180,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -4490,7 +5194,7 @@
     "impact": "A 3-line static wrapper around SMAppService.mainApp.status that the rest of the same file bypasses, so it never runs.",
     "fix": "Delete currentStatus(), or replace the inline SMAppService.mainApp.status reads in this file with it if a single wrapper is preferred.",
     "test_red_green": {
-      "name": "n/a",
+      "name": "n/a, no existing test exercises currentStatus()",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4501,10 +5205,13 @@
     "domain": "verbosity",
     "status": "resolved",
     "id": "VERB-LAC-005",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:28 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:28 UTC",
@@ -4529,9 +5236,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -4546,7 +5250,7 @@
     "impact": "The doc comment documents a workflow (call after applyChanges to reset the dirty and Save-button state) that does not happen; hasUnsavedChanges may stay stale after a save unless something else resets original. This is a dead-flag-shaped risk (a documented behavior that never fires), bordering on a functional gap rather than pure ceremony, hence MEDIUM rather than LOW.",
     "fix": "Either call reloadFromDisk() at the end of the settings-save flow wherever applyChanges is invoked from SettingsView, or delete the method and its comment if original is already kept in sync some other way; verify which with a test on hasUnsavedChanges after a simulated save.",
     "test_red_green": {
-      "name": "n/a",
+      "name": "hasUnsavedChanges resets after save",
       "assert_before": "after calling the save action, viewModel.hasUnsavedChanges is still true (red, proves reloadFromDisk is not wired)",
       "assert_after": "after calling the save action, viewModel.hasUnsavedChanges is false"
     },
@@ -4558,10 +5262,13 @@
     "domain": "verbosity",
     "status": "resolved",
     "id": "VERB-LAC-006",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:28 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:28 UTC",
@@ -4586,9 +5293,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -4603,7 +5307,7 @@
     "impact": "8-line arbitrary-position reorder method, plus the VendorOrder.moving(id:before:) pure function it is the sole production caller of, reads as the drag-and-drop reorder implementation, but the UI only ever moves vendors one step via buttons. A reader tracing how reordering works has to rule this method out.",
     "fix": "Delete moveVendor(_:before:) if no drag-and-drop UI is planned. VendorOrder.moving(id:before:) still has its own direct unit test (VendorOrderTests.swift:92-99) and can stay if that pure logic is worth keeping standalone, or delete both together.",
     "test_red_green": {
-      "name": "n/a",
+      "name": "n/a, VendorOrder.moving(id:before:) already has a direct characterization test; UsageStore.moveVendor itself has none",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4614,10 +5318,13 @@
     "domain": "verbosity",
     "status": "resolved",
     "id": "VERB-LAC-007",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:28 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:28 UTC",
@@ -4642,9 +5349,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -4659,7 +5363,7 @@
     "impact": "3-line synchronous, main-actor-blocking method left behind after its detached replacement shipped. A reader could call the blocking version by mistake since both are public.",
     "fix": "Delete compactAllHistory(); compactAllHistoryDetached() is the only one any code path uses.",
     "test_red_green": {
-      "name": "n/a",
+      "name": "n/a, no existing test exercises the synchronous compactAllHistory()",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4670,10 +5374,13 @@
     "domain": "verbosity",
     "status": "resolved",
     "id": "VERB-LAC-008",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:28 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:28 UTC",
@@ -4698,10 +5405,30 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "verbosity",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
+    "line": 136,
+    "title": "AnalyticsStore.defaultEstimates ignores its snapshots parameter; currentSnapshots computed each refresh for nothing",
+    "evidence": "AnalyticsStore.defaultEstimates ignores its snapshots parameter; currentSnapshots computed each refresh for nothing (raised by the 3-lens review panel during remediation batch B1)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B1",
+    "domain": "verbosity",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "VERB-MAE-001",
+    "blocks_pr": false
   },
   {
     "agent": "Atlas",
@@ -4715,7 +5442,7 @@
     "impact": "Between critical and 99% the flame is red while the adjacent icon is orange. The rule is copied three times, so a threshold change must be made in all of them. Cosmetic.",
     "fix": "Add SeverityColor.flame(forPercent:thresholds:) and use it at all three sites.",
     "test_red_green": {
-      "name": "SeverityColorFlameTests (6 cases)",
+      "name": "SeverityColorTests.flame_band",
       "assert_before": "Rule is inline in the views; nothing to assert",
       "assert_after": "The shared helper is pinned for the critical..99 band"
     },
@@ -4726,10 +5453,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/Views/MenuBarLabelView.swift",
     "id": "ARCH-ATL-007",
-    "blocks_pr": false,
     "resolved_test": "SeverityColorFlameTests (6 cases)",
     "resolved_at": "2026-09-29 16:28:06 UTC",
     "resolved_note": "batch B11-app-lows",
+    "progress": [
+      "2026-09-29: resolvido · teste SeverityColorFlameTests (6 cases) · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:28:06 UTC",
@@ -4754,10 +5484,30 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste SeverityColorFlameTests (6 cases) · revisão approved (3/3) · batch B11-app-lows"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "architecture",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
+    "line": 558,
+    "title": "UsageWindow.label remains display text and identity key (ForEach id, notification key) for all vendors; CreditBaselineStore.reset now waits",
+    "evidence": "UsageWindow.label remains display text and identity key (ForEach id, notification key) for all vendors; CreditBaselineStore.reset now waits on writeGate from the main actor (raised by the 3-lens review panel during remediation batch B11)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B11",
+    "domain": "architecture",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "ARCH-MAE-001",
+    "blocks_pr": false
   },
   {
     "title": "ConfigLoader.onAfterSave is typed @Sendable (callable anywhere) but its only consumer traps unless it runs on MainActor",
@@ -4875,7 +5625,7 @@
     "fix": "Change to static let; log the error and roll back the mark on failure; localize the title.",
     "confidence": "high",
     "test_red_green": {
-      "name": "n/a",
+      "name": "failedNotificationDoesNotMarkThreshold",
       "assert_before": "injected failing center -> threshold marked",
       "assert_after": "not marked; logged"
     },
@@ -4887,10 +5637,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/NotificationService.swift",
     "id": "BEST-ATE-008",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:29 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:29 UTC",
@@ -4915,9 +5668,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -4934,7 +5684,7 @@
     "fix": "Inject the holder->manager signal or make init private; inline .primary.",
     "confidence": "medium",
     "test_red_green": {
-      "name": "n/a",
+      "name": "injectedManagerReceivesMainItemSignal",
       "assert_before": "fresh instance waits for 3s timeout",
       "assert_after": "notified immediately"
     },
@@ -4945,10 +5695,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
     "id": "BEST-ATE-009",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:29 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:29 UTC",
@@ -4973,9 +5726,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -4992,7 +5742,7 @@
     "fix": "Remove nonisolated(unsafe); the vars inherit @MainActor.",
     "confidence": "high",
     "test_red_green": {
-      "name": "n/a",
+      "name": "n/a compile-time",
       "assert_before": "nonisolated access compiles",
       "assert_after": "compiler rejects"
     },
@@ -5003,10 +5753,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/Localization/L10n.swift",
     "id": "BEST-ATE-010",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:29 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:29 UTC",
@@ -5031,10 +5784,30 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "best_practices",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarCore/Cost/CostWindow.swift",
+    "line": 21,
+    "title": "CostWindow is public but only Core uses it; KeyedUsage.usage rebuilds per read (CPU for memory trade)",
+    "evidence": "CostWindow is public but only Core uses it; KeyedUsage.usage rebuilds per read (CPU for memory trade) (raised by the 3-lens review panel during remediation batch B2)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B2",
+    "domain": "best_practices",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BEST-MAE-001",
+    "blocks_pr": false
   },
   {
     "agent": "Represa",
@@ -5113,7 +5886,7 @@
     "fix": "Split identifiers on dots and numeric runs, then compare the numeric parts as integers per SemVer section 11.",
     "failure_scenario": "isNewer(v0.24.0-beta10, than: 0.24.0-beta9) returns false.",
     "test_red_green": {
-      "name": "SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases",
+      "name": "semverNumericPrereleaseOrdering",
       "assert_before": "false",
       "assert_after": "true"
     },
@@ -5125,10 +5898,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Util/Semver.swift",
     "id": "BUG-ART-012",
-    "blocks_pr": false,
     "resolved_test": "SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases",
     "resolved_at": "2026-09-29 15:29:49 UTC",
     "resolved_note": "batch B8-updater",
+    "progress": [
+      "2026-09-29: resolvido · teste SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases · revisão approved (3/3) · batch B8-updater"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:29:49 UTC",
@@ -5153,9 +5929,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases · revisão approved (3/3) · batch B8-updater"
-    ],
     "in_progress": false
   },
   {
@@ -5240,15 +6013,18 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
     "test_red_green": {
-      "name": "VendorNoticeLocalizationTests#keys_exist_in_every_language",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-AUR-002",
-    "blocks_pr": false,
     "resolved_test": "VendorNoticeLocalizationTests#keys_exist_in_every_language",
     "resolved_at": "2026-09-29 13:40:41 UTC",
     "resolved_note": "batch B4-i18n",
+    "progress": [
+      "2026-09-29: resolvido · teste VendorNoticeLocalizationTests#keys_exist_in_every_language · revisão approved (3/3) · batch B4-i18n"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 13:40:41 UTC",
@@ -5273,9 +6049,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste VendorNoticeLocalizationTests#keys_exist_in_every_language · revisão approved (3/3) · batch B4-i18n"
-    ],
     "in_progress": false
   },
   {
@@ -5293,15 +6066,18 @@
     "domain": "quality",
     "status": "resolved",
     "test_red_green": {
-      "name": "n/a",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-CET-001",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:30 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:30 UTC",
@@ -5326,10 +6102,76 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "quality",
+    "severity": "INFO",
+    "path": "README.md",
+    "line": 1,
+    "title": "README does not mention the 0..1000% utilization clamp; App repeats Int(saturating: x.rounded())+% at ~15 sites (formatter candidate)",
+    "evidence": "README does not mention the 0..1000% utilization clamp; App repeats Int(saturating: x.rounded())+% at ~15 sites (formatter candidate) (raised by the 3-lens review panel during remediation batch B3)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B3",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-004",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "INFO",
+    "path": "CHANGELOG.md",
+    "line": 1,
+    "title": "CHANGELOG.md stops at v0.20.0 while repo is v0.23.6",
+    "evidence": "CHANGELOG.md stops at v0.20.0 while repo is v0.23.6 (raised by the 3-lens review panel during remediation batch B8)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B8",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-008",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/NotificationService.swift",
+    "line": 102,
+    "title": "NotificationService title hard-codes English at; failed add() does not roll back the threshold mark; DiskCacheTests function name still says",
+    "evidence": "NotificationService title hard-codes English at; failed add() does not roll back the threshold mark; DiskCacheTests function name still says payload_age (raised by the 3-lens review panel during remediation batch B12)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B12",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-012",
+    "blocks_pr": false
   },
   {
     "lens": "deps",
@@ -5347,15 +6189,18 @@
     "domain": "deps",
     "status": "resolved",
     "test_red_green": {
-      "name": "SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DEP-MAE-001",
-    "blocks_pr": false,
     "resolved_test": "SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)",
     "resolved_at": "2026-09-29 15:29:49 UTC",
     "resolved_note": "batch B8-updater",
+    "progress": [
+      "2026-09-29: resolvido · teste SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON) · revisão approved (3/3) · batch B8-updater"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 15:29:49 UTC",
@@ -5380,9 +6225,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON) · revisão approved (3/3) · batch B8-updater"
-    ],
     "in_progress": false
   },
   {
@@ -5418,6 +6260,52 @@
     "in_progress": false
   },
   {
+    "lens": "duplication",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift",
+    "line": 181,
+    "title": "Duplicated count+label block (sessions vs models) in VendorAnalyticsCardView",
+    "evidence": "Duplicated count+label block (sessions vs models) in VendorAnalyticsCardView (raised by the 3-lens review panel during remediation batch B1)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B1",
+    "domain": "duplication",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "DUP-MAE-002",
+    "blocks_pr": false
+  },
+  {
+    "lens": "duplication",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarProviders/AntigravityExecutor.swift",
+    "line": 160,
+    "title": "agy error fallback and context-canceled mapping duplicated (AntigravityExecutor.swift:160,172,122; GeminiProvider.swift:112-113); stale Issu",
+    "evidence": "agy error fallback and context-canceled mapping duplicated (AntigravityExecutor.swift:160,172,122; GeminiProvider.swift:112-113); stale Issue.record message in XAIProviderTests:271; key prefix inconsistency in VendorNoticeText (raised by the 3-lens review panel during remediation batch B4)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B4",
+    "domain": "duplication",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "DUP-MAE-003",
+    "blocks_pr": false
+  },
+  {
     "agent": "Fantasma",
     "lens": "memleak",
     "severity": "INFO",
@@ -5429,7 +6317,7 @@
     "impact": "+1 tiny entry per month, negligible. The path is also disabled on macOS 26.",
     "fix": "Prune the keys of this vendor that are absent from snapshot.windows at the end of observe().",
     "test_red_green": {
-      "name": "NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms",
+      "name": "NotificationServiceTests.rolledCycleKeyIsPruned",
       "assert_before": "2 keys after a cycle rollover",
       "assert_after": "1 key"
     },
@@ -5440,10 +6328,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/NotificationService.swift",
     "id": "LEAK-FAN-007",
-    "blocks_pr": false,
     "resolved_test": "NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms",
     "resolved_at": "2026-09-29 16:28:06 UTC",
     "resolved_note": "batch B11-app-lows",
+    "progress": [
+      "2026-09-29: resolvido · teste NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:28:06 UTC",
@@ -5468,9 +6359,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms · revisão approved (3/3) · batch B11-app-lows"
-    ],
     "in_progress": false
   },
   {
@@ -5485,7 +6373,7 @@
     "impact": "No growth today: a single scheduler is created in App.init (AiTaskbarApp.swift:67). It would leak, with duplicate refresh fan-out, if a scheduler is ever rebuilt without calling stop().",
     "fix": "Re-bind weakly per iteration, as compactLoop does.",
     "test_red_green": {
-      "name": "RefreshScheduler#started_scheduler_is_released",
+      "name": "RefreshSchedulerTests.deinitCancelsLoops",
       "assert_before": "weak ref still non-nil after the last strong ref is dropped",
       "assert_after": "weak ref is nil and the refreshAll counter stops"
     },
@@ -5496,10 +6384,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift",
     "id": "LEAK-FAN-008",
-    "blocks_pr": false,
     "resolved_test": "RefreshScheduler#started_scheduler_is_released",
     "resolved_at": "2026-09-29 14:58:02 UTC",
     "resolved_note": "batch B7-scheduler",
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#started_scheduler_is_released · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:58:02 UTC",
@@ -5524,9 +6415,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste RefreshScheduler#started_scheduler_is_released · revisão approved (3/3) · batch B7-scheduler"
-    ],
     "in_progress": false
   },
   {
@@ -5637,7 +6525,7 @@
     "impact": "Bounded (max 5 pinned items) so not strongly user-visible, but every vendor refresh (up to 8 vendors, every ~300s, or more often under manual refresh) triggers a SwiftUI rootView reassignment + layoutSubtreeIfNeeded() + tooltip rebuild (MenuBarTooltipBuilder.buildTooltip) for pinned vendors that did not change, when only the changed vendor badge needs updating.",
     "fix": "Track which vendor $state fired (tag the merged publisher with vendor id instead of erasing to Void) and call updateButton only for that vendor status item.",
     "test_red_green": {
-      "name": "n/a",
+      "name": "PinnedStatusItemManagerTests.onlyChangedVendorBadgeIsRebuilt",
       "assert_before": "With 3 vendors pinned, changing vendor A state triggers updateButton call count == 3 (expected 1) - test fails.",
       "assert_after": "Same scenario updates only vendor A NSHostingView rootView; call count == 1."
     },
@@ -5649,10 +6537,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
     "id": "PERF-FLU-002",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:29 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:29 UTC",
@@ -5677,9 +6568,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
   },
   {
@@ -5694,7 +6582,7 @@
     "impact": "Small in absolute terms (table sizes are ~14-20 entries) but is a per-line allocation + full-table scan in a loop that is otherwise carefully optimized elsewhere in the same file (byte prefilter, mmap, typed decode) specifically to avoid allocation - this path was missed.",
     "fix": "Precompute a sorted-by-length-descending array of (prefix, pricing) once per table (static), or cache resolved model to pricing lookups in a dictionary keyed by the literal model string seen so far during a single scan pass.",
     "test_red_green": {
-      "name": "CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil",
+      "name": "PricingTableTests.lookupPrefixFallbackDoesNotAllocatePerCall",
       "assert_before": "An allocation-count assertion around 10k calls to lookup with an unlisted suffixed model id shows allocation count proportional to call count (expected O(1) amortized) - test fails.",
       "assert_after": "After caching, allocation count is O(1) amortized across repeated calls with the same model id."
     },
@@ -5706,10 +6594,13 @@
     "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/PricingTable.swift",
     "id": "PERF-FLU-003",
-    "blocks_pr": false,
     "resolved_test": "CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil",
     "resolved_at": "2026-09-29 16:43:29 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:29 UTC",
@@ -5734,10 +6625,30 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "performance",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift",
+    "line": 67,
+    "title": "AtomicFileWrite now fsyncs every write (incl. DiskCache error markers, ConfigLoader.save possibly on MainActor); confirm no MainActor hot pa",
+    "evidence": "AtomicFileWrite now fsyncs every write (incl. DiskCache error markers, ConfigLoader.save possibly on MainActor); confirm no MainActor hot path pays for it (raised by the 3-lens review panel during remediation batch B6)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B6",
+    "domain": "performance",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "PERF-MAE-001",
+    "blocks_pr": false
   },
   {
     "agent": "Cronos",
@@ -5819,7 +6730,7 @@
     "fix": "Take writeGate in reset(). Optionally skip record() for stale-fallback decodes.",
     "failure_scenario": "Fetch thread in record(): load() returns stored (peak 10000). Main thread: recalibrateCredits -> reset() clears the cache and the file. Fetch thread: save(peak 10000). On the next refresh the peak is 10000 again.",
     "test_red_green": {
-      "name": "CreditBaselineStoreTests#reset_serializes_with_record",
+      "name": "creditBaseline_resetDuringRecord_isNotReverted",
       "assert_before": "Two actors: A calls record() with a load hook paused on a barrier; B calls reset(); then release. Expect load() == nil afterwards. FAILS today (the old peak is restored).",
       "assert_after": "After reset completes, the baseline is nil or seeded only from observations that started after the reset."
     },
@@ -5830,10 +6741,13 @@
     "domain": "race",
     "status": "resolved",
     "id": "RACE-CRO-007",
-    "blocks_pr": false,
     "resolved_test": "CreditBaselineStoreTests#reset_serializes_with_record",
     "resolved_at": "2026-09-29 16:28:06 UTC",
     "resolved_note": "batch B11-app-lows",
+    "progress": [
+      "2026-09-29: resolvido · teste CreditBaselineStoreTests#reset_serializes_with_record · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:28:06 UTC",
@@ -5858,9 +6772,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste CreditBaselineStoreTests#reset_serializes_with_record · revisão approved (3/3) · batch B11-app-lows"
-    ],
     "in_progress": false
   },
   {
@@ -5975,15 +6886,18 @@
     "domain": "tests",
     "status": "resolved",
     "test_red_green": {
-      "name": "UpdateCheckerDownloadTests#quarantine_failure_throws",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-003",
-    "blocks_pr": false,
     "resolved_test": "UpdateCheckerDownloadTests#quarantine_failure_throws",
     "resolved_at": "2026-09-29 14:35:01 UTC",
     "resolved_note": "batch B6-files-tests",
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerDownloadTests#quarantine_failure_throws · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 14:35:01 UTC",
@@ -6008,10 +6922,30 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste UpdateCheckerDownloadTests#quarantine_failure_throws · revisão approved (3/3) · batch B6-files-tests"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "tests",
+    "severity": "INFO",
+    "path": "Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift",
+    "line": 1,
+    "title": "AnalyticsStoreHistoryLoadTests settle() uses fixed 100ms sleep (possible CI flake); VendorViewModel.swift:80 misaligned continuation",
+    "evidence": "AnalyticsStoreHistoryLoadTests settle() uses fixed 100ms sleep (possible CI flake); VendorViewModel.swift:80 misaligned continuation (raised by the 3-lens review panel during remediation batch B5)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B5",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-005",
+    "blocks_pr": false
   },
   {
     "title": "Two of AppLog seven Logger categories are declared but never logged to",
@@ -6025,7 +6959,7 @@
     "impact": "No functional effect, just two Logger instances nobody writes through, so filtering Console.app or log stream by category==updates or scheduler will always be silent, which could mislead someone into thinking those subsystems are quiet by design rather than unwired.",
     "fix": "Delete the updates and scheduler static lets, or start using them at the call sites in UpdateChecker.swift and RefreshScheduler.swift that currently either do not log or use a different category.",
     "test_red_green": {
-      "name": "n/a",
+      "name": "n/a, no test possible for an unused constant",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -6036,10 +6970,13 @@
     "domain": "verbosity",
     "status": "resolved",
     "id": "VERB-LAC-002",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 16:43:28 UTC",
     "resolved_note": "batch B12-cleanup",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 16:43:28 UTC",
@@ -6064,9 +7001,29 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
-    ],
     "in_progress": false
+  },
+  {
+    "lens": "verbosity",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+    "line": 1,
+    "title": "8 more unused localization keys (e.g. updated_ago_fmt, analytics_usage_share, vs_previous_period_fmt) in all locales",
+    "evidence": "8 more unused localization keys (e.g. updated_ago_fmt, analytics_usage_share, vs_previous_period_fmt) in all locales (raised by the 3-lens review panel during remediation batch B4)",
+    "fix": "see evidence",
+    "impact": "see evidence",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B4",
+    "domain": "verbosity",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "VERB-MAE-002",
+    "blocks_pr": false
   }
 ]
