@@ -1,0 +1,15 @@
+{
+ "id": "TEST-ARG-005",
+ "verdict": "APROVA",
+ "reasoning": "All five sites now have an `else { Issue.record }` branch, so a wrong variant fails instead of passing silently. Reversal: I changed three production sites to throw a different variant. CachedFetch.swift:123 threw .transport, OAuthRefresher.swift:32 threw .schema, and FileCredentialReader.swift:105,121 threw .credentials. Every one of the five named tests went RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Tests/AiTaskbarProvidersTests/FetchPayloadTests.swift:59",
+  "Tests/AiTaskbarProvidersTests/OAuthRefresherTests.swift:93",
+  "Tests/AiTaskbarCoreTests/FileCredentialReaderTests.swift:142"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "a20274f24dc43e71c",
+ "batch": "B6-files-tests"
+}

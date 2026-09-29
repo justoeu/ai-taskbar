@@ -90,6 +90,8 @@ struct OAuthRefresherTests {
         } catch let err as AppError {
             if case .credentials(let msg) = err {
                 #expect(msg.contains("bad_request"))
+            } else {
+                Issue.record("expected .credentials, got \(err)")
             }
         } catch {
             Issue.record("expected AppError, got \(error)")
@@ -109,6 +111,8 @@ struct OAuthRefresherTests {
         } catch let err as AppError {
             if case .credentials(let msg) = err {
                 #expect(msg.contains("Service Unavailable"))
+            } else {
+                Issue.record("expected .credentials, got \(err)")
             }
         } catch {
             Issue.record("expected AppError")

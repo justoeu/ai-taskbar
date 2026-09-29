@@ -1,0 +1,15 @@
+{
+ "id": "TEST-ARG-008",
+ "verdict": "APROVA",
+ "reasoning": "Both new tests build the provider without the manageOAuthRefresh: argument, so the init default is what gets exercised. Reversal: I flipped the defaults at AnthropicProvider.swift:28,38 and OpenAIProvider.swift:38,49 to true, and both default_init_never_refreshes_expired_token tests went RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Tests/AiTaskbarProvidersTests/AnthropicProviderE2ETests.swift:318",
+  "Tests/AiTaskbarProvidersTests/OpenAIProviderE2ETests.swift:228",
+  "Sources/AiTaskbarProviders/OpenAIProvider.swift:38"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "a20274f24dc43e71c",
+ "batch": "B6-files-tests"
+}

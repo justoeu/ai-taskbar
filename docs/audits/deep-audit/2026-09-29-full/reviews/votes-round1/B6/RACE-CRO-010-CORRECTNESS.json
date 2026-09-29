@@ -1,0 +1,15 @@
+{
+ "id": "RACE-CRO-010",
+ "verdict": "APROVA",
+ "reasoning": "AtomicFileWrite.swift:47 opens the temp file with O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW|O_CLOEXEC and the requested mode, and :53 fchmods it while it is still empty. The payload never exists under the umask mode, and Foundation's inner .atomic temp file is gone. The seam at :30 runs after fsync and before rename, which is where the payload is observable. Reversal: HEAD logic with the seam after data.write made temp_file_never_holds_payload_with_loose_mode fail, observing 0644. The fixed code is green.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:47",
+  "Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:53",
+  "Tests/AiTaskbarCoreTests/AtomicFileWriteTests.swift:39"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "a20274f24dc43e71c",
+ "batch": "B6-files-tests"
+}

@@ -29,15 +29,28 @@ public struct DiskCache: Sendable {
     public let baseDir: URL
     public let ttl: TimeInterval
     public let maxStale: TimeInterval
+    /// Clock used to age the payload. Injectable so tests can pin the
+    /// `ttl` / `maxStale` boundaries without sleeping (TEST-ARG-012).
+    private let now: @Sendable () -> Date
 
     public init(vendor: VendorId,
                 baseDir: URL,
                 ttl: TimeInterval = 300,
                 maxStale: TimeInterval = 7 * 24 * 60 * 60) {
+        self.init(vendor: vendor, baseDir: baseDir, ttl: ttl, maxStale: maxStale,
+                  now: { Date() })
+    }
+
+    init(vendor: VendorId,
+         baseDir: URL,
+         ttl: TimeInterval = 300,
+         maxStale: TimeInterval = 7 * 24 * 60 * 60,
+         now: @escaping @Sendable () -> Date) {
         self.vendor = vendor
         self.baseDir = baseDir
         self.ttl = ttl
         self.maxStale = maxStale
+        self.now = now
     }
 
     private func withIOLock<T>(_ body: () throws -> T) rethrows -> T {
@@ -75,7 +88,7 @@ public struct DiskCache: Sendable {
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
                   let mtime = attrs[.modificationDate] as? Date
             else { return nil }
-            return Date.now.timeIntervalSince(mtime)
+            return now().timeIntervalSince(mtime)
         }
     }
 
@@ -84,7 +97,7 @@ public struct DiskCache: Sendable {
         withIOLock {
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
                   let mtime = attrs[.modificationDate] as? Date else { return nil }
-            let age = Date.now.timeIntervalSince(mtime)
+            let age = now().timeIntervalSince(mtime)
             guard age <= ttl,
                   let data = try? Data(contentsOf: payloadURL) else { return nil }
             return (data, age)
@@ -99,7 +112,7 @@ public struct DiskCache: Sendable {
         withIOLock {
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
                   let mtime = attrs[.modificationDate] as? Date else { return nil }
-            let age = Date.now.timeIntervalSince(mtime)
+            let age = now().timeIntervalSince(mtime)
             guard age <= maxStale,
                   let data = try? Data(contentsOf: payloadURL) else { return nil }
             return (data, age)

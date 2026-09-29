@@ -1,0 +1,61 @@
+{
+  "id": "TEST-ARG-005",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 14:35:01 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "All five sites now have an `else { Issue.record }` branch, so a wrong variant fails instead of passing silently. Reversal: I changed three production sites to throw a different variant. CachedFetch.swift:123 threw .transport, OAuthRefresher.swift:32 threw .schema, and FileCredentialReader.swift:105,121 threw .credentials. Every one of the five named tests went RED.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Tests/AiTaskbarProvidersTests/FetchPayloadTests.swift:59",
+        "Tests/AiTaskbarProvidersTests/OAuthRefresherTests.swift:93",
+        "Tests/AiTaskbarCoreTests/FileCredentialReaderTests.swift:142"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "All five if-case sites the finding cites now have an else { Issue.record(\"expected .X, got \\(err)\") }: FetchPayloadTests.swift:59, OAuthRefresherTests.swift:93 and :114, FileCredentialReaderTests.swift:142 and :164. The message names the variant that was received. This is a two-line change per site with no new abstraction, which fits a fix this small.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/FetchPayloadTests.swift:59",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/OAuthRefresherTests.swift:93",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/FileCredentialReaderTests.swift:142"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Each of the 5 cited asserts (FetchPayloadTests:59, OAuthRefresherTests:93,114, FileCredentialReaderTests:142,164) gets a minimal else-branch Issue.record, which is exactly what the finding asked for. Nothing else is touched.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/FetchPayloadTests.swift:59"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

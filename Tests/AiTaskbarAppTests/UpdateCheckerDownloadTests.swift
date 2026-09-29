@@ -39,20 +39,28 @@ private final class CallCounter: @unchecked Sendable {
 
 @Suite("UpdateChecker DMG download verification (SEC-CER-001)", .serialized)
 @MainActor
-struct UpdateCheckerDownloadTests {
+final class UpdateCheckerDownloadTests {
     private static let bodySHA = SHA256.hash(data: FixedDMGProtocol.body)
         .map { String(format: "%02x", $0) }.joined()
 
-    private func makeDir() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
+    /// One downloads directory and one UserDefaults suite per test instance,
+    /// both removed in `deinit` so repeated runs leave nothing behind.
+    private let dir: URL
+    private let defaultsSuite = "test-updates-dl-\(UUID().uuidString)"
+
+    init() throws {
+        dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("update-dl-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: dir) // test cleanup
+        UserDefaults(suiteName: defaultsSuite)?.removePersistentDomain(forName: defaultsSuite)
     }
 
     private func makeChecker(dir: URL, verifier: StubVerifier) -> UpdateChecker {
-        let name = "test-updates-dl-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
+        let defaults = UserDefaults(suiteName: defaultsSuite)!
         return UpdateChecker(
             config: UpdatesConfig(enabled: true, ownerRepo: "o/r", includePrereleases: false),
             currentVersion: "1.0.0",
@@ -97,7 +105,6 @@ struct UpdateCheckerDownloadTests {
 
     @Test("release without a parseable checksum fails closed")
     func missing_checksum_fails_closed() async throws {
-        let dir = try makeDir()
         let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true))
         checker.download(release(sha: nil))
         let status = await settle(checker)
@@ -107,7 +114,6 @@ struct UpdateCheckerDownloadTests {
 
     @Test("verified DMG carries the com.apple.quarantine xattr")
     func downloaded_dmg_is_quarantined() async throws {
-        let dir = try makeDir()
         let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true))
         checker.download(release(sha: Self.bodySHA))
         let status = await settle(checker)
@@ -118,7 +124,6 @@ struct UpdateCheckerDownloadTests {
 
     @Test("team-signature verifier rejection fails and leaves no file")
     func verifier_rejects() async throws {
-        let dir = try makeDir()
         let verifier = StubVerifier(accept: false)
         let checker = makeChecker(dir: dir, verifier: verifier)
         checker.download(release(sha: Self.bodySHA))
@@ -130,7 +135,6 @@ struct UpdateCheckerDownloadTests {
 
     @Test("team-signature verifier acceptance downloads")
     func verifier_accepts() async throws {
-        let dir = try makeDir()
         let verifier = StubVerifier(accept: true)
         let checker = makeChecker(dir: dir, verifier: verifier)
         checker.download(release(sha: Self.bodySHA))
@@ -139,9 +143,16 @@ struct UpdateCheckerDownloadTests {
         #expect(verifier.calls.count == 1)
     }
 
+    @Test("quarantine on a missing file throws instead of being swallowed")
+    func quarantine_failure_throws() {
+        let url = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).dmg")
+        #expect(throws: POSIXError.self) {
+            try UpdateChecker.applyQuarantine(to: url)
+        }
+    }
+
     @Test("checksum mismatch fails and leaves no file")
     func checksum_mismatch() async throws {
-        let dir = try makeDir()
         let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true))
         checker.download(release(sha: String(repeating: "0", count: 64)))
         let status = await settle(checker)
@@ -152,14 +163,6 @@ struct UpdateCheckerDownloadTests {
 
 @Suite("TeamSignatureDMGVerifier")
 struct TeamSignatureDMGVerifierTests {
-    @Test("quarantine on a missing file throws instead of being swallowed")
-    func quarantine_failure_throws() {
-        let url = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).dmg")
-        #expect(throws: POSIXError.self) {
-            try UpdateChecker.applyQuarantine(to: url)
-        }
-    }
-
     @Test("ad-hoc build (no team) skips the check")
     func nil_team_skips() async throws {
         let url = URL(fileURLWithPath: "/nonexistent/x.dmg")

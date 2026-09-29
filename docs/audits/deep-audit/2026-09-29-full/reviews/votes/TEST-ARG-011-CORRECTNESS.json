@@ -1,0 +1,14 @@
+{
+ "id": "TEST-ARG-011",
+ "verdict": "APROVA",
+ "reasoning": "The test now accepts only CancellationError (CachedFetchEdgeTests.swift:141). The 50 ms sleep is gone: an AsyncStream reports when the request is in flight and StubGate holds it until the cancel. The session is drained so no request leaks into the next suite; GeminiProvider stayed green in the same run. Reversal: I deleted `catch is CancellationError` at CachedFetch.swift:39 and the test went RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift:141",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:39"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "a20274f24dc43e71c",
+ "batch": "B6-files-tests"
+}

@@ -694,7 +694,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "AtomicFileWriteTests.overwrite_tightens_loose_mode",
+      "name": "AtomicFileWriteTests#existing_loose_destination_is_tightened,AtomicFileWriteTests#symlinked_destination_is_refused",
       "assert_before": "dest 0o644; write(permissions:0o600); #expect(mode==0o600) -> RED today (644)",
       "assert_after": "GREEN after fix"
     },
@@ -703,10 +703,41 @@
     "cetico_evidence": "Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:20-27: the temp file is chmod'd to the requested mode, then replaceItemAt(dest, withItemAt: tmp) swaps it in. replaceItemAt keeps the destination's old metadata, so write(permissions:0o600) does not deliver the mode it promises (doc comment lines 8-12) whenever the file already exists with a looser mode. Downgraded from HIGH: the app creates its secret files 0600 from the start, config.toml is re-chmodded on load, and app dirs are 0700 (the security panel's vote). A loose mode only gets there from outside the app, so this is a contract defect, not a reachable leak.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift",
     "id": "TEST-ARG-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AtomicFileWriteTests#existing_loose_destination_is_tightened,AtomicFileWriteTests#symlinked_destination_is_refused",
+    "resolved_at": "2026-09-29 14:35:00 UTC",
+    "resolved_note": "batch B6-files-tests",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:35:00 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AtomicFileWriteTests#existing_loose_destination_is_tightened,AtomicFileWriteTests#symlinked_destination_is_refused · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "in_progress": false
   },
   {
     "title": "The canPersistCredentials guard that stops rotation of a /usr/bin/security-fallback credential is never tested at provider level",
@@ -720,7 +751,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "fallback_credential_is_never_rotated",
+      "name": "AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated",
       "assert_before": "RED under guard-removal mutation",
       "assert_after": "GREEN with guard"
     },
@@ -729,10 +760,41 @@
     "cetico_evidence": "The guard exists at AnthropicProvider.swift:87-88. MockKeychainReader gets the protocol default canPersistCredentials {true} (AnthropicCredentialReading.swift:48). The only asserts on the flag are reader-level (SecurityToolCredentialReaderTests.swift:211,291), and the E2E refresh test (AnthropicProviderE2ETests.swift:191-221) runs with canPersist=true. Deleting the guard keeps the suite green. Downgraded: the defect is a missing test, not a bug. The code is correct today, and the path needs opt-in manage_oauth_refresh=true plus the security-tool fallback.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AnthropicProvider.swift",
     "id": "TEST-ARG-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated",
+    "resolved_at": "2026-09-29 14:35:00 UTC",
+    "resolved_note": "batch B6-files-tests",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:35:00 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Atlas",
@@ -2643,7 +2705,7 @@
     "fix": "Create the tmp file with open(O_CREAT|O_EXCL|O_WRONLY, 0o600), or FileManager.createFile(atPath:contents:attributes:[.posixPermissions: 0o600]), write through that fd, then rename.",
     "failure_scenario": "The writer calls data.write, so the tmp file exists at 0644 with the token in it. A reader running as another account opens it. The writer then chmods it to 0600, but the reader's open fd keeps access.",
     "test_red_green": {
-      "name": "atomicWrite_tmpNeverWorldReadable",
+      "name": "AtomicFileWriteTests#temp_file_never_holds_payload_with_loose_mode,AtomicFileWriteTests#symlinked_destination_is_refused",
       "assert_before": "Run a watcher that stats every new '.auth.json.*.tmp' in the directory during 1000 writes. Expect no mode other than 0600. FAILS today.",
       "assert_after": "Every tmp file observed has mode 0600 from creation."
     },
@@ -2651,9 +2713,40 @@
     "cetico_evidence": "AtomicFileWrite.swift:19-24 calls data.write(.atomic), which creates the file under the umask (0644), and only then setAttributes 0600. ~/.codex is 0755 and ~ is 0750 with group staff, so another staff user can reach the tmp file during that window. Only the opt-in auth.json writeBack is exposed. Everything under Application Support is protected by its 0700 directory (verified with ls -ld).",
     "verification": "cetico",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "id": "RACE-CRO-010",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AtomicFileWriteTests#temp_file_never_holds_payload_with_loose_mode,AtomicFileWriteTests#symlinked_destination_is_refused",
+    "resolved_at": "2026-09-29 14:35:00 UTC",
+    "resolved_note": "batch B6-files-tests",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:35:00 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AtomicFileWriteTests#temp_file_never_holds_payload_with_loose_mode,AtomicFileWriteTests#symlinked_destination_is_refused · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",
@@ -3032,7 +3125,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "throws_http_on_5xx",
+      "name": "FetchPayloadTests#throws_http_on_5xx,OAuthRefresherTests#bare_error_string_shape,OAuthRefresherTests#non_json_error_falls_through,FileCredentialReaderTests#missing_tokens_object_throws_schema,FileCredentialReaderTests#missing_access_token_throws_schema",
       "assert_before": "mutation GREEN",
       "assert_after": "RED"
     },
@@ -3041,10 +3134,41 @@
     "cetico_evidence": "FetchPayloadTests.swift:57-59, OAuthRefresherTests.swift:91,110 and FileCredentialReaderTests.swift:140,160 use `if case ... { #expect }` with no else, so a different AppError variant passes. Downgraded: this is a weak assert. No product bug is shown.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "Tests/AiTaskbarProvidersTests/FetchPayloadTests.swift",
     "id": "TEST-ARG-005",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "FetchPayloadTests#throws_http_on_5xx,OAuthRefresherTests#bare_error_string_shape,OAuthRefresherTests#non_json_error_falls_through,FileCredentialReaderTests#missing_tokens_object_throws_schema,FileCredentialReaderTests#missing_access_token_throws_schema",
+    "resolved_at": "2026-09-29 14:35:01 UTC",
+    "resolved_note": "batch B6-files-tests",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:35:01 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste FetchPayloadTests#throws_http_on_5xx,OAuthRefresherTests#bare_error_string_shape,OAuthRefresherTests#non_json_error_falls_through,FileCredentialReaderTests#missing_tokens_object_throws_schema,FileCredentialReaderTests#missing_access_token_throws_schema · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "in_progress": false
   },
   {
     "title": "RefreshScheduler 429 back-off is untested and its loop has no injectable clock",
@@ -3110,7 +3234,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "default_init_is_read_only",
+      "name": "AnthropicProviderE2ETests#default_init_never_refreshes_expired_token,OpenAIProviderE2ETests#default_init_never_refreshes_expired_token",
       "assert_before": "flip GREEN",
       "assert_after": "RED"
     },
@@ -3118,10 +3242,41 @@
     "cetico_evidence": "The claim 'always overridden in tests' is inaccurate: default-init tests exist (AnthropicProviderE2ETests.swift:112,279,310; OpenAIProviderE2ETests.swift:59,238). But all of them use non-expired tokens (e.g. :107, :277, :308), so flipping the default to true stays green. AppConfigTests.swift:19-20 pins only the config default.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AnthropicProvider.swift",
     "id": "TEST-ARG-008",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnthropicProviderE2ETests#default_init_never_refreshes_expired_token,OpenAIProviderE2ETests#default_init_never_refreshes_expired_token",
+    "resolved_at": "2026-09-29 14:35:00 UTC",
+    "resolved_note": "batch B6-files-tests",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:35:00 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnthropicProviderE2ETests#default_init_never_refreshes_expired_token,OpenAIProviderE2ETests#default_init_never_refreshes_expired_token · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "in_progress": false
   },
   {
     "title": "coverage.sh uses find | head -1 to pick profdata and the test binary",
@@ -3160,7 +3315,7 @@
     "confidence": "low",
     "agent": "Argus",
     "test_red_green": {
-      "name": "cancelled_task_raises",
+      "name": "CachedFetchEdgeTests#cancelled_task_raises_cancellation",
       "assert_before": "GREEN on decode error",
       "assert_after": "RED"
     },
@@ -3168,10 +3323,41 @@
     "cetico_evidence": "CachedFetchEdgeTests.swift:136 accepts .other. The 50 ms sleep is at :122, and the stub blocks 5 s (:110). The claimed 'green on decode error' is unproven: empty data maps to .schema, not .other. .other only comes from AppError wrapping a non-AppError (AppError.swift:67).",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift",
     "id": "TEST-ARG-011",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "CachedFetchEdgeTests#cancelled_task_raises_cancellation",
+    "resolved_at": "2026-09-29 14:35:01 UTC",
+    "resolved_note": "batch B6-files-tests",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:35:01 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste CachedFetchEdgeTests#cancelled_task_raises_cancellation · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "in_progress": false
   },
   {
     "title": "DiskCache TTL/stale tests use the real clock, so the boundary semantics are not pinned",
@@ -3185,7 +3371,7 @@
     "confidence": "medium",
     "agent": "Argus",
     "test_red_green": {
-      "name": "ttl_boundary",
+      "name": "DiskCacheTests#age_equal_to_ttl_is_fresh,DiskCacheTests#age_past_ttl_is_not_fresh,DiskCacheTests#max_stale_boundary,DiskCacheTests#payload_age_uses_injected_clock",
       "assert_before": "not expressible",
       "assert_after": "pinned"
     },
@@ -3193,10 +3379,41 @@
     "cetico_evidence": "DiskCache.swift:78,87,102 use Date.now with no clock seam, and the `age <= ttl` boundary (:88) cannot be pinned. The tests use ttl 0.001 plus Thread.sleep(0.05) (DiskCacheTests.swift:26-28, 92-94), so a <= vs < mutation is not caught.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "Tests/AiTaskbarCoreTests/DiskCacheTests.swift",
     "id": "TEST-ARG-012",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "DiskCacheTests#age_equal_to_ttl_is_fresh,DiskCacheTests#age_past_ttl_is_not_fresh,DiskCacheTests#max_stale_boundary,DiskCacheTests#payload_age_uses_injected_clock",
+    "resolved_at": "2026-09-29 14:35:01 UTC",
+    "resolved_note": "batch B6-files-tests",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:35:01 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste DiskCacheTests#age_equal_to_ttl_is_fresh,DiskCacheTests#age_past_ttl_is_not_fresh,DiskCacheTests#max_stale_boundary,DiskCacheTests#payload_age_uses_injected_clock · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "in_progress": false
   },
   {
     "lens": "tests",
@@ -4349,14 +4566,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "UpdateCheckerDownloadTests#quarantine_failure_throws",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "UpdateCheckerDownloadTests#quarantine_failure_throws",
+    "resolved_at": "2026-09-29 14:35:01 UTC",
+    "resolved_note": "batch B6-files-tests",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:35:01 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerDownloadTests#quarantine_failure_throws · revisão approved (3/3) · batch B6-files-tests"
+    ],
+    "in_progress": false
   },
   {
     "title": "Two of AppLog seven Logger categories are declared but never logged to",

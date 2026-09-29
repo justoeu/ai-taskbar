@@ -801,6 +801,14 @@ section("AtomicFileWrite permissions") {
     let attrs = try FileManager.default.attributesOfItem(atPath: secretFile.path)
     let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
     expect(perms == 0o600, "AtomicFileWrite locks tempfile to 0o600 before rename")
+
+    // An existing looser file must not keep its old mode (TEST-ARG-001).
+    try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o644)],
+                                          ofItemAtPath: secretFile.path)
+    try AtomicFileWrite.write(Data("token=abc".utf8), to: secretFile, permissions: 0o600)
+    let over = try FileManager.default.attributesOfItem(atPath: secretFile.path)
+    let overPerms = (over[.posixPermissions] as? NSNumber)?.intValue ?? 0
+    expect(overPerms == 0o600, "AtomicFileWrite tightens an existing 0o644 file to 0o600")
 }
 
 section("JWT decode") {

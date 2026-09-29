@@ -1,0 +1,61 @@
+{
+  "id": "RACE-CRO-010",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 14:35:00 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The window is closed. writeTemp (AtomicFileWrite.swift:60-67) opens the temp file with O_CREAT|O_EXCL|O_NOFOLLOW and runs fchmod to the exact mode while the file is still empty. Only then does it write the bytes and fsync, so the payload is never on disk at the umask default. The tempWritten seam runs after the payload is written and before the rename, which is the right point to observe. In the reversal with the HEAD body plus the seam, temp_file_never_holds_payload_with_loose_mode failed at AtomicFileWriteTests.swift:49 with modes [420] (0644) against the expected [384] (0600). With the fix, all 6 AtomicFileWrite tests are green, and the filtered run passed 98/98. The symlink guard at :37-40 throws before any temp file is created, and the test confirms that no .tmp file is left behind (:104-105). When permissions is nil, the mode comes from the existing file's lstat, and only in the non-symlink case (:42), so CreditBaseline:239 keeps its mode (nil_permissions_preserve_existing_mode). The write loop retries on EINTR and handles short writes. The fd is closed through defer on every path, and the catch block removes the temp file.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:60",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:42",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/AtomicFileWriteTests.swift:49"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "writeTemp at AtomicFileWrite.swift:61-83 is unchanged since my round-1 APROVA. It still opens with O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC, calls fchmod before the first byte, loops on write with EINTR handling, and ends with fsync. Its deepest nesting is still 4 levels. The only change on this path is where the mode for a nil-permissions write comes from: it is now existing.map { $0 & 0o7777 } at :43, which reuses the single lstat result instead of calling stat a second time. That shrinks the code and does not add a branch. The symlink refusal happens before any temp file exists, so it cannot leave a payload on disk. The new test also confirms the directory holds only the link and its target afterwards, which covers the no-leftover-temp side of this finding. The tempWritten test seam is unchanged.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:43",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:61"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "This id shared its only round-1 required change with TEST-ARG-001 (pin and document symlinked-destination handling), and that change is now in place, as covered above. The temp file is still created with open(O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC) and fchmod before any write, and the symlink check runs before the temp file exists, so a refused call leaves nothing on disk (the test asserts the directory listing). No new dependency, host, entitlement or public-contract change. The per-write fsync was already flagged in round-1 new_findings and was not re-raised.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/AtomicFileWriteTests.swift:89"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

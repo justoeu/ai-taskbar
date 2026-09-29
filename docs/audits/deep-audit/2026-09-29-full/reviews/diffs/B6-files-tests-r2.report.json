@@ -1,0 +1,25 @@
+{
+ "batch": "B6-files-tests-r2",
+ "results": [
+  {
+   "id": "TEST-ARG-001",
+   "outcome": "fixed",
+   "tests": [
+    "AtomicFileWriteTests#existing_loose_destination_is_tightened",
+    "AtomicFileWriteTests#symlinked_destination_is_refused"
+   ],
+   "red": "AtomicFileWriteTests.swift:34:9: Expectation failed: try Self.mode(dest) == 0o600",
+   "reversal": "ok"
+  },
+  {
+   "id": "RACE-CRO-010",
+   "outcome": "fixed",
+   "tests": [
+    "AtomicFileWriteTests#temp_file_never_holds_payload_with_loose_mode",
+    "AtomicFileWriteTests#symlinked_destination_is_refused"
+   ],
+   "red": "AtomicFileWriteTests.swift:49:9: Expectation failed: (modes.modes \u2192 [420]) == ([0o600] \u2192 [384])",
+   "reversal": "ok"
+  }
+ ]
+}

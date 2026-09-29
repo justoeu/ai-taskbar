@@ -94,52 +94,62 @@ struct CachedFetchEdgeTests {
         StubURLProtocol.reset()
     }
 
-    @Test("cancelled Task during fetch raises an error rather than returning a value")
+    @Test("cancelled Task during fetch raises CancellationError, not a value or a wrapped error")
     func cancelled_task_raises_cancellation() async throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("ai-taskbar-cfeC-\(UUID().uuidString)")
         try? Paths.ensureDir(tmp)
-        defer { try? FileManager.default.removeItem(at: tmp) }
+        defer {
+            try? FileManager.default.removeItem(at: tmp)
+            StubURLProtocol.reset()
+        }
         let cache = DiskCache(vendor: .openrouter, baseDir: tmp, ttl: 60)
         let creds = EnvOrConfigCredentialReader(
             envVarName: "_UNSET", inlineKey: "k", vendorName: "OpenRouter")
-        // Sleep long enough that cancel always lands while the request is
-        // still in flight — turns the original "either outcome is acceptable"
-        // test (which could not fail) into a deterministic assertion.
+        // The stub announces that a request is in flight, then holds it until
+        // the test has cancelled: no timing guess decides whether the cancel
+        // lands before or after the network call. OpenRouter fires three
+        // requests; only the first is held, the rest pass once released.
+        let (entered, enteredContinuation) = AsyncStream<Void>.makeStream()
+        let gate = StubGate()
         StubURLProtocol.handler = { _ in
-            Thread.sleep(forTimeInterval: 5)
+            enteredContinuation.yield()
+            gate.waitUntilReleased()
             return .init(data: Data())
         }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: cfg)
         let provider = OpenRouterProvider(
             credentials: creds,
             cache: cache,
-            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]))
+            http: HTTPClient(session: session))
         let task = Task<FetchOutcome, Error> {
             try await provider.fetchUsage(forceRefresh: true)
         }
-        // Let the task enter the URLSession await before cancelling. 50ms is
-        // generous for the StubURLProtocol handshake start.
-        try await Task.sleep(for: .milliseconds(50))
+        for await _ in entered { break }
         task.cancel()
+        gate.release()
+
         do {
             _ = try await task.value
             Issue.record("expected the cancelled task to throw, not return a value")
         } catch {
-            // Either CancellationError (cancel observed at checkCancellation)
-            // or AppError.transport (URLSession surfaced URLError.cancelled).
-            // Both prove the cancel was observed — that's the assertion.
-            // The previous test accepted ANY outcome including success,
-            // which made it documentation-only.
-            let isCancellation = error is CancellationError
-            let isAppErrorTransport = (error as? AppError).map { err in
-                if case .transport = err { return true }
-                if case .other = err { return true }  // wrapped URLError
-                return false
-            } ?? false
-            #expect(isCancellation || isAppErrorTransport,
-                    "expected CancellationError or AppError transport, got \(error)")
+            // HTTPClient maps URLError.cancelled to CancellationError, and the
+            // post-network checkCancellation throws it too. Anything else
+            // (AppError.other, .transport, .schema from the empty body) means
+            // the cancel was lost or re-wrapped.
+            #expect(error is CancellationError, "expected CancellationError, got \(error)")
         }
-        StubURLProtocol.reset()
+        // Drain the sibling requests the cancel left behind. StubURLProtocol
+        // state is process-wide, so a request still loading here would be
+        // captured by (and served the handler of) the NEXT suite's test —
+        // that is how this test broke GeminiProviderTests' header check.
+        session.invalidateAndCancel()
+        for _ in 0..<500 where await !session.allTasks.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await session.allTasks.isEmpty)
     }
 
     @Test("semantic decode failure preserves and serves the last known-good payload")
@@ -190,5 +200,29 @@ struct CachedFetchEdgeTests {
 
         #expect(outcome.isStale)
         #expect(abs(outcome.fetchedAt.timeIntervalSince(cachedAt)) < 2)
+    }
+}
+
+/// One-shot latch for a blocking StubURLProtocol handler: callers wait until
+/// `release()`; after that every call returns immediately.
+private final class StubGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var released = false
+    private let semaphore = DispatchSemaphore(value: 0)
+
+    func waitUntilReleased() {
+        lock.lock()
+        let open = released
+        lock.unlock()
+        if open { return }
+        _ = semaphore.wait(timeout: .now() + 5)
+        semaphore.signal() // pass the wake-up on to any other waiter
+    }
+
+    func release() {
+        lock.lock()
+        released = true
+        lock.unlock()
+        semaphore.signal()
     }
 }

@@ -1,0 +1,12 @@
+{
+ "id": "TEST-ARG-011",
+ "verdict": "APROVA",
+ "reasoning": "CachedFetchEdgeTests.swift:97-153 keeps its changes inside the one test: a gate replaces the timing guess, the assert now requires CancellationError, and a private StubGate is added. It also drains the session, which stops process-wide StubURLProtocol state leaking into the next suite, and that is on-topic for this finding.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift:97"
+ ],
+ "lens": "SCOPE",
+ "_task": "a74bf3a318eae6e3f",
+ "batch": "B6-files-tests"
+}

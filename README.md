@@ -528,6 +528,7 @@ the same item. No telemetry, no remote logging.
 - Optional **TLS pinning** with Trust-On-First-Use SPKI hashes for paranoid setups.
 - Hardened-runtime entitlements ready for Developer ID signing (see [`Resources/entitlements.plist`](Resources/entitlements.plist)).
 - TOCTOU symlink refusal on cache + support directories.
+- Credential, config and cache writes (`AtomicFileWrite`) refuse a symlinked destination file: the write fails and both the link and its target are left untouched.
 - All audit findings from a 5-agent code review are tracked and addressed; see `CLAUDE.md` for the policy.
 
 ## Build from source
