@@ -592,6 +592,16 @@ that came out of fixing that:
   `UsageHistoryStore.Sample`, at init AND on decode. `validate.sh` rejects
   bare integer conversions in `*WireTypes.swift` (point-free `Int.init`
   included), via the same shared script and self-test.
+- **Integer format specifiers in `Localizable.strings` are `%ld`, never
+  `%d` / `%i`.** Every integer a call site formats is a Swift `Int` (64-bit);
+  `%d` reads 32 bits of it, so a discreet notification for an unclamped
+  `notify_at` of 5000000000 printed `705032704%` (BUG-MAE-015). Positional
+  forms are `%1$ld`. If an argument is ever genuinely `Int32`, widen it to
+  `Int` at the call site instead of carving out a `%d`. The same ratchet in
+  `scripts/check-source-ratchets.sh` requires en, pt-BR and es to carry the
+  identical key set and, per key, the identical specifier list (by argument
+  index, so a translation may reorder positional forms); the self-test
+  plants `%d`, `%i`, `%1$d`, `%hd`, a missing key and a mismatched specifier.
 - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
   cleanup, marker writes). If a credential write fails, the user must see it.
 - **Keychain reads AND writes** must run inside

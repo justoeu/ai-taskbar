@@ -103,8 +103,9 @@ if ! cmp -s CLAUDE.md AGENTS.md; then
 fi
 ok "CLAUDE.md ≡ AGENTS.md"
 
-# Vacuous-#expect ratchet + trapping Double->Int ratchet for *WireTypes.swift.
-# Both live in one script shared with ci.yml so the two cannot drift, and the
+# Vacuous-#expect ratchet + trapping Double->Int ratchet for *WireTypes.swift +
+# 64-bit %ld / en-pt-BR-es parity ratchet for Localizable.strings.
+# All live in one script shared with ci.yml so the two cannot drift, and the
 # self-test runs first: it plants every form each check must reject or accept
 # in a scratch tree, so a regex that silently stopped matching fails here
 # instead of reporting a clean tree. See the scripts for the rationale.
@@ -114,7 +115,7 @@ if ! selftest_out=$(scripts/source-ratchet-selftest.sh 2>&1); then
 fi
 ok "source-ratchet self-test (planted forms caught, allowed forms pass)"
 scripts/check-source-ratchets.sh \
-    || fail "source ratchet — use expectTrue/expectFalse / Int(saturating:) / Int(checkedTruncating:)"
+    || fail "source ratchet — use expectTrue/expectFalse / Int(saturating:) / Int(checkedTruncating:) / %ld"
 
 # Warnings ratchet.
 #

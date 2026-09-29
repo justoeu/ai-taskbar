@@ -9,6 +9,8 @@
 # planted scratch tree instead of the repo:
 #   TESTS_DIR       (default: Tests)
 #   WIRE_TYPES_DIR  (default: Sources/AiTaskbarProviders)
+#   STRINGS_DIR     (default: Sources/AiTaskbarApp/Resources; holds
+#                    {en,pt-BR,es}.lproj/Localizable.strings)
 #
 # Exits non-zero, printing up to 5 offending locations, when either check
 # fires. If you change a pattern here, run scripts/source-ratchet-selftest.sh:
@@ -132,6 +134,83 @@ if [ -n "$bare_int" ]; then
     status=1
 else
     echo "  ✓ no trapping integer conversions in wire types"
+fi
+
+# 3. Localizable.strings integer specifiers + language parity (BUG-MAE-015).
+# Every integer a call site formats is a Swift `Int`, which is 64-bit; `%d` /
+# `%i` read 32 bits of it, so `notif_discreet_body_fmt` fed an unclamped
+# 5_000_000_000 threshold printed 705032704. Integer conversions must carry a
+# 64-bit length modifier (`%ld`, `%1$ld`, `%lld`, `%qd`, `%zd`, `%jd`, `%td`);
+# a bare or `h`/`hh` `%d`/`%i` fails. If an argument is ever genuinely Int32,
+# widen it to Int at the call site rather than special-casing the gate.
+# The three languages must also carry identical key sets and, per key, the
+# identical specifier list (ordered by argument index, so a translation may
+# reorder positional `%1$@ … %2$ld` forms), since a missing or mismatched
+# specifier in one language reads the wrong vararg at runtime.
+# The space flag is deliberately not parsed: prose keys looked up without args
+# ("90% ahora", "(% Quota)") would otherwise read as `% a` / `% Q` specifiers,
+# and no format key here uses that flag.
+strings_dir="${STRINGS_DIR:-Sources/AiTaskbarApp/Resources}"
+strings_files=()
+for lang in en pt-BR es; do
+    strings_files+=("$strings_dir/$lang.lproj/Localizable.strings")
+done
+for f in "${strings_files[@]}"; do
+    if [ ! -f "$f" ]; then
+        echo "  ✗ strings check could not run (missing $f)"
+        exit 1
+    fi
+done
+if ! bad_fmt=$(perl -0777 -ne '
+        my $src = $_;
+        $src =~ s{/\*.*?\*/}{ (my $m = $&) =~ s/[^\n]//g; $m }gse;
+        my $line = 0;
+        for my $l (split /\n/, $src, -1) {
+            $line++;
+            $l =~ s{^\s*//.*}{};
+            next if $l =~ /^\s*$/;
+            if ($l !~ /^\s*"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;\s*(?:\/\/.*)?$/) {
+                print "$ARGV:$line: unparseable entry — cannot verify\n";
+                next;
+            }
+            my ($key, $val) = ($1, $2);
+            my ($next, @specs) = (1);
+            while ($val =~ /%(?:(\d+)\$)?[-+#0\x27]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(hh|h|ll|l|q|z|t|j|L)?([diouxXeEfFgGaAcCsSp@%])/g) {
+                my ($pos, $len, $conv) = ($1, $2 // "", $3);
+                next if $conv eq "%";
+                if (($conv eq "d" || $conv eq "i") && $len !~ /^(?:l|ll|q|z|t|j)$/) {
+                    print "$ARGV:$line: \"$key\" uses %$len$conv — use %l$conv for a Swift Int\n";
+                }
+                my $idx = defined $pos ? $pos : $next++;
+                push @specs, [$idx, "$len$conv"];
+            }
+            my $sig = join ",", map { "$_->[0]:$_->[1]" } sort { $a->[0] <=> $b->[0] } @specs;
+            $seen{$ARGV}{$key} = $sig;
+        }
+        END {
+            my @files = sort keys %seen;
+            my %all;
+            for my $f (@files) { $all{$_} = 1 for keys %{$seen{$f}} }
+            for my $k (sort keys %all) {
+                my %sigs;
+                for my $f (@files) {
+                    if (!exists $seen{$f}{$k}) { print "$f: missing key \"$k\"\n"; next }
+                    $sigs{$seen{$f}{$k}} = 1;
+                }
+                print "\"$k\": specifiers differ across languages (", join(" | ", sort keys %sigs), ")\n"
+                    if keys %sigs > 1;
+            }
+        }
+    ' "${strings_files[@]}"); then
+    echo "  ✗ strings check could not run (dir: $strings_dir)"
+    exit 1
+fi
+if [ -n "$bad_fmt" ]; then
+    echo "$bad_fmt" | head -5
+    echo "  ✗ Localizable.strings integer specifier / parity violation — use %ld and keep en, pt-BR, es in lockstep"
+    status=1
+else
+    echo "  ✓ Localizable.strings: 64-bit integer specifiers, identical keys and specifiers in en/pt-BR/es"
 fi
 
 exit "$status"

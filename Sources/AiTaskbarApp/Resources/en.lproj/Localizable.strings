@@ -74,7 +74,7 @@
 "notif_heavy_usage" = "Heavy usage.";
 "notif_resets_fmt" = "%@ Resets %@.";
 "notif_discreet_title" = "AI Taskbar";
-"notif_discreet_body_fmt" = "A monitored window crossed %d%%.";
+"notif_discreet_body_fmt" = "A monitored window crossed %ld%%.";
 "notif_title_fmt" = "%@ — %@ at %ld%%";
 
 // About panel
@@ -211,7 +211,7 @@
 // Public service status
 "service_status_help" = "Service status";
 "service_status_ax_label" = "Service status";
-"service_status_ax_value_fmt" = "%d affected, %d unknown, %d automatic sources";
+"service_status_ax_value_fmt" = "%ld affected, %ld unknown, %ld automatic sources";
 "service_status_ax_hint" = "Opens public service status for the last six hours.";
 "service_status_title" = "Service status";
 "service_status_last_six_hours" = "Last 6 hours";
@@ -250,7 +250,7 @@
 "service_status_expand" = "Show incident details";
 "service_status_collapse" = "Hide incident details";
 "service_status_components_fmt" = "Components: %@";
-"service_status_duration_fmt" = "%dh %dm";
+"service_status_duration_fmt" = "%ldh %ldm";
 "service_status_open_incident" = "Open incident";
 "service_status_open_page" = "Open official status page";
 "service_status_timeline_ax_fmt" = "Six-hour timeline: %@";
@@ -264,7 +264,7 @@
 "reset_confirm_title" = "Use one rate-limit reset?";
 "reset_confirm_button" = "Confirm reset";
 "reset_cancel" = "Cancel";
-"reset_confirm_message" = "Account: %@\nAvailable resets: %d\nThis consumes one earned reset. Retries reuse the same attempt and cannot consume a second credit for it.";
+"reset_confirm_message" = "Account: %@\nAvailable resets: %ld\nThis consumes one earned reset. Retries reuse the same attempt and cannot consume a second credit for it.";
 "reset_done" = "Reset confirmed. Updating usage…";
 "reset_done_refresh_pending" = "Reset confirmed, but usage could not be refreshed yet.";
 "reset_nothing" = "OpenAI reports no eligible limit to reset.";
@@ -283,8 +283,8 @@
 "credits_balance_fmt" = "Credits: %@";
 "credits_remaining_fmt" = "%@ of %@ left";
 "credits_unlimited" = "Unlimited credits";
-"credits_local_msgs_fmt" = "≈ %d–%d local messages on credits";
-"credits_cloud_msgs_fmt" = "≈ %d–%d cloud messages on credits";
+"credits_local_msgs_fmt" = "≈ %ld–%ld local messages on credits";
+"credits_cloud_msgs_fmt" = "≈ %ld–%ld cloud messages on credits";
 "credits_funding_now" = "Plan window spent — running on credits";
 "credits_recalibrate" = "Recalibrate credits bar";
 "credits_exhausted" = "Credits used up";
@@ -343,11 +343,11 @@
 "compare_prev_month_1" = "Previous month";
 "compare_prev_month_2" = "2 months ago";
 "compare_vs_prev_week_1" = "vs. previous week";
-"compare_vs_prev_week_fmt" = "vs. %d weeks ago";
+"compare_vs_prev_week_fmt" = "vs. %ld weeks ago";
 "compare_vs_prev_day_1" = "vs. yesterday";
-"compare_vs_prev_day_fmt" = "vs. %d days ago";
+"compare_vs_prev_day_fmt" = "vs. %ld days ago";
 "compare_vs_prev_month_1" = "vs. previous month";
-"compare_vs_prev_month_fmt" = "vs. %d months ago";
+"compare_vs_prev_month_fmt" = "vs. %ld months ago";
 "analytics_delta_quota_help" = "Change in average quota utilization compared to the selected previous period.";
 "analytics_insufficient_history_short" = "No prior data";
 "analytics_insufficient_history_help" = "Not enough historical data recorded yet for the selected comparison period.";

@@ -73,7 +73,7 @@
 "notif_heavy_usage" = "Uso intenso.";
 "notif_resets_fmt" = "%@ Se reinicia %@.";
 "notif_discreet_title" = "AI Taskbar";
-"notif_discreet_body_fmt" = "Una ventana monitoreada cruzó %d%%.";
+"notif_discreet_body_fmt" = "Una ventana monitoreada cruzó %ld%%.";
 "notif_title_fmt" = "%@ — %@ al %ld%%";
 
 // About panel
@@ -210,7 +210,7 @@
 // Estado público de los servicios
 "service_status_help" = "Estado de los servicios";
 "service_status_ax_label" = "Estado de los servicios";
-"service_status_ax_value_fmt" = "%d afectados, %d desconocidos, %d fuentes automáticas";
+"service_status_ax_value_fmt" = "%ld afectados, %ld desconocidos, %ld fuentes automáticas";
 "service_status_ax_hint" = "Abre el estado público de los servicios de las últimas seis horas.";
 "service_status_title" = "Estado de los servicios";
 "service_status_last_six_hours" = "Últimas 6 horas";
@@ -249,7 +249,7 @@
 "service_status_expand" = "Mostrar detalles de incidentes";
 "service_status_collapse" = "Ocultar detalles de incidentes";
 "service_status_components_fmt" = "Componentes: %@";
-"service_status_duration_fmt" = "%dh %dmin";
+"service_status_duration_fmt" = "%ldh %ldmin";
 "service_status_open_incident" = "Abrir incidente";
 "service_status_open_page" = "Abrir página oficial de estado";
 "service_status_timeline_ax_fmt" = "Cronología de seis horas: %@";
@@ -263,7 +263,7 @@
 "reset_confirm_title" = "¿Usar un reset de límite?";
 "reset_confirm_button" = "Confirmar reset";
 "reset_cancel" = "Cancelar";
-"reset_confirm_message" = "Cuenta: %@\nResets disponibles: %d\nEsta acción consume un reset ganado. Los reintentos usan la misma clave y no consumen un segundo crédito para ella.";
+"reset_confirm_message" = "Cuenta: %@\nResets disponibles: %ld\nEsta acción consume un reset ganado. Los reintentos usan la misma clave y no consumen un segundo crédito para ella.";
 "reset_done" = "Reset confirmado. Actualizando uso…";
 "reset_done_refresh_pending" = "Reset confirmado, pero todavía no se pudo actualizar el uso.";
 "reset_nothing" = "OpenAI indica que no hay un límite elegible para reset.";
@@ -282,8 +282,8 @@
 "credits_balance_fmt" = "Créditos: %@";
 "credits_remaining_fmt" = "%@ de %@ restantes";
 "credits_unlimited" = "Créditos ilimitados";
-"credits_local_msgs_fmt" = "≈ %d–%d mensajes locales con créditos";
-"credits_cloud_msgs_fmt" = "≈ %d–%d mensajes en la nube con créditos";
+"credits_local_msgs_fmt" = "≈ %ld–%ld mensajes locales con créditos";
+"credits_cloud_msgs_fmt" = "≈ %ld–%ld mensajes en la nube con créditos";
 "credits_funding_now" = "Ventana del plan agotada — consumiendo créditos";
 "credits_recalibrate" = "Recalibrar barra de créditos";
 "credits_exhausted" = "Créditos agotados";
@@ -342,11 +342,11 @@
 "compare_prev_month_1" = "Mes anterior";
 "compare_prev_month_2" = "Hace 2 meses";
 "compare_vs_prev_week_1" = "vs. semana anterior";
-"compare_vs_prev_week_fmt" = "vs. hace %d semanas";
+"compare_vs_prev_week_fmt" = "vs. hace %ld semanas";
 "compare_vs_prev_day_1" = "vs. ayer";
-"compare_vs_prev_day_fmt" = "vs. hace %d días";
+"compare_vs_prev_day_fmt" = "vs. hace %ld días";
 "compare_vs_prev_month_1" = "vs. mes anterior";
-"compare_vs_prev_month_fmt" = "vs. hace %d meses";
+"compare_vs_prev_month_fmt" = "vs. hace %ld meses";
 "analytics_delta_quota_help" = "Variación en la utilización promedio de cuota en comparación con el período anterior seleccionado.";
 "analytics_insufficient_history_short" = "Sin datos previos";
 "analytics_insufficient_history_help" = "Aún no hay suficientes datos registrados en el historial para el período comparativo seleccionado.";
