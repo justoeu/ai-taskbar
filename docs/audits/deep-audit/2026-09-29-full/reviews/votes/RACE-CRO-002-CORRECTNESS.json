@@ -1,0 +1,17 @@
+{
+ "id": "RACE-CRO-002",
+ "verdict": "APROVA",
+ "reasoning": "The defect is fixed on both providers and on every route into the exchange.\n\nOpenAIProvider.swift:110-113: inside the SingleFlight closure it re-reads auth.json through OffPool.run. If the refresh token no longer matches the caller's, it returns the current credential and skips the exchange. Otherwise it exchanges and writes back based on `current`, not on the `auth` captured before the network await (:115-122). This covers the proactive and the reactive 401 routes, because both go through refreshAndWriteBack.\n\nAnthropicProvider.swift:108-114: it re-reads with readOffPool inside the flight and returns `current` in two cases: the refresh token rotated, or `!canPersistCredentials` (the re-read was served by /usr/bin/security). The exchange then uses current.refreshToken (:115-122). The outer gate at :89 still requires manageOAuthRefresh && canPersistCredentials.\n\nCLAUDE.md rules hold. Read-only stays the default: manageOAuthRefresh defaults to false in AnthropicProvider.swift:27/37, OpenAIProvider.swift:37/48 and AppConfig.swift:309/326. A credential that cannot be persisted is never rotated: it is checked before the flight and again after the re-read, because canPersistCredentials reflects the latest actual read (KeychainCredentialReader.swift:27-31).\n\nTests: the filter `OAuthKeychainConcurrency|AnthropicProvider|OpenAIProvider|KeychainCredentialReader` passes, 80 tests in 9 suites.\n\nTargeted reversal: I replaced only the re-read and skip blocks with `let current = credentials` / `let current = auth` and kept SingleFlight and the other B10 fixes. Both tests went RED: openai_reactive_refresh_skips_rotated_refresh_token (OAuthKeychainConcurrencyTests.swift:230-232) and anthropic_refresh_skips_rotated_refresh_token (:265-268). Each failed with `hits.count 1 != 0`, not-stale false, and Authorization nil instead of 'Bearer rotated.acc'. I then restored both files. `git diff HEAD` is byte-identical to reviews/diffs/B10-oauth-keychain-r2.diff (cmp).\n\nCaveat, not a vote:\n- No test covers the in-flight branch where `!canPersistCredentials` flips to true on the re-read. The branch only returns early, so it can never cause a rotation.\n- If `current` has a different refresh token but is also expired, the reactive path gets one 401, then invalidate plus reload triggers a single exchange with the new refresh token. It does not loop.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicProvider.swift:108",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicProvider.swift:89",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:110",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:27",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/OAuthKeychainConcurrencyTests.swift:237"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "a4154da2cb1273c8b",
+ "batch": "B10-oauth-keychain-r2"
+}

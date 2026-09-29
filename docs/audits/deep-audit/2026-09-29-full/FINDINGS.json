@@ -999,7 +999,7 @@
     "fix": "Add authorizeOffPool() (continuation + DispatchQueue.global) next to readOffPool() and call it from `Task { @MainActor }`. Wrap OpenAIResetService the same way. Think about releasing the gate around the interactive prompt.",
     "confidence": "medium",
     "test_red_green": {
-      "name": "authorizeDoesNotBlockConcurrentRead",
+      "name": "OAuthKeychainConcurrencyTests#authorize_runs_off_cooperative_pool,SingleFlightTests#offpool_leaves_cooperative_pool,SingleFlightTests#offpool_rethrows",
       "assert_before": "stub authorizer sleeping 2s; concurrent readOffPool() >= 2s",
       "assert_after": "authorize runs on a GCD thread; read not serialized behind the prompt"
     },
@@ -1008,10 +1008,41 @@
     "cetico_evidence": "VendorSectionView.swift:421 runs Task.detached (cooperative pool), which calls authorizePersistently, which holds credentialMutationGate (KeychainCredentialReader.swift:88-90) while the dialog is open. Same pattern in CodexResetProcess.swift:158/:172. Downgraded: it is triggered only by the user, who is in front of the dialog at that moment. Scheduled reads use readOffPool (a GCD thread), so they park GCD threads, not pool threads.",
     "verification": "cetico",
     "domain": "best_practices",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
     "id": "BEST-ATE-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "OAuthKeychainConcurrencyTests#authorize_runs_off_cooperative_pool,SingleFlightTests#offpool_leaves_cooperative_pool,SingleFlightTests#offpool_rethrows",
+    "resolved_at": "2026-09-29 16:10:11 UTC",
+    "resolved_note": "batch B10-oauth-keychain",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:10:11 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#authorize_runs_off_cooperative_pool,SingleFlightTests#offpool_leaves_cooperative_pool,SingleFlightTests#offpool_rethrows · revisão approved (3/3) · batch B10-oauth-keychain"
+    ],
+    "in_progress": false
   },
   {
     "title": "No project-wide checked Double->Int conversion; JWT, Anthropic credential and Gemini decoders still trap on out-of-range JSON numbers",
@@ -2912,7 +2943,7 @@
     "fix": "Create and store the Task inside one withLock critical section: return the existing Task, or create the new one and store it in the same closure. In the defer, clear the slot only if it still holds this task (compare handles). Apply to both providers.",
     "failure_scenario": "A scheduled tick starts fetch A (token within refreshBuffer). 50 ms later the user clicks refresh. VendorViewModel cancels A's Task, but that cancel does not reach the code between read() and refreshAndWriteBack, and the refresh Task is unstructured anyway. A and B both read slot==nil at L106 and both create Tasks at L109, so two OpenAIOAuth.refresh POSTs go out with the same RT. A installs its task. B finds A's task and awaits its value, but B's orphan Task keeps running, exchanges the already-consumed RT, and its defer sets slot=nil.",
     "test_red_green": {
-      "name": "refreshFlight_concurrentCallers_exchangeOnce",
+      "name": "OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears",
       "assert_before": "StubURLProtocol counts POSTs to the token endpoint and holds each response on a barrier. Start two fetchUsage(forceRefresh:true) calls concurrently with an expiring id_token and manageOAuthRefresh=true, then release the barrier. Expect tokenEndpointHits == 1. FAILS today (2).",
       "assert_after": "tokenEndpointHits == 1; the auth.json RT equals the single response's refresh_token; both callers return the same access token."
     },
@@ -2921,9 +2952,40 @@
     "cetico_evidence": "The check and the store are not atomic. OpenAIProvider.swift:106 reads the slot, :109 creates Task{} (it runs at once, because the provider is a final class and not an actor, so nothing serializes it), and only :123-127 stores it. AnthropicProvider.swift:92-113 has the same shape. Downgraded from HIGH: (1) only reachable with opt-in manage_oauth_refresh=true; (2) fetchUsage has a single caller, VendorViewModel.swift:226, which cancels the previous task before starting the next (:222). (3) The window between the two withLock calls is only as long as Task creation (microseconds). The finding's own scenario (a click 50 ms later) does NOT produce a double exchange: by then B finds A's Task in the slot and joins it.",
     "verification": "cetico",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "id": "RACE-CRO-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears",
+    "resolved_at": "2026-09-29 16:10:10 UTC",
+    "resolved_note": "batch B10-oauth-keychain",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:10:10 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears · revisão approved (3/3) · batch B10-oauth-keychain"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",
@@ -2939,7 +3001,7 @@
     "fix": "Inside the single-flight task, re-read the credential. If its refresh_token differs from the one the caller passed in, someone already rotated it: return the fresh credential and skip the exchange. Alternatively, key the flight by the RT being rotated and memoize the result for that RT.",
     "failure_scenario": "Fetches A and B run with the same access token (A from the scheduled tick, B from the auth.json watcher or scheduleReauthRetry). A gets a 401 at t=300 ms, refreshes, writes back, and clears the slot at t=700 ms. B's 401 arrives at t=750 ms because of network jitter. The slot is nil, so B calls refreshAndWriteBack(authOld) and runs a second exchange with RT_old, which is already consumed.",
     "test_red_green": {
-      "name": "reactive401_lateCaller_doesNotReuseRotatedRT",
+      "name": "OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token",
       "assert_before": "Stub the usage endpoint to return 401 to two requests, releasing the second only after the first refresh has finished. Stub the token endpoint to return invalid_grant for any RT it has already seen. Expect B to succeed. FAILS today: B throws invalid_grant and the token endpoint is hit twice.",
       "assert_after": "The token endpoint is hit exactly once; B retries the usage call with the rotated access token and succeeds."
     },
@@ -2948,9 +3010,40 @@
     "cetico_evidence": "There is no re-read of the credential inside the flight: OpenAIProvider.swift:68 reads auth before the await, and :94 exchanges the captured RT. A vector is possible: A gets a 401, passes checkCancellation (:93) and starts the flight. B supersedes A and reads auth.json before A's writeBack (:120). B's usage call gets a 401 after A's flight has cleared the slot, so B exchanges RT_old. That needs the server to revoke the AT, a user or watcher refresh landing inside the exchange window, and the opt-in flag. Anthropic is mostly immune: its 401 path calls invalidateCachedCredentials and re-reads (AnthropicProvider.swift:66-68). Not proven.",
     "verification": "cetico",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "id": "RACE-CRO-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token",
+    "resolved_at": "2026-09-29 16:10:11 UTC",
+    "resolved_note": "batch B10-oauth-keychain",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:10:10 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token · revisão approved (3/3) · batch B10-oauth-keychain"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",
@@ -3024,7 +3117,7 @@
     "fix": "Never read credentials from decode. Pass in the label computed in the fetch closure (primeLabelCache already runs there), or make planLabel return only the memoized value. Alternatively, call readOffPool before decode from an async context.",
     "failure_scenario": "Launch within the cache TTL: fetchUsage -> freshPayloadWithAge hit -> decodeSnapshot -> planLabel -> read() -> direct read fails with -25308 -> security tool subprocess runs for 5 s on a cooperative thread. Meanwhile the status store and the other providers' tasks queue on the reduced pool.",
     "test_red_green": {
-      "name": "planLabel_cacheHit_doesNotCallBlockingRead",
+      "name": "OAuthKeychainConcurrencyTests#anthropic_cache_hit_plan_label_reads_off_pool",
       "assert_before": "Reader stub whose read() sleeps 2 s and records the calling thread and call count. Seed a fresh DiskCache and call fetchUsage(forceRefresh:false). Expect read() call count == 0 on the cache-hit path. FAILS today (1 call, on a pool thread).",
       "assert_after": "decode never calls read(); the label is nil or memoized; the fetch returns in < 50 ms."
     },
@@ -3033,9 +3126,40 @@
     "cetico_evidence": "CachedFetch.swift:26-27 on a cache hit calls decodeSnapshot, which calls planLabel (AnthropicProvider.swift:157), which calls a synchronous credentialReader.read(). That read holds credentialMutationGate (KeychainCredentialReader.swift:53-54) and can hit the security-tool fallback (:186-192) on a cooperative thread. This breaks the readOffPool rule in CLAUDE.md. Downgraded: it happens once at launch, when labelCache is empty. After a fallback failure the 1 h / 5 min cooldown makes later attempts return fast, so the cost is at most about 5-8 s on one pool thread.",
     "verification": "cetico",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "id": "RACE-CRO-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "OAuthKeychainConcurrencyTests#anthropic_cache_hit_plan_label_reads_off_pool",
+    "resolved_at": "2026-09-29 16:10:11 UTC",
+    "resolved_note": "batch B10-oauth-keychain",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:10:11 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#anthropic_cache_hit_plan_label_reads_off_pool · revisão approved (3/3) · batch B10-oauth-keychain"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",

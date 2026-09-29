@@ -1,0 +1,67 @@
+{
+  "id": "BEST-ATE-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 16:10:11 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "VendorSectionView.swift:422-426 now calls provider.authorizeCredentialsOffPool() (UsageProvider.swift:35-37 -> OffPool.run -> DispatchQueue.global), so the blocking dialog no longer parks a cooperative thread. OpenAIResetService.prepare/consume (CodexResetProcess.swift:158,172) moved to OffPool.run the same way. readOffPool keeps its semantics: it now delegates to OffPool.run with the same default qos .userInitiated and the same Result-based resume. Reversal: I replaced the helper body with the old pattern, Task.detached{...}.value. authorize_runs_off_cooperative_pool went RED (expectFalse on authorizeRanOnPool), which shows the probe tells the pool apart from GCD. Restored, and it passes. Caveat: credentialMutationGate is still held during the prompt, so a concurrent read still queues behind it. It now waits on a GCD thread, not a pool thread, which is the point of the finding. The withPromptsAllowed path after the click and the silent read after authorize are untouched (KeychainAccessAuthorizer and KeychainCredentialReader are not in the diff). The VendorSectionView call site itself has no test (UI code); the helper it calls is covered.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Views/VendorSectionView.swift:422",
+        "Sources/AiTaskbarProviders/UsageProvider.swift:35",
+        "Sources/AiTaskbarCore/Util/OffPool.swift:8",
+        "Sources/AiTaskbarApp/CodexResetProcess.swift:158"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The continuation code that lived only in readOffPool was extracted into OffPool.run (Sources/AiTaskbarCore/Util/OffPool.swift). It resumes exactly once through `resume(with: Result{})`, and T: Sendable plus a @Sendable body satisfies strict concurrency. readOffPool (AnthropicCredentialReading.swift:35), authorizeCredentialsOffPool (UsageProvider.swift:35) and OpenAIResetService.prepare/consume (CodexResetProcess.swift:158,172) all reuse it, so there are no new copies. The do/catch in VendorSectionView.swift:424 replaces Result{} only because that initializer is not async, which is fine. The report says tests=1054, warnings=0, coverage 92.63%. I did not build this myself because the protocol says QUALITY is read-only.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/OffPool.swift:9",
+        "Sources/AiTaskbarProviders/UsageProvider.swift:35",
+        "Sources/AiTaskbarApp/Views/VendorSectionView.swift:421",
+        "Sources/AiTaskbarApp/CodexResetProcess.swift:158"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The finding names three sites: VendorSectionView.swift:421, OpenAIResetService (CodexResetProcess.swift:159,173) and readOffPool. All three move to OffPool.run. Sources/AiTaskbarCore/Util/OffPool.swift is new and public. AnthropicCredentialReading.readOffPool keeps its behaviour. The UsageProvider change at UsageProvider.swift:35 adds only a method in a protocol extension, not a new protocol requirement, so no conformer breaks. CooperativePoolProbe lives only in AiTaskbarTesting. Package.swift:23-37 shows AiTaskbarApp, Core and Providers do not depend on AiTaskbarTesting, and no file under Sources outside that target references the probe. It calls the private `__dispatch_queue_get_label` SPI, which stays confined to test code. The diff adds no dependency, host, entitlement or secret file.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/OffPool.swift:9",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/UsageProvider.swift:35",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/CodexResetProcess.swift:158",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarTesting/CooperativePoolProbe.swift:12",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Package.swift:23"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

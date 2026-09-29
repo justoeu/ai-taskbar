@@ -32,11 +32,7 @@ public extension AnthropicCredentialReading {
     /// plain GCD thread so a hung tool parks neither the main actor nor one
     /// of the cooperative pool's few worker threads.
     func readOffPool() async throws -> AnthropicCredentials {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(with: Result { try self.read() })
-            }
-        }
+        try await OffPool.run { try self.read() }
     }
 
     /// Test/in-memory readers need no distinct persistent-ACL path.

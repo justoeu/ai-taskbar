@@ -1,0 +1,13 @@
+{
+ "id": "RACE-CRO-002",
+ "verdict": "APROVA",
+ "reasoning": "OpenAIProvider.swift:105-113 re-reads auth.json inside the flight. If the refresh_token no longer matches the caller's, it returns the current credential and skips the exchange. Otherwise it exchanges and writes back using current, not the auth captured before the await. This covers both the reactive (:93) and proactive (:74) routes. Reverted to HEAD: openai_reactive_refresh_skips_rotated_refresh_token went RED (hits.count 1, not stale false, Authorization nil). Restored, and it passes. Caveat, not a vote: AnthropicProvider.refreshAndWriteBack (:99-110) still exchanges the captured credentials.refreshToken with no re-read. The window there is only the sync isExpired check between readOffPool and run(), and the reactive 401 path already calls invalidateCachedCredentials and re-reads. The finding's scenario (stale RT across a network await) does not exist on that route.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/OpenAIProvider.swift:105",
+  "Sources/AiTaskbarProviders/AnthropicProvider.swift:99"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a6f44a63712ba49fc",
+ "batch": "B10-oauth-keychain"
+}

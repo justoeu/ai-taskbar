@@ -1,5 +1,4 @@
 import Foundation
-import os
 import AiTaskbarCore
 
 public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
@@ -28,9 +27,9 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
     private var labelCache: (idToken: String, label: String?)?
 
     /// Single-flight OAuth refresh so concurrent fetchUsage calls share one
-    /// token exchange (RACE-HER-003). Vendors rotate RT on every exchange.
-    private let refreshFlight = OSAllocatedUnfairLock(
-        initialState: Optional<Task<CodexAuth, Error>>.none)
+    /// token exchange (RACE-HER-003, RACE-CRO-001). Vendors rotate RT on
+    /// every exchange.
+    private let refreshFlight = SingleFlight<CodexAuth>()
 
     public init(credentials: FileCredentialReader = .init(),
                 cache: DiskCache,
@@ -103,29 +102,27 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
     /// Opt-in only — see `manageOAuthRefresh`. Concurrent callers coalesce onto
     /// one in-flight exchange (RACE-HER-003).
     private func refreshAndWriteBack(_ auth: CodexAuth) async throws -> CodexAuth {
-        if let existing = refreshFlight.withLock({ $0 }) {
-            return try await existing.value
-        }
-        let task = Task<CodexAuth, Error> {
-            defer { refreshFlight.withLock { $0 = nil } }
+        try await refreshFlight.run { [self] in
+            // The caller may hold a credential read before another flight (or
+            // the Codex CLI) rotated it. Exchanging that refresh token would
+            // spend one the server already consumed, so use the newer
+            // credential instead (RACE-CRO-002).
+            let current = try await OffPool.run { [credentials] in try credentials.read() }
+            if current.tokens.refreshToken != auth.tokens.refreshToken {
+                return current
+            }
             let resp = try await OpenAIOAuth.refresh(
-                refreshToken: auth.tokens.refreshToken, http: http)
+                refreshToken: current.tokens.refreshToken, http: http)
             try Task.checkCancellation()
-            var updated = auth
+            var updated = current
             updated.tokens = CodexTokens(
                 accessToken: resp.access_token,
-                refreshToken: resp.refresh_token ?? auth.tokens.refreshToken,
-                idToken: resp.id_token ?? auth.tokens.idToken
+                refreshToken: resp.refresh_token ?? current.tokens.refreshToken,
+                idToken: resp.id_token ?? current.tokens.idToken
             )
             try credentials.writeBack(updated)
             return updated
         }
-        let winner: Task<CodexAuth, Error> = refreshFlight.withLock { slot in
-            if let existing = slot { return existing }
-            slot = task
-            return task
-        }
-        return try await winner.value
     }
 
     /// Builds the usage request with the given credential and returns the

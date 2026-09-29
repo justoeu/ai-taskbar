@@ -1,0 +1,16 @@
+{
+ "id": "RACE-CRO-002",
+ "verdict": "MUDANCAS",
+ "reasoning": "The finding's evidence names two vendors: OpenAIProvider L94 and 'AnthropicProvider.loadCredentials L82-90 has the same shape'. The diff fixes only OpenAI: OpenAIProvider.swift:105-112 re-reads inside the flight and skips the exchange if the token was already rotated. The Anthropic sibling at AnthropicProvider.swift:99-110 still exchanges `credentials.refreshToken`, which the caller captured before the await. It has no re-read, so a late caller that arrives after an earlier flight cleared the slot still spends an already-rotated token. It is the same refreshAndWriteBack function mirrored across the two vendors. The report has one test for this id, and it covers OpenAI only.",
+ "required_changes": [
+  "AnthropicProvider.refreshAndWriteBack: inside refreshFlight.run, re-read the item with `try await credentialReader.readOffPool()`, off the pool. If its refreshToken differs from the one passed in, return the fresh credential without exchanging. Otherwise exchange and rotate from the re-read value.",
+  "Add an Anthropic counterpart of openai_reactive_refresh_skips_rotated_refresh_token to OAuthKeychainConcurrencyTests, with a reversal."
+ ],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicProvider.swift:99",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:105"
+ ],
+ "lens": "SCOPE",
+ "_task": "a22fc59bdd3bf81fe",
+ "batch": "B10-oauth-keychain"
+}

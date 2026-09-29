@@ -1,0 +1,15 @@
+{
+ "batch": "B10-oauth-keychain-r2",
+ "results": [
+  {
+   "id": "RACE-CRO-002",
+   "outcome": "fixed",
+   "tests": [
+    "OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token",
+    "OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token"
+   ],
+   "red": "Expectation failed: (hits.count \u2192 1) == 0; ...captured.last?.value(forHTTPHeaderField: \"Authorization\") \u2192 nil) == \"Bearer rotated.acc\"",
+   "reversal": "ok"
+  }
+ ]
+}

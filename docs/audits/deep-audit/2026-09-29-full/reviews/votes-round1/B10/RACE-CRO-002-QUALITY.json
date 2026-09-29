@@ -1,0 +1,16 @@
+{
+ "id": "RACE-CRO-002",
+ "verdict": "MUDANCAS",
+ "reasoning": "The finding names two copies of the same pattern, and the fix covers only one. The evidence points at OpenAIProvider fetch L68/L92-94 and says 'AnthropicProvider.loadCredentials L82-90 has the same shape'. The diff adds the re-read and refresh-token comparison only in OpenAIProvider.refreshAndWriteBack (OpenAIProvider.swift:110-113). AnthropicProvider.refreshAndWriteBack (AnthropicProvider.swift:100-110) still exchanges `credentials.refreshToken` captured by the caller, with no re-read inside the flight. So a late caller can still start a new flight with a refresh token that an earlier flight already rotated. The window is smaller on Anthropic: lastKnownGood is refreshed by writeBack, and there is no network await between the read and run(). But it is the unfixed copy of the same clone. On form, the OpenAI side is fine: the comment explains why, and the `try credentials.read()` inside the flight propagates its error.",
+ "required_changes": [
+  "Apply the same guard in AnthropicProvider.refreshAndWriteBack. Inside the refreshFlight.run closure, re-read through credentialReader (off the pool, via readOffPool). If the refreshToken differs from the one passed in, return the current credential without exchanging. Otherwise exchange current.refreshToken. Add an Anthropic test next to openai_reactive_refresh_skips_rotated_refresh_token.",
+  "If Anthropic is left out on purpose (for example because lastKnownGood makes the window negligible), write that reason as a comment at AnthropicProvider.swift:100 and in the batch report, instead of leaving the difference implicit."
+ ],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/OpenAIProvider.swift:110",
+  "Sources/AiTaskbarProviders/AnthropicProvider.swift:100"
+ ],
+ "lens": "QUALITY",
+ "_task": "af73257c90825425c",
+ "batch": "B10-oauth-keychain"
+}

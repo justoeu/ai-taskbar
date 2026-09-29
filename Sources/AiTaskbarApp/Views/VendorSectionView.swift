@@ -419,9 +419,11 @@ public struct VendorSectionView: View {
         let vm = self.vm
         let provider = vm.provider
         Task.detached(priority: .userInitiated) {
-            let result: Result<Bool, Error> = Result {
-                try provider.authorizeCredentialsInteractively()
-            }
+            // The native dialog blocks until the user answers, so the call
+            // hops to a GCD thread instead of parking a cooperative one.
+            let result: Result<Bool, Error>
+            do { result = .success(try await provider.authorizeCredentialsOffPool()) }
+            catch { result = .failure(error) }
             await MainActor.run {
                 keychainAuthPending = false
                 switch result {

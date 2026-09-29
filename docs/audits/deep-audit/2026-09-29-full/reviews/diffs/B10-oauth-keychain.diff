@@ -1,0 +1,712 @@
+diff --git a/Sources/AiTaskbarApp/CodexResetProcess.swift b/Sources/AiTaskbarApp/CodexResetProcess.swift
+index 33d2582..5754ddf 100644
+--- a/Sources/AiTaskbarApp/CodexResetProcess.swift
++++ b/Sources/AiTaskbarApp/CodexResetProcess.swift
+@@ -152,8 +152,10 @@ final class CodexResetProcess: CodexResetRPC {
+ }
+ 
+ enum OpenAIResetService {
++    // Both calls block on a child process (up to 15 s per request), so they
++    // run on a GCD thread rather than the cooperative pool.
+     static func prepare(path: URL) async throws -> OpenAIResetOffer {
+-        try await Task.detached(priority: .userInitiated) {
++        try await OffPool.run {
+             let auth = try FileCredentialReader(path: path).read()
+             if let pending = try OpenAIResetJournal().read() {
+                 guard try OpenAIResetProtocol.accountID(auth) == pending.accountID else {
+@@ -163,11 +165,11 @@ enum OpenAIResetService {
+             }
+             let rpc = try CodexResetProcess()
+             return try OpenAIResetProtocol.prepare(auth: auth, rpc: rpc)
+-        }.value
++        }
+     }
+ 
+     static func consume(path: URL, offer: OpenAIResetOffer, retry: Bool) async throws -> OpenAIResetReceipt {
+-        try await Task.detached(priority: .userInitiated) {
++        try await OffPool.run {
+             let journal = OpenAIResetJournal()
+             return try journal.withExclusiveAccess {
+                 let existing = try journal.read()
+@@ -187,6 +189,6 @@ enum OpenAIResetService {
+                 catch { throw OpenAIResetError.submissionUncertain }
+                 return receipt
+             }
+-        }.value
++        }
+     }
+ }
+diff --git a/Sources/AiTaskbarApp/Views/VendorSectionView.swift b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+index 6853703..70d770a 100644
+--- a/Sources/AiTaskbarApp/Views/VendorSectionView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+@@ -419,9 +419,11 @@ public struct VendorSectionView: View {
+         let vm = self.vm
+         let provider = vm.provider
+         Task.detached(priority: .userInitiated) {
+-            let result: Result<Bool, Error> = Result {
+-                try provider.authorizeCredentialsInteractively()
+-            }
++            // The native dialog blocks until the user answers, so the call
++            // hops to a GCD thread instead of parking a cooperative one.
++            let result: Result<Bool, Error>
++            do { result = .success(try await provider.authorizeCredentialsOffPool()) }
++            catch { result = .failure(error) }
+             await MainActor.run {
+                 keychainAuthPending = false
+                 switch result {
+diff --git a/Sources/AiTaskbarCore/Credentials/AnthropicCredentialReading.swift b/Sources/AiTaskbarCore/Credentials/AnthropicCredentialReading.swift
+index 4a751c4..71887c4 100644
+--- a/Sources/AiTaskbarCore/Credentials/AnthropicCredentialReading.swift
++++ b/Sources/AiTaskbarCore/Credentials/AnthropicCredentialReading.swift
+@@ -32,11 +32,7 @@ public extension AnthropicCredentialReading {
+     /// plain GCD thread so a hung tool parks neither the main actor nor one
+     /// of the cooperative pool's few worker threads.
+     func readOffPool() async throws -> AnthropicCredentials {
+-        try await withCheckedThrowingContinuation { continuation in
+-            DispatchQueue.global(qos: .userInitiated).async {
+-                continuation.resume(with: Result { try self.read() })
+-            }
+-        }
++        try await OffPool.run { try self.read() }
+     }
+ 
+     /// Test/in-memory readers need no distinct persistent-ACL path.
+diff --git a/Sources/AiTaskbarCore/Util/OffPool.swift b/Sources/AiTaskbarCore/Util/OffPool.swift
+new file mode 100644
+index 0000000..c520384
+--- /dev/null
++++ b/Sources/AiTaskbarCore/Util/OffPool.swift
+@@ -0,0 +1,19 @@
++import Foundation
++
++/// Runs blocking work (a Keychain read, a `/usr/bin/security` subprocess, a
++/// SecurityAgent dialog waiting on the user) on a plain GCD thread and
++/// resumes the async caller when it finishes. `Task.detached` is not enough:
++/// it still runs on the cooperative pool, which has one thread per core, so
++/// a blocked body parks one of the few threads every other task needs.
++public enum OffPool {
++    public static func run<T: Sendable>(
++        qos: DispatchQoS.QoSClass = .userInitiated,
++        _ body: @escaping @Sendable () throws -> T
++    ) async throws -> T {
++        try await withCheckedThrowingContinuation { continuation in
++            DispatchQueue.global(qos: qos).async {
++                continuation.resume(with: Result { try body() })
++            }
++        }
++    }
++}
+diff --git a/Sources/AiTaskbarCore/Util/SingleFlight.swift b/Sources/AiTaskbarCore/Util/SingleFlight.swift
+new file mode 100644
+index 0000000..cb5ae19
+--- /dev/null
++++ b/Sources/AiTaskbarCore/Util/SingleFlight.swift
+@@ -0,0 +1,48 @@
++import Foundation
++import os
++
++/// Coalesces concurrent callers onto one in-flight operation. The OAuth
++/// providers use it so overlapping fetches share one refresh-token exchange:
++/// both vendors rotate the refresh token on every exchange, so a second
++/// exchange spends a token the first one already consumed.
++///
++/// The operation's Task is created and stored inside the same critical
++/// section, so no caller can start a second one between the check and the
++/// install. A finished flight clears the slot only if the slot still holds
++/// that same flight.
++public final class SingleFlight<Value: Sendable>: Sendable {
++    private struct Flight: Sendable {
++        let id: UInt64
++        let task: Task<Value, Error>
++    }
++
++    private struct State: Sendable {
++        var nextID: UInt64 = 0
++        var flight: Flight?
++    }
++
++    private let state = OSAllocatedUnfairLock(initialState: State())
++
++    public init() {}
++
++    public func run(_ operation: @escaping @Sendable () async throws -> Value) async throws -> Value {
++        let task: Task<Value, Error> = state.withLock { state in
++            if let flight = state.flight { return flight.task }
++            state.nextID &+= 1
++            let id = state.nextID
++            let task = Task<Value, Error> { [self] in
++                defer { finish(id) }
++                return try await operation()
++            }
++            state.flight = Flight(id: id, task: task)
++            return task
++        }
++        return try await task.value
++    }
++
++    private func finish(_ id: UInt64) {
++        state.withLock { state in
++            if state.flight?.id == id { state.flight = nil }
++        }
++    }
++}
+diff --git a/Sources/AiTaskbarProviders/AnthropicProvider.swift b/Sources/AiTaskbarProviders/AnthropicProvider.swift
+index ecb8ffe..4348152 100644
+--- a/Sources/AiTaskbarProviders/AnthropicProvider.swift
++++ b/Sources/AiTaskbarProviders/AnthropicProvider.swift
+@@ -1,5 +1,4 @@
+ import Foundation
+-import os
+ import AiTaskbarCore
+ 
+ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
+@@ -48,7 +47,12 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
+     }
+ 
+     public func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
+-        try await fetcher.run(
++        // A cache hit decodes synchronously, so the plan label must already
++        // be memoized: reading the Keychain from decode would block a
++        // cooperative-pool thread (RACE-CRO-004). The fetch path primes it
++        // from its own read.
++        if !forceRefresh { await primeLabelCacheOffPoolIfNeeded() }
++        return try await fetcher.run(
+             forceRefresh: forceRefresh,
+             decode: decodeSnapshot,
+             fetch: { [self] in
+@@ -74,9 +78,9 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
+         )
+     }
+ 
+-    /// Single-flight OAuth refresh (RACE-HER-003) — same RT rotation hazard as OpenAI.
+-    private let refreshFlight = OSAllocatedUnfairLock(
+-        initialState: Optional<Task<AnthropicCredentials, Error>>.none)
++    /// Single-flight OAuth refresh (RACE-HER-003, RACE-CRO-001) — same RT
++    /// rotation hazard as OpenAI.
++    private let refreshFlight = SingleFlight<AnthropicCredentials>()
+ 
+     private func loadCredentials() async throws -> AnthropicCredentials {
+         var credentials = try await credentialReader.readOffPool()
+@@ -93,11 +97,7 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
+     }
+ 
+     private func refreshAndWriteBack(_ credentials: AnthropicCredentials) async throws -> AnthropicCredentials {
+-        if let existing = refreshFlight.withLock({ $0 }) {
+-            return try await existing.value
+-        }
+-        let task = Task<AnthropicCredentials, Error> {
+-            defer { refreshFlight.withLock { $0 = nil } }
++        try await refreshFlight.run { [self] in
+             let resp = try await AnthropicOAuth.refresh(
+                 refreshToken: credentials.refreshToken, http: http)
+             try Task.checkCancellation()
+@@ -108,12 +108,6 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
+             try credentialReader.writeBack(updated)
+             return updated
+         }
+-        let winner: Task<AnthropicCredentials, Error> = refreshFlight.withLock { slot in
+-            if let existing = slot { return existing }
+-            slot = task
+-            return task
+-        }
+-        return try await winner.value
+     }
+ 
+     private func requestUsage(using credentials: AnthropicCredentials) async throws -> Data {
+@@ -149,19 +143,23 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
+         return .anthropic(parsed.toSnapshot(planLabel: planLabel()))
+     }
+ 
++    /// Memoized only. Decode runs synchronously on the caller's executor, so
++    /// it must never touch the Keychain.
+     private func planLabel() -> String? {
+         labelLock.lock()
+-        let cached = labelCache
+-        labelLock.unlock()
+-        if let cached { return cached.label }
+-        guard let credentials = try? credentialReader.read() else { return nil }
+-        primeLabelCache(subscriptionType: credentials.subscriptionType,
+-                        rateLimit: credentials.rateLimitTier)
+-        labelLock.lock()
+         defer { labelLock.unlock() }
+         return labelCache?.label
+     }
+ 
++    /// Best-effort: a failed read only costs the plan label on this cache
++    /// hit. The fetch path reads again and surfaces credential errors.
++    private func primeLabelCacheOffPoolIfNeeded() async {
++        guard !labelLock.withLock({ labelCache != nil }),
++              let credentials = try? await credentialReader.readOffPool() else { return }
++        primeLabelCache(subscriptionType: credentials.subscriptionType,
++                        rateLimit: credentials.rateLimitTier)
++    }
++
+     private func primeLabelCache(subscriptionType: String?, rateLimit: String?) {
+         let key = "\(subscriptionType ?? "")|\(rateLimit ?? "")"
+         labelLock.lock()
+diff --git a/Sources/AiTaskbarProviders/OpenAIProvider.swift b/Sources/AiTaskbarProviders/OpenAIProvider.swift
+index f9668d8..062aa77 100644
+--- a/Sources/AiTaskbarProviders/OpenAIProvider.swift
++++ b/Sources/AiTaskbarProviders/OpenAIProvider.swift
+@@ -1,5 +1,4 @@
+ import Foundation
+-import os
+ import AiTaskbarCore
+ 
+ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
+@@ -28,9 +27,9 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
+     private var labelCache: (idToken: String, label: String?)?
+ 
+     /// Single-flight OAuth refresh so concurrent fetchUsage calls share one
+-    /// token exchange (RACE-HER-003). Vendors rotate RT on every exchange.
+-    private let refreshFlight = OSAllocatedUnfairLock(
+-        initialState: Optional<Task<CodexAuth, Error>>.none)
++    /// token exchange (RACE-HER-003, RACE-CRO-001). Vendors rotate RT on
++    /// every exchange.
++    private let refreshFlight = SingleFlight<CodexAuth>()
+ 
+     public init(credentials: FileCredentialReader = .init(),
+                 cache: DiskCache,
+@@ -103,29 +102,27 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
+     /// Opt-in only — see `manageOAuthRefresh`. Concurrent callers coalesce onto
+     /// one in-flight exchange (RACE-HER-003).
+     private func refreshAndWriteBack(_ auth: CodexAuth) async throws -> CodexAuth {
+-        if let existing = refreshFlight.withLock({ $0 }) {
+-            return try await existing.value
+-        }
+-        let task = Task<CodexAuth, Error> {
+-            defer { refreshFlight.withLock { $0 = nil } }
++        try await refreshFlight.run { [self] in
++            // The caller may hold a credential read before another flight (or
++            // the Codex CLI) rotated it. Exchanging that refresh token would
++            // spend one the server already consumed, so use the newer
++            // credential instead (RACE-CRO-002).
++            let current = try credentials.read()
++            if current.tokens.refreshToken != auth.tokens.refreshToken {
++                return current
++            }
+             let resp = try await OpenAIOAuth.refresh(
+-                refreshToken: auth.tokens.refreshToken, http: http)
++                refreshToken: current.tokens.refreshToken, http: http)
+             try Task.checkCancellation()
+-            var updated = auth
++            var updated = current
+             updated.tokens = CodexTokens(
+                 accessToken: resp.access_token,
+-                refreshToken: resp.refresh_token ?? auth.tokens.refreshToken,
+-                idToken: resp.id_token ?? auth.tokens.idToken
++                refreshToken: resp.refresh_token ?? current.tokens.refreshToken,
++                idToken: resp.id_token ?? current.tokens.idToken
+             )
+             try credentials.writeBack(updated)
+             return updated
+         }
+-        let winner: Task<CodexAuth, Error> = refreshFlight.withLock { slot in
+-            if let existing = slot { return existing }
+-            slot = task
+-            return task
+-        }
+-        return try await winner.value
+     }
+ 
+     /// Builds the usage request with the given credential and returns the
+diff --git a/Sources/AiTaskbarProviders/UsageProvider.swift b/Sources/AiTaskbarProviders/UsageProvider.swift
+index 935002e..cbf2bd0 100644
+--- a/Sources/AiTaskbarProviders/UsageProvider.swift
++++ b/Sources/AiTaskbarProviders/UsageProvider.swift
+@@ -28,4 +28,11 @@ public extension UsageProvider {
+     func authorizeCredentialsInteractively() throws -> Bool {
+         throw AppError.credentials("Interactive credential authorization is not supported for \(displayName)")
+     }
++
++    /// Async entry point for the Authorize button. The interactive call
++    /// blocks while a SecurityAgent dialog waits on the user, so it runs on a
++    /// plain GCD thread instead of the cooperative pool.
++    func authorizeCredentialsOffPool() async throws -> Bool {
++        try await OffPool.run { try self.authorizeCredentialsInteractively() }
++    }
+ }
+diff --git a/Sources/AiTaskbarTesting/CooperativePoolProbe.swift b/Sources/AiTaskbarTesting/CooperativePoolProbe.swift
+new file mode 100644
+index 0000000..5db0279
+--- /dev/null
++++ b/Sources/AiTaskbarTesting/CooperativePoolProbe.swift
+@@ -0,0 +1,18 @@
++import Foundation
++
++/// Tells a test whether the calling code runs on one of Swift Concurrency's
++/// cooperative-pool threads. Those threads run on dispatch root queues whose
++/// labels end in `.cooperative`, for example
++/// `com.apple.root.default-qos.cooperative`. A plain
++/// `DispatchQueue.global()` thread carries the same label without that
++/// suffix. `Thread.isMainThread` cannot tell the two apart, and
++/// `Task.detached` still runs on the pool.
++public enum CooperativePoolProbe {
++    public static var currentQueueLabel: String {
++        String(cString: __dispatch_queue_get_label(nil))
++    }
++
++    public static var isOnCooperativePool: Bool {
++        currentQueueLabel.hasSuffix(".cooperative")
++    }
++}
+diff --git a/Tests/AiTaskbarCoreTests/SingleFlightTests.swift b/Tests/AiTaskbarCoreTests/SingleFlightTests.swift
+new file mode 100644
+index 0000000..837da3e
+--- /dev/null
++++ b/Tests/AiTaskbarCoreTests/SingleFlightTests.swift
+@@ -0,0 +1,69 @@
++import Testing
++import Foundation
++@testable import AiTaskbarCore
++import AiTaskbarTesting
++
++private final class Counter: @unchecked Sendable {
++    private let lock = NSLock()
++    private var value = 0
++    func next() -> Int { lock.withLock { value += 1; return value } }
++    var count: Int { lock.withLock { value } }
++}
++
++@Suite("SingleFlight and OffPool")
++struct SingleFlightTests {
++    @Test("concurrent callers share one operation and its result")
++    func concurrent_callers_share_one_run() async throws {
++        let flight = SingleFlight<Int>()
++        let runs = Counter()
++        let results = try await withThrowingTaskGroup(of: Int.self) { group in
++            for _ in 0..<16 {
++                group.addTask {
++                    try await flight.run {
++                        let n = runs.next()
++                        try await Task.sleep(nanoseconds: 100_000_000)
++                        return n
++                    }
++                }
++            }
++            return try await group.reduce(into: [Int]()) { $0.append($1) }
++        }
++        #expect(runs.count == 1)
++        #expect(Set(results) == [1])
++    }
++
++    @Test("a finished flight clears the slot, so the next call runs again")
++    func finished_flight_allows_next_run() async throws {
++        let flight = SingleFlight<Int>()
++        let runs = Counter()
++        let first = try await flight.run { runs.next() }
++        let second = try await flight.run { runs.next() }
++        #expect(first == 1)
++        #expect(second == 2)
++    }
++
++    @Test("an error reaches every joined caller and clears the slot")
++    func error_propagates_and_clears() async throws {
++        let flight = SingleFlight<Int>()
++        await #expect(throws: AppError.self) {
++            try await flight.run { throw AppError.credentials("boom") }
++        }
++        let after = try await flight.run { 7 }
++        #expect(after == 7)
++    }
++
++    @Test("OffPool.run executes on a GCD thread, not the cooperative pool")
++    func offpool_leaves_cooperative_pool() async throws {
++        let onPool = try await OffPool.run { CooperativePoolProbe.isOnCooperativePool }
++        let detachedOnPool = await Task.detached { CooperativePoolProbe.isOnCooperativePool }.value
++        #expect(!onPool)
++        #expect(detachedOnPool)
++    }
++
++    @Test("OffPool.run rethrows the body's error")
++    func offpool_rethrows() async {
++        await #expect(throws: AppError.self) {
++            try await OffPool.run { () throws -> Int in throw AppError.credentials("x") }
++        }
++    }
++}
+diff --git a/Tests/AiTaskbarProvidersTests/OAuthKeychainConcurrencyTests.swift b/Tests/AiTaskbarProvidersTests/OAuthKeychainConcurrencyTests.swift
+new file mode 100644
+index 0000000..30f106d
+--- /dev/null
++++ b/Tests/AiTaskbarProvidersTests/OAuthKeychainConcurrencyTests.swift
+@@ -0,0 +1,278 @@
++import Testing
++import Foundation
++import os
++@testable import AiTaskbarCore
++@testable import AiTaskbarProviders
++import AiTaskbarTesting
++
++/// Thread-safe in-memory reader. It records whether each blocking call ran on
++/// a cooperative-pool thread, and optionally blocks `authorizePersistently`
++/// on a semaphore to stand in for a SecurityAgent dialog waiting on the user.
++private final class ProbingKeychainReader: AnthropicCredentialReading, @unchecked Sendable {
++    private let lock = NSLock()
++    private var current: AnthropicCredentials
++    private var readsOnPool = 0
++    private var readsTotal = 0
++    private var authorizeOnPool: Bool?
++    private var writes = 0
++    let authorizeGate: DispatchSemaphore?
++
++    init(_ credentials: AnthropicCredentials, authorizeGate: DispatchSemaphore? = nil) {
++        current = credentials
++        self.authorizeGate = authorizeGate
++    }
++
++    var poolReads: Int { lock.withLock { readsOnPool } }
++    var totalReads: Int { lock.withLock { readsTotal } }
++    var writeBacks: Int { lock.withLock { writes } }
++    var authorizeRanOnPool: Bool? { lock.withLock { authorizeOnPool } }
++
++    func read() throws -> AnthropicCredentials {
++        let onPool = CooperativePoolProbe.isOnCooperativePool
++        return lock.withLock {
++            readsTotal += 1
++            if onPool { readsOnPool += 1 }
++            return current
++        }
++    }
++
++    func authorizePersistently() throws -> KeychainAccessAuthorizer.Outcome {
++        let onPool = CooperativePoolProbe.isOnCooperativePool
++        lock.withLock { authorizeOnPool = onPool }
++        if let authorizeGate {
++            _ = authorizeGate.wait(timeout: .now() + 5)
++        }
++        return .authorized
++    }
++
++    func writeBack(_ updated: AnthropicCredentials) throws {
++        lock.withLock {
++            writes += 1
++            current = updated
++        }
++    }
++}
++
++/// Counts token-endpoint exchanges across the URLSession loader threads.
++private final class HitCounter: @unchecked Sendable {
++    private let lock = NSLock()
++    private var value = 0
++    func increment() { lock.withLock { value += 1 } }
++    var count: Int { lock.withLock { value } }
++}
++
++@Suite("OAuth single-flight and Keychain off-pool hops", .serialized)
++struct OAuthKeychainConcurrencyTests {
++    private static let callers = 8
++    private static let iterations = 25
++
++    private static func tmpDir() throws -> URL {
++        let url = URL(fileURLWithPath: NSTemporaryDirectory())
++            .appendingPathComponent("ai-taskbar-oauth-race-\(UUID().uuidString)")
++        try Paths.ensureDir(url)
++        return url
++    }
++
++    private static func base64URL(_ text: String) -> String {
++        Data(text.utf8).base64EncodedString()
++            .replacingOccurrences(of: "+", with: "-")
++            .replacingOccurrences(of: "/", with: "_")
++            .replacingOccurrences(of: "=", with: "")
++    }
++
++    private static func jwt(expiresIn: TimeInterval) -> String {
++        let exp = Int(Date().addingTimeInterval(expiresIn).timeIntervalSince1970)
++        return "\(base64URL("{\"alg\":\"none\"}")).\(base64URL("{\"exp\":\(exp)}"))."
++    }
++
++    private static func writeCodexAuth(to url: URL, idToken: String,
++                                       accessToken: String, refreshToken: String) throws {
++        let json = #"""
++        {"tokens":{"access_token":"\#(accessToken)","refresh_token":"\#(refreshToken)","id_token":"\#(idToken)"},"account_id":"acc-1"}
++        """#
++        try json.write(to: url, atomically: true, encoding: .utf8)
++    }
++
++    /// Runs `callers` concurrent fetches that are all released by one gate,
++    /// so they race into the refresh path together.
++    private static func raceFetches(_ provider: any UsageProvider) async {
++        let gate = DispatchSemaphore(value: 0)
++        await withTaskGroup(of: Void.self) { group in
++            for _ in 0..<callers {
++                group.addTask {
++                    await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
++                        DispatchQueue.global().async {
++                            gate.wait()
++                            c.resume()
++                        }
++                    }
++                    _ = try? await provider.fetchUsage(forceRefresh: true)
++                }
++            }
++            for _ in 0..<callers { gate.signal() }
++        }
++    }
++
++    // MARK: RACE-CRO-001
++
++    @Test("OpenAI: concurrent callers with an expiring token run exactly one exchange")
++    func openai_concurrent_refresh_exchanges_once() async throws {
++        let hits = HitCounter()
++        let freshID = Self.jwt(expiresIn: 3600)
++        let body = #"{"access_token":"new.acc","refresh_token":"new.ref","id_token":"\#(freshID)","expires_in":3600}"#
++        StubURLProtocol.reset()
++        StubURLProtocol.handler = { req in
++            if req.url?.path.contains("oauth/token") == true {
++                hits.increment()
++                Thread.sleep(forTimeInterval: 0.05)
++                return .init(data: Data(body.utf8))
++            }
++            return .init(data: Fixtures.data(Fixtures.openaiUsage200))
++        }
++        defer { StubURLProtocol.reset() }
++        var extraExchanges = 0
++        for _ in 0..<Self.iterations {
++            let dir = try Self.tmpDir()
++            defer { try? FileManager.default.removeItem(at: dir) }
++            let path = dir.appendingPathComponent("auth.json")
++            try Self.writeCodexAuth(to: path, idToken: Self.jwt(expiresIn: -100),
++                                    accessToken: "old.acc", refreshToken: "old.ref")
++            let before = hits.count
++            let provider = OpenAIProvider(
++                credentials: FileCredentialReader(path: path),
++                cache: DiskCache(vendor: .openai, baseDir: dir),
++                http: .stubbed(protocols: [StubURLProtocol.self]),
++                manageOAuthRefresh: true)
++            await Self.raceFetches(provider)
++            extraExchanges += max(0, hits.count - before - 1)
++        }
++        #expect(extraExchanges == 0)
++    }
++
++    @Test("Anthropic: concurrent callers with an expired token run exactly one exchange")
++    func anthropic_concurrent_refresh_exchanges_once() async throws {
++        let hits = HitCounter()
++        let body = #"{"access_token":"new.acc","refresh_token":"new.ref","expires_in":3600}"#
++        StubURLProtocol.reset()
++        StubURLProtocol.handler = { req in
++            if req.url?.path.contains("oauth/token") == true {
++                hits.increment()
++                Thread.sleep(forTimeInterval: 0.05)
++                return .init(data: Data(body.utf8))
++            }
++            return .init(data: Fixtures.data(Fixtures.anthropicUsage200))
++        }
++        defer { StubURLProtocol.reset() }
++        var extraExchanges = 0
++        for _ in 0..<Self.iterations {
++            let dir = try Self.tmpDir()
++            defer { try? FileManager.default.removeItem(at: dir) }
++            let before = hits.count
++            let reader = ProbingKeychainReader(AnthropicCredentials(
++                accessToken: "old.acc", refreshToken: "old.ref",
++                expiresAtMs: Int64(Date().addingTimeInterval(-60).timeIntervalSince1970 * 1000)))
++            let provider = AnthropicProvider(
++                credentialReader: reader,
++                cache: DiskCache(vendor: .anthropic, baseDir: dir),
++                http: .stubbed(protocols: [StubURLProtocol.self]),
++                manageOAuthRefresh: true)
++            await Self.raceFetches(provider)
++            extraExchanges += max(0, hits.count - before - 1)
++        }
++        #expect(extraExchanges == 0)
++    }
++
++    // MARK: RACE-CRO-002
++
++    @Test("OpenAI: a 401 after another process rotated auth.json reuses the new token, no exchange")
++    func openai_reactive_refresh_skips_rotated_refresh_token() async throws {
++        let dir = try Self.tmpDir()
++        defer { try? FileManager.default.removeItem(at: dir) }
++        let path = dir.appendingPathComponent("auth.json")
++        let idToken = Self.jwt(expiresIn: 3600)
++        try Self.writeCodexAuth(to: path, idToken: idToken,
++                                accessToken: "old.acc", refreshToken: "old.ref")
++        let hits = HitCounter()
++        StubURLProtocol.reset()
++        StubURLProtocol.handler = { req in
++            if req.url?.path.contains("oauth/token") == true {
++                hits.increment()
++                return .init(status: 400, data: Data(#"{"error":"invalid_grant"}"#.utf8))
++            }
++            if req.value(forHTTPHeaderField: "Authorization") == "Bearer old.acc" {
++                // Another fetch (or the Codex CLI) rotates the credential while
++                // this request is in flight, then the server rejects the old AT.
++                try? Self.writeCodexAuth(to: path, idToken: idToken,
++                                         accessToken: "rotated.acc", refreshToken: "rotated.ref")
++                return .init(status: 401, data: Data(#"{"error":"expired"}"#.utf8))
++            }
++            return .init(data: Fixtures.data(Fixtures.openaiUsage200))
++        }
++        defer { StubURLProtocol.reset() }
++        let provider = OpenAIProvider(
++            credentials: FileCredentialReader(path: path),
++            cache: DiskCache(vendor: .openai, baseDir: dir),
++            http: .stubbed(protocols: [StubURLProtocol.self]),
++            manageOAuthRefresh: true)
++
++        let outcome = try? await provider.fetchUsage(forceRefresh: true)
++
++        #expect(hits.count == 0)
++        expectTrue(outcome.map { !$0.isStale } ?? false)
++        #expect(StubURLProtocol.captured.last?.value(forHTTPHeaderField: "Authorization")
++                == "Bearer rotated.acc")
++    }
++
++    // MARK: RACE-CRO-004
++
++    @Test("Anthropic: a cache hit never reads the Keychain on the cooperative pool")
++    func anthropic_cache_hit_plan_label_reads_off_pool() async throws {
++        let dir = try Self.tmpDir()
++        defer { try? FileManager.default.removeItem(at: dir) }
++        let cache = DiskCache(vendor: .anthropic, baseDir: dir)
++        try cache.writePayload(Fixtures.data(Fixtures.anthropicUsage200))
++        let reader = ProbingKeychainReader(AnthropicCredentials(
++            accessToken: "a", refreshToken: "r",
++            expiresAtMs: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000),
++            subscriptionType: "max", rateLimitTier: "default_claude_max_20x"))
++        StubURLProtocol.reset()
++        let provider = AnthropicProvider(credentialReader: reader, cache: cache,
++                                         http: .stubbed(protocols: [StubURLProtocol.self]))
++
++        let outcome = try await provider.fetchUsage(forceRefresh: false)
++
++        #expect(reader.poolReads == 0)
++        #expect(StubURLProtocol.captured.isEmpty)
++        guard case let .anthropic(snap) = outcome.snapshot else {
++            Issue.record("expected anthropic snapshot")
++            return
++        }
++        #expect(snap.planLabel == "Claude Max 20x")
++    }
++
++    // MARK: BEST-ATE-001
++
++    @Test("Authorize runs off the cooperative pool and does not starve readOffPool")
++    func authorize_runs_off_cooperative_pool() async throws {
++        let gate = DispatchSemaphore(value: 0)
++        let reader = ProbingKeychainReader(AnthropicCredentials(
++            accessToken: "a", refreshToken: "r",
++            expiresAtMs: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000)),
++            authorizeGate: gate)
++        let dir = try Self.tmpDir()
++        defer { try? FileManager.default.removeItem(at: dir) }
++        let provider = AnthropicProvider(credentialReader: reader,
++                                         cache: DiskCache(vendor: .anthropic, baseDir: dir),
++                                         http: .stubbed(protocols: [StubURLProtocol.self]))
++
++        let authorization = Task { try await provider.authorizeCredentialsOffPool() }
++        // The dialog is "open": a concurrent credential read must still finish.
++        let read = try await reader.readOffPool()
++        gate.signal()
++        let authorized = try await authorization.value
++
++        #expect(read.accessToken == "a")
++        #expect(authorized)
++        expectFalse(reader.authorizeRanOnPool ?? true)
++    }
++}

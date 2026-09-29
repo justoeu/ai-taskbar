@@ -1,0 +1,15 @@
+{
+ "id": "RACE-CRO-004",
+ "verdict": "APROVA",
+ "reasoning": "planLabel() is now memo-only (AnthropicProvider.swift:148). It takes the lock, uses defer, and returns. It lost its double lock/unlock and no longer reads the Keychain from decode, so the function got shorter. The priming moved to primeLabelCacheOffPoolIfNeeded() (AnthropicProvider.swift:157), which uses readOffPool. Its `try?` is on a path that really is best-effort (only the label is lost), the doc comment says the fetch path reads again and surfaces the error, and CLAUDE.md allows `try?` for that. The extra read on a cold miss is cheap: KeychainCredentialReader.read() returns the in-memory lastKnownGood (KeychainCredentialReader.swift:56), and after a failure the security-tool fallback is in cooldown.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/AnthropicProvider.swift:54",
+  "Sources/AiTaskbarProviders/AnthropicProvider.swift:148",
+  "Sources/AiTaskbarProviders/AnthropicProvider.swift:157",
+  "Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:56"
+ ],
+ "lens": "QUALITY",
+ "_task": "af73257c90825425c",
+ "batch": "B10-oauth-keychain"
+}

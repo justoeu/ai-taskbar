@@ -152,8 +152,10 @@ final class CodexResetProcess: CodexResetRPC {
 }
 
 enum OpenAIResetService {
+    // Both calls block on a child process (up to 15 s per request), so they
+    // run on a GCD thread rather than the cooperative pool.
     static func prepare(path: URL) async throws -> OpenAIResetOffer {
-        try await Task.detached(priority: .userInitiated) {
+        try await OffPool.run {
             let auth = try FileCredentialReader(path: path).read()
             if let pending = try OpenAIResetJournal().read() {
                 guard try OpenAIResetProtocol.accountID(auth) == pending.accountID else {
@@ -163,11 +165,11 @@ enum OpenAIResetService {
             }
             let rpc = try CodexResetProcess()
             return try OpenAIResetProtocol.prepare(auth: auth, rpc: rpc)
-        }.value
+        }
     }
 
     static func consume(path: URL, offer: OpenAIResetOffer, retry: Bool) async throws -> OpenAIResetReceipt {
-        try await Task.detached(priority: .userInitiated) {
+        try await OffPool.run {
             let journal = OpenAIResetJournal()
             return try journal.withExclusiveAccess {
                 let existing = try journal.read()
@@ -187,6 +189,6 @@ enum OpenAIResetService {
                 catch { throw OpenAIResetError.submissionUncertain }
                 return receipt
             }
-        }.value
+        }
     }
 }

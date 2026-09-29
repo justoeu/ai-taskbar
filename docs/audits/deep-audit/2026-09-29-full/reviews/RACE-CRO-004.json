@@ -1,0 +1,62 @@
+{
+  "id": "RACE-CRO-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 16:10:11 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "AnthropicProvider.swift planLabel() (~:146-151) now only returns the memoized value, so decode never touches the Keychain on the cache-hit or stale-fallback paths. With !forceRefresh it first primes the label through readOffPool, a GCD thread (primeLabelCacheOffPoolIfNeeded, ~:155-161, called at :54). Reverted to HEAD: anthropic_cache_hit_plan_label_reads_off_pool went RED (poolReads 1). Restored, and it passes. Caveats: (a) forceRefresh + fetch failure + empty labelCache now shows a nil label in the stale fallback, where it used to read. That is acceptable, because that read would most likely have failed too. (b) On a cold start (cache miss, labelCache nil), the priming adds one extra off-pool read before the fetch reads again. That costs performance, not correctness.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/AnthropicProvider.swift:54",
+        "Sources/AiTaskbarProviders/AnthropicProvider.swift:146"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "planLabel() is now memo-only (AnthropicProvider.swift:148). It takes the lock, uses defer, and returns. It lost its double lock/unlock and no longer reads the Keychain from decode, so the function got shorter. The priming moved to primeLabelCacheOffPoolIfNeeded() (AnthropicProvider.swift:157), which uses readOffPool. Its `try?` is on a path that really is best-effort (only the label is lost), the doc comment says the fetch path reads again and surfaces the error, and CLAUDE.md allows `try?` for that. The extra read on a cold miss is cheap: KeychainCredentialReader.read() returns the in-memory lastKnownGood (KeychainCredentialReader.swift:56), and after a failure the security-tool fallback is in cooldown.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/AnthropicProvider.swift:54",
+        "Sources/AiTaskbarProviders/AnthropicProvider.swift:148",
+        "Sources/AiTaskbarProviders/AnthropicProvider.swift:157",
+        "Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:56"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "AnthropicProvider.swift:50-55 and :146-161 are confined to this finding. planLabel() is now memo-only, and priming moved to an async readOffPool before fetcher.run. The snapshot shape and planLabel semantics are unchanged, so the golden tests are unaffected. One cost is introduced; it is recorded in new_findings for the performance lens.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicProvider.swift:55",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicProvider.swift:156"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

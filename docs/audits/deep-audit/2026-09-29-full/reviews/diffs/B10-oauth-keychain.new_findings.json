@@ -1,0 +1,34 @@
+[
+ [
+  "SCOPE",
+  "performance: AnthropicProvider.swift:55 primeLabelCacheOffPoolIfNeeded runs before fetcher.run on every non-forced fetch while labelCache is nil. On a stale or missing cache, for example at cold launch, the fetch path reads the credential again (loadCredentials :87), so that fetch reads the Keychain twice. On ad-hoc builds each read can spawn a /usr/bin/security subprocess, up to the 5 s budget. If the priming read keeps failing, the label cache stays empty and every scheduled tick retries it (try? swallow at :158). Suggest skipping the prime when the cache is not fresh, and memoizing a negative result."
+ ],
+ [
+  "SCOPE",
+  "race: OpenAIProvider.swift:107 now calls the synchronous `credentials.read()` (FileCredentialReader, a file read) inside the SingleFlight Task on the cooperative pool. It is cheap, but the batch's stated rule is no blocking I/O on the pool. Consider OffPool.run."
+ ],
+ [
+  "SCOPE",
+  "idiom: Sources/AiTaskbarApp/DMGVerifier.swift:60 and OpenAIResetController.swift:57 still use the `Task.detached { blocking }.value` pattern that OffPool.swift:5 documents as insufficient. Audit them for blocking work (subprocess, file I/O) and move any blocking call to OffPool.run."
+ ],
+ [
+  "QUALITY",
+  "VendorSectionView.swift:421: `Task.detached(priority: .userInitiated)` no longer does anything, because the blocking work now happens in OffPool. `Task { ... }` followed by `await MainActor.run` would be enough (the finding's own fix suggested `Task { @MainActor }`). Low-priority cleanup."
+ ],
+ [
+  "QUALITY",
+  "Tests/AiTaskbarCoreTests/SingleFlightTests.swift:55,63: the two OffPool tests live in a suite named SingleFlightTests, so the file name does not match what it tests. Consider OffPoolTests.swift."
+ ],
+ [
+  "QUALITY",
+  "SingleFlight.run: the flight is an unstructured Task, so cancelling a caller never cancels it, and the `try Task.checkCancellation()` inside the refresh closures (OpenAIProvider.swift:116, AnthropicProvider.swift:103) can never fire. This was already true before the diff. It meets the letter of the checkCancellation hard rule but has no effect. Worth a doc comment on SingleFlight, or a design decision about whether to propagate cancellation."
+ ],
+ [
+  "QUALITY",
+  "KeychainCredentialReader authorize still holds credentialMutationGate for the whole interactive dialog (the finding suggested thinking about releasing it). Scheduled read() calls on other threads still wait on the NSRecursiveLock while the dialog is open. Only the cooperative-pool part was fixed. This is a possible next round."
+ ],
+ [
+  "CORRECTNESS",
+  "AnthropicProvider.refreshAndWriteBack (Sources/AiTaskbarProviders/AnthropicProvider.swift:99-110) does not re-read the credential inside the flight the way OpenAI now does (RACE-CRO-002). The residual window is tiny: the caller reads, another flight finishes its writeBack and clears the slot, then the caller calls run(). Re-reading via credentialReader.read() inside the flight would make the two providers symmetric."
+ ]
+]
