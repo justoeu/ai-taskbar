@@ -226,4 +226,42 @@ struct NotificationDeliveryRollbackTests {
         service.observe(vendor: .anthropic, snapshot: Self.snapshot)
         #expect(center.identifiers.last == "ai-taskbar.anthropic.5h.90")
     }
+
+    /// RACE-MAE-004: pending crossings were keyed by threshold only. After a
+    /// reset and a re-cross of the same threshold, the first add()'s late
+    /// failure un-marked the new crossing, so it was sent a third time.
+    @Test("a stale failure from before a reset does not re-arm the re-crossed threshold")
+    func stale_failure_after_reset_is_ignored() async {
+        let center = FakeNotificationCenter()
+        center.status = .authorized
+        let service = Self.service(center)
+        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
+        service.observe(vendor: .anthropic, snapshot: Self.anthropic(50))
+        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
+        await center.complete(0, with: NSError(domain: "test", code: 1))
+        await drainMainQueue()
+        await center.complete(1, with: nil)
+        await drainMainQueue()
+        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
+        #expect(center.identifiers.count == 2)
+    }
+
+    /// RACE-MAE-004, other order: the first add()'s late success confirmed
+    /// the new crossing, so the new crossing's failure found nothing pending
+    /// and the notification was lost for the window.
+    @Test("a stale success from before a reset does not confirm the re-crossed threshold")
+    func stale_success_after_reset_is_ignored() async {
+        let center = FakeNotificationCenter()
+        center.status = .authorized
+        let service = Self.service(center)
+        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
+        service.observe(vendor: .anthropic, snapshot: Self.anthropic(50))
+        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
+        await center.complete(0, with: nil)
+        await drainMainQueue()
+        await center.complete(1, with: NSError(domain: "test", code: 1))
+        await drainMainQueue()
+        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
+        #expect(center.identifiers.count == 3)
+    }
 }

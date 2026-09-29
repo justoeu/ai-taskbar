@@ -121,7 +121,8 @@ public final class NotificationService {
         for crossing in tracker.crossings(vendor: vendor, windows: snapshot.windows,
                                           sortedThresholds: sortedThresholds) {
             ensureAuthorizedBeforeSend()
-            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold)
+            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold,
+                 token: crossing.token)
         }
     }
 
@@ -137,16 +138,16 @@ public final class NotificationService {
             guard let self else { return }
             self.authorizationRecheckInFlight = false
             guard status != .denied else { return }
-            self.clearKnownDenial()
+            self.clearKnownDenialAndRearm()
         }
     }
 
-    private func clearKnownDenial() {
+    private func clearKnownDenialAndRearm() {
         authorizationKnownDenied = false
         tracker.rearmParked()
     }
 
-    private func send(vendor: VendorId, window: UsageWindow, threshold: Double) {
+    private func send(vendor: VendorId, window: UsageWindow, threshold: Double, token: UInt64) {
         // Defense in depth: never reach `UNUserNotificationCenter` on a
         // runtime known to crash the XPC handshake. `observe()` already
         // filters this, but `send()` is private and could be reused later.
@@ -170,7 +171,7 @@ public final class NotificationService {
             let failure = error.map { String(describing: $0) }
             Task { @MainActor in
                 self?.deliveryFinished(failure: failure, vendor: vendor, label: label,
-                                       threshold: threshold)
+                                       threshold: threshold, token: token)
             }
         }
     }
@@ -181,25 +182,25 @@ public final class NotificationService {
     /// (CQ-MAE-012). Not when the permission is denied: no retry can succeed
     /// then (PERF-MAE-004), so it is parked until permission comes back.
     private func deliveryFinished(failure: String?, vendor: VendorId, label: String,
-                                  threshold: Double) {
+                                  threshold: Double, token: UInt64) {
         guard let failure else {
-            tracker.delivered(vendor: vendor, label: label, threshold: threshold)
-            if authorizationKnownDenied { clearKnownDenial() }
+            tracker.delivered(vendor: vendor, label: label, threshold: threshold, token: token)
+            if authorizationKnownDenied { clearKnownDenialAndRearm() }
             return
         }
         AppLog.lifecycle.error("notification delivery failed: \(failure, privacy: .public)")
         guard !authorizationKnownDenied else {
-            tracker.park(vendor: vendor, label: label, threshold: threshold)
+            tracker.park(vendor: vendor, label: label, threshold: threshold, token: token)
             return
         }
         center.authorizationStatus { [weak self] status in
             guard let self else { return }
             if status == .denied {
                 self.authorizationKnownDenied = true
-                self.tracker.park(vendor: vendor, label: label, threshold: threshold)
+                self.tracker.park(vendor: vendor, label: label, threshold: threshold, token: token)
                 return
             }
-            self.tracker.unmark(vendor: vendor, label: label, threshold: threshold)
+            self.tracker.unmark(vendor: vendor, label: label, threshold: threshold, token: token)
         }
     }
 
@@ -253,12 +254,19 @@ struct NotificationThresholdTracker {
     /// Consecutive snapshots of the key's vendor that did not report it.
     private var missedSnapshots: [Key: Int] = [:]
 
-    /// A crossing whose delivery has not been confirmed: the mark it replaced
-    /// and whether a denial parked it.
+    /// A crossing whose delivery has not been confirmed: the mark it replaced,
+    /// the token its `add()` completion carries back, and whether a denial
+    /// parked it.
     private struct Pending {
         var previous: Double?
+        let token: UInt64
         var parked = false
     }
+
+    /// Source of `Pending.token`. A reset and re-cross of the same threshold
+    /// replaces the entry under a new token, so the first `add()`'s late
+    /// completion no longer acts on the new crossing (RACE-MAE-004).
+    private var nextToken: UInt64 = 0
 
     /// Unconfirmed crossings per key, by threshold. They chain through
     /// `previous`, so a failure can restore the nearest mark that was not
@@ -281,9 +289,10 @@ struct NotificationThresholdTracker {
     /// would restore this one restores what this one replaced instead, so a
     /// mark that was never delivered is never put back (RACE-MAE-003). A
     /// reset since the crossing (no pending entry) must not be undone.
-    mutating func unmark(vendor: VendorId, label: String, threshold: Double) {
+    mutating func unmark(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
         let key = Key(vendor: vendor, label: label)
-        guard let failed = pending[key]?.removeValue(forKey: threshold) else { return }
+        guard isCurrent(key, threshold, token),
+              let failed = pending[key]?.removeValue(forKey: threshold) else { return }
         if highestNotified[key] == threshold {
             highestNotified[key] = failed.previous
         } else {
@@ -291,20 +300,23 @@ struct NotificationThresholdTracker {
                 pending[key]?[higher]?.previous = failed.previous
             }
         }
-        if pending[key]?.isEmpty ?? false { pending.removeValue(forKey: key) }
+        dropEmptyPending(key)
     }
 
     /// The crossing's delivery was confirmed: its mark is final.
-    mutating func delivered(vendor: VendorId, label: String, threshold: Double) {
+    mutating func delivered(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
         let key = Key(vendor: vendor, label: label)
+        guard isCurrent(key, threshold, token) else { return }
         pending[key]?.removeValue(forKey: threshold)
-        if pending[key]?.isEmpty ?? false { pending.removeValue(forKey: key) }
+        dropEmptyPending(key)
     }
 
     /// Keeps a crossing that failed while permission is denied marked, to be
     /// re-armed by `rearmParked()` once permission is granted (BUG-MAE-013).
-    mutating func park(vendor: VendorId, label: String, threshold: Double) {
-        pending[Key(vendor: vendor, label: label)]?[threshold]?.parked = true
+    mutating func park(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
+        let key = Key(vendor: vendor, label: label)
+        guard isCurrent(key, threshold, token) else { return }
+        pending[key]?[threshold]?.parked = true
     }
 
     func hasParked(vendor: VendorId) -> Bool {
@@ -316,14 +328,31 @@ struct NotificationThresholdTracker {
     /// Un-marks every parked crossing so the next snapshot re-sends it.
     mutating func rearmParked() {
         let parked = pending.flatMap { key, byThreshold in
-            byThreshold.filter { $0.value.parked }.map { (key, $0.key) }
+            byThreshold.filter { $0.value.parked }.map { (key, $0.key, $0.value.token) }
         }
-        for (key, threshold) in parked {
-            unmark(vendor: key.vendor, label: key.label, threshold: threshold)
+        for (key, threshold, token) in parked {
+            unmark(vendor: key.vendor, label: key.label, threshold: threshold, token: token)
         }
     }
 
-    typealias Crossing = (window: UsageWindow, threshold: Double)
+    /// Whether `token` still names the pending crossing: false once a reset,
+    /// prune or newer crossing of the same threshold replaced it.
+    private func isCurrent(_ key: Key, _ threshold: Double, _ token: UInt64) -> Bool {
+        pending[key]?[threshold]?.token == token
+    }
+
+    private mutating func dropEmptyPending(_ key: Key) {
+        if pending[key]?.isEmpty ?? false { pending.removeValue(forKey: key) }
+    }
+
+    /// Drops every per-key map entry, so a reset and a prune cannot diverge.
+    private mutating func forget(_ key: Key) {
+        highestNotified.removeValue(forKey: key)
+        missedSnapshots.removeValue(forKey: key)
+        pending.removeValue(forKey: key)
+    }
+
+    typealias Crossing = (window: UsageWindow, threshold: Double, token: UInt64)
 
     /// Folds one snapshot's windows in and returns the crossings to notify.
     /// Each stays pending until `delivered` or `unmark`.
@@ -336,9 +365,7 @@ struct NotificationThresholdTracker {
             let percent = window.utilizationPercent
             // Window dropped below all thresholds → reset so a new cycle re-arms.
             if percent < minThreshold {
-                highestNotified.removeValue(forKey: key)
-                missedSnapshots.removeValue(forKey: key)
-                pending.removeValue(forKey: key)
+                forget(key)
                 continue
             }
             // Find the highest threshold this reading has reached.
@@ -346,8 +373,9 @@ struct NotificationThresholdTracker {
             let previous = highestNotified[key]
             if reached > previous ?? -1 {
                 highestNotified[key] = reached
-                pending[key, default: [:]][reached] = Pending(previous: previous)
-                fired.append((window, reached))
+                nextToken &+= 1
+                pending[key, default: [:]][reached] = Pending(previous: previous, token: nextToken)
+                fired.append((window, reached, nextToken))
             }
         }
         // Prune this vendor's keys for windows no longer reported (xAI's
@@ -358,9 +386,7 @@ struct NotificationThresholdTracker {
         for key in highestNotified.keys where key.vendor == vendor && !current.contains(key) {
             let misses = missedSnapshots[key, default: 0] + 1
             if misses >= Self.pruneAfterMissedSnapshots {
-                highestNotified.removeValue(forKey: key)
-                missedSnapshots.removeValue(forKey: key)
-                pending.removeValue(forKey: key)
+                forget(key)
             } else {
                 missedSnapshots[key] = misses
             }

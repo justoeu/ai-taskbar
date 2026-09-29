@@ -55,6 +55,17 @@ public enum AnalyticsFormatters {
         L10n.localizedString("analytics_quota_percent_fmt", PercentText.whole(percent))
     }
 
+    /// The Usage donut's centre label: the mean `totalUsagePercent` of
+    /// `vendors` (a vendor without a summary counts as 0), rounded like every
+    /// other percent label (CQ-MAE-023).
+    static func averageUsageText(vendors: [VendorId], summaries: [VendorAnalyticsSummary]) -> String {
+        guard !vendors.isEmpty else { return "0%" }
+        let total = vendors.map { vendor in
+            summaries.first(where: { $0.vendor == vendor })?.totalUsagePercent ?? 0
+        }.reduce(0, +)
+        return PercentText.format(total / Double(vendors.count))
+    }
+
     public static func vendorColor(for vendor: VendorId) -> Color {
         switch vendor {
         case .anthropic:  return .orange

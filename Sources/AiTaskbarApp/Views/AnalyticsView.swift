@@ -188,9 +188,8 @@ public struct AnalyticsView: View {
             )
         }
 
-        let avgUsage = shares.isEmpty ? 0 : Int(saturating: shares.map { share in
-            snapshot?.vendorSummaries.first(where: { $0.vendor == share.vendor })?.totalUsagePercent ?? 0
-        }.reduce(0, +) / Double(shares.count))
+        let avgUsage = AnalyticsFormatters.averageUsageText(
+            vendors: shares.map(\.vendor), summaries: snapshot?.vendorSummaries ?? [])
 
         let hoveredSlice = usageSlices.first(where: { $0.id == hoveredUsageVendor })
 
@@ -213,7 +212,7 @@ public struct AnalyticsView: View {
                             Text(L10n.localizedString("analytics_usage"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text("\(avgUsage)%")
+                            Text(avgUsage)
                                 .font(.headline.weight(.bold).monospacedDigit())
                         }
                     }

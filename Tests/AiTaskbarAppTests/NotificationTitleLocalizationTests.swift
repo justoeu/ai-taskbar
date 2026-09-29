@@ -42,6 +42,17 @@ struct NotificationTitleLocalizationTests {
         #expect(NotificationService.title(vendor: .anthropic, window: window)
             == "\(VendorId.anthropic.displayName) — 5h at 93%")
     }
+
+    /// BUG-MAE-014: the title's percent is a 64-bit `Int`; `%d` reads 32
+    /// bits of it. Harmless inside the 0...1000 clamp, wrong beyond it.
+    @Test("the title format reads the percent as a 64-bit Int", arguments: ["en", "pt-BR", "es"])
+    func title_format_is_64_bit(language: String) {
+        let previous = L10n.languageOverride
+        defer { L10n.languageOverride = previous }
+        L10n.languageOverride = language
+        let title = L10n.localizedString("notif_title_fmt", "V", "W", 5_000_000_000)
+        #expect(title.hasSuffix(" 5000000000%"))
+    }
 }
 
 /// CQ-MAE-018: one rounding rule for every whole-percent label.

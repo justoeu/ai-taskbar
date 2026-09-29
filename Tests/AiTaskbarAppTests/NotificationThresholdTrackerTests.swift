@@ -84,11 +84,11 @@ struct NotificationThresholdTrackerTests {
     @Test("unmark leaves a higher threshold marked since then")
     func unmark_keeps_higher_mark() {
         var t = NotificationThresholdTracker()
-        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 75)],
-                        sortedThresholds: thresholds)
+        let at70 = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 75)],
+                               sortedThresholds: thresholds)
         _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
                         sortedThresholds: thresholds)
-        t.unmark(vendor: .xai, label: "W", threshold: 70)
+        t.unmark(vendor: .xai, label: "W", threshold: 70, token: at70[0].token)
         expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 90)
     }
 
@@ -99,9 +99,9 @@ struct NotificationThresholdTrackerTests {
         var t = NotificationThresholdTracker()
         _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 75)],
                         sortedThresholds: thresholds)
-        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
-                        sortedThresholds: thresholds)
-        t.unmark(vendor: .xai, label: "W", threshold: 90)
+        let at90 = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
+                               sortedThresholds: thresholds)
+        t.unmark(vendor: .xai, label: "W", threshold: 90, token: at90[0].token)
         expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 70)
     }
 
@@ -109,9 +109,23 @@ struct NotificationThresholdTrackerTests {
     func unmark_current_mark_refires() {
         var t = NotificationThresholdTracker()
         let w = [UsageWindow(label: "W", utilizationPercent: 95)]
-        _ = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
-        t.unmark(vendor: .xai, label: "W", threshold: 90)
+        let fired = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
+        t.unmark(vendor: .xai, label: "W", threshold: 90, token: fired[0].token)
         #expect(t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
             .map(\.threshold) == [90])
+    }
+
+    /// RACE-MAE-004: a completion carrying the token of a crossing that a
+    /// reset replaced must not un-mark the re-crossed threshold.
+    @Test("unmark with a stale token after reset and re-cross is ignored")
+    func unmark_stale_token_is_ignored() {
+        var t = NotificationThresholdTracker()
+        let w = [UsageWindow(label: "W", utilizationPercent: 95)]
+        let first = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
+        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 5)],
+                        sortedThresholds: thresholds)
+        _ = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
+        t.unmark(vendor: .xai, label: "W", threshold: 90, token: first[0].token)
+        expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 90)
     }
 }

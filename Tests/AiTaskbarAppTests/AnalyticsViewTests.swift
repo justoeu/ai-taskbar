@@ -25,6 +25,30 @@ struct AnalyticsViewTests {
         #expect(text.contains("84%"))
     }
 
+    /// CQ-MAE-023: the donut's average truncated 92.9 to 92% while every
+    /// other percent label rounds it to 93%.
+    @Test("average usage label rounds like every other percent label")
+    func average_usage_rounds() {
+        let summaries = [
+            VendorAnalyticsSummary(vendor: .anthropic, totalCostUSD: 0, totalUsagePercent: 90.8),
+            VendorAnalyticsSummary(vendor: .openai, totalCostUSD: 0, totalUsagePercent: 95.0),
+        ]
+        #expect(AnalyticsFormatters.averageUsageText(vendors: [.anthropic, .openai],
+                                                     summaries: summaries) == "93%")
+    }
+
+    @Test("average usage counts a vendor without a summary as zero")
+    func average_usage_missing_summary_is_zero() {
+        let summaries = [VendorAnalyticsSummary(vendor: .anthropic, totalCostUSD: 0, totalUsagePercent: 81)]
+        #expect(AnalyticsFormatters.averageUsageText(vendors: [.anthropic, .xai],
+                                                     summaries: summaries) == "41%")
+    }
+
+    @Test("average usage of no vendors is 0%")
+    func average_usage_empty() {
+        #expect(AnalyticsFormatters.averageUsageText(vendors: [], summaries: []) == "0%")
+    }
+
     @Test("VendorAnalyticsCardView initializes with reorder affordances")
     func card_view_initialization() {
         let summary = VendorAnalyticsSummary(

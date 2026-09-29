@@ -75,7 +75,7 @@
 "notif_resets_fmt" = "%@ Resets %@.";
 "notif_discreet_title" = "AI Taskbar";
 "notif_discreet_body_fmt" = "A monitored window crossed %d%%.";
-"notif_title_fmt" = "%@ — %@ at %d%%";
+"notif_title_fmt" = "%@ — %@ at %ld%%";
 
 // About panel
 "about_description" = "Tracks LLM usage across Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), and Kimi (Moonshot) — all from your menu bar.";
