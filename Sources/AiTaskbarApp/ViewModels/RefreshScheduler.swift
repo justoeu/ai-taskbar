@@ -17,7 +17,8 @@ public final class RefreshScheduler: ObservableObject {
     private var refreshLoop: Task<Void, Never>?
     private var statusRefreshLoop: Task<Void, Never>?
     private var compactLoop: Task<Void, Never>?
-    private var updateCheckLoop: Task<Void, Never>?
+    /// Internal read so a test can prove the loop never started (TEST-MAE-011).
+    private(set) var updateCheckLoop: Task<Void, Never>?
     /// Suspends the usage refresh loop between ticks. Production uses
     /// `Task.sleep`; tests inject a scripted sleeper so the cadence and the
     /// 429 back-off can be asserted without wall-clock waits. Returning early
@@ -190,12 +191,13 @@ public final class RefreshScheduler: ObservableObject {
             // Once per local calendar day (UPDATE-SCHED-001): check at launch
             // when due, then sleep until the next local day (or 24 h), which
             // is recomputed from the stored last-check date after every round,
-            // so a manual check from About moves the next one too. The floor
-            // keeps a busy or unrecorded check from spinning.
+            // so a manual check from About moves the next one too. The
+            // instance delay carries the 60 s floor that keeps a busy check
+            // from spinning.
             self?.updates?.checkIfNeeded()
             while !Task.isCancelled {
                 guard let delay = self?.updates?.delayUntilNextCheck() else { break }
-                await sleeper(max(UpdateChecker.minimumRetryDelay, delay))
+                await sleeper(delay)
                 if Task.isCancelled { break }
                 self?.updates?.checkIfNeeded()
             }

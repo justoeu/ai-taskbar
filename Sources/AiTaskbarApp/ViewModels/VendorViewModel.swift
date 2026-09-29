@@ -169,8 +169,10 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     /// Backs `isExpanded`. Injected so tests never touch `.standard`.
     private let defaults: UserDefaults
 
-    /// Wall clock read when a response arrives, to stamp the 429 cooldown.
-    /// Injected so tests can model a slow request (BUG-MAE-009).
+    /// Wall clock read when a response arrives, to stamp the 429 cooldown and
+    /// `lastNetworkFetch`. Injected so tests can model a slow request
+    /// (BUG-MAE-009). A wall clock, not `ContinuousClock`: both stamps are
+    /// `Date`s compared with `Date`s elsewhere (CQ-MAE-019).
     private let clock: @MainActor () -> Date
 
     public init(provider: any UsageProvider,
@@ -286,7 +288,7 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 self.state = .ok(outcome)
                 self.observeRateLimit(status: outcome.lastError?.status, at: arrival())
                 if Self.isNetworkOutcome(outcome) {
-                    self.lastNetworkFetch = .now
+                    self.lastNetworkFetch = self.clock()   // one time source (CQ-MAE-019)
                 }
                 self.notifications?.observe(vendor: self.vendorId, snapshot: outcome.snapshot)
                 // Only a real network reading is a new sample. A stale

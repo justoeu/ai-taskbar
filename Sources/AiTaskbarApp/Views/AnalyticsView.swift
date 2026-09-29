@@ -206,7 +206,7 @@ public struct AnalyticsView: View {
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
-                            Text("\(Int(saturating: h.value.rounded()))%")
+                            Text(PercentText.format(h.value))
                                 .font(.headline.weight(.bold).monospacedDigit())
                                 .foregroundStyle(h.color)
                         } else {
@@ -238,7 +238,7 @@ public struct AnalyticsView: View {
                                     .font(.callout.weight(isHovered ? .bold : .medium))
                                     .lineLimit(1)
                                 Spacer()
-                                Text(String(format: "%.0f%%", usagePct))
+                                Text(PercentText.format(usagePct))
                                     .font(.callout.monospacedDigit().weight(isHovered ? .bold : .medium))
                                     .foregroundStyle(isHovered ? Color.primary : Color.secondary)
                             }

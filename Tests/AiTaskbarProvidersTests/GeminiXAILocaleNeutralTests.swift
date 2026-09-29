@@ -118,6 +118,16 @@ struct GeminiXAILocaleNeutralTests {
         #expect(message == AppError.io("agy: quota backend down").description)
     }
 
+    /// BUG-MAE-010: the live executor treats a non-empty `error` as an agy
+    /// error whatever the `status`; the cached-payload path only checked
+    /// `status == "ERROR"`, so the same envelope rendered as data there.
+    @Test("an agy error with a non-ERROR status is still an error on the cached path")
+    func agy_error_with_other_status_is_error() async throws {
+        let body = #"{"conversation_id":"","status":"SUCCESS","response":"","error":"quota exceeded"}"#
+        let message = try await Self.fetchError(agyPayload: Data(body.utf8))
+        #expect(message == AppError.io("agy: quota exceeded").description)
+    }
+
     @Test("non-JSON payload is a schema error")
     func non_json_payload_is_schema_error() async throws {
         let message = try await Self.fetchError(agyPayload: Data("not json".utf8))

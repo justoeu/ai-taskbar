@@ -108,9 +108,9 @@ public final class GeminiProvider: UsageProvider {
             } catch {
                 throw AppError.schema("agy usage decode: \(error)")
             }
-            if agy.status == "ERROR" {
-                throw AntigravityReportedError.appError(
-                    for: AntigravityReportedError.message(error: agy.error, response: agy.response))
+            if let reported = AntigravityReportedError.reported(
+                status: agy.status, error: agy.error, response: agy.response) {
+                throw AntigravityReportedError.appError(for: reported)
             }
             return .gemini(agy.toSnapshot())
         }

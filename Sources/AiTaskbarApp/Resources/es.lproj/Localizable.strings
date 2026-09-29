@@ -315,6 +315,7 @@
 "analytics_by_llm_title" = "Consumo por LLM";
 "analytics_empty_data" = "No hay consumo registrado en este período.";
 "analytics_busiest_day" = "Día con mayor uso";
+"analytics_quota_percent_fmt" = "%ld%% de la cuota";
 "analytics_sessions" = "sesiones activas";
 "analytics_session_single" = "sesión activa";
 "analytics_models" = "modelos usados";

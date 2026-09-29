@@ -19,11 +19,12 @@ struct NumericConversionTrapAppTests {
         #expect(text.contains("\(Int.max)% quota"))
     }
 
-    @Test("Busiest-day text keeps truncating normal values")
+    /// CQ-MAE-018: rounds like the cards now (it truncated 84.9 to 84).
+    @Test("Busiest-day text rounds normal values like the cards")
     func peak_day_text_normal_utilization() {
         let record = PeakDayRecord(date: Date(timeIntervalSince1970: 1_700_000_000),
                                    costUSD: 1, utilizationPercent: 84.9)
-        #expect(AnalyticsFormatters.peakDayText(record).contains("84% quota"))
+        #expect(AnalyticsFormatters.peakDayText(record).contains("85% quota"))
     }
 
     @Test("Menu-bar tooltip survives an Anthropic utilization of 1e300 end to end")

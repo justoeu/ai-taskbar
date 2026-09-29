@@ -152,8 +152,8 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
         }
 
         func reported(_ env: AgyEnvelope) -> String? {
-            guard env.status == "ERROR" || !(env.error ?? "").isEmpty else { return nil }
-            return AntigravityReportedError.message(error: env.error, response: env.response)
+            AntigravityReportedError.reported(status: env.status, error: env.error,
+                                              response: env.response)
         }
 
         func inspect(_ data: Data) -> String? {
@@ -181,6 +181,14 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
 /// the live run (`ProcessAntigravityExecutor`) and the cached-payload decode
 /// (`GeminiProvider`) so the two cannot drift (DUP-MAE-003).
 enum AntigravityReportedError {
+    /// The one "is this envelope an agy error" rule, for the live run and the
+    /// cached decode alike (BUG-MAE-010): `status == "ERROR"`, or a non-empty
+    /// `error` whatever the status. nil when the envelope reports no error.
+    static func reported(status: String?, error: String?, response: String?) -> String? {
+        guard status == "ERROR" || !(error ?? "").isEmpty else { return nil }
+        return message(error: error, response: response)
+    }
+
     /// `error` when non-empty, else `response` when non-empty, else a
     /// generic message.
     static func message(error: String?, response: String?) -> String {

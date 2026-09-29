@@ -143,8 +143,13 @@ public final class UpdateChecker: ObservableObject {
         return min(cadenceInterval, max(minimumRetryDelay, next.timeIntervalSince(now)))
     }
 
+    /// How long the update loop sleeps before its next round: the pure delay
+    /// with a 0 ("due now") raised to `minimumRetryDelay`, so a busy or
+    /// unrecorded check does not spin. The loop owns no floor of its own
+    /// (DUP-MAE-005).
     public func delayUntilNextCheck() -> TimeInterval {
-        Self.delayUntilNextCheck(lastCheck: lastCheckDate, now: now(), calendar: calendar)
+        max(Self.minimumRetryDelay,
+            Self.delayUntilNextCheck(lastCheck: lastCheckDate, now: now(), calendar: calendar))
     }
 
     public var isUpdateBannerVisible: Bool {
@@ -186,11 +191,14 @@ public final class UpdateChecker: ObservableObject {
             status = .failed(message: L10n.localizedString("updates_disabled"))
             return
         }
+        // Recorded before the repo is validated: an invalid owner_repo is an
+        // attempt too, so it fails once per day instead of keeping the check
+        // due and waking the update loop every minute (BUG-MAE-012).
+        recordCheckDate()
         guard !config.ownerRepo.isEmpty, config.ownerRepo.contains("/") else {
             status = .failed(message: L10n.localizedString("updates_bad_repo"))
             return
         }
-        recordCheckDate()
         status = .checking
         Task { [weak self] in
             guard let self else { return }

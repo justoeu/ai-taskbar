@@ -316,6 +316,7 @@
 "analytics_by_llm_title" = "Breakdown by LLM";
 "analytics_empty_data" = "No consumption recorded in this timeframe.";
 "analytics_busiest_day" = "Busiest day";
+"analytics_quota_percent_fmt" = "%ld%% quota";
 "analytics_sessions" = "active sessions";
 "analytics_session_single" = "active session";
 "analytics_models" = "models used";

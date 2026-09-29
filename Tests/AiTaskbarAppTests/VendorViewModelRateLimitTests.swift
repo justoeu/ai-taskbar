@@ -129,4 +129,32 @@ struct VendorViewModelRateLimitTests {
         let expected = start.addingTimeInterval(100 + VendorViewModel.rateLimitCooldown(forAttempt: 1))
         #expect(retryAt == expected)
     }
+
+    /// CQ-MAE-019: `lastNetworkFetch` read `.now` beside the injected clock,
+    /// so the one refresh path used two time sources.
+    @Test("lastNetworkFetch is stamped on the injected clock")
+    func last_network_fetch_uses_injected_clock() async throws {
+        defer { cleanup() }
+        let dir = tmp
+        let stamp = Date(timeIntervalSince1970: 1_000_000)
+        let vm = VendorViewModel(
+            provider: NetworkOutcomeProvider(), defaults: defaults,
+            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) },
+            clock: { stamp })
+
+        vm.refresh(forceRefresh: true, now: stamp)
+        await waitUntil { vm.lastNetworkFetch != nil }
+        expectTrue(vm.lastNetworkFetch == stamp)
+    }
+}
+
+/// Answers a live network reading (`cacheAge: 0`).
+private struct NetworkOutcomeProvider: UsageProvider {
+    let vendorId: VendorId = .zai
+    var displayName: String { vendorId.displayName }
+    var credentialFileURL: URL? { nil }
+    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
+        FetchOutcome(snapshot: .zai(ZAISnapshot(
+            session: UsageWindow(label: "Session", utilizationPercent: 10))), cacheAge: 0)
+    }
 }

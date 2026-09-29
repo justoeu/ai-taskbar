@@ -135,4 +135,44 @@ struct UpdateCheckerCadenceTests {
         checker.setMockStatusForTesting(.updateAvailable(latest: releaseV12))
         #expect(checker.isUpdateBannerVisible)
     }
+
+    /// BUG-MAE-012: the invalid-repo early return skipped `recordCheckDate`,
+    /// so the check stayed due and the update loop woke every 60 s.
+    @Test("an invalid owner_repo still records the attempt")
+    @MainActor
+    func bad_repo_records_attempt() {
+        let defaults = makeSuiteDefaults()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let config = UpdatesConfig(enabled: true, ownerRepo: "no-slash", includePrereleases: false)
+        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
+                                    http: .stubbed(protocols: [OfflineProtocol.self]),
+                                    userDefaults: defaults, now: { now })
+        checker.check()
+        expectTrue(checker.lastCheckDate == now)
+    }
+
+    /// DUP-MAE-005: the loop no longer floors the delay itself, so the
+    /// instance delay must: a due check sleeps the floor, never 0.
+    @Test("the instance delay of a due check is the retry floor, not 0")
+    @MainActor
+    func instance_delay_is_floored() {
+        let checker = UpdateChecker(
+            config: UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false),
+            currentVersion: "1.0.0",
+            http: .stubbed(protocols: [OfflineProtocol.self]),
+            userDefaults: makeSuiteDefaults())
+        #expect(checker.delayUntilNextCheck() == UpdateChecker.minimumRetryDelay)
+    }
+
+    @Test("an invalid owner_repo still reports the configuration error")
+    @MainActor
+    func bad_repo_reports_error() {
+        let defaults = makeSuiteDefaults()
+        let config = UpdatesConfig(enabled: true, ownerRepo: "no-slash", includePrereleases: false)
+        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
+                                    http: .stubbed(protocols: [OfflineProtocol.self]),
+                                    userDefaults: defaults)
+        checker.check()
+        #expect(checker.status == .failed(message: L10n.localizedString("updates_bad_repo")))
+    }
 }

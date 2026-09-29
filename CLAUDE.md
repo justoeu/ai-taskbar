@@ -289,7 +289,10 @@ cleanly on `[skip release]` heads.
   first, clamped to 60 s...24 h) are pure over an injected `Calendar` + clock;
   `RefreshScheduler` sleeps that delay and recomputes it after every round
   from the stored last-check date. A fixed 24 h sleep after a skipped launch
-  check once delayed checks to ~48 h (UPDATE-SCHED-001).
+  check once delayed checks to ~48 h (UPDATE-SCHED-001). The 60 s floor lives
+  in the instance `delayUntilNextCheck()` only (not in the loop), and `check()`
+  records the attempt BEFORE validating `owner_repo`, so an invalid repo fails
+  once a day instead of waking the loop every minute (BUG-MAE-012).
 
 ### DMG release runbook (generating the signed DMG)
 

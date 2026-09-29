@@ -376,9 +376,32 @@ final class RefreshSchedulerTests {
         let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
 
         scheduler.start()
-        for _ in 0..<5 { await Task.yield() }
+        // TEST-MAE-011: the guard is synchronous, so the loop handle itself
+        // is the proof of absence (a few `Task.yield()`s proved nothing).
+        expectTrue(scheduler.updateCheckLoop == nil)
         #expect(updateSleeper.durations.isEmpty)
         #expect(checker.status == .idle)
+        scheduler.stop()
+    }
+
+    /// BUG-MAE-012: an invalid owner_repo returned before recording the
+    /// attempt, so the check stayed due and the loop woke every 60 s.
+    @Test("an invalid owner_repo backs off to the next day instead of waking every minute")
+    func update_loop_with_bad_repo_backs_off_daily() async {
+        let base = UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00")
+        let updateSleeper = ScriptedSleeper(returningSleeps: 1)
+        let checker = UpdateChecker(
+            config: UpdatesConfig(enabled: true, ownerRepo: "no-slash", includePrereleases: false),
+            currentVersion: "1.0.0",
+            http: .stubbed(protocols: [HangingGitHubProtocol.self]),
+            userDefaults: defaults,
+            calendar: UpdateCheckDueTests.saoPaulo,
+            now: { [updateSleeper] in base.addingTimeInterval(updateSleeper.elapsed) })
+        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
+
+        scheduler.start()
+        await updateSleeper.waitForSleeps(2)
+        #expect(updateSleeper.durations == [14 * 3_600, 86_400])
         scheduler.stop()
     }
 

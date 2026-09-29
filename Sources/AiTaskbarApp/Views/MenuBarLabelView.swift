@@ -38,7 +38,7 @@ public struct MenuBarLabelView: View {
             iconForMaxPercent
             let percent = store.maxUtilization
             let isFull = SeverityColor.showsFlame(forPercent: percent, thresholds: store.thresholds)
-            Text("\(Int(saturating: percent.rounded()))%")
+            Text(PercentText.format(percent))
                 .font(.system(size: 15.0, weight: .bold, design: .monospaced))
                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent,
                                                                         thresholds: store.thresholds))
@@ -71,7 +71,7 @@ public struct MenuBarLabelView: View {
             Image(systemName: symbolName(for: percent))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
-            Text("\(shortLabel(for: vm.vendorId)) \(Int(saturating: percent.rounded()))%")
+            Text("\(shortLabel(for: vm.vendorId)) \(PercentText.format(percent))")
                 .font(.system(size: 14.0, weight: .bold, design: .monospaced))
                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
             if isFull {

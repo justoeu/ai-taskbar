@@ -594,7 +594,7 @@ public struct VendorSectionView: View {
                         .font(.subheadline.monospaced())
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 4)
-                    Text("\(Int(saturating: m.percent.rounded()))%")
+                    Text(PercentText.format(m.percent))
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.tertiary)
                 }
