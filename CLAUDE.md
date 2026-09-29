@@ -260,6 +260,11 @@ cleanly on `[skip release]` heads.
 - The two DMG names are a contract with `UpdateChecker.pickDMGAsset`:
   `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon) and `ai-taskbar-X.Y.Z.dmg`
   (universal). Renaming either breaks in-app update downloads.
+- The in-app download **fails closed** without a matching line in the
+  release's `checksums-X.Y.Z.txt` (so `make publish` must keep uploading it),
+  requires the DMG's `.app` to be signed by the running app's Developer ID
+  team (skipped on ad-hoc builds), and sets `com.apple.quarantine` so
+  Gatekeeper assesses it. See `UpdateChecker.download` + `DMGVerifier.swift`.
 
 ### DMG release runbook (generating the signed DMG)
 

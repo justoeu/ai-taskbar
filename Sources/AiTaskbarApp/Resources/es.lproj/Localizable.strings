@@ -112,6 +112,9 @@
 "updates_bad_repo" = "Define `[updates] owner_repo = \"tuusuario/ai-taskbar\"` en config para activar.";
 "updates_no_stable" = "Solo hay un pre-release; define `include_prereleases = true` para considerarlo.";
 "updates_no_asset" = "La versión existe pero no tiene un .dmg adjunto.";
+"updates_no_checksum" = "La versión no tiene checksum para este .dmg, así que no se puede verificar. Descárgalo desde la página de la versión.";
+"updates_signature_invalid" = "La app descargada no está firmada por el mismo desarrollador que esta. La descarga se eliminó.";
+"updates_quarantine_failed" = "No se pudo marcar la descarga para la verificación de Gatekeeper. La descarga se eliminó.";
 
 // Model breakdown
 "models_label" = "Modelos";

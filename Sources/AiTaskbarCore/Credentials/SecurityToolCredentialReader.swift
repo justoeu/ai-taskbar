@@ -132,56 +132,26 @@ public final class SecurityToolCredentialReader: Sendable {
     }
 
     private func runTool(service: String, account: String?, keychainPaths: [String]) throws -> Data {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = Self.arguments(service: service, account: account, keychainPaths: keychainPaths)
-        process.standardInput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        let stdout = Pipe()
-        process.standardOutput = stdout
-
-        let exited = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in exited.signal() }
+        let outcome: BoundedProcess.Outcome
         do {
-            try process.run()
+            outcome = try BoundedProcess.run(
+                executable: executable,
+                arguments: Self.arguments(service: service, account: account, keychainPaths: keychainPaths),
+                timeout: timeout)
         } catch {
             throw Failure.launchFailed(error.localizedDescription)
         }
-
-        // Drain stdout concurrently so a child that writes more than the pipe
-        // buffer can never deadlock against our wait below.
-        let output = OSAllocatedUnfairLock(initialState: Data())
-        let drained = DispatchSemaphore(value: 0)
-        let reader = stdout.fileHandleForReading
-        DispatchQueue.global(qos: .userInitiated).async {
-            let data = reader.readDataToEndOfFile()
-            output.withLock { $0 = data }
-            drained.signal()
-        }
-
-        // One deadline for everything: child exit, then drain.
-        let deadline = DispatchTime.now() + timeout
-        if exited.wait(timeout: deadline) == .timedOut {
-            process.terminate()
-            if exited.wait(timeout: .now() + 1) == .timedOut {
-                kill(process.processIdentifier, SIGKILL)
-                _ = exited.wait(timeout: .now() + 1)
-            }
-            let drainedInTime = drained.wait(timeout: .now() + 1) == .success
+        if outcome.timedOut {
             // Race window: the child may have finished cleanly right as the
             // budget lapsed. A complete, decodable answer is a success, not an
             // hour-long outage.
-            if drainedInTime, !process.isRunning, process.terminationReason == .exit,
-               process.terminationStatus == 0,
-               let secret = Self.decodeOutput(output.withLock { $0 }) {
+            if outcome.exitedCleanly, let secret = Self.decodeOutput(outcome.stdout) {
                 return secret
             }
             throw Failure.timedOut
         }
-        guard drained.wait(timeout: deadline) == .success else { throw Failure.timedOut }
-
-        guard process.terminationStatus == 0 else { throw Failure.exited(status: process.terminationStatus) }
-        guard let secret = Self.decodeOutput(output.withLock { $0 }) else { throw Failure.undecodableOutput }
+        guard outcome.status == 0 else { throw Failure.exited(status: outcome.status) }
+        guard let secret = Self.decodeOutput(outcome.stdout) else { throw Failure.undecodableOutput }
         return secret
     }
 

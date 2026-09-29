@@ -82,6 +82,8 @@ The app runs on macOS 13+ (Ventura). Building the app requires Swift 6.2+; Comma
 
 Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly, compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
 
+Before the DMG is shown, the app checks it against the release's `checksums-*.txt` (a release without one is refused), confirms the app inside is signed by the same Developer ID team as the installed app, and marks the file with `com.apple.quarantine` so Gatekeeper checks it when you open it. If any step fails, the download is deleted.
+
 ## Setup per provider
 
 The app **reads existing credentials** — you don't need to paste API keys for the OAuth-based ones.

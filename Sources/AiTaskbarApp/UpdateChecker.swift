@@ -35,7 +35,8 @@ public final class UpdateChecker: ObservableObject {
         public let publishedAt: Date?
         public let dmgURL: URL?
         public let dmgSize: Int64?
-        /// Optional SHA-256 hex from a sibling `checksums-*.txt` asset.
+        /// SHA-256 hex from a sibling `checksums-*.txt` asset. nil means the
+        /// release cannot be verified, and `download(_:)` refuses it.
         public let dmgSHA256: String?
     }
 
@@ -60,15 +61,27 @@ public final class UpdateChecker: ObservableObject {
     public let currentVersion: String
     public let userDefaults: UserDefaults
     private let http: HTTPClient
+    /// Where the DMG lands; nil → the user's ~/Downloads (tests inject a temp dir).
+    private let downloadsDirectory: URL?
+    private let revealInFinder: @MainActor (URL) -> Void
+    private let dmgVerifier: any DMGVerifying
 
     public init(config: UpdatesConfig,
                 currentVersion: String? = nil,
                 http: HTTPClient = .init(),
-                userDefaults: UserDefaults = .standard) {
+                userDefaults: UserDefaults = .standard,
+                downloadsDirectory: URL? = nil,
+                revealInFinder: @escaping @MainActor (URL) -> Void = {
+                    NSWorkspace.shared.activateFileViewerSelecting([$0])
+                },
+                dmgVerifier: any DMGVerifying = TeamSignatureDMGVerifier()) {
         self.config = config
         self.currentVersion = currentVersion ?? Self.bundleVersion()
         self.http = http
         self.userDefaults = userDefaults
+        self.downloadsDirectory = downloadsDirectory
+        self.revealInFinder = revealInFinder
+        self.dmgVerifier = dmgVerifier
         self.dismissedTag = userDefaults.string(forKey: Self.dismissedTagKey)
     }
 
@@ -183,7 +196,13 @@ public final class UpdateChecker: ObservableObject {
             if let dmgName = asset?.name,
                let cURL = checksumsAsset.flatMap({ URL(string: $0.browser_download_url) }),
                Self.isAllowedDownloadURL(cURL) {
-                dmgSHA = try? await self.fetchChecksum(for: dmgName, from: cURL)
+                do {
+                    dmgSHA = try await self.fetchChecksum(for: dmgName, from: cURL)
+                } catch {
+                    // Not fatal for the CHECK (the update still shows), but
+                    // download() fails closed on a nil checksum (SEC-CER-001).
+                    AppLog.updates.error("checksum fetch failed: \(String(describing: error), privacy: .public)")
+                }
             }
             return Release(
                 tag: raw.tag_name,
@@ -227,18 +246,27 @@ public final class UpdateChecker: ObservableObject {
             status = .failed(message: L10n.localizedString("updates_bad_repo"))
             return
         }
+        // Fail closed: no checksum from the release's checksums-*.txt means
+        // nothing ties these bytes to what was published (SEC-CER-001).
+        guard let wantSHA = release.dmgSHA256?.lowercased(), !wantSHA.isEmpty else {
+            status = .failed(message: L10n.localizedString("updates_no_checksum"))
+            return
+        }
         status = .downloading(progress: 0, latest: release)
         // Drop the DMG in ~/Downloads (NOT the system temp dir) so the user
         // can find it later from Finder's sidebar. Falls back to temp if the
         // Downloads directory can't be resolved (rare — sandbox edge case).
-        let downloadsDir = FileManager.default.urls(for: .downloadsDirectory,
-                                                    in: .userDomainMask).first
+        let downloadsDir = downloadsDirectory
+            ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let dest = downloadsDir.appendingPathComponent("ai-taskbar-\(release.tag).dmg")
         try? FileManager.default.removeItem(at: dest)
 
         Task { [weak self] in
             guard let self else { return }
+            // Whatever is on disk and not yet handed to the user; deleted on
+            // every failure path (LEAK-FAN-004).
+            var pending: URL?
             do {
                 // Route through the injected HTTPClient (pinned/ephemeral),
                 // never URLSession.shared (ARCH-ATL-001 / SEC-SEN-002).
@@ -246,6 +274,7 @@ public final class UpdateChecker: ObservableObject {
                 req.setValue("ai-taskbar/\(self.currentVersion)",
                              forHTTPHeaderField: "User-Agent")
                 let (tmp, http) = try await self.http.download(req)
+                pending = tmp
                 guard (200..<300).contains(http.statusCode) else {
                     throw AppError.http(status: http.statusCode, body: "DMG download")
                 }
@@ -256,13 +285,28 @@ public final class UpdateChecker: ObservableObject {
                         throw AppError.other("DMG size mismatch (got \(size), expected \(expected))")
                     }
                 }
-                if let want = release.dmgSHA256?.lowercased(), !want.isEmpty {
-                    let got = try Self.sha256Hex(ofFileAt: tmp)
-                    guard got == want else {
-                        throw AppError.other("DMG checksum mismatch")
-                    }
+                guard try Self.sha256Hex(ofFileAt: tmp) == wantSHA else {
+                    throw AppError.other("DMG checksum mismatch")
+                }
+                // Size and checksum come from the same release; anchor trust
+                // outside it: the contained .app must be signed by our team.
+                do {
+                    try await self.dmgVerifier.verify(dmgAt: tmp)
+                } catch {
+                    AppLog.updates.error("DMG signature check failed: \(String(describing: error), privacy: .public)")
+                    throw AppError.other(L10n.localizedString("updates_signature_invalid"))
                 }
                 try FileManager.default.moveItem(at: tmp, to: dest)
+                pending = dest
+                // URLSession downloads carry no quarantine, so Gatekeeper
+                // would never assess the DMG or the app copied out of it.
+                do {
+                    try Self.applyQuarantine(to: dest)
+                } catch {
+                    AppLog.updates.error("quarantine xattr failed: \(String(describing: error), privacy: .public)")
+                    throw AppError.other(L10n.localizedString("updates_quarantine_failed"))
+                }
+                pending = nil
                 self.status = .downloaded(localURL: dest, latest: release)
                 // Reveal the DMG in Finder so the user can drag the new app
                 // into /Applications. We deliberately do NOT auto-open the
@@ -272,10 +316,27 @@ public final class UpdateChecker: ObservableObject {
                 // that far without an explicit user gesture. The user
                 // double-clicking in Finder gives Gatekeeper a chance to
                 // surface its warning before anything runs.
-                NSWorkspace.shared.activateFileViewerSelecting([dest])
+                self.revealInFinder(dest)
             } catch {
+                if let pending {
+                    try? FileManager.default.removeItem(at: pending) // best-effort cleanup
+                }
                 self.status = .failed(message: error.localizedDescription)
             }
+        }
+    }
+
+    /// Sets `com.apple.quarantine` so Gatekeeper assesses the DMG (and the
+    /// app copied out of it) on first open. Throws the POSIX errno on failure.
+    nonisolated internal static func applyQuarantine(to url: URL, now: Date = Date()) throws {
+        let value = String(format: "0083;%08x;ai-taskbar;%@",
+                           UInt32(truncatingIfNeeded: Int(now.timeIntervalSince1970)),
+                           UUID().uuidString)
+        let rc = value.withCString { ptr in
+            setxattr(url.path, "com.apple.quarantine", ptr, strlen(ptr), 0, 0)
+        }
+        guard rc == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
     }
 
