@@ -1,0 +1,361 @@
+{
+ "agent": "Cartógrafo",
+ "max_components": 24,
+ "effort": "max",
+ "threat_model": "local single-user desktop app; attackers: malicious network responses (vendor APIs, status feeds, GitHub releases), malicious local files in scanned dirs, user-edited config.toml URLs, other local processes",
+ "components": [
+  {
+   "id": "core-networking-tls",
+   "name": "core-networking-tls",
+   "paths": [
+    "Sources/AiTaskbarCore/Networking/HTTPClient.swift",
+    "Sources/AiTaskbarCore/Networking/PinningDelegate.swift",
+    "Sources/AiTaskbarCore/Networking/PinBaseline.swift",
+    "Sources/AiTaskbarCore/Networking/PinStore.swift"
+   ],
+   "lenses": [
+    "crypto-secrets",
+    "injection"
+   ]
+  },
+  {
+   "id": "core-keychain-secrets",
+   "name": "core-keychain-secrets",
+   "paths": [
+    "Sources/AiTaskbarCore/Credentials/KeychainAccessAuthorizer.swift",
+    "Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift",
+    "Sources/AiTaskbarCore/Credentials/KeychainPromptSuppressor.swift",
+    "Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift",
+    "Sources/AiTaskbarCore/Util/SecretBox.swift",
+    "Sources/AiTaskbarCore/Util/JWT.swift"
+   ],
+   "lenses": [
+    "authorization",
+    "crypto-secrets",
+    "injection"
+   ]
+  },
+  {
+   "id": "core-file-credentials",
+   "name": "core-file-credentials",
+   "paths": [
+    "Sources/AiTaskbarCore/Credentials/AnthropicCredentials.swift",
+    "Sources/AiTaskbarCore/Credentials/AnthropicCredentialReading.swift",
+    "Sources/AiTaskbarCore/Credentials/CodexCredentials.swift",
+    "Sources/AiTaskbarCore/Credentials/GrokCredentials.swift",
+    "Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift",
+    "Sources/AiTaskbarCore/Credentials/EnvOrConfigCredentialReader.swift",
+    "Sources/AiTaskbarCore/Util/Paths.swift"
+   ],
+   "lenses": [
+    "crypto-secrets",
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "core-config-settings",
+   "name": "core-config-settings",
+   "paths": [
+    "Sources/AiTaskbarCore/Config/AppConfig.swift",
+    "Sources/AiTaskbarCore/Config/ConfigLoader.swift",
+    "Sources/AiTaskbarCore/Config/TOMLEditor.swift",
+    "Sources/AiTaskbarApp/Views/SettingsView.swift",
+    "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization",
+    "crypto-secrets"
+   ]
+  },
+  {
+   "id": "core-cache-io",
+   "name": "core-cache-io",
+   "paths": [
+    "Sources/AiTaskbarCore/Cache/DiskCache.swift",
+    "Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift",
+    "Sources/AiTaskbarCore/Cost/ScanMemo.swift",
+    "Sources/AiTaskbarCore/Util/JSONValue.swift",
+    "Sources/AiTaskbarCore/Util/SharedCoders.swift"
+   ],
+   "lenses": [
+    "exposure",
+    "authorization"
+   ]
+  },
+  {
+   "id": "providers-oauth",
+   "name": "providers-oauth",
+   "paths": [
+    "Sources/AiTaskbarProviders/AnthropicOAuth.swift",
+    "Sources/AiTaskbarProviders/OpenAIOAuth.swift",
+    "Sources/AiTaskbarProviders/OAuthRefresher.swift"
+   ],
+   "lenses": [
+    "authorization",
+    "crypto-secrets",
+    "injection"
+   ]
+  },
+  {
+   "id": "providers-anthropic",
+   "name": "providers-anthropic",
+   "paths": [
+    "Sources/AiTaskbarProviders/AnthropicProvider.swift",
+    "Sources/AiTaskbarProviders/AnthropicWireTypes.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "providers-openai-codex",
+   "name": "providers-openai-codex",
+   "paths": [
+    "Sources/AiTaskbarProviders/OpenAIProvider.swift",
+    "Sources/AiTaskbarProviders/OpenAIWireTypes.swift"
+   ],
+   "lenses": [
+    "injection",
+    "crypto-secrets"
+   ]
+  },
+  {
+   "id": "providers-openrouter",
+   "name": "providers-openrouter",
+   "paths": [
+    "Sources/AiTaskbarProviders/OpenRouterProvider.swift",
+    "Sources/AiTaskbarProviders/OpenRouterWireTypes.swift"
+   ],
+   "lenses": [
+    "injection"
+   ]
+  },
+  {
+   "id": "providers-zai",
+   "name": "providers-zai",
+   "paths": [
+    "Sources/AiTaskbarProviders/ZAIProvider.swift",
+    "Sources/AiTaskbarProviders/ZAIWireTypes.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "providers-kimi",
+   "name": "providers-kimi",
+   "paths": [
+    "Sources/AiTaskbarProviders/KimiProvider.swift",
+    "Sources/AiTaskbarProviders/KimiWireTypes.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "providers-deepseek",
+   "name": "providers-deepseek",
+   "paths": [
+    "Sources/AiTaskbarProviders/DeepSeekProvider.swift",
+    "Sources/AiTaskbarProviders/DeepSeekWireTypes.swift",
+    "Sources/AiTaskbarProviders/DeepSeekStatusSource.swift",
+    "Sources/AiTaskbarProviders/DeepSeekStatusWireTypes.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "providers-xai",
+   "name": "providers-xai",
+   "paths": [
+    "Sources/AiTaskbarProviders/XAIProvider.swift",
+    "Sources/AiTaskbarProviders/XAIWireTypes.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "providers-gemini",
+   "name": "providers-gemini",
+   "paths": [
+    "Sources/AiTaskbarProviders/GeminiProvider.swift",
+    "Sources/AiTaskbarProviders/GeminiWireTypes.swift"
+   ],
+   "lenses": [
+    "injection"
+   ]
+  },
+  {
+   "id": "providers-common-lifecycle",
+   "name": "providers-common-lifecycle",
+   "paths": [
+    "Sources/AiTaskbarProviders/CachedFetch.swift",
+    "Sources/AiTaskbarProviders/UsageProvider.swift",
+    "Sources/AiTaskbarProviders/ServiceStatusProvider.swift",
+    "Sources/AiTaskbarProviders/ServiceStatusProviderFactory.swift",
+    "Sources/AiTaskbarProviders/CachedServiceStatusProvider.swift"
+   ],
+   "lenses": [
+    "authorization",
+    "exposure"
+   ]
+  },
+  {
+   "id": "service-status-feeds",
+   "name": "service-status-feeds",
+   "paths": [
+    "Sources/AiTaskbarProviders/RSSStatusSource.swift",
+    "Sources/AiTaskbarProviders/RSSStatusWireTypes.swift",
+    "Sources/AiTaskbarProviders/StatuspageSource.swift",
+    "Sources/AiTaskbarProviders/StatuspageWireTypes.swift"
+   ],
+   "lenses": [
+    "injection"
+   ]
+  },
+  {
+   "id": "local-session-scanners",
+   "name": "local-session-scanners",
+   "paths": [
+    "Sources/AiTaskbarCore/Cost/CodexLogScanner.swift",
+    "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift",
+    "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
+    "Sources/AiTaskbarCore/Cost/CodexCost.swift",
+    "Sources/AiTaskbarCore/Cost/SessionCounters.swift",
+    "Sources/AiTaskbarCore/Util/PIIScrub.swift"
+   ],
+   "lenses": [
+    "injection",
+    "exposure"
+   ]
+  },
+  {
+   "id": "opencode-sqlite-scanner",
+   "name": "opencode-sqlite-scanner",
+   "paths": [
+    "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift"
+   ],
+   "lenses": [
+    "memory-unsafe",
+    "injection"
+   ]
+  },
+  {
+   "id": "cost-analytics-models",
+   "name": "cost-analytics-models",
+   "paths": [
+    "Sources/AiTaskbarCore/Cost/CostAggregator.swift",
+    "Sources/AiTaskbarCore/Cost/PricingTable.swift",
+    "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift",
+    "Sources/AiTaskbarCore/Models",
+    "Sources/AiTaskbarCore/History/UsageHistoryStore.swift"
+   ],
+   "lenses": [
+    "exposure"
+   ]
+  },
+  {
+   "id": "antigravity-executor",
+   "name": "antigravity-executor",
+   "paths": [
+    "Sources/AiTaskbarProviders/AntigravityExecutor.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "codex-reset-subprocess",
+   "name": "codex-reset-subprocess",
+   "paths": [
+    "Sources/AiTaskbarApp/CodexResetProcess.swift",
+    "Sources/AiTaskbarApp/OpenAIResetJournal.swift",
+    "Sources/AiTaskbarApp/OpenAIResetProtocol.swift",
+    "Sources/AiTaskbarApp/ViewModels/OpenAIResetController.swift",
+    "Sources/AiTaskbarApp/Views/OpenAIResetControls.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "update-checker",
+   "name": "update-checker",
+   "paths": [
+    "Sources/AiTaskbarApp/UpdateChecker.swift",
+    "Sources/AiTaskbarCore/Util/CodeSignatureInfo.swift",
+    "Sources/AiTaskbarCore/Util/Semver.swift"
+   ],
+   "lenses": [
+    "injection",
+    "authorization"
+   ]
+  },
+  {
+   "id": "app-orchestration",
+   "name": "app-orchestration",
+   "paths": [
+    "Sources/AiTaskbarApp/AiTaskbarApp.swift",
+    "Sources/AiTaskbarApp/AppEnvironment.swift",
+    "Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
+    "Sources/AiTaskbarApp/NotificationService.swift",
+    "Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift",
+    "Sources/AiTaskbarApp/LoginItemService.swift",
+    "Sources/AiTaskbarApp/ViewModels",
+    "Resources/entitlements.plist",
+    "Resources/Info.plist"
+   ],
+   "lenses": [
+    "authorization",
+    "exposure"
+   ]
+  },
+  {
+   "id": "app-ui-views",
+   "name": "app-ui-views",
+   "paths": [
+    "Sources/AiTaskbarApp/Views",
+    "Sources/AiTaskbarApp/Localization",
+    "Sources/AiTaskbarApp/ServiceStatusPresentation.swift",
+    "Sources/AiTaskbarApp/VendorOrder.swift"
+   ],
+   "lenses": [
+    "exposure"
+   ]
+  }
+ ],
+ "not_scanned": [
+  {
+   "path": "Sources/AiTaskbarTesting/**, Sources/AiTaskbarTestSupport/**, Sources/AiTaskbarValidate/**, Tests/**",
+   "reason": "test targets, not shipped"
+  },
+  {
+   "path": ".build/**",
+   "reason": "build output + vendored TOMLKit"
+  },
+  {
+   "path": "scripts/**, Makefile, .github/**",
+   "reason": "CI/release tooling outside local-desktop threat model"
+  },
+  {
+   "path": "docs/**, *.md",
+   "reason": "documentation"
+  },
+  {
+   "path": "config.example.toml, Bundler.toml, Package.swift, Package.resolved",
+   "reason": "manifests; TOMLKit pin is documented accepted risk"
+  }
+ ],
+ "note": "Persisted by Maestro verbatim from Cartógrafo output (agent had no write tool)."
+}

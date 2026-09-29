@@ -1,0 +1,70 @@
+{
+ "findings": [
+  {
+   "title": "AnalyticsStore.recompute() does synchronous multi-vendor disk I/O on MainActor, invoked twice per cost-estimate cycle",
+   "lens": "performance",
+   "severity": "MEDIUM",
+   "confidence": "high",
+   "agent": "Fluxo",
+   "file": "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift",
+   "line": 246,
+   "category": "main-thread I/O / redundant recompute",
+   "evidence": "recompute() (line 246) is @MainActor (class annotated @MainActor at line 7) and for every vendor in Set(estimates.keys).union(snapshots.keys) calls historyProvider(v) synchronously (line 256), which resolves to (try? UsageHistoryStore.defaultFor(vendor))?.load(since: Date().addingTimeInterval(-90 * 86_400)) (AnalyticsStore.swift:203) - a fresh mmap + full JSONL decode of up to 90 days of history PER VENDOR, PER CALL, with no caching. recompute() is wired as a Combine sink on costEstimator.$byVendor (line 209-214) and usageStore.$vendors (line 216-221), and also fires on every timeframe/compareWithPrevious/comparisonOffset didSet. Because CostEstimator.refresh() assigns the two dictionary keys as two SEPARATE statements - self.byVendor[.anthropic] = claudeEstimate then self.byVendor[.openai] = codexEstimate (CostEstimator.swift:138-139) - each mutates the same @Published property and fires objectWillChange independently, so recompute() (and the full 90-day/vendor re-read for every configured vendor) runs TWICE per cost-estimate cycle, unconditionally, even when AnalyticsView is never opened (subscriptions are wired in init, not gated on visibility).",
+   "impact": "Every ~60s (CostEstimator.minRecomputeInterval) the main thread performs 2x(N vendors) blocking file reads + per-line JSON decodes of up to 90 days of history (up to ~25,920 samples/vendor at the default 300s cadence), even while the Analytics screen is closed. This is the exact pattern VendorViewModel already avoids for its own 24h history (loads once off-MainActor at init, then appends in-memory - VendorViewModel.swift:145-155, recordHistory at 274-285); AnalyticsStore re-reads from disk from scratch on every trigger with no cache, on MainActor. On a long-running install with several vendors configured this is a repeating, measurable UI-thread hitch, doubled by the split @Published assignment.",
+   "fix": "1) Merge the two CostEstimator assignments into one dictionary update before setting byVendor once (or debounce recompute triggering). 2) Move AnalyticsStore.recompute() history loads off the MainActor (Task.detached, mirroring VendorViewModel pattern) and only recompute when AnalyticsView is visible, or cache each vendor 90-day sample set in memory and append the incremental tail instead of re-reading the whole file every call.",
+   "test_red_green": {
+    "name": "AnalyticsStoreRecomputeTests.doesNotDoubleReadOnSplitByVendorAssignment",
+    "assert_before": "A spy historyProvider counting invocations shows count == 2 for one CostEstimator-style two-key dictionary update (expected 1) - test fails.",
+    "assert_after": "After coalescing the byVendor update into a single assignment (or debouncing recompute), the spy invocation count is exactly 1 per estimate cycle."
+   },
+   "severity_original": "HIGH",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "AnalyticsStore is created in App.init (AiTaskbarApp.swift:75) and always subscribed (L209-221). recompute() on MainActor calls historyProvider for every vendor (L255-256), a full load(since:-90d) with one JSONDecoder call per line (UsageHistoryStore.swift:92-124). CostEstimator.swift:138-139 performs two @Published writes, so it runs twice per scheduler cost tick (RefreshScheduler.swift:83/121, gated at 60 s). Measured sizes: lines are about 34 bytes. Today this machine has about 3.2k lines per vendor, 21.4k total (860 KB). At the 90-day cap that is about 25.9k per vendor, roughly 200k decodes (~7 MB) per recompute, about 0.2-0.5 s of main thread twice every 5 min. At current sizes it is tens of ms. Real, but a periodic hitch rather than a hang, so downgraded to MEDIUM.",
+   "verification": "cetico"
+  },
+  {
+   "title": "PinnedStatusItemManager.syncStatusItems rebuilds every pinned badge on ANY vendor state change, not just the one that changed",
+   "lens": "performance",
+   "severity": "INFO",
+   "confidence": "medium",
+   "agent": "Fluxo",
+   "file": "Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
+   "line": 183,
+   "category": "combine fan-out / redundant view update",
+   "evidence": "Publishers.MergeMany(stateStreams) merges $state for ALL vendors (line 183-189), throttled 100ms, and on any emission calls syncIfMainItemReady() -> syncStatusItems() (line 219), which loops for vid in desiredOrder (line 246) and calls updateButton(for:vm:store:) for EVERY pinned item (up to 5, canAddPinnedStatusItem absoluteMax = 5) regardless of whether that specific vendor state actually changed.",
+   "impact": "Bounded (max 5 pinned items) so not strongly user-visible, but every vendor refresh (up to 8 vendors, every ~300s, or more often under manual refresh) triggers a SwiftUI rootView reassignment + layoutSubtreeIfNeeded() + tooltip rebuild (MenuBarTooltipBuilder.buildTooltip) for pinned vendors that did not change, when only the changed vendor badge needs updating.",
+   "fix": "Track which vendor $state fired (tag the merged publisher with vendor id instead of erasing to Void) and call updateButton only for that vendor status item.",
+   "test_red_green": {
+    "name": "PinnedStatusItemManagerTests.onlyChangedVendorBadgeIsRebuilt",
+    "assert_before": "With 3 vendors pinned, changing vendor A state triggers updateButton call count == 3 (expected 1) - test fails.",
+    "assert_after": "Same scenario updates only vendor A NSHostingView rootView; call count == 1."
+   },
+   "severity_original": "LOW",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "PinnedStatusItemManager.swift:182-188 merges all $state streams into a sync that calls updateButton for every pinned item (L246-250). New items are updated twice (L238 and L247). This happens at most 5 items per throttled 100 ms burst, about every 300 s. It exists but has no measurable impact.",
+   "verification": "cetico"
+  },
+  {
+   "title": "PricingTable.lookup prefix-match path allocates a filtered dictionary on every call, invoked per-turn inside CodexSessionScanner",
+   "lens": "performance",
+   "severity": "INFO",
+   "confidence": "medium",
+   "agent": "Fluxo",
+   "file": "Sources/AiTaskbarCore/Cost/PricingTable.swift",
+   "line": 264,
+   "category": "hot-loop allocation",
+   "evidence": "lookup(_:table:) (line 264-274) falls back to table.filter { model.hasPrefix($0.key) }.max { ... } when there is no exact key match - this allocates a brand-new [String: ModelPricing] on every miss. It is called from CodexSessionScanner.record(_:at:model:) (CodexSessionScanner.swift:293) for every surviving token_count event that passes the byte-prefilter, i.e. once per turn in every freshly-scanned rollout file (ScanMemo only skips unchanged files, so any actively-used session re-triggers this per new line each refresh).",
+   "impact": "Small in absolute terms (table sizes are ~14-20 entries) but is a per-line allocation + full-table scan in a loop that is otherwise carefully optimized elsewhere in the same file (byte prefilter, mmap, typed decode) specifically to avoid allocation - this path was missed.",
+   "fix": "Precompute a sorted-by-length-descending array of (prefix, pricing) once per table (static), or cache resolved model to pricing lookups in a dictionary keyed by the literal model string seen so far during a single scan pass.",
+   "test_red_green": {
+    "name": "PricingTableTests.lookupPrefixFallbackDoesNotAllocatePerCall",
+    "assert_before": "An allocation-count assertion around 10k calls to lookup with an unlisted suffixed model id shows allocation count proportional to call count (expected O(1) amortized) - test fails.",
+    "assert_after": "After caching, allocation count is O(1) amortized across repeated calls with the same model id."
+   },
+   "severity_original": "LOW",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "PricingTable.swift:264-274 runs filter(), which allocates, only on an exact-key miss. The table has about 20 entries, and the call sits next to a JSONDecoder.decode per line in CodexSessionScanner.swift:290-293 that costs far more. It exists, but the impact is negligible.",
+   "verification": "cetico"
+  }
+ ]
+}

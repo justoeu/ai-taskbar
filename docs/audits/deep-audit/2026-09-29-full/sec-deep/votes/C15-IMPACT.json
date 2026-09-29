@@ -1,0 +1,15 @@
+{
+ "verdict": "TRUE_POSITIVE",
+ "lens": "IMPACT",
+ "reasoning": "I traced the claimed damage through the code and it holds. ZAIModelUsage.usage is decoded as a Double with no finiteness check (ZAIWireTypes.swift:108, AppConfig.swift:199-203). The only filter is `used > 0` (ZAIWireTypes.swift:180), and values are summed under the same modelCode (ZAIWireTypes.swift:181). Two entries of 1e308 for one model add up to +inf. `totalUsage > 0` is still true for inf (ZAIWireTypes.swift:184-185), so percent = inf/inf*100 = NaN (ZAIWireTypes.swift:189). OpenRouter does the same thing (OpenRouterWireTypes.swift:168-177). ModelShare's init stores percent without clamping (UsageSnapshot.swift:388-392). The view calls Int(m.percent.rounded()) at VendorSectionView.swift:608 and :638. Swift's Int(Double) init traps on NaN even in release builds, so the whole menu-bar process crashes, not just the popover. The raw payload is what gets cached, so every render within the TTL, or from stale fallback, crashes again. The impact is availability only: no data leaks and nothing sensitive is written. It lasts until a normal response replaces the cache, which fits the LOW severity. Whether an attacker can actually shape the Z.AI/OpenRouter response over TLS is a reachability question, not part of this lens. Separate from this finding: two distinct models at 1e308 each give 0% rather than NaN, so only same-code summing triggers the crash.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:108",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:180-189",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenRouterWireTypes.swift:168-177",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:388-392",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199-203",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift:608",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift:638"
+ ],
+ "_task": "a9d900e6aa5722b14"
+}

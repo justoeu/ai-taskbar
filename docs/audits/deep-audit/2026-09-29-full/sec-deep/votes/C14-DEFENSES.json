@@ -1,0 +1,19 @@
+{
+ "verdict": "TRUE_POSITIVE",
+ "lens": "DEFENSES",
+ "reasoning": "Nothing between the wire and the Int() conversion checks that the value is finite or clamps it. (1) Source: AnthropicWireTypes.swift:71 decodes utilization with flexibleDoubleIfPresent (AppConfig.swift:199-203), which accepts any Double, so 1e300 passes. toSnapshot (AnthropicWireTypes.swift:140-147) passes the percent straight into UsageWindow, and its init (UsageWindow.swift:15-20) just stores it. (2) Propagation: UsageSnapshot.swift:70-71 maxUtilization is a plain max(). VendorViewModel.swift:235 then calls recordHistory, and :274-284 appends the value to disk and to memory with no check. UsageHistoryStore.append (:56-57) encodes it as is. load(since:) (:92-126) filters only on the timestamp, so the sample is reloaded on every launch while it stays inside the 24h window (VendorViewModel.swift:149-155). (3) Sink: SparklineView.swift:24 filters on time only, and :46 maxPercent is an unclamped max(). The yFor closure (:57-58) clamps to 0...100, but only for drawing. The labels at :116 (Int(last.max.rounded())) and :126 (Int(maxPercent.rounded()), guarded at :125 only by maxPercent > currentPercent + 5) convert a Double far above Int.max to Int. That traps at runtime in Swift, and there is no isFinite or range check first. I found no framework, type-system or middleware defense on this path. Whether an attacker can control the TLS vendor response is a reachability question, not a defenses one.",
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+  "Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+  "Sources/AiTaskbarCore/Models/UsageWindow.swift:20",
+  "Sources/AiTaskbarCore/Models/UsageSnapshot.swift:71",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:235",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:276",
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:57",
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:116",
+  "Sources/AiTaskbarApp/Views/SparklineView.swift:46",
+  "Sources/AiTaskbarApp/Views/SparklineView.swift:116",
+  "Sources/AiTaskbarApp/Views/SparklineView.swift:126"
+ ],
+ "_task": "a973d2f8c0d3e60ab"
+}

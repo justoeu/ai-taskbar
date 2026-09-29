@@ -1,0 +1,13 @@
+{
+ "verdict": "FALSE_POSITIVE",
+ "lens": "IMPACT",
+ "reasoning": "The code does behave as described. With the default empty pin_hosts, AppEnvironment.swift installs a plain HTTPClient(). HTTPClient.pinned also returns an unpinned client when pinnedHosts is empty (HTTPClient.swift:39-40). PinningDelegate.swift:36 checks pinnedHosts before PinBaseline.pin(for:) is ever read at line 63, so the 12 baseline pins in PinBaseline.swift:44-57 never apply by default. The UI text at Localizable.strings:153/190/210 is therefore wrong. That is a real correctness and documentation bug.\n\nThe claimed damage does not hold up under the IMPACT lens, though. The attack needs a rogue root CA that the system already trusts. Taking each source in turn: malware or an MDM profile means the attacker already controls the device and can read the Keychain item or ~/.codex/auth.json directly. A corporate TLS-inspection proxy is trust the device owner deliberately accepts. Mis-issuance is a remote, CT-logged event outside this app's threat model.\n\nThe main prize is the Claude and ChatGPT OAuth bearer tokens. Per CLAUDE.md they are shared with the Claude Code CLI and the Codex CLI, which send the same tokens to the same hosts (api.anthropic.com, chatgpt.com) without this app's pinning. An on-path attacker holding a trusted certificate gets those tokens from the CLI traffic whether or not this app pins. The refresh-token scenario needs manage_oauth_refresh=true, which is off by default. Enforcing pins here would add almost no protection for those credentials. The finding itself calls this a defense-in-depth gap and bases the severity on user messaging, not on a sensitive-data exposure that this code causes. The misleading UI and doc strings should still be fixed.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:36",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:63",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/HTTPClient.swift:39",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinBaseline.swift:44",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AppEnvironment.swift:30"
+ ],
+ "_task": "a4f731d8a75a17ea6"
+}

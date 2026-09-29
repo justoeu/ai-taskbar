@@ -1,0 +1,12 @@
+{
+ "verdict": "FALSE_POSITIVE",
+ "lens": "REACHABILITY",
+ "reasoning": "The mmap sink is real: ClaudeSessionScanner.swift:91 and CodexSessionScanner.swift:128 do use Data(contentsOf:options:[.mappedIfSafe]). But the only source is a process running as the same user with write access to ~/.claude/projects or ~/.codex/sessions (ClaudeSessionScanner.swift:58-66). Those directories belong to the user and are not a boundary another principal can cross. A process that already has that access can kill the app outright with kill(2), edit config.toml, or read the credentials, so a SIGBUS race gives it nothing it lacks. For benign cases, the scanner's own comment and memo logic treat transcripts as append-only (ClaudeSessionScanner.swift:75-77). No normal writer (Claude Code CLI or Codex CLI) shrinks a file mid-scan, so nobody reaches the truncation path in the default deploy. The source is not attacker-controlled across any boundary, so point 1 of the proof standard fails. At most this is a robustness bug in how the app reads files, not an exploitable vulnerability.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:58",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:75",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:128"
+ ],
+ "_task": "a2359049aa4d5beb3"
+}

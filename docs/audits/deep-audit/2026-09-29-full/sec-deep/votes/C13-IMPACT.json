@@ -1,0 +1,17 @@
+{
+ "verdict": "TRUE_POSITIVE",
+ "lens": "IMPACT",
+ "reasoning": "The crash described in the finding is real, and it persists as claimed. Source: AnthropicWireTypes.swift:71 decodes utilization through flexibleDoubleIfPresent (AppConfig.swift:199-203). That function only decodes the value and never checks its range or finiteness, so 1e300 is accepted. AnthropicWireTypes.swift:147 then passes it straight into UsageWindow.utilizationPercent. UsageWindow.swift:15-20 does not clamp it, and UsageSnapshot.swift:71 carries it into maxUtilization as the max. Persistence: VendorViewModel.swift:234 calls recordHistory, and UsageHistoryStore.swift:56-67 appends the sample without validation. The Double is finite, so the JSON encoder accepts it. On load, UsageHistoryStore.swift:113-114 filters only by timestamp (cutoff), not by value. Sink: AnalyticsAggregator.swift:21-55 computePeakDay picks the largest daily max (1e300 > 0.5, and the variance check does not remove it). The result reaches the summary at AnalyticsAggregator.swift:121/157. VendorAnalyticsCardView.swift:145 calls AnalyticsFormatters.peakDayText, and AnalyticsFormatters.swift:46/48 runs Int(record.utilizationPercent). Int(Double) on a value that does not fit in Int traps at runtime, so the process aborts. Nothing between source and sink clamps the value or uses Int(exactly:). The crash repeats every time Analytics opens, including after relaunch, until the sample ages out of the 90-day window or the JSONL is deleted by hand. So the claimed damage holds. The real harm is availability of a local app, and the attacker must control the vendor's response (a malicious or compromised vendor, or a MITM with a trusted certificate). MEDIUM is therefore generous; I would call it LOW. Separately, ZAIWireTypes.swift:84-85 also calls Int() on unit/number without a check. That is a different bug and does not affect this vote.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:71",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:234",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:56",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:113",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:29",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:145",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:48"
+ ],
+ "_task": "a1abb6b39354d4c63"
+}

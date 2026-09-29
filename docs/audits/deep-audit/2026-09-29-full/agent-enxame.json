@@ -1,0 +1,55 @@
+{
+ "findings": [
+  {
+   "title": "SessionCounters re-fetches resourceValues per file after contentsOfDirectory prefetch",
+   "lens": "nplus1",
+   "severity": "INFO",
+   "file": "Sources/AiTaskbarCore/Cost/SessionCounters.swift",
+   "line": 23,
+   "category": "backend-file-io",
+   "evidence": "contentsOfDirectory already prefetches mtime for every entry via includingPropertiesForKeys, but the loop then calls file.resourceValues(forKeys:) again per file in antigravityCount and grokCount instead of reading the value the enumeration already attached to the URL.",
+   "impact": "Foundation caches resource values fetched via includingPropertiesForKeys on the URL, so this is very likely a no-op re-read rather than a real per-file stat syscall, and N here (session files per vendor) is small, tens not thousands. Code nit, not a measurable N+1 on the hot path.",
+   "fix": "Read the mtime off the URLs returned by contentsOfDirectory directly instead of calling resourceValues again inside the loop.",
+   "confidence": "medium",
+   "agent": "Enxame",
+   "severity_original": "LOW",
+   "cetico_verdict": "REFUTADO",
+   "cetico_evidence": "SessionCounters.swift:16-30 and 45-58 prefetch .contentModificationDateKey via includingPropertiesForKeys. URL.resourceValues(forKeys:) returns the values cached on the URL object without another stat. There is no N+1, and the finding says so itself.",
+   "verification": "cetico"
+  },
+  {
+   "title": "PinnedStatusItemManager.refreshTooltips rebuilds every pinned item tooltip on a 30s timer",
+   "lens": "nplus1",
+   "severity": "INFO",
+   "file": "Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
+   "line": 481,
+   "category": "app-ui-per-row",
+   "evidence": "refreshTooltips loops over statusItems and rebuilds each button tooltip via MenuBarTooltipBuilder.buildTooltip every 30 seconds regardless of whether that vendors snapshot changed.",
+   "impact": "N is capped at absoluteMax = 5 pinned items, so worst case is 5 string-building calls every 30s, negligible CPU, no user-visible delay.",
+   "fix": "If ever tightened, skip vendors whose displayed percent did not change since the previous tick before calling buildTooltip. Not worth doing at N=5.",
+   "confidence": "low",
+   "agent": "Enxame",
+   "severity_original": "LOW",
+   "cetico_verdict": "REFUTADO",
+   "cetico_evidence": "The rebuild is required, not redundant. The tooltip embeds a reset countdown computed from `now` (MenuBarTooltipBuilder.swift:33-39 via formatCountdown(from: now, …)), so it must be rebuilt every 30 s even when the percent is unchanged. The proposed 'skip if percent unchanged' fix would freeze the countdown.",
+   "verification": "cetico"
+  },
+  {
+   "title": "Per-row L10n.localizedString bundle lookups fire on every 1 Hz clock tick",
+   "lens": "nplus1",
+   "severity": "INFO",
+   "file": "Sources/AiTaskbarApp/Views/ProviderRowView.swift",
+   "line": 59,
+   "category": "app-ui-per-row",
+   "evidence": "resetLabel(resetsAt:now:) calls L10n.text and L10n.localizedString inside a view body that re-evaluates every second via the shared 1 Hz clock (N1-NEX-005). Each call does a bundle.localizedString lookup once per window per vendor per second.",
+   "impact": "L10n.bundle is already memoized, documented for 50 to 200 calls per second, and N (visible vendor windows) is roughly 8 to 16, well within that budget. Residual cost of an already-optimized design, not a regression.",
+   "fix": "No action needed at current N. If window count grows substantially, memoize the two fixed strings as static lets the way the popover header already does.",
+   "confidence": "low",
+   "agent": "Enxame",
+   "severity_original": "LOW",
+   "cetico_verdict": "REFUTADO",
+   "cetico_evidence": "The finding concedes it: L10n.bundle is memoized and the call count (about 8-16 lookups per second) is well within budget (ProviderRowView.swift:57-68). No defect; 'no action needed' is not a finding.",
+   "verification": "cetico"
+  }
+ ]
+}

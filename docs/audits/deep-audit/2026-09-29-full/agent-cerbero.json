@@ -1,0 +1,273 @@
+[
+  {
+    "agent": "Cérbero",
+    "domain": "security",
+    "title": "Update DMG accepted with no integrity anchor outside the release and no quarantine flag, so Gatekeeper never checks it",
+    "severity": "HIGH",
+    "confidence": "medium",
+    "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
+    "line": 265,
+    "category": "improper-authorization",
+    "symbol": "UpdateChecker.download(_:)",
+    "snippet": "try FileManager.default.moveItem(at: tmp, to: dest)",
+    "source": "GitHub Releases API response (tag_name, assets[].browser_download_url, assets[].size, checksums-*.txt asset), Sources/AiTaskbarApp/UpdateChecker.swift:165-196",
+    "sink": "DMG promoted into ~/Downloads and shown in Finder for the user to install, Sources/AiTaskbarApp/UpdateChecker.swift:265 and :275",
+    "description": "Every integrity input comes from the same release the attacker controls. The size comes from the asset metadata. The SHA-256 comes from a sibling checksums-*.txt asset in that release, and a missing or unparseable checksums file (`try?` at :186) turns the check off entirely (fail-open, :259). Nothing checks the DMG, or the app inside it, against the app's own Developer ID team (CodeSignatureInfo.currentTeamID exists but is never used here). The comment at :267-274 says Gatekeeper is the last line of defence. But the file is fetched with URLSession.download in an app that is not sandboxed (entitlements.plist app-sandbox=false), and Info.plist has no LSFileQuarantineEnabled. So the file gets no com.apple.quarantine flag, and Gatekeeper never assesses the DMG or the .app copied out of it.",
+    "evidence": ":179-187 the checksum comes from an asset in the same release, fetched with try? (fail-open). :252-264 size/hash come from the release, and the hash is optional. :265 moveItem and :275 activateFileViewerSelecting run with no codesign or team check. HTTPClient.download (Sources/AiTaskbarCore/Networking/HTTPClient.swift:71) is a plain session.download, and nothing sets xattr quarantine. Resources/entitlements.plist sets app-sandbox false, and Resources/Info.plist has no LSFileQuarantineEnabled. CodeSignatureInfo is only used by the Keychain code and AboutView, never by UpdateChecker.",
+    "exploit_scenario": "1) The attacker gets write access to the release repo (stolen maintainer token or compromised account) and publishes v99.0.0. The release holds an unsigned or ad-hoc-signed ai-taskbar-99.0.0-arm64.dmg and optionally a matching checksums-99.0.0.txt, or no checksums file at all. 2) Within 24 h every installed copy sees Semver.isNewer('v99.0.0', current) == true and shows the update banner. 3) The user clicks Download. The size and hash match because the attacker wrote both, the file is moved to ~/Downloads without quarantine, and Finder reveals it. 4) The user mounts it and drags the app to /Applications, as the app tells them to. On launch there is no Gatekeeper or notarization prompt, because the file has no quarantine flag. The attacker's code runs as the user and can read the Claude/Codex OAuth tokens and API keys this app handles.",
+    "preconditions": [
+      "attacker can publish a release on the configured updates owner/repo (compromised maintainer account or token)",
+      "user clicks Download and installs the DMG as instructed"
+    ],
+    "impact": "Arbitrary code runs as the user on every installed copy that accepts the update. That exposes the Keychain-held Claude credentials, ~/.codex/auth.json, and vendor API keys.",
+    "fix": "Before moving or revealing the DMG, verify it against an anchor that is not in the release. Mount it read-only (hdiutil attach -nobrowse -readonly), then run SecStaticCodeCheckValidity on the bundled .app with a requirement that pins anchor apple generic plus certificate leaf[subject.OU] = the running app's team ID (CodeSignatureInfo.currentTeamID). Also require a notarization ticket (stapler/spctl assessment). Fail closed when the running build has no team ID, instead of skipping. Set com.apple.quarantine on the downloaded file (or add LSFileQuarantineEnabled) so Gatekeeper still runs. Treat a missing checksum as an error, not as a skip.",
+    "cwe": "CWE-494",
+    "component": "update-checker",
+    "lens": "authorization",
+    "verification": "panel",
+    "panel": {
+      "true": 2,
+      "false": 1,
+      "voters": 3
+    },
+    "panel_detail": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "reasoning": "The only attacker-controlled input is the GitHub Releases response for config.ownerRepo (UpdateChecker.swift:150). The finding admits this needs publish rights on the maintainer's release repo, through a stolen account or token. That repo is the product's trust root, not a surface an outside attacker can reach. The transport is locked down: HTTPS, a host allow-list for the DMG and checksum URLs (isAllowedDownloadURL, :182, :226), and a pinned HTTPClient (:239-241). So no network attacker or third party can inject a release. The code checks what the finding says it checks: size at :248-254, and a SHA-256 at :255-260 that is skipped when missing because of try? at :185. Nothing runs automatically. The DMG is only moved at :265 and revealed at :275, and the user still has to mount it, drag the app and launch it. Whoever can publish a release can also change the README and the release page, so the same attacker already reaches every new install. Missing quarantine and team-ID pinning would be defence in depth against a compromised trust root, not a reachable bypass in the default deployment. Quarantine alone would not stop a release signed with some other Developer ID anyway. The claimed attack path starts from a privileged-compromise premise, so the source is not attacker-controlled under the reachability lens."
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "The precondition is heavy: the attacker must be able to publish on the release repo. Given that, the claimed damage holds. (1) Source: every integrity input comes from the attacker's own release. The size comes from the asset metadata (UpdateChecker.swift:193). The SHA comes from a sibling checksums-*.txt asset in that release, fetched with try? (:179-186), and the check is skipped when it is nil (:259). (2) Dangerous operation: the DMG is moved into ~/Downloads (:265) and revealed in Finder (:275), and the user is told to drag the app into /Applications. (3) No effective mitigation: nothing in UpdateChecker checks the signature or team ID. CodeSignatureInfo.currentTeamID (Sources/AiTaskbarCore/Util/CodeSignatureInfo.swift:42) is never called from the update path. The download is a plain session.download (HTTPClient.swift:71) in an app that is not sandboxed (Resources/entitlements.plist:14-15, app-sandbox false). Resources/Info.plist has no LSFileQuarantineEnabled, and there is no xattr code. So the file gets no com.apple.quarantine flag, and the Gatekeeper check the comment at :267-274 relies on never runs for an unsigned app. The impact is real and specific: CLAUDE.md keeps the Developer ID key off the repo on purpose, so compromising GitHub alone should not be enough to ship code that runs. This path makes it enough. The result is arbitrary code running as the user, with access to the Claude and Codex credentials the app handles."
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "I looked for any defense between the GitHub release metadata and the DMG being handed to the user, and found none that holds up against someone who controls the release. (1) Source: the tag, asset URL, size and checksums asset all come from the releases/latest JSON (UpdateChecker.swift:159-196). The SHA comes from a sibling asset in the same release, fetched with `try?` at :186, so a missing or unparseable checksums file leaves dmgSHA256 nil. (2) Sink: at :265 the DMG is moved into ~/Downloads, and at :275 it is revealed in Finder. The size check (:252-258) and the hash check (:259-264) only compare against values from that same release, and the hash check is skipped when there is no checksum. isAllowedDownloadURL (:282-288) only pins the host to GitHub, and GitHub is where the attacker publishes. (3) Missing mitigation: HTTPClient.swift:71 is a plain session.download. Searching Sources/ and Resources/ for quarantine or LSFileQuarantineEnabled finds nothing, and entitlements.plist:14-15 sets app-sandbox false. So the file never gets com.apple.quarantine, and the comment at :267-274 relying on Gatekeeper is not backed by code. UpdateChecker never checks a code signature or team ID, and no key outside the release (for example an EdDSA key like Sparkle uses) exists. The attacker does need to be able to publish a release, which is the REACHABILITY lens's call. Under DEFENSES, nothing in the code stops the attack once that is possible."
+      }
+    },
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "exploit or deny-path fails open",
+      "assert_after": "exploit blocked; legitimate path unchanged"
+    },
+    "status": "OPEN",
+    "blocks_pr": false,
+    "id": "SEC-CER-001"
+  },
+  {
+    "agent": "Cérbero",
+    "domain": "security",
+    "title": "Crash persists after the vendor recovers: an oversized utilization is saved to 90-day history and replayed into Int() on the analytics busiest-day label",
+    "severity": "MEDIUM",
+    "confidence": "medium",
+    "path": "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift",
+    "line": 48,
+    "category": "integer-overflow",
+    "symbol": "AnalyticsFormatters.peakDayText",
+    "snippet": "return \"🔥 \\(L10n.localizedString(\"analytics_busiest_day\")): \\(dateStr) (\\(Int(record.utilizationPercent))% quota)\"",
+    "source": "Any vendor utilization field, e.g. Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71 or ZAIWireTypes.swift:88, then VendorViewModel.recordHistory (Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:235,276)",
+    "sink": "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:46/48 Int(record.utilizationPercent)",
+    "description": "One response with a finite value of at least 9.3e18 (for example 1e300) sets snapshot.maxUtilization. recordHistory appends it to <vendor>.jsonl before SwiftUI renders anything, so the value is on disk even if the menu bar then crashes. compact() keeps samples for 90 days. AnalyticsStore loads 90 days of history (AnalyticsStore.swift:203). computePeakDay (AnalyticsAggregator.swift:29-47) picks that sample as the busiest day, and peakDayText converts it with Int() without a check. AnalyticsAggregator.swift:124-125 also feeds historyMax into totalUsagePercent when there is no live snapshot, and that reaches Int() at VendorAnalyticsCardView.swift:102.",
+    "evidence": "VendorViewModel.swift:229-235 sets state and appends history synchronously. UsageHistoryStore.swift:56-67 does no validation. UsageHistoryStore.defaultRetention is 90*86_400. AnalyticsAggregator.swift:29 is dayMaxes max(). AnalyticsFormatters.swift:46,48 call Int().",
+    "exploit_scenario": "1) The vendor endpoint, or a MITM holding a trusted certificate, returns utilization 1e300 once. 2) The app appends {\"max\":1e300} to history. 3) The vendor goes back to normal values, so the menu bar and cache are fine again. 4) For the next 90 days, opening the Analytics dashboard computes the peak day and aborts the process, every time and after every relaunch.",
+    "preconditions": [
+      "The attacker controls one usage response from any enabled vendor (malicious or compromised vendor, or a TLS MITM)",
+      "The user opens the Analytics view within 90 days"
+    ],
+    "impact": "A lasting crash of the analytics feature that survives relaunch and outlives the attack. Recovery needs manual deletion of the history JSONL.",
+    "fix": "Clamp and finite-check utilization when UsageWindow is built (for example min(max(x,0),1000)), also clamp in UsageHistoryStore.append/load, and use a non-trapping formatter such as Int(exactly:) or clamp before Int() in the views.",
+    "cwe": "CWE-190",
+    "component": "UsageHistoryStore / Analytics",
+    "lens": "injection",
+    "verification": "panel",
+    "panel": {
+      "true": 2,
+      "false": 1,
+      "voters": 3
+    },
+    "panel_detail": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "reasoning": "The code path is real, and there is no clamp anywhere along it. A finite 1e300 from the wire is accepted by flexibleDoubleIfPresent (AppConfig.swift:199-203) and passes unchanged through AnthropicWireTypes.swift:140-147 and UsageWindow.swift:15-20. It is then written to disk by recordHistory (VendorViewModel.swift:235,274-276, into UsageHistoryStore.swift:56). computePeakDay picks it as the max (AnalyticsAggregator.swift:29,51), and Int() traps on it (AnalyticsFormatters.swift:46,48). The problem is the source. It is not controlled by an attacker in any realistic threat model for this local single-user app. The value arrives only in an authenticated HTTPS response. Every vendor base URL is https-only and host-allowlisted (AppConfig.swift:452-458 and the matching validators at 559, 626, 715). Pinned hosts also get SPKI TOFU pinning (PinningDelegate.swift:6-40). So the finding needs either a malicious or compromised first-party vendor, or a MITM holding a trusted root. The trusted-root case has to beat pinning too, and anyone in that position can already read the OAuth and API tokens the app sends, which is far worse than crashing the Analytics view. A vendor sending garbage is a robustness bug, not an attacker reaching a sink. The finding offers no path where an unprivileged party controls the utilization field. Side note (not the claim voted on): the missing finite/range clamp before Int() is still worth fixing as a hardening step."
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "The crash described in the finding is real, and it persists as claimed. Source: AnthropicWireTypes.swift:71 decodes utilization through flexibleDoubleIfPresent (AppConfig.swift:199-203). That function only decodes the value and never checks its range or finiteness, so 1e300 is accepted. AnthropicWireTypes.swift:147 then passes it straight into UsageWindow.utilizationPercent. UsageWindow.swift:15-20 does not clamp it, and UsageSnapshot.swift:71 carries it into maxUtilization as the max. Persistence: VendorViewModel.swift:234 calls recordHistory, and UsageHistoryStore.swift:56-67 appends the sample without validation. The Double is finite, so the JSON encoder accepts it. On load, UsageHistoryStore.swift:113-114 filters only by timestamp (cutoff), not by value. Sink: AnalyticsAggregator.swift:21-55 computePeakDay picks the largest daily max (1e300 > 0.5, and the variance check does not remove it). The result reaches the summary at AnalyticsAggregator.swift:121/157. VendorAnalyticsCardView.swift:145 calls AnalyticsFormatters.peakDayText, and AnalyticsFormatters.swift:46/48 runs Int(record.utilizationPercent). Int(Double) on a value that does not fit in Int traps at runtime, so the process aborts. Nothing between source and sink clamps the value or uses Int(exactly:). The crash repeats every time Analytics opens, including after relaunch, until the sample ages out of the 90-day window or the JSONL is deleted by hand. So the claimed damage holds. The real harm is availability of a local app, and the attacker must control the vendor's response (a malicious or compromised vendor, or a MITM with a trusted certificate). MEDIUM is therefore generous; I would call it LOW. Separately, ZAIWireTypes.swift:84-85 also calls Int() on unit/number without a check. That is a different bug and does not affect this vote."
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "I found no check anywhere between the vendor's JSON and Int(). (1) Source: AnthropicWireTypes.swift:71 decodes `utilization` through flexibleDoubleIfPresent (AppConfig.swift:199-203). That helper is a plain Double decode with no range or isFinite check, so a finite value like 1e300 is accepted. toSnapshot (AnthropicWireTypes.swift:140-147) passes the value into UsageWindow as is, and UsageWindow.init (UsageWindow.swift:15-20) stores it unchanged. (2) Persistence: VendorViewModel.swift:235 calls recordHistory(snapshot.maxUtilization), which reaches UsageHistoryStore.append (UsageHistoryStore.swift:56-58). append encodes the raw Double. JSONEncoder only rejects non-finite values, and 1e300 is finite, so it is written to disk. load (UsageHistoryStore.swift:92-125) decodes it back and only filters by timestamp. (3) Aggregation: computePeakDay (AnalyticsAggregator.swift:29-47) takes the per-day max() with no clamp and returns it as utilizationPercent. AnalyticsAggregator.swift:121 and :157 put that result into summary.peakDay. (4) Sink: VendorAnalyticsCardView.swift:143-145 renders AnalyticsFormatters.peakDayText. At AnalyticsFormatters.swift:46 and :48 it calls Int(record.utilizationPercent), and Int() of a Double at or above about 9.22e18 traps at runtime. The only isFinite check in the model layer (UsageSnapshot.swift:325) is on a different path, notifications above 90%, and there is no clamp in Providers, History or the aggregator. I found no framework, type-system or middleware protection. Whether a malicious vendor or TLS MITM is a realistic attacker is a question for the REACHABILITY lens. It does not change that nothing on this path would stop the crash."
+      }
+    },
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "exploit or deny-path fails open",
+      "assert_after": "exploit blocked; legitimate path unchanged"
+    },
+    "status": "OPEN",
+    "blocks_pr": false,
+    "id": "SEC-CER-002"
+  },
+  {
+    "agent": "Cérbero",
+    "domain": "security",
+    "title": "Huge utilization value in Anthropic usage JSON crashes the app on every launch",
+    "severity": "LOW",
+    "confidence": "medium",
+    "path": "Sources/AiTaskbarProviders/AnthropicWireTypes.swift",
+    "line": 71,
+    "category": "integer-overflow",
+    "symbol": "AnthropicWindow.init(from:)",
+    "snippet": "        utilization = c.flexibleDoubleIfPresent(forKey: .utilization)",
+    "source": "Response body of GET https://api.anthropic.com/api/oauth/usage: five_hour/seven_day/seven_day_opus.utilization, limits[].percent, extra_usage.utilization (AnthropicWireTypes.swift:42,71,100)",
+    "sink": "Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:41 `Text(\"\\(Int(percent.rounded()))%\")` (store.maxUtilization); also NotificationService.swift:102 `Int(window.utilizationPercent)`, ProviderRowView.swift:26",
+    "description": "The Anthropic decoder accepts any finite Double, e.g. 1e300, as a utilization percent. toSnapshot (AnthropicWireTypes.swift:145-149, 168-173, 185) and UsageWindow.init copy it without a range or finiteness clamp. VendorSnapshot.maxUtilization (UsageSnapshot.swift:71) and UsageStore aggregate compute (UsageStore.swift:379) then pass it to the menu-bar label, whose Int(Double) conversion traps when the value does not fit in Int.",
+    "evidence": "AppConfig.swift:199-203 flexibleDoubleIfPresent returns any decoded Double; UsageWindow.swift:15-23 stores it as-is; UsageSnapshot.swift:70-72 max(); MenuBarLabelView.swift:39-41 Int(percent.rounded()); NotificationService.swift:102 Int(window.utilizationPercent).",
+    "exploit_scenario": "The usage endpoint returns {\"five_hour\":{\"utilization\":1e300}}. Decoding succeeds, CachedFetch writes the payload to the disk cache (CachedFetch.swift:34-36), and the menu-bar label renders Int(1e300.rounded()), which is a fatal trap. On relaunch the cached payload decodes the same way and crashes again until the cache expires or is removed. Stale fallback keeps serving it if the next fetch fails.",
+    "preconditions": [
+      "Attacker controls the Anthropic usage API response (malicious or compromised vendor; TLS rules out an ordinary MITM)",
+      "Anthropic card is expanded (default) or a notification threshold fires"
+    ],
+    "impact": "Denial of service of the local menu-bar app (repeated crash loop through the disk cache); stops monitoring of every vendor. No data exposure.",
+    "fix": "Sanitize at the wire-to-snapshot boundary. In toSnapshot, or centrally in UsageWindow.init, drop non-finite values and clamp to a sane range (e.g. 0...1000) before building UsageWindow. Optionally, in the UI use Int(exactly:) or a checked conversion instead of Int(Double).",
+    "cwe": "CWE-190",
+    "component": "providers-anthropic",
+    "lens": "injection",
+    "verification": "panel",
+    "panel": {
+      "true": 2,
+      "false": 1,
+      "voters": 3
+    },
+    "panel_detail": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "reasoning": "The crash itself is real: MenuBarLabelView.swift:41 runs Int(percent.rounded()) with no clamp, and UsageWindow.swift:15-20 stores the value unchecked. What fails is the attacker source. The finding says it comes from the Anthropic response, but only Anthropic can control that. The URL is fixed in the code as https://api.anthropic.com/api/oauth/usage (AnthropicProvider.swift:17), and the user cannot configure a base_url for it. The connection uses TLS, and the host has a pinned SPKI hash (PinBaseline.swift:45), so a network MITM is out. The finding's own preconditions say it needs a 'malicious or compromised vendor', and that vendor is the service that already issues and holds the user's credential, so this is not an attacker outside the trust boundary. The disk-cache route needs write access inside the user's 0700 Application Support directory, and anyone with that access already controls the user account. No attacker-controlled source reaches the sink in the default deploy. This is a robustness bug (the value should be clamped or converted with Int(exactly:)), not a vulnerability someone can reach."
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "The claimed damage holds, and it is only a LOW-severity local DoS. AnthropicWireTypes.swift:71 accepts any finite Double as utilization. toSnapshot (AnthropicWireTypes.swift:140-150, 164-170, 176-190) and UsageWindow.init (UsageWindow.swift:15-23) pass it through without a finiteness or range clamp. VendorSnapshot.maxUtilization (UsageSnapshot.swift:70-72) and UsageStore.swift:378-380 carry the value into the menu-bar label. That label's mode is the default: AppConfig.swift:230 sets menuBarMode = .iconAndPercent, and the card is open by default. MenuBarLabelView.swift:41 then runs Int(percent.rounded()), and Swift's Int(Double) aborts the process (it does not throw) when the value is outside Int's range, e.g. 1e300. The same unchecked conversion appears at PinnedStatusItemManager.swift:97/100/110 and NotificationService.swift:102. I found no clamp anywhere between the source and these conversions. A crash kills the whole process, so monitoring stops for every vendor, not just Anthropic. The cached payload is decoded again on relaunch within the TTL or as a stale fallback, which supports the crash-loop claim. Limits: the attacker has to be Anthropic itself or a compromised api.anthropic.com. Ordinary network interception is ruled out by TLS. Nothing is exposed and nothing is written. The harm is availability of a desktop monitor only, which fits the LOW rating."
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "I found nothing that stops a huge utilization value between the decoder and the Int(Double) trap. (1) Source: AnthropicWireTypes.swift:71 reads utilization with flexibleDoubleIfPresent. That function (AppConfig.swift:199-203) returns any decoded Double, with no range or finiteness check. (2) Nothing in between: toSnapshot (AnthropicWireTypes.swift:140-185) passes the value straight to UsageWindow, and UsageWindow.init (UsageWindow.swift:15-23) stores it unchanged. The only comment there says 'or higher if the vendor reports overuse', so large values are expected. VendorSnapshot.maxUtilization (UsageSnapshot.swift:70-72) takes a plain max(). UsageStore.swift:379 folds it in with only an 'm > maxUtil' comparison. The only isFinite guard nearby is UsageSnapshot.swift:325, which is a different predicate. The isFinite guards in CreditBaseline apply to credits, not to plan windows. (3) Sink: the default menuBarMode is .iconAndPercent (AppConfig.swift:230), and MenuBarLabelView.swift:41 runs Text(\"\\(Int(percent.rounded()))%\"). Swift's Int(Double) crashes the app when the value is out of range, and the same conversion appears at ProviderRowView.swift:26 and PinnedStatusItemManager.swift:97/100/110. Neither the framework nor the type system prevents it: JSONDecoder accepts 1e300 as a valid finite Double. One limit: the attacker would have to be Anthropic's API itself (a malicious or compromised vendor), since TLS blocks an ordinary man-in-the-middle. That limits how often this can happen, but it is not a defense, and the finding already lists it as a precondition."
+      }
+    },
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "exploit or deny-path fails open",
+      "assert_after": "exploit blocked; legitimate path unchanged"
+    },
+    "status": "OPEN",
+    "blocks_pr": false,
+    "id": "SEC-CER-003"
+  },
+  {
+    "agent": "Cérbero",
+    "domain": "security",
+    "title": "Same persisted history value crashes the popover sparkline for 24 hours",
+    "severity": "LOW",
+    "confidence": "medium",
+    "path": "Sources/AiTaskbarApp/Views/SparklineView.swift",
+    "line": 126,
+    "category": "integer-overflow",
+    "symbol": "SparklineView.chartContent",
+    "snippet": "Text(\"↑\\(Int(maxPercent.rounded()))%\")",
+    "source": "History JSONL loaded in VendorViewModel.init (VendorViewModel.swift:150-155, 24h cutoff)",
+    "sink": "Sources/AiTaskbarApp/Views/SparklineView.swift:116 and :126",
+    "description": "The 1e300 sample from history is reloaded on every launch. After the vendor sends normal values again, maxPercent (1e300) is more than current+5, so the peak label runs Int(1e300.rounded()) and traps. yFor() clamps for drawing, but the text labels do not. If the device stays offline and the bad sample is the last one, line 116 traps as well.",
+    "evidence": "SparklineView.swift:46 is maxPercent = samples.map(\\.max).max(). Line 125 guards only 'maxPercent > currentPercent + 5'. VendorSectionView.swift:59-60 renders SparklineView when the card is expanded.",
+    "exploit_scenario": "After one malicious response, each relaunch plus opening the popover with that vendor's card expanded crashes the app until the sample leaves the 24h window.",
+    "preconditions": [
+      "One attacker-controlled usage response",
+      "At least 2 samples in 24h",
+      "Vendor card expanded"
+    ],
+    "impact": "The popover cannot be opened for up to 24 hours after the attack, across relaunches.",
+    "fix": "Clamp samples on append/load and clamp before Int() in the labels (the drawing code already clamps with min/max).",
+    "cwe": "CWE-190",
+    "component": "SparklineView",
+    "lens": "injection",
+    "verification": "panel",
+    "panel": {
+      "true": 2,
+      "false": 1,
+      "voters": 3
+    },
+    "panel_detail": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "reasoning": "The data path is real and nothing clamps it. AnthropicWireTypes.swift:71 decodes `utilization` into a Double with no bounds check. UsageSnapshot.swift:70 (`maxUtilization`) passes it on unchanged, VendorViewModel.swift:235/276 writes it to history, VendorViewModel.swift:150-155 reloads it within the 24h window, and SparklineView.swift:46/116/126 calls Int(...rounded()) without clamping. So a value of 1e300 would reach the trap. What fails is the claimed source. The only way to inject that value is a JSON usage response from the vendor's own API: Anthropic, OpenAI, or xAI over HTTPS to a fixed host. Kimi/Gemini base_url is host-allowlisted (AppConfig.swift:432-446), and PinningDelegate.swift:50-56 never accepts a certificate the system rejects. In the default deploy, the only parties who can write that response are the vendor itself or a MITM holding a CA trusted by the system. Both are outside the threat model, and neither is an attacker who can reach this code. The other route is the history JSONL file. That needs local write access as the same user, which already means full control of that user account. The 'One attacker-controlled usage response' precondition is assumed, never shown. What remains is a robustness bug: a missing clamp on vendor data. It is not an attacker-reachable vulnerability. OpenRouter already clamps with min(...,100) at OpenRouterWireTypes.swift:150; Anthropic, XAI and OpenAI do not."
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "The crash described in the finding is real, and nothing along the path stops it. (1) Source: the wire decoder takes any finite Double for utilization with no range check (AnthropicWireTypes.swift:71, via AppConfig.swift:199-203). UsageWindow.swift:20 stores it as-is, UsageSnapshot.swift:71 takes the max of the windows, and VendorViewModel.swift:274-276 appends that value to history. UsageHistoryStore.swift:56-58 writes it to JSONL. 1e300 encodes fine; only inf/NaN would fail. (2) Reload: VendorViewModel.swift:150-155 loads 24h of samples on every launch, and neither load() nor SparklineView.swift:24 (time filter only) checks the value. (3) Sink: SparklineView.swift:46 sets maxPercent to the largest sample. yFor at :58-60 clamps only the drawing coordinates. The label at :126 runs Int(maxPercent.rounded()) when maxPercent > current+5, and :116 runs Int(last.max.rounded()). In Swift, Int(Double) traps when the value is out of range, so the app hard-crashes when the expanded card renders. So the claimed damage holds: the popover crashes on every relaunch until the sample falls out of the 24h window, and the user has no in-app fix because the popover crashes before they can act. Impact is availability only: no data is disclosed or written beyond the one bad number. The attacker must control an HTTPS response from an allowlisted vendor host, which is a strong precondition. That makes the finding's LOW severity right, but the harm itself is real."
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "Nothing between the wire and the Int() conversion checks that the value is finite or clamps it. (1) Source: AnthropicWireTypes.swift:71 decodes utilization with flexibleDoubleIfPresent (AppConfig.swift:199-203), which accepts any Double, so 1e300 passes. toSnapshot (AnthropicWireTypes.swift:140-147) passes the percent straight into UsageWindow, and its init (UsageWindow.swift:15-20) just stores it. (2) Propagation: UsageSnapshot.swift:70-71 maxUtilization is a plain max(). VendorViewModel.swift:235 then calls recordHistory, and :274-284 appends the value to disk and to memory with no check. UsageHistoryStore.append (:56-57) encodes it as is. load(since:) (:92-126) filters only on the timestamp, so the sample is reloaded on every launch while it stays inside the 24h window (VendorViewModel.swift:149-155). (3) Sink: SparklineView.swift:24 filters on time only, and :46 maxPercent is an unclamped max(). The yFor closure (:57-58) clamps to 0...100, but only for drawing. The labels at :116 (Int(last.max.rounded())) and :126 (Int(maxPercent.rounded()), guarded at :125 only by maxPercent > currentPercent + 5) convert a Double far above Int.max to Int. That traps at runtime in Swift, and there is no isFinite or range check first. I found no framework, type-system or middleware defense on this path. Whether an attacker can control the TLS vendor response is a reachability question, not a defenses one."
+      }
+    },
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "exploit or deny-path fails open",
+      "assert_after": "exploit blocked; legitimate path unchanged"
+    },
+    "status": "OPEN",
+    "blocks_pr": false,
+    "id": "SEC-CER-004"
+  },
+  {
+    "agent": "Cérbero",
+    "domain": "security",
+    "title": "Overflowing model usage totals make the top-model share NaN, which traps in Int() in the vendor card (Z.AI and OpenRouter)",
+    "severity": "LOW",
+    "confidence": "medium",
+    "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
+    "line": 638,
+    "category": "integer-overflow",
+    "symbol": "VendorSectionView (model breakdown, .zai / .openrouter)",
+    "snippet": "Text(\"\\(Int(m.percent.rounded()))%\")",
+    "source": "usageDetails[].usage (ZAIWireTypes.swift:108) or OpenRouter per-model usage (OpenRouterWireTypes.swift:168-176)",
+    "sink": "Sources/AiTaskbarApp/Views/VendorSectionView.swift:608 and :638",
+    "description": "Per-model usage values only need to be > 0. Two entries of 1e308 for the same modelCode add up to +inf, so totalUsage is inf and percent = inf/inf is NaN (ZAIWireTypes.swift:181-189, OpenRouterWireTypes.swift:169-176). Int(NaN.rounded()) traps when the expanded card renders. The survivor clamp on utilizationPercent does not cover ModelShare.percent.",
+    "evidence": "ZAIWireTypes.swift:180-189. CachedFetch.swift:34-36 writes after decode, and fallback at :105-108 re-decodes the cached payload.",
+    "exploit_scenario": "The vendor returns usageDetails [{modelCode:\"a\",usage:1e308},{modelCode:\"a\",usage:1e308}]. The payload is written to the cache because decode succeeds, and the app crashes whenever the Z.AI card is shown, including from cache after a relaunch within the TTL or as a stale fallback while offline.",
+    "preconditions": [
+      "Attacker-controlled response",
+      "Vendor card expanded"
+    ],
+    "impact": "The popover crashes. The payload is cached (writePayload runs after a successful decode), so offline stale fallback keeps crashing.",
+    "fix": "Skip non-finite totals and clamp percent to 0...100 when ModelShare is built. Format without Int().",
+    "cwe": "CWE-190",
+    "component": "ZAIWireTypes / OpenRouterWireTypes / VendorSectionView",
+    "lens": "injection",
+    "verification": "panel",
+    "panel": {
+      "true": 2,
+      "false": 1,
+      "voters": 3
+    },
+    "panel_detail": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "reasoning": "The arithmetic bug is real. In ZAIWireTypes.swift:180-189, entries that are each > 0 are summed with no finiteness check, so two usage values of 1e308 give an infinite total, the share becomes inf/inf = NaN, and VendorSectionView.swift:638 calls Int() on it. But the attacker source is not established. The JSON comes only from a hardcoded endpoint: ZAIProvider.swift:10 is `URL(string: \"https://api.z.ai/api/monitor/usage/quota/limit\")`, which is not user-configurable. Nothing is on the path except the first-party vendor over TLS, and the config also has a pin_hosts option (AppConfig.swift:124). To send 1e308 values, an attacker would have to be Z.AI or OpenRouter themselves, or break TLS. The finding's only precondition is 'Attacker-controlled response', with no path that gets there. The cached copy of the payload sits in the user's own 0700 Application Support directory, so tampering with it requires the same user account, which is not an attacker boundary. flexibleDoubleIfPresent (AppConfig.swift:199-203) does accept any finite Double, so the robustness bug (a crash if the vendor sends absurd values) is worth fixing with a clamp, but it is not reachable by an attacker as written."
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "I traced the claimed damage through the code and it holds. ZAIModelUsage.usage is decoded as a Double with no finiteness check (ZAIWireTypes.swift:108, AppConfig.swift:199-203). The only filter is `used > 0` (ZAIWireTypes.swift:180), and values are summed under the same modelCode (ZAIWireTypes.swift:181). Two entries of 1e308 for one model add up to +inf. `totalUsage > 0` is still true for inf (ZAIWireTypes.swift:184-185), so percent = inf/inf*100 = NaN (ZAIWireTypes.swift:189). OpenRouter does the same thing (OpenRouterWireTypes.swift:168-177). ModelShare's init stores percent without clamping (UsageSnapshot.swift:388-392). The view calls Int(m.percent.rounded()) at VendorSectionView.swift:608 and :638. Swift's Int(Double) init traps on NaN even in release builds, so the whole menu-bar process crashes, not just the popover. The raw payload is what gets cached, so every render within the TTL, or from stale fallback, crashes again. The impact is availability only: no data leaks and nothing sensitive is written. It lasts until a normal response replaces the cache, which fits the LOW severity. Whether an attacker can actually shape the Z.AI/OpenRouter response over TLS is a reachability question, not part of this lens. Separate from this finding: two distinct models at 1e308 each give 0% rather than NaN, so only same-code summing triggers the crash."
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "reasoning": "I found no defense between the server response and the trap. Decoding: ZAIWireTypes.swift:108 reads `usage` through flexibleDoubleIfPresent (AppConfig.swift:199-203). That function only decodes a Double or an Int64. It has no isFinite or range check, and 1e308 is a finite JSON number that JSONDecoder accepts. Aggregation: ZAIWireTypes.swift:179-181 only requires used > 0. It then sums per modelCode, so two entries of 1e308 under the same code give totals[code] = +inf. totalUsage (line 184) is inf, which passes the `> 0` check at line 185. Line 189 then computes inf/inf*100 = NaN. ModelShare.init (UsageSnapshot.swift:388-392) stores percent unchanged, with no clamp. The isFinite guards in the codebase cover utilizationPercent (UsageSnapshot.swift:325, OpenAIResetController.swift:32) and credits (CreditBaseline.swift), never ModelShare.percent. Render: VendorSectionView.swift:618 only checks that the list is non-empty. Line 638 then runs Int(m.percent.rounded()), and Swift's Int(Double) is a runtime trap on NaN. The same pattern is at :608 for OpenRouter. The source is the vendor's HTTPS response, so the attacker is the vendor itself or someone who can rewrite its responses. That is a weak attacker model, but it is a reachability question, not a defenses one. Under the DEFENSES lens, neither the framework, the type system nor a guard at a higher layer prevents the crash."
+      }
+    },
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "exploit or deny-path fails open",
+      "assert_after": "exploit blocked; legitimate path unchanged"
+    },
+    "status": "OPEN",
+    "blocks_pr": false,
+    "id": "SEC-CER-005"
+  }
+]

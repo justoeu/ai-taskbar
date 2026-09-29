@@ -1,0 +1,12 @@
+{
+ "verdict": "TRUE_POSITIVE",
+ "lens": "IMPACT",
+ "reasoning": "If an attacker reaches this path, the claimed damage is real. The write only happens after opt-in (manage_oauth_refresh=true, OpenAIProvider.swift:38 defaults to false), and the severity stays LOW. AtomicFileWrite.swift:19 uses Data.write(.atomic), which gives the new tmp file the default mode (0666 & ~umask, so 0644) and fills it with the full JSON payload. The chmod to 0600 only runs afterwards at :20-24. Nothing narrows the mode before the plaintext lands. FileCredentialReader.swift:58-74 writes access_token, refresh_token and id_token into that tmp file in ~/.codex. On this machine the home dir is drwxr-x--- justoeu:staff, which every standard local user can traverse through the staff group, and ~/.codex is 0755. So during that window another local user can open() the .auth.json.<uuid>.tmp file. The fd keeps its read access after the chmod and the rename. What leaks is the rotated Codex refresh_token, a long-lived credential that allows session takeover, so the data is sensitive. The doc comment at :8-12 claims the race is avoided but it only moved from the final path to the tmp path, and a comment is not a mitigation. Limits: the window is short and there are two preconditions, a multi-user Mac and the non-default opt-in. config.toml writes land in the 0700 app-support dir and are not exposed.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:19",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:21",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:74",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:38"
+ ],
+ "_task": "acc4d47158bb071de"
+}

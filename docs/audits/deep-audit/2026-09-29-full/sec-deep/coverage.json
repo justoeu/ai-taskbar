@@ -1,0 +1,85 @@
+{
+  "verification_status": "verified",
+  "panel_source": "vote-files",
+  "require_vote_files": true,
+  "candidates_in": 15,
+  "candidates_deduped_out": 5,
+  "panel_reviewed_findings": 15,
+  "panel_quorum_findings": 5,
+  "panel_dropped": 10,
+  "unreviewed_candidate_sites": 0,
+  "quorum": 2,
+  "voters": 3,
+  "dropped_sample": [
+    {
+      "temp_id": "C1",
+      "reason": "below-quorum",
+      "true": 1,
+      "false": 2,
+      "title": "Secret-bearing temp file is briefly left at umask permissions (0644) before chmod to 0600"
+    },
+    {
+      "temp_id": "C2",
+      "reason": "below-quorum",
+      "true": 0,
+      "false": 3,
+      "title": "Fallback metadata query runs outside prompt suppression and without UIFail, including on the locked-keychain path"
+    },
+    {
+      "temp_id": "C3",
+      "reason": "below-quorum",
+      "true": 1,
+      "false": 2,
+      "title": "Built-in TLS pins for vendor hosts are never enforced unless the host is also listed in pin_hosts, which is empty by default"
+    },
+    {
+      "temp_id": "C4",
+      "reason": "below-quorum",
+      "true": 0,
+      "false": 3,
+      "title": "Session JSONL files are memory-mapped, so truncating one mid-scan raises SIGBUS"
+    },
+    {
+      "temp_id": "C5",
+      "reason": "below-quorum",
+      "true": 1,
+      "false": 2,
+      "title": "A crafted opencode message crashes the app: the output + reasoning addition does not saturate"
+    },
+    {
+      "temp_id": "C7",
+      "reason": "below-quorum",
+      "true": 0,
+      "false": 3,
+      "title": "Antigravity remaining_fraction out of range crashes the app in Int(Double)"
+    },
+    {
+      "temp_id": "C8",
+      "reason": "below-quorum",
+      "true": 0,
+      "false": 3,
+      "title": "Unbounded Grok creditUsagePercent reaches Int() in the menu-bar label and crashes the app"
+    },
+    {
+      "temp_id": "C9",
+      "reason": "below-quorum",
+      "true": 1,
+      "false": 2,
+      "title": "Huge limit_window_seconds in the vendor response crashes the app on Int(Double) conversion"
+    },
+    {
+      "temp_id": "C10",
+      "reason": "below-quorum",
+      "true": 0,
+      "false": 3,
+      "title": "Z.AI quota response with an out-of-range unit/number crashes the app (Int(Double) trap), and the crash repeats from the disk cache"
+    },
+    {
+      "temp_id": "C12",
+      "reason": "below-quorum",
+      "true": 0,
+      "false": 3,
+      "title": "AtomicFileWrite overwrite of an existing file keeps its old (looser) mode: replaceItemAt preserves original metadata, so write(permissions:0o600) leaves a 0644 secret file at 0644"
+    }
+  ]
+}

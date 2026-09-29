@@ -1,0 +1,30 @@
+{
+ "component": "providers-openrouter-zai-kimi",
+ "lens": "injection",
+ "findings": [
+  {
+   "title": "Z.AI quota response with an out-of-range unit/number crashes the app (Int(Double) trap), and the crash repeats from the disk cache",
+   "category": "integer-overflow",
+   "severity": "LOW",
+   "confidence": "high",
+   "path": "Sources/AiTaskbarProviders/ZAIWireTypes.swift",
+   "line": 83,
+   "symbol": "ZAILimitEntry.init(from:)",
+   "snippet": "unit = c.flexibleDoubleIfPresent(forKey: .unit).map { Int($0) }",
+   "source": "Response body of GET https://api.z.ai/api/monitor/usage/quota/limit (ZAIProvider.swift:50, http.fetchPayload), decoded in ZAIProvider.decodeSnapshot (ZAIProvider.swift:58)",
+   "sink": "Sources/AiTaskbarProviders/ZAIWireTypes.swift:83 and :84, where Int($0) converts a Double that was never checked for range",
+   "description": "flexibleDoubleIfPresent (AppConfig.swift:199-203) accepts any finite JSON number as a Double, and the code passes it straight to Int(_:) with no range or isFinite check. In Swift, Int(Double) is a runtime trap when the value does not fit in Int (above about 9.22e18), so this is a crash rather than a thrown error. The decode happens in decodeSnapshot, which is not protected by the do/catch around it, because a trap cannot be caught.",
+   "exploit_scenario": "The Z.AI endpoint, or anything that can shape its JSON, returns {\"code\":200,\"success\":true,\"data\":{\"limits\":[{\"type\":\"TOKENS_LIMIT\",\"unit\":1e19,\"number\":1}]}}. ZAILimitEntry.init calls Int(1e19) and the process aborts. CachedFetch saves the raw payload in the DiskCache, so every later cache or stale-fallback decode aborts again, until the cache is cleared or overwritten by a clean fetch.",
+   "preconditions": [
+    "Z.AI provider enabled",
+    "attacker controls or influences the Z.AI API response (the threat model given)"
+   ],
+   "impact": "Denial of service for the menu-bar app (crash, possibly a crash loop while the poisoned cache entry lasts). No confidentiality or integrity impact.",
+   "fix": "Convert with Int(exactly:) after rounding, or check range first, and return nil when the value is out of range, for example flexibleDoubleIfPresent(...).flatMap { $0.isFinite ? Int(exactly: $0.rounded()) : nil }. Consider a shared flexibleIntIfPresent helper in Core that decodes Int64 first and uses an exact conversion as the fallback.",
+   "cwe": "CWE-190",
+   "evidence": "ZAIWireTypes.swift:83-84 `.map { Int($0) }` on the result of flexibleDoubleIfPresent, and AppConfig.swift:200 `try? decodeIfPresent(Double.self…)` accepts values like 1e19. There is no other place where unit or number are checked before this conversion.",
+   "component": "providers-zai",
+   "lens": "injection"
+  }
+ ]
+}

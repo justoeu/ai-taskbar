@@ -1,0 +1,371 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 65783ac..1550c1b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -359,6 +359,13 @@ traffic rides a subscription (zero marginal cost, so tokens are shown and
+ dollars are not), and xAI's card already reports account-wide cycle spend from
+ the Management API, so adding opencode's dollars there would double-count.
+ 
++`ClaudeSessionScanner` counts each API response once: Claude Code writes the
++same response to transcripts several times (same `message.id` + `requestId`,
++also across resumed/forked files), so lines are deduped by that pair across
++the whole window — memo replays included — keeping the largest
++`output_tokens`. Lines missing either id are counted individually. Summing
++every line measured ~1.9x too high.
++
+ ### Claude fast mode is a per-request premium, not a separate model
+ 
+ Fast mode (`usage.speed == "fast"` in `~/.claude/projects` transcripts) keeps
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 65783ac..1550c1b 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -359,6 +359,13 @@ traffic rides a subscription (zero marginal cost, so tokens are shown and
+ dollars are not), and xAI's card already reports account-wide cycle spend from
+ the Management API, so adding opencode's dollars there would double-count.
+ 
++`ClaudeSessionScanner` counts each API response once: Claude Code writes the
++same response to transcripts several times (same `message.id` + `requestId`,
++also across resumed/forked files), so lines are deduped by that pair across
++the whole window — memo replays included — keeping the largest
++`output_tokens`. Lines missing either id are counted individually. Summing
++every line measured ~1.9x too high.
++
+ ### Claude fast mode is a per-request premium, not a separate model
+ 
+ Fast mode (`usage.speed == "fast"` in `~/.claude/projects` transcripts) keeps
+diff --git a/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift b/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift
+index 4fe9082..9512f84 100644
+--- a/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift
++++ b/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift
+@@ -53,6 +53,9 @@ public enum ClaudeSessionScanner {
+         var totalsLast7: [String: ModelUsage] = [:]
+         var filesScanned = 0
+         var unparseableTimestamps = 0
++        // Responses keyed by (message.id, requestId), deduped across every
++        // file in the window — memo replays included — before aggregation.
++        var keyedAll: [String: ScanMemo.KeyedUsage] = [:]
+ 
+         var seenPaths = Set<String>()
+         for case let url as URL in walker {
+@@ -85,6 +88,7 @@ public enum ClaudeSessionScanner {
+                 for (model, usage) in hit.week {
+                     CostAggregator.add(usage, into: &totalsLast7, model: model)
+                 }
++                for (key, record) in hit.keyed { mergeKeyed(record, key: key, into: &keyedAll) }
+                 continue
+             }
+ 
+@@ -93,12 +97,15 @@ public enum ClaudeSessionScanner {
+             // memoized; merge into the running totals afterwards.
+             var fileToday: [String: ModelUsage] = [:]
+             var fileWeek: [String: ModelUsage] = [:]
+-            scan(data: data,
+-                 startOfToday: startOfToday,
+-                 sevenDaysAgo: sevenDaysAgo,
+-                 totalsToday: &fileToday,
+-                 totalsLast7: &fileWeek,
+-                 unparseableTimestamps: &unparseableTimestamps)
++            var fileKeyed: [String: ScanMemo.KeyedUsage] = [:]
++            scanLines(data: data,
++                      startOfToday: startOfToday,
++                      sevenDaysAgo: sevenDaysAgo,
++                      totalsToday: &fileToday,
++                      totalsLast7: &fileWeek,
++                      keyed: &fileKeyed,
++                      unparseableTimestamps: &unparseableTimestamps)
++            for (key, record) in fileKeyed { mergeKeyed(record, key: key, into: &keyedAll) }
+             for (model, usage) in fileToday {
+                 CostAggregator.add(usage, into: &totalsToday, model: model)
+             }
+@@ -109,11 +116,13 @@ public enum ClaudeSessionScanner {
+                 memo.store(path: url.path,
+                            entry: ScanMemo.Entry(size: size, mtime: mtime,
+                                                  computedForDay: startOfToday,
+-                                                 today: fileToday, week: fileWeek))
++                                                 today: fileToday, week: fileWeek,
++                                                 keyed: fileKeyed))
+             }
+         }
+         // Files that aged out of the window stop being tracked.
+         memo.retain(paths: seenPaths)
++        fold(keyedAll, totalsToday: &totalsToday, totalsLast7: &totalsLast7)
+ 
+         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)
+         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.anthropic)
+@@ -163,8 +172,10 @@ public enum ClaudeSessionScanner {
+     /// actually need — `JSONDecoder` discards everything else cheaply.
+     private struct AssistantLine: Decodable {
+         let timestamp: String?
++        let requestId: String?
+         let message: Message?
+         struct Message: Decodable {
++            let id: String?
+             let model: String?
+             let usage: Usage?
+             struct Usage: Decodable {
+@@ -195,6 +206,45 @@ public enum ClaudeSessionScanner {
+         totalsToday: inout [String: ModelUsage],
+         totalsLast7: inout [String: ModelUsage],
+         unparseableTimestamps: inout Int
++    ) {
++        var keyed: [String: ScanMemo.KeyedUsage] = [:]
++        scanLines(data: data, startOfToday: startOfToday, sevenDaysAgo: sevenDaysAgo,
++                  totalsToday: &totalsToday, totalsLast7: &totalsLast7,
++                  keyed: &keyed, unparseableTimestamps: &unparseableTimestamps)
++        fold(keyed, totalsToday: &totalsToday, totalsLast7: &totalsLast7)
++    }
++
++    /// Claude Code writes the same API response to a transcript more than
++    /// once (streaming / tool-use splits) and, for resumed or forked
++    /// sessions, into more than one file — same `message.id` + `requestId`.
++    /// One response is billed once, so keep one record per key: the one with
++    /// the largest `output_tokens` (later lines carry the final count), ties
++    /// going to the last seen.
++    internal static func mergeKeyed(_ record: ScanMemo.KeyedUsage, key: String,
++                                    into keyed: inout [String: ScanMemo.KeyedUsage]) {
++        if let kept = keyed[key], kept.usage.outputTokens > record.usage.outputTokens { return }
++        keyed[key] = record
++    }
++
++    private static func fold(_ keyed: [String: ScanMemo.KeyedUsage],
++                             totalsToday: inout [String: ModelUsage],
++                             totalsLast7: inout [String: ModelUsage]) {
++        for record in keyed.values {
++            if record.inToday { CostAggregator.add(record.usage, into: &totalsToday, model: record.model) }
++            if record.inWeek { CostAggregator.add(record.usage, into: &totalsLast7, model: record.model) }
++        }
++    }
++
++    /// Lines carrying both ids go to `keyed` (deduped); lines missing either
++    /// id have nothing to dedup on and are added to the totals directly.
++    private static func scanLines(
++        data: Data,
++        startOfToday: Date,
++        sevenDaysAgo: Date,
++        totalsToday: inout [String: ModelUsage],
++        totalsLast7: inout [String: ModelUsage],
++        keyed: inout [String: ScanMemo.KeyedUsage],
++        unparseableTimestamps: inout Int
+     ) {
+         var offset = data.startIndex
+         let end = data.endIndex
+@@ -257,15 +307,19 @@ public enum ClaudeSessionScanner {
+             )
+ 
+             let ts = parsed.timestamp.flatMap(ISO8601Parsing.parse)
+-            if let ts {
+-                if ts >= startOfToday { CostAggregator.add(modelUsage, into: &totalsToday, model: model) }
+-                if ts >= sevenDaysAgo { CostAggregator.add(modelUsage, into: &totalsLast7, model: model) }
++            // Fail-safe: a missing/unparseable timestamp counts into both
++            // buckets; the count is surfaced in the note so users spot drift.
++            let inToday = ts.map { $0 >= startOfToday } ?? true
++            let inWeek = ts.map { $0 >= sevenDaysAgo } ?? true
++            if ts == nil { unparseableTimestamps += 1 }
++            if let messageId = msg.id, !messageId.isEmpty,
++               let requestId = parsed.requestId, !requestId.isEmpty {
++                mergeKeyed(ScanMemo.KeyedUsage(model: model, usage: modelUsage,
++                                               inToday: inToday, inWeek: inWeek),
++                           key: messageId + "\u{0}" + requestId, into: &keyed)
+             } else {
+-                // Fail-safe: count missing-timestamp records into today.
+-                // We surface the count in the note so users can spot drift.
+-                CostAggregator.add(modelUsage, into: &totalsToday, model: model)
+-                CostAggregator.add(modelUsage, into: &totalsLast7, model: model)
+-                unparseableTimestamps += 1
++                if inToday { CostAggregator.add(modelUsage, into: &totalsToday, model: model) }
++                if inWeek { CostAggregator.add(modelUsage, into: &totalsLast7, model: model) }
+             }
+         }
+     }
+diff --git a/Sources/AiTaskbarCore/Cost/ScanMemo.swift b/Sources/AiTaskbarCore/Cost/ScanMemo.swift
+index 89dce8c..ec14c27 100644
+--- a/Sources/AiTaskbarCore/Cost/ScanMemo.swift
++++ b/Sources/AiTaskbarCore/Cost/ScanMemo.swift
+@@ -25,6 +25,23 @@ import Foundation
+ /// cache file that outlives an app version whose parsing rules may have
+ /// changed, to save a cold start that happens once per launch.
+ public final class ScanMemo: @unchecked Sendable {
++    /// One API response identified by a request key (Claude: message.id +
++    /// requestId). Kept un-aggregated because the same response can be
++    /// written to several files, and dedup has to happen across all of them.
++    public struct KeyedUsage: Sendable, Equatable {
++        public let model: String
++        public let usage: ModelUsage
++        public let inToday: Bool
++        public let inWeek: Bool
++
++        public init(model: String, usage: ModelUsage, inToday: Bool, inWeek: Bool) {
++            self.model = model
++            self.usage = usage
++            self.inToday = inToday
++            self.inWeek = inWeek
++        }
++    }
++
+     /// What one file contributed, in the window it was scanned for.
+     public struct Entry: Sendable {
+         public let size: Int
+@@ -34,14 +51,19 @@ public final class ScanMemo: @unchecked Sendable {
+         public let computedForDay: Date
+         public let today: [String: ModelUsage]
+         public let week: [String: ModelUsage]
++        /// Keyed records, NOT folded into `today`/`week`, so the caller can
++        /// dedup them against other files before aggregating.
++        public let keyed: [String: KeyedUsage]
+ 
+         public init(size: Int, mtime: Date, computedForDay: Date,
+-                    today: [String: ModelUsage], week: [String: ModelUsage]) {
++                    today: [String: ModelUsage], week: [String: ModelUsage],
++                    keyed: [String: KeyedUsage] = [:]) {
+             self.size = size
+             self.mtime = mtime
+             self.computedForDay = computedForDay
+             self.today = today
+             self.week = week
++            self.keyed = keyed
+         }
+     }
+ 
+diff --git a/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift b/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift
+index 591a583..06bc7d9 100644
+--- a/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift
++++ b/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift
+@@ -295,4 +295,137 @@ struct ClaudeSessionScannerTests {
+         #expect(today["claude-opus-5-5"]?.cacheReadTokens == 0)
+         #expect(today["claude-opus-5-5"]?.fastInputTokens == 0)
+     }
++
++    // MARK: - Duplicate API responses (BUG-ART-001)
++    //
++    // Claude Code writes the same API response to the transcript more than
++    // once (streaming / tool-use splits), with the same `message.id` and
++    // `requestId`. Summing every line inflated tokens and $ by ~1.9x on real
++    // data. Each (message.id, requestId) must count once per scan, across
++    // files, keeping the line with the largest output.
++
++    private static func keyedLine(timestamp: String, messageId: String?, requestId: String?,
++                                  model: String = "claude-opus-4-7",
++                                  input: Int = 0, output: Int = 0, cacheRead: Int = 0) -> String {
++        let req = requestId.map { #""requestId":"\#($0)","# } ?? ""
++        let mid = messageId.map { #""id":"\#($0)","# } ?? ""
++        return #"""
++        {\#(req)"timestamp":"\#(timestamp)","message":{\#(mid)"role":"assistant","model":"\#(model)","usage":{"input_tokens":\#(input),"output_tokens":\#(output),"cache_read_input_tokens":\#(cacheRead)}}}
++        """#
++    }
++
++    private static func makeProjects(_ files: [String: [String]]) throws -> URL {
++        let root = URL(fileURLWithPath: NSTemporaryDirectory())
++            .appendingPathComponent("ai-taskbar-claude-dedup-\(UUID().uuidString)")
++        let proj = root.appendingPathComponent("proj")
++        try FileManager.default.createDirectory(at: proj, withIntermediateDirectories: true)
++        for (name, lines) in files {
++            try Data((lines.joined(separator: "\n") + "\n").utf8)
++                .write(to: proj.appendingPathComponent(name))
++        }
++        return root
++    }
++
++    @Test("the same message.id + requestId written twice in one file counts once")
++    func duplicate_key_in_one_file_counts_once() throws {
++        let now = Date()
++        let ts = ISO8601DateFormatter().string(from: now)
++        let line = Self.keyedLine(timestamp: ts, messageId: "msg_A", requestId: "req_A",
++                                  input: 100, output: 50, cacheRead: 1_000)
++        let root = try Self.makeProjects(["s.jsonl": [line, line]])
++        defer { try? FileManager.default.removeItem(at: root) }
++        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 50)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.cacheReadTokens == 1_000)
++    }
++
++    @Test("duplicates with differing usage keep the line with the larger output")
++    func duplicate_key_keeps_larger_output() throws {
++        let now = Date()
++        let ts = ISO8601DateFormatter().string(from: now)
++        let small = Self.keyedLine(timestamp: ts, messageId: "msg_B", requestId: "req_B",
++                                   input: 100, output: 10, cacheRead: 1_000)
++        let large = Self.keyedLine(timestamp: ts, messageId: "msg_B", requestId: "req_B",
++                                   input: 100, output: 80, cacheRead: 1_000)
++        // Larger-first and larger-last must both settle on the larger output.
++        let root = try Self.makeProjects(["a.jsonl": [small, large],
++                                          "b.jsonl": [
++                                              Self.keyedLine(timestamp: ts, messageId: "msg_C", requestId: "req_C",
++                                                             model: "claude-haiku-4-5", input: 7, output: 90),
++                                              Self.keyedLine(timestamp: ts, messageId: "msg_C", requestId: "req_C",
++                                                             model: "claude-haiku-4-5", input: 7, output: 5),
++                                          ]])
++        defer { try? FileManager.default.removeItem(at: root) }
++        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 80)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
++        #expect(est.totalsByModel["claude-haiku-4-5"]?.outputTokens == 90)
++        #expect(est.totalsByModel["claude-haiku-4-5"]?.inputTokens == 7)
++    }
++
++    @Test("the same key in two different files counts once")
++    func duplicate_key_across_files_counts_once() throws {
++        let now = Date()
++        let ts = ISO8601DateFormatter().string(from: now)
++        let line = Self.keyedLine(timestamp: ts, messageId: "msg_D", requestId: "req_D",
++                                  input: 100, output: 50)
++        let root = try Self.makeProjects(["orig.jsonl": [line], "resumed.jsonl": [line]])
++        defer { try? FileManager.default.removeItem(at: root) }
++        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 50)
++    }
++
++    @Test("cross-file dedup holds when one file replays from the memo")
++    func duplicate_key_across_files_with_memo_replay() throws {
++        let now = Date()
++        let ts = ISO8601DateFormatter().string(from: now)
++        let line = Self.keyedLine(timestamp: ts, messageId: "msg_E", requestId: "req_E",
++                                  input: 100, output: 50)
++        let root = try Self.makeProjects(["orig.jsonl": [line], "resumed.jsonl": [line]])
++        defer { try? FileManager.default.removeItem(at: root) }
++        _ = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
++        // Grow one file so it re-scans while the other replays from the memo.
++        let resumed = root.appendingPathComponent("proj/resumed.jsonl")
++        let handle = try FileHandle(forWritingTo: resumed)
++        try handle.seekToEnd()
++        try handle.write(contentsOf: Data((#"{"role":"user","content":"hi"}"# + "\n").utf8))
++        try handle.close()
++        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 50)
++    }
++
++    @Test("lines missing message.id or requestId are still counted, each one")
++    func lines_without_ids_are_counted() throws {
++        let now = Date()
++        let ts = ISO8601DateFormatter().string(from: now)
++        let noIds = Self.keyedLine(timestamp: ts, messageId: nil, requestId: nil, input: 100, output: 50)
++        let onlyMsg = Self.keyedLine(timestamp: ts, messageId: "msg_F", requestId: nil, input: 10, output: 5)
++        let onlyReq = Self.keyedLine(timestamp: ts, messageId: nil, requestId: "req_F", input: 1, output: 1)
++        let root = try Self.makeProjects(["s.jsonl": [noIds, noIds, onlyMsg, onlyMsg, onlyReq]])
++        defer { try? FileManager.default.removeItem(at: root) }
++        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 221)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 111)
++    }
++
++    @Test("scan() dedups a repeated key within the data it is given")
++    func scan_dedups_within_data() {
++        let startOfToday = Date(timeIntervalSince1970: 1_764_000_000)
++        let iso = ISO8601DateFormatter().string(from: startOfToday.addingTimeInterval(60))
++        let line = Self.keyedLine(timestamp: iso, messageId: "msg_G", requestId: "req_G",
++                                  input: 100, output: 50)
++        var today: [String: ModelUsage] = [:]
++        var week: [String: ModelUsage] = [:]
++        var unparseable = 0
++        ClaudeSessionScanner.scan(data: Data(([line, line].joined(separator: "\n") + "\n").utf8),
++                                  startOfToday: startOfToday,
++                                  sevenDaysAgo: startOfToday.addingTimeInterval(-7 * 86_400),
++                                  totalsToday: &today, totalsLast7: &week,
++                                  unparseableTimestamps: &unparseable)
++        #expect(today["claude-opus-4-7"]?.inputTokens == 100)
++        #expect(week["claude-opus-4-7"]?.outputTokens == 50)
++    }
+ }

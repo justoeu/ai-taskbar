@@ -1,0 +1,22 @@
+{
+ "verdict": "APROVA",
+ "lens": "SCOPE",
+ "reasoning": "The diff touches 5 files and each one belongs to BUG-ART-001. ClaudeSessionScanner.swift: requestId and message.id are now decoded, lines are deduped per key across files through mergeKeyed/fold, and memo replays merge hit.keyed. ScanMemo.swift: KeyedUsage is new and Entry gains `keyed`, so dedup still works on replayed files. ClaudeSessionScannerTests.swift covers the fix. CLAUDE.md and AGENTS.md get the same 7-line note on the token-semantics rule, and `cmp` confirms the two files are byte-identical. On contracts: ScanMemo is in-memory only (ScanMemo.swift:24), so no serialized format changed and nothing needs migrating. Entry.init's new `keyed` parameter defaults to [:], so the call site in CodexSessionScanner.swift:148 still compiles unchanged. VendorSnapshot and CostEstimate/ModelUsage are unchanged. KeyedUsage is a new public type, but it lives inside ScanMemo and needs only the ModelUsage Equatable/Sendable conformance that already exists (CostEstimate.swift:3). The diff adds no dependency, host, secret file, entitlement or unsafe code. Cost is one dictionary entry per keyed line, bounded by the number of unique responses in the 7-day window, with no extra I/O on the scan path. README only mentions ClaudeSessionScanner in architecture lists (README.md:402, :692) and never describes how lines are counted, so it did not need an update. The fix adds no user-facing text, so Localizable needs nothing. The untracked docs/audits/ directory holds the pipeline's own audit artifacts and is not part of this diff.",
+ "required_changes": [],
+ "new_findings": [
+  "Low-severity sibling check for the correctness lens: the memo stores each keyed record's inToday/inWeek at scan time. It is invalidated only by computedForDay, size and mtime, so a record that drifts past sevenDaysAgo during the day keeps inWeek=true until the day rolls over. The unkeyed today/week totals already behaved this way before the fix, so this is not a regression."
+ ],
+ "unrelated_files": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:125",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ScanMemo.swift:24",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ScanMemo.swift:58",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:148",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CostEstimate.swift:3",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md:402"
+ ],
+ "_task": "ae3ad95b18e48cc24"
+}

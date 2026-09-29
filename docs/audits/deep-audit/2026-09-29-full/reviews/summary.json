@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-09-29 04:47:12 UTC",
+  "panel_source": "vote-files",
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "reviewed": 1,
+  "approved": 1,
+  "changes_requested": 0,
+  "rejected": 0,
+  "by_id": {
+    "SEC-CER-001": "approved"
+  }
+}

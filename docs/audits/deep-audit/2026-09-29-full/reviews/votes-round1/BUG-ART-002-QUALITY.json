@@ -1,0 +1,21 @@
+{
+ "verdict": "MUDANCAS",
+ "lens": "QUALITY",
+ "reasoning": "The fix does the right structural thing. It pulls the 65-line merge closure out of the convenience init into a pure `nonisolated static func mergingOpencode`, which is testable. It also removes the `PricingTable`/`CostMath` re-pricing, so opencode dollars are no longer computed. That respects the CLAUDE.md rule that opencode is a client, never merged into vendor totals. The new tests are in the existing `AiTaskbarAppTests` target (Package.swift:62), use Swift Testing, and keep one fact per `#expect`. They compare optional Doubles and Ints, never optional Bools, so the `expectTrue`/`expectFalse` rule does not apply. Nesting is at most 3 levels (for, if/else, for), no deeper than the old closure. No error is swallowed.\n\nThe problem is leftover machinery that the fix made meaningless. At AnalyticsStore.swift, after the change, `computedToday` and `computedLast7` are `mapValues { _ in 0.0 }`, so they are always zero. The name `computed*` now describes a price calculation the fix removed (rule 6, a name that lies). The two `for (m, c) in computed* { merged*[m, default: 0] += c }` loops now always add 0. Their only real effect is to insert missing keys with a $0 value, which reads like adding cost when it does nothing (rule 5, ceremony). A reader seeing `+= c` will assume dollars are still being added, and that assumption is exactly the bug being fixed. It is a small change (rename, plus a key-only insert) and fits a minimal fix.\n\nPer my instructions I did not build or run the warning check, so I cannot measure any new warning. Reading the diff, none is expected: the `PricingTable`/`CostMath` calls were removed and no new locals go unused.",
+ "required_changes": [
+  "AnalyticsStore.mergingOpencode: rename `computedToday`/`computedLast7` to say what they hold (for example `zeroCostToday`/`zeroCostLast7`), or drop them.",
+  "Replace the two `merged*[m, default: 0] += c` loops with a key-only insert (for example `for m in scan.todayByModel.keys where mergedToday[m] == nil { mergedToday[m] = 0 }`), so the code no longer looks like it adds opencode cost."
+ ],
+ "new_findings": [
+  "OpencodeScan.costTodayByModel and costLast7DaysByModel (Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:15-16, filled at :202-205) no longer feed Analytics. Their only remaining production reader is CostFooterView.swift:198. Check whether that footer rendering follows the 'OpenAI tokens shown, dollars not' rule for subscription traffic.",
+  "Pre-existing: the `if dict[v] == nil { ... } else if let existing = dict[v]` pattern in mergingOpencode could be a single `if let existing = dict[v] { ... } else { ... }`. It is out of scope for this fix."
+ ],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:81",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift:1",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:15",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/CostFooterView.swift:198",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md"
+ ],
+ "_task": "ab062caa39b8d772b"
+}

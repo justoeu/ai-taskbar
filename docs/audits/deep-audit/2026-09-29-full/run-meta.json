@@ -1,0 +1,104 @@
+{
+  "generated_at": "2026-09-29 03:04:27 UTC",
+  "root": "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d",
+  "app": "ai-taskbar",
+  "version": "0.23.6",
+  "version_source": "Makefile",
+  "mode": "full",
+  "depth": "deep",
+  "effort": "max",
+  "base": "origin/main",
+  "head": "656075a",
+  "branch": "audit/deep-audit-2026-09-29",
+  "only": [],
+  "scope": [],
+  "changed_files": [],
+  "changed_file_count": 0,
+  "history": [
+    {
+      "at": "2026-09-29 03:04:27 UTC",
+      "mode": "full",
+      "depth": "deep",
+      "effort": "max",
+      "head": "656075a",
+      "event": "init"
+    }
+  ],
+  "merged_at": "2026-09-29 04:47:34 UTC",
+  "agent_sources": [
+    {
+      "file": "agent-argus.json",
+      "count": 13
+    },
+    {
+      "file": "agent-artemis.json",
+      "count": 14
+    },
+    {
+      "file": "agent-atena.json",
+      "count": 10
+    },
+    {
+      "file": "agent-atlas.json",
+      "count": 7
+    },
+    {
+      "file": "agent-aurora.json",
+      "count": 4
+    },
+    {
+      "file": "agent-cerbero.json",
+      "count": 5
+    },
+    {
+      "file": "agent-cetico.json",
+      "count": 2
+    },
+    {
+      "file": "agent-cronos.json",
+      "count": 11
+    },
+    {
+      "file": "agent-dedalo.json",
+      "count": 5
+    },
+    {
+      "file": "agent-eco.json",
+      "count": 5
+    },
+    {
+      "file": "agent-enxame.json",
+      "count": 3
+    },
+    {
+      "file": "agent-fantasma.json",
+      "count": 8
+    },
+    {
+      "file": "agent-fluxo.json",
+      "count": 3
+    },
+    {
+      "file": "agent-laconio.json",
+      "count": 8
+    },
+    {
+      "file": "agent-maestro-review-followups.json",
+      "count": 9
+    },
+    {
+      "file": "agent-prisma-freshness.json",
+      "count": 0
+    },
+    {
+      "file": "agent-prisma.json",
+      "count": 3
+    },
+    {
+      "file": "agent-represa.json",
+      "count": 5
+    }
+  ],
+  "raw_findings": 115,
+  "unique_findings": 115
+}

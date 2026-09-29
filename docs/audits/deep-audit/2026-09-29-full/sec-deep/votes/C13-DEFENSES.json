@@ -1,0 +1,18 @@
+{
+ "verdict": "TRUE_POSITIVE",
+ "lens": "DEFENSES",
+ "reasoning": "I found no check anywhere between the vendor's JSON and Int(). (1) Source: AnthropicWireTypes.swift:71 decodes `utilization` through flexibleDoubleIfPresent (AppConfig.swift:199-203). That helper is a plain Double decode with no range or isFinite check, so a finite value like 1e300 is accepted. toSnapshot (AnthropicWireTypes.swift:140-147) passes the value into UsageWindow as is, and UsageWindow.init (UsageWindow.swift:15-20) stores it unchanged. (2) Persistence: VendorViewModel.swift:235 calls recordHistory(snapshot.maxUtilization), which reaches UsageHistoryStore.append (UsageHistoryStore.swift:56-58). append encodes the raw Double. JSONEncoder only rejects non-finite values, and 1e300 is finite, so it is written to disk. load (UsageHistoryStore.swift:92-125) decodes it back and only filters by timestamp. (3) Aggregation: computePeakDay (AnalyticsAggregator.swift:29-47) takes the per-day max() with no clamp and returns it as utilizationPercent. AnalyticsAggregator.swift:121 and :157 put that result into summary.peakDay. (4) Sink: VendorAnalyticsCardView.swift:143-145 renders AnalyticsFormatters.peakDayText. At AnalyticsFormatters.swift:46 and :48 it calls Int(record.utilizationPercent), and Int() of a Double at or above about 9.22e18 traps at runtime. The only isFinite check in the model layer (UsageSnapshot.swift:325) is on a different path, notifications above 90%, and there is no clamp in Providers, History or the aggregator. I found no framework, type-system or middleware protection. Whether a malicious vendor or TLS MITM is a realistic attacker is a question for the REACHABILITY lens. It does not change that nothing on this path would stop the crash.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:20",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:235",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:56",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:113",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:29",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:121",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:145",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:48"
+ ],
+ "_task": "acb5b037ca3bfb087"
+}

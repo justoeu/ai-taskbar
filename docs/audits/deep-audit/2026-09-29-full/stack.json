@@ -1,0 +1,29 @@
+{
+  "root": "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d",
+  "languages": [
+    "python",
+    "swift"
+  ],
+  "frameworks": [
+    "spm",
+    "swift-app"
+  ],
+  "package_managers": [
+    "spm"
+  ],
+  "ecosystems": [
+    "spm"
+  ],
+  "manifests": [
+    {
+      "kind": "spm-resolved",
+      "path": "Package.resolved"
+    },
+    {
+      "kind": "spm",
+      "path": "Package.swift"
+    }
+  ],
+  "signals": [],
+  "catalog": "catalogs/classic-bugs.md"
+}

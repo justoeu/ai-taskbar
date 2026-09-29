@@ -1,0 +1,669 @@
+{
+  "rounds": {
+    "C1": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The window is real. AtomicFileWrite.swift:19 writes the temp file with the default mode, and the chmod to 0600 only comes at :20-24. But the only secret-bearing write another local user could reach is the Codex write-back (FileCredentialReader.swift:74), and that path is not reachable in the default deploy. OpenAIProvider.swift:76 and :92 call refresh/writeBack only when manageOAuthRefresh is true. That flag defaults to false in AppConfig.swift:309/326/350/364 and in the provider init parameters (OpenAIProvider.swift:38/49), and CLAUDE.md treats read-only as a hard rule. The other 0o600 callers (ConfigLoader.swift:110/189/276, DiskCache.swift:135, UsageHistoryStore.swift:152, OpenAIResetJournal.swift:30) write into the app's Application Support and Caches dirs, which the app forces to 0700, so another user cannot get to their temp files; the finding admits this itself. The claimed attack also stacks unproven conditions: a multi-user Mac, a ~/.codex that others can traverse (nothing in the repo sets this dir's mode, so its permissions are not shown), and winning a race window of microseconds. The attacker's source is not reachable in the standard configuration, so the attack path is incomplete.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:19",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:74",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:76",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:92",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:350"
+        ],
+        "_task": "a2142f936af91c152"
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "If an attacker reaches this path, the claimed damage is real. The write only happens after opt-in (manage_oauth_refresh=true, OpenAIProvider.swift:38 defaults to false), and the severity stays LOW. AtomicFileWrite.swift:19 uses Data.write(.atomic), which gives the new tmp file the default mode (0666 & ~umask, so 0644) and fills it with the full JSON payload. The chmod to 0600 only runs afterwards at :20-24. Nothing narrows the mode before the plaintext lands. FileCredentialReader.swift:58-74 writes access_token, refresh_token and id_token into that tmp file in ~/.codex. On this machine the home dir is drwxr-x--- justoeu:staff, which every standard local user can traverse through the staff group, and ~/.codex is 0755. So during that window another local user can open() the .auth.json.<uuid>.tmp file. The fd keeps its read access after the chmod and the rename. What leaks is the rotated Codex refresh_token, a long-lived credential that allows session takeover, so the data is sensitive. The doc comment at :8-12 claims the race is avoided but it only moved from the final path to the tmp path, and a comment is not a mitigation. Limits: the window is short and there are two preconditions, a multi-user Mac and the non-default opt-in. config.toml writes land in the 0700 app-support dir and are not exposed.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:19",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:21",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:74",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:38"
+        ],
+        "_task": "acc4d47158bb071de"
+      },
+      "DEFENSES": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "The code pattern is real. AtomicFileWrite.swift:19 writes the full payload with Data.write(.atomic), and the 0o600 chmod only runs afterwards at :20-24, so the doc comment at :8-12 overstates what it does. The attack as written still does not hold up. (1) It only works through the Codex write-back at FileCredentialReader.swift:74, which runs only when manage_oauth_refresh is true. That setting is off by default for both the struct and the decoder (AppConfig.swift:309/326 and 350/364). The finding lists this as a precondition, so the claim depends on a non-default configuration. (2) Every other 0o600 caller writes into the app's own Application Support or Caches directories. The finding itself says those are forced to 0700, so another local user cannot even see the temp file there. That covers ConfigLoader.swift:110/189/276, DiskCache.swift:135/152, UsageHistoryStore.swift:152 and OpenAIResetJournal.swift:30. (3) The window only opens if Foundation's atomic write leaves the file at 0666&~umask rather than 0600. That code is closed-source Foundation and I could not confirm it by reading anything in this repo. It also needs a second local OS user who can traverse ~/.codex. What remains is a hardening gap: an opt-in setting on a multi-user Mac, plus unverified framework behaviour. That does not meet the standard of a complete attack path with no mitigation in the default deployment. The fix is still worth doing: use open(O_CREAT|O_EXCL|O_NOFOLLOW, 0o600) and fchmod before writing.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:19",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:20",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:74",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:350",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:364",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:86"
+        ],
+        "_task": "aff3868c46890c485"
+      }
+    },
+    "C2": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The code path the finding describes does exist and runs in the default deploy. KeychainCredentialReader.swift:36 sets fallback to SecurityToolCredentialReader() by default. At :166, an ACL-blocked read (-25308/-25293) calls readViaSecurityTool, and at :187 that calls itemKeychain before isUnlocked is checked. The query at :211-218 has no kSecUseAuthenticationUI key and is not wrapped in withPromptsSuppressed. KeychainPromptSuppressor.exit() turns interaction back on at depth 0. So the finding breaks the CLAUDE.md hard rule as written. It still fails the proof standard on two of the three points. (1) There is no attacker-controlled source. The triggers are a keychain auto-locking and an unsigned or unauthorized build, which are ordinary system events. No attacker picks the input or can drive the path on demand, so at most the user might see a prompt they did not ask for. (2) The dangerous operation is not established. The finding's own precondition list says it is 'not verified here' that securityd raises an unlock dialog for a kSecReturnRef-only lookup by persistent ref in a locked file keychain. Nothing in the repo shows that it does. This query reads no secret data, and the code that reads secret data (:156, :265) is suppressed and passes UIFail. With the source missing and the sink unconfirmed, the trace cannot be finished. This remains a real inconsistency with the project's own rule, worth fixing as hardening by wrapping :218 in withPromptsSuppressed and adding UIFail. It does not show a reachable attack.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:36",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:166",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:187",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:218",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainPromptSuppressor.swift:111"
+        ],
+        "_task": "aa00fef41794ee607"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The code matches the description. At KeychainCredentialReader.swift:209-218, itemKeychain runs SecItemCopyMatching without KeychainPromptSuppressor.withPromptsSuppressed and without kSecUseAuthenticationUI. Line 187 calls it before the isUnlocked check. KeychainPromptSuppressor.swift exit() sets interaction back to true at depth 0. The claimed harm is a SecurityAgent unlock or password dialog, and that part is not shown. The query only resolves a persistent ref and returns a SecKeychainItem ref. It uses kSecReturnRef and kSecMatchItemList, with no kSecReturnData and no attribute decryption. Classic file keychains keep record attributes in cleartext and encrypt only the secret blob. Nothing in the repo, and nothing the finding cites, shows that a ref-only lookup in a locked keychain makes securityd ask the user to unlock it. The finding's own preconditions say this was 'not verified here'. The partition-list and ACL prompts that CLAUDE.md documents fire on secret decryption, which this query never asks for. The /usr/bin/security path, which does decrypt, is gated by isUnlocked at line 187. No credential is disclosed and nothing is written. Without proof that the sink actually shows a prompt, the stalled refresh and the user trained to type their password are speculation, so the impact does not hold. As defense in depth, wrapping the query in the suppressor would be cheap, but that is best practice, not a proven vulnerability.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:156",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:187",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:211",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:218",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainPromptSuppressor.swift:111"
+        ],
+        "_task": "a16004d4376ae700d"
+      },
+      "DEFENSES": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "The code gap is real. At KeychainCredentialReader.swift:211-218, itemKeychain builds a SecItemCopyMatching query with no kSecUseAuthenticationUIFail and does not wrap it in KeychainPromptSuppressor.withPromptsSuppressed. At depth 0 the suppressor leaves interaction allowed (KeychainPromptSuppressor.swift:111-119). The isUnlocked guard at line 187 runs only after that query. So no defense covers this particular call. The finding still fails the proof standard, for three reasons. (1) There is no source an attacker controls. The trigger is the OS locking the keychain on sleep or timeout, plus a scheduled refresh, and neither is adversary input. The identity.persistentRef passed at line 214 comes from the app's own earlier suppressed search. (2) The dangerous effect is itself unverified. The finding admits that a SecurityAgent unlock prompt for a return-ref lookup in a locked file keychain was 'not verified here', and nothing in the code confirms it. (3) Even if a prompt appears, the harm is a UX or policy break: a genuine system dialog, with no credential disclosure and no authorization bypass. It is a real hardening gap against the CLAUDE.md rule that scheduled reads never prompt, and should be fixed by wrapping the call and adding UIFail. But the chain is incomplete as written, so this does not show a security vulnerability.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:187",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:211-218",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainPromptSuppressor.swift:111-119"
+        ],
+        "_task": "a19fe049904f14db5"
+      }
+    },
+    "C3": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The code does what the finding says. With the default config, no pinning runs. pin_hosts defaults to [] (AppConfig.swift:106/119). AppEnvironment.swift:30 then builds a plain HTTPClient(), and HTTPClient.swift:39-40 returns an unpinned client for an empty list. PinningDelegate.swift:36 only reaches PinBaseline.pin(for:) at line 63 when the host is already in pinnedHosts. So the baseline entries in PinBaseline.swift:44-57 are never used by default, and the UI strings in en.lproj/Localizable.strings:153/190/210 are wrong when they say the baseline pins are active. The attack still does not hold up under this lens. There is no attacker-controlled source in the default deployment: the attack needs a forged certificate that the victim's system already trusts. The listed ways to get one are a corporate TLS-inspection proxy, an MDM profile, malware that installed a root CA, or a CA mis-issuance. A proxy or MDM profile is installed by whoever manages the machine. A malware root CA requires admin-level trust changes, and an attacker with that access can read the credential stores directly. Mis-issuance is speculative, and no code path shows it. Also, the same OAuth tokens are read from the Keychain item and ~/.codex/auth.json that the Claude Code and Codex CLIs keep current, and those CLIs call the same hosts using only system trust. An attacker who controls a trusted CA gets the tokens from them anyway, so this app is not what gives the attacker access. What is left is a missing extra layer of protection plus misleading UI text and doc comments, which is a documentation and correctness bug. The standard of proof requires a demonstrated attacker-controlled source, so the vote is FALSE_POSITIVE.",
+        "cited_paths": [
+          "Sources/AiTaskbarCore/Networking/PinningDelegate.swift:36",
+          "Sources/AiTaskbarCore/Networking/PinningDelegate.swift:63",
+          "Sources/AiTaskbarCore/Networking/HTTPClient.swift:39",
+          "Sources/AiTaskbarApp/AppEnvironment.swift:30",
+          "Sources/AiTaskbarCore/Config/AppConfig.swift:106",
+          "Sources/AiTaskbarCore/Networking/PinBaseline.swift:44",
+          "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:210"
+        ],
+        "_task": "aca500646a788e213"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The code does behave as described. With the default empty pin_hosts, AppEnvironment.swift installs a plain HTTPClient(). HTTPClient.pinned also returns an unpinned client when pinnedHosts is empty (HTTPClient.swift:39-40). PinningDelegate.swift:36 checks pinnedHosts before PinBaseline.pin(for:) is ever read at line 63, so the 12 baseline pins in PinBaseline.swift:44-57 never apply by default. The UI text at Localizable.strings:153/190/210 is therefore wrong. That is a real correctness and documentation bug.\n\nThe claimed damage does not hold up under the IMPACT lens, though. The attack needs a rogue root CA that the system already trusts. Taking each source in turn: malware or an MDM profile means the attacker already controls the device and can read the Keychain item or ~/.codex/auth.json directly. A corporate TLS-inspection proxy is trust the device owner deliberately accepts. Mis-issuance is a remote, CT-logged event outside this app's threat model.\n\nThe main prize is the Claude and ChatGPT OAuth bearer tokens. Per CLAUDE.md they are shared with the Claude Code CLI and the Codex CLI, which send the same tokens to the same hosts (api.anthropic.com, chatgpt.com) without this app's pinning. An on-path attacker holding a trusted certificate gets those tokens from the CLI traffic whether or not this app pins. The refresh-token scenario needs manage_oauth_refresh=true, which is off by default. Enforcing pins here would add almost no protection for those credentials. The finding itself calls this a defense-in-depth gap and bases the severity on user messaging, not on a sensitive-data exposure that this code causes. The misleading UI and doc strings should still be fixed.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:36",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:63",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/HTTPClient.swift:39",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinBaseline.swift:44",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AppEnvironment.swift:30"
+        ],
+        "_task": "a4f731d8a75a17ea6"
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "Nothing between the source and the sink stops this. 1) Source: under the default config, a certificate issued by any root the system trusts is accepted for vendor hosts. pinHosts defaults to [] (AppConfig.swift:106 and :119). 2) Dangerous operation: AppEnvironment.swift:30-37 installs HTTPClient() with the shared ephemeral session and no delegate when pinHosts is empty. HTTPClient.swift:39-41 also returns an unpinned HTTPClient() for an empty list. Even when the delegate is installed, PinningDelegate.swift:36-44 sends every host that is not in pinnedHosts to .performDefaultHandling before PinBaseline.pin(for:) is ever read at line 63. The 12 baseline hosts in PinBaseline.swift:44-57 are therefore never checked by default. 3) No mitigation: I found no NSPinnedDomains or other ATS pinning in Resources or Sources, and no other delegate. PinBaseline's doc comment (lines 9-12) and Localizable.strings:153/190/210 say the baseline pins are active and tell users to leave the list empty. The code does the opposite, and a comment is not a defense. The precondition (a trusted rogue or corporate CA) is strong, so LOW severity fits a defense-in-depth gap. It does not remove the missing control as written.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:36",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:63",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/HTTPClient.swift:39",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AppEnvironment.swift:30",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:106",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinBaseline.swift:44",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:190"
+        ],
+        "_task": "a77b6bf1b7303e6d5"
+      }
+    },
+    "C4": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The mmap sink is real: ClaudeSessionScanner.swift:91 and CodexSessionScanner.swift:128 do use Data(contentsOf:options:[.mappedIfSafe]). But the only source is a process running as the same user with write access to ~/.claude/projects or ~/.codex/sessions (ClaudeSessionScanner.swift:58-66). Those directories belong to the user and are not a boundary another principal can cross. A process that already has that access can kill the app outright with kill(2), edit config.toml, or read the credentials, so a SIGBUS race gives it nothing it lacks. For benign cases, the scanner's own comment and memo logic treat transcripts as append-only (ClaudeSessionScanner.swift:75-77). No normal writer (Claude Code CLI or Codex CLI) shrinks a file mid-scan, so nobody reaches the truncation path in the default deploy. The source is not attacker-controlled across any boundary, so point 1 of the proof standard fails. At most this is a robustness bug in how the app reads files, not an exploitable vulnerability.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:58",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:75",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:128"
+        ],
+        "_task": "a2359049aa4d5beb3"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The mmap is real. ClaudeSessionScanner.swift:91 and CodexSessionScanner.swift:128 map the files with Data(contentsOf:options:[.mappedIfSafe]), so a file that shrinks mid-scan can in theory raise SIGBUS. The claimed damage does not hold up, though. The only source is write access to ~/.claude/projects or ~/.codex/sessions, which means code already running as the same user in the same single-user desktop session. That code can already kill the process directly (kill -9), delete or corrupt the config, read the same credentials, or stop the app from launching. Crashing the menu-bar app through a truncation race gives it nothing it did not already have: no privilege or trust boundary is crossed, and the finding itself says nothing is disclosed. It also cannot hurt integrity. A short read or crash cannot write to disk or change credentials, and the memo or cache just gets rebuilt on the next launch. A legitimate writer (the Claude or Codex CLI) only appends to these transcripts, and appending does not cause SIGBUS. Only shrinking a file does, so accidental real-world triggering is unlikely. The result is a robustness or hardening issue (a plain read would remove the SIGBUS window), not a security impact. The same pattern appears at UsageHistoryStore.swift:95 and 142 on app-owned files, with the same conclusion.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:128",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:95"
+        ],
+        "_task": "ad1afa0d57cd41a0e"
+      },
+      "DEFENSES": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "The code claim is accurate. ClaudeSessionScanner.swift:91 and CodexSessionScanner.swift:128 read files with Data(contentsOf:options:[.mappedIfSafe]). The only guards before the read are a size/mtime memo lookup (ClaudeSessionScanner.swift:77-88) and a Task.isCancelled check (:65). Neither stops a file from being truncated after it is mapped. So nothing in the code protects the mapped bytes. That does not make this a vulnerability, because the attack never crosses a trust boundary. The finding's own precondition is write access to ~/.claude/projects or ~/.codex/sessions. Those directories are owned by the same macOS user who runs the menu-bar app. The operating system's per-user isolation is the defense, and it holds: another user, a sandboxed process or a remote party cannot write there. A same-user process that can write there already has a strictly stronger way to cause the claimed harm. It can send kill -9 to the app, delete or edit its config, or change the credential files the app reads. The only claimed impact is a crash that repeats (denial of service). This path gives the attacker nothing they did not already have, so there is no mitigation missing across a boundary. Switching to a plain read would be a sensible robustness fix against a CLI truncating its own files, but that is a reliability issue, not a security finding.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:65",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:77",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:128"
+        ],
+        "_task": "a5ae801d95413d7c5"
+      }
+    },
+    "C5": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The overflow is real in the code, and the scan runs by default. OpencodeScanner.swift:141-142 sums $.tokens.output and $.tokens.reasoning, :186-187 read them as Int64, and :197 adds them with a bare checked `+` that clamps each value only from below. CostEstimator.swift:44-49 and :161-164 run the scan on every cost refresh for the hard-coded provider aliases, with no config switch. No -Ounchecked or unsafeFlags turns the trap off. What fails is the source. The data comes from ~/.local/share/opencode/opencode.db, a file in the user's home that only the user's own processes, or root, can write. The finding says so itself: its precondition is 'another tool or a prompt-injected agent running as the same user'. On this local single-user desktop app, a process that can write that file already has the same power over this app. It can kill the process, edit ~/Library/Application Support/ai-taskbar/config.toml, or delete the caches. Crashing the menu-bar app through a malformed row crosses no trust boundary and gives the attacker nothing new. No remote or lower-privileged actor controls this input: opencode itself writes token counts from real usage, and the file is opened read-only (SQLITE_OPEN_READONLY, :108). A multi-row sum that overflows makes SQLite fail the step with an integer overflow error, so :211 returns nil. That leaves only the crafted single-row case, which again needs a same-user writer. Separately, as a robustness bug (not a security vulnerability), :197 should use CostAggregator.saturatingAdd to match the other scanners.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:108",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:141",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:197",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:211",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:44",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:164"
+        ],
+        "_task": "a53640e91c04e171d"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The arithmetic is real. OpencodeScanner.swift:141-142 sums $.tokens.output and $.tokens.reasoning in SQLite. Lines 186-187 read them with sqlite3_column_int64, which saturates a REAL to Int64.max. Line 197 adds `max(0, output) + max(0, reasoning)` with Swift's checked `+`, and neither Package.swift nor the Makefile sets -Ounchecked, so Int64.max + 1 would trap. What does not hold up is the claimed security impact. The only precondition is write access to ~/.local/share/opencode/opencode.db as the same UID. That access already allows everything the 'persistent DoS' does and more: kill or delete the app, edit config.toml, remove its Application Support directory, or change opencode's token data to fake the cost numbers. No privilege, sandbox or trust boundary is crossed. The damage is limited to a local usage monitor, and the user can undo it by deleting the offending row. No confidentiality or integrity loss comes from the trap. Setting the precondition aside, this is a robustness bug: line 197 should use CostAggregator.saturatingAdd like the other scanners. It should be tracked as a correctness fix, not a security vulnerability.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:141",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:187",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:197"
+        ],
+        "_task": "ab965f9f85eb934ee"
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "Nothing in the code stops the trap. 1) Source: the SQL at OpencodeScanner.swift:136-151 reads sum($.tokens.output) and sum($.tokens.reasoning) from the JSON `data` column of opencode.db. OpencodeScanner.swift:186-187 turns them into Int with sqlite3_column_int64. That call clamps REALs to the Int64 range, and SQLite's sum() does not overflow on a single row, so a value of Int64.max gets through. 2) Operation: OpencodeScanner.swift:197 `max(0, output) + max(0, reasoning)` uses Swift's checked `+`, which traps on overflow. max(0, x) only sets a lower bound. There is no upper clamp, no &+, and no CostAggregator.saturatingAdd before this line. The saturating add inside CostAggregator.add (line 201) runs after the trap point, so it cannot help. 3) Nothing sits between the source and the operation: no sanity ceiling, no SQL-side min(), and a trap cannot be caught with do/try. Caveat on the threat model: the attacker must be able to write to opencode.db as the same user, or a malicious provider must return huge token counts that opencode then stores. So the impact is a local, persistent crash of the monitor app, and LOW severity is appropriate. Seen through the DEFENSES lens, though, no framework, type-system or code-level guard prevents the crash.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:141",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:186",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:187",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:197"
+        ],
+        "_task": "a014fbb74a9c1045a"
+      }
+    },
+    "C6": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The crash itself is real: MenuBarLabelView.swift:41 runs Int(percent.rounded()) with no clamp, and UsageWindow.swift:15-20 stores the value unchecked. What fails is the attacker source. The finding says it comes from the Anthropic response, but only Anthropic can control that. The URL is fixed in the code as https://api.anthropic.com/api/oauth/usage (AnthropicProvider.swift:17), and the user cannot configure a base_url for it. The connection uses TLS, and the host has a pinned SPKI hash (PinBaseline.swift:45), so a network MITM is out. The finding's own preconditions say it needs a 'malicious or compromised vendor', and that vendor is the service that already issues and holds the user's credential, so this is not an attacker outside the trust boundary. The disk-cache route needs write access inside the user's 0700 Application Support directory, and anyone with that access already controls the user account. No attacker-controlled source reaches the sink in the default deploy. This is a robustness bug (the value should be clamped or converted with Int(exactly:)), not a vulnerability someone can reach.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicProvider.swift:17",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinBaseline.swift:45",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:41",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:15"
+        ],
+        "_task": "ab75165aa819fa025"
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The claimed damage holds, and it is only a LOW-severity local DoS. AnthropicWireTypes.swift:71 accepts any finite Double as utilization. toSnapshot (AnthropicWireTypes.swift:140-150, 164-170, 176-190) and UsageWindow.init (UsageWindow.swift:15-23) pass it through without a finiteness or range clamp. VendorSnapshot.maxUtilization (UsageSnapshot.swift:70-72) and UsageStore.swift:378-380 carry the value into the menu-bar label. That label's mode is the default: AppConfig.swift:230 sets menuBarMode = .iconAndPercent, and the card is open by default. MenuBarLabelView.swift:41 then runs Int(percent.rounded()), and Swift's Int(Double) aborts the process (it does not throw) when the value is outside Int's range, e.g. 1e300. The same unchecked conversion appears at PinnedStatusItemManager.swift:97/100/110 and NotificationService.swift:102. I found no clamp anywhere between the source and these conversions. A crash kills the whole process, so monitoring stops for every vendor, not just Anthropic. The cached payload is decoded again on relaunch within the TTL or as a stale fallback, which supports the crash-loop claim. Limits: the attacker has to be Anthropic itself or a compromised api.anthropic.com. Ordinary network interception is ruled out by TLS. Nothing is exposed and nothing is written. The harm is availability of a desktop monitor only, which fits the LOW rating.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:15",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift:379",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:41",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:230",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PinnedStatusItemManager.swift:97",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:102"
+        ],
+        "_task": "a202d4956b7eee771"
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "I found nothing that stops a huge utilization value between the decoder and the Int(Double) trap. (1) Source: AnthropicWireTypes.swift:71 reads utilization with flexibleDoubleIfPresent. That function (AppConfig.swift:199-203) returns any decoded Double, with no range or finiteness check. (2) Nothing in between: toSnapshot (AnthropicWireTypes.swift:140-185) passes the value straight to UsageWindow, and UsageWindow.init (UsageWindow.swift:15-23) stores it unchanged. The only comment there says 'or higher if the vendor reports overuse', so large values are expected. VendorSnapshot.maxUtilization (UsageSnapshot.swift:70-72) takes a plain max(). UsageStore.swift:379 folds it in with only an 'm > maxUtil' comparison. The only isFinite guard nearby is UsageSnapshot.swift:325, which is a different predicate. The isFinite guards in CreditBaseline apply to credits, not to plan windows. (3) Sink: the default menuBarMode is .iconAndPercent (AppConfig.swift:230), and MenuBarLabelView.swift:41 runs Text(\"\\(Int(percent.rounded()))%\"). Swift's Int(Double) crashes the app when the value is out of range, and the same conversion appears at ProviderRowView.swift:26 and PinnedStatusItemManager.swift:97/100/110. Neither the framework nor the type system prevents it: JSONDecoder accepts 1e300 as a valid finite Double. One limit: the attacker would have to be Anthropic's API itself (a malicious or compromised vendor), since TLS blocks an ordinary man-in-the-middle. That limits how often this can happen, but it is not a defense, and the finding already lists it as a precondition.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:15",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift:379",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:230",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:41"
+        ],
+        "_task": "aa6ce7e4e72508cf4"
+      }
+    },
+    "C7": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The trap is real: GeminiWireTypes.swift:150 reads `rem` with no clamp, and :154 does Int((rem*100).rounded()), which traps on huge values like 1e300 and on NaN. But no attacker who crosses a trust boundary controls either input. (1) The HTTP path only reaches generativelanguage.googleapis.com over https. GeminiConfig.validate (AppConfig.swift:557-569) enforces https, a single-host allowlist (AppConfig.swift:512-514) and the API-version path, and the provider builds the request from that validated baseURL (GeminiProvider.swift:45,89). Forging the body therefore takes Google itself or a TLS MITM with a trusted CA. That is an upstream compromise, not an attacker the app is exposed to. (2) The agy path runs a local executable. It comes from the user's own config agy_path or from fixed install locations (~/.local/bin, /opt/homebrew/bin, /usr/local/bin, ~/.gemini/antigravity/bin; AntigravityExecutor.swift:28-48). All of these are writable only by the user or an admin, and each is already a way to run code as the user. Anyone who can replace agy already has code execution as that user, far more than a crash. The only trusted author of real agy output is Google's own CLI. The finding's precondition, 'attacker controls the agy output or the Gemini API response', is therefore not reachable in the default deploy. What remains is a robustness bug (the unclamped Int conversion) with no attacker-controlled source.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiWireTypes.swift:150",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiWireTypes.swift:154",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:512",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:557",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiProvider.swift:89",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AntigravityExecutor.swift:28"
+        ],
+        "_task": "add8094f0519ce88e"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The conversion does trap. GeminiWireTypes.swift:150 reads `rem` with no clamp, and :154 passes `rem*100` straight to `Int()`, so a value like 1e300 crashes the app. The claimed damage does not hold up, though. (1) The finding says the crash repeats on relaunch because of the cache, which is wrong. CachedFetch.swift:34 decodes the fresh payload before CachedFetch.swift:36 writes it to DiskCache, so the process traps before the bad payload is ever saved and a relaunch does not re-read it. (2) Only two sources reach this line. One is the local `agy` binary's output (GeminiProvider.swift:70-71). An attacker who controls that binary can already run code as the user, which is far worse than crashing a menu-bar widget. The other is Google's generativelanguage.googleapis.com response over TLS (GeminiProvider.swift:94-95). Controlling that means compromising Google or TLS, and even then the result is a monitoring widget that dies on each refresh cycle. No data leaks and nothing dangerous is written. At most this is a robustness bug where a trusted upstream can crash the app while that condition lasts. It is not a security impact, and the persistent DoS in the finding is false as written. It is still worth clamping `rem` to 0...1 and rejecting non-finite values, but as a correctness fix.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiWireTypes.swift:150",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiWireTypes.swift:154",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/CachedFetch.swift:34",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/CachedFetch.swift:36",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiProvider.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiProvider.swift:95"
+        ],
+        "_task": "a0531d2485224ab28"
+      },
+      "DEFENSES": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "The conversion really is unguarded. GeminiWireTypes.swift:150 takes remaining_fraction unclamped, line 151 clamps only consumedFraction, and line 154 runs Int((rem*100).rounded()), which traps for values beyond Int range. That is a real robustness bug. It does not work as a security finding, because the defenses that matter stop an attacker before this line. (1) The HTTP path: AppConfig.swift:505-527 checks base_url against a fixed Google host list (GeminiConfig.allowedHosts) and falls back to the default when it fails, and the request goes over TLS to generativelanguage.googleapis.com. To inject the payload an attacker would have to be Google, or break TLS or the allowlist. The finding shows no bypass for either. (2) The agy path: AntigravityExecutor.swift:28-45,62-64 runs a local binary from the user's own paths (~/.local/bin, /opt/homebrew/bin, /usr/local/bin, ~/.gemini). Anyone who can control that binary's output already runs code as the user, so crashing the menu-bar app gains them nothing and crosses no trust boundary. (3) The claimed crash on every relaunch is wrong. CachedFetch.swift:34-36 calls decode(data) before cache.writePayload(data), so the process traps before a hostile payload can be written to the DiskCache, and the next launch does not replay it. The finding offers 'hostile or compromised upstream' as a precondition without showing how an attacker gets there. Recommend clamping rem as a hardening fix, not as a vulnerability.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiWireTypes.swift:150",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiWireTypes.swift:154",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:513",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:527",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AntigravityExecutor.swift:28",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/CachedFetch.swift:34",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/CachedFetch.swift:36"
+        ],
+        "_task": "a73886c2b31028d96"
+      }
+    },
+    "C8": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The sink is real: MenuBarLabelView.swift:41 calls Int(percent.rounded()), and XAIWireTypes.swift:266-270 passes creditUsagePercent through unchecked. The problem is the source. No realistic attacker controls it. The Grok billing URL is built from grokBaseURL (XAIProvider.swift:81), and XAIConfig.validate (AppConfig.swift:716-723) only accepts https with a host in allowedHosts (AppConfig.swift:659-662: cli-chat-proxy.grok.com and management-api.x.ai). The config init and decoder fall back to the default whenever validation fails (AppConfig.swift:684, 696-702). The response therefore arrives over TLS from the vendor's own endpoint, authenticated with the user's own ~/.grok/auth.json token. The finding's precondition, 'attacker controls the Grok CLI proxy response body', requires either the vendor to be malicious or a MITM with a locally trusted root CA. A trusted root CA already means the machine is compromised. The finding says the cached payload replays the value, but only the app writes that cache, in the user's own Application Support folder, so a local writer is already the same user. No attacker-controlled source reaches this sink in the default deploy. This is a robustness gap: no isFinite check or clamp before Int() for any vendor. It is not an exploitable path as written.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/XAIProvider.swift:81",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:659",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:684",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:716",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/XAIWireTypes.swift:266",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:41"
+        ],
+        "_task": "ab88e4e2cfeb930b2"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The code path is real. XAIWireTypes.swift:261 copies creditUsagePercent into utilizationPercent without clamping, at L268-271. UsageWindow.swift:14-20 stores it as is. UsageSnapshot.swift:70-72 takes the max. UsageStore.swift:379/156 publishes it. MenuBarLabelView.swift:41 then runs Int(percent.rounded()), which would trap on 1e300. The alleged security damage does not hold, though. The only party who can put that value in the payload is the first-party HTTPS endpoint the user already trusts and is authenticated to (cli-chat-proxy.grok.com, XAIProvider.swift:7/50). TLS rules out a network attacker. What the 'attacker' gets is a crash of the user's own read-only display app. It exposes no data, grants no write or code execution, and crosses no privilege boundary. A vendor that wanted to break the card could just stop serving data. What remains is a robustness bug: a malformed vendor response crashes the app, and the cache can make the crash come back after relaunch. The fix is still worth doing: check isFinite and clamp in UsageWindow.init. As written, though, the finding claims attacker-driven DoS and assumes a hostile source, so it is not a security impact.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/XAIWireTypes.swift:261",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:14",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:70",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:41",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/XAIProvider.swift:50"
+        ],
+        "_task": "a8726d7428deb02af"
+      },
+      "DEFENSES": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "The sink is real and unguarded. XAIWireTypes.swift:261 copies creditUsagePercent straight into UsageWindow (UsageWindow.swift:20 has no clamp). Neither UsageSnapshot.swift:70-71 (maxUtilization) nor AggregatesComputation.compute in UsageStore.swift:352 clamps it, and MenuBarLabelView.swift:41 calls Int(percent.rounded()), which traps on an out-of-range Double. That makes it a robustness bug. What fails is requirement 1, a source the attacker controls. The value comes only from the xAI billing endpoint. AppConfig.swift:715-722 (XAIConfig.validate) only accepts an https URL whose host is on allowedHosts (cli-chat-proxy.grok.com, line 661), and any rejected config value falls back to the default (lines 696-702). So the only parties who can inject 1e300 are xAI itself, with its own valid TLS certificate, or someone who can already write the user's local config and install a trusted root on the machine. Either one already has far more power than crashing a menu-bar app. The finding's own precondition is 'attacker controls the Grok CLI proxy response body', and the host allowlist plus TLS rule that out. I could not trace a third-party source to the sink, so there is no attack path. Clamping at the wire boundary is still a sensible hardening fix.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/XAIWireTypes.swift:261",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:20",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:70",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift:352",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:41",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:715",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/XAIProvider.swift:80"
+        ],
+        "_task": "af8b394c090a66562"
+      }
+    },
+    "C9": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The crash is real. OpenAIWireTypes.swift:207 checks only `s > 0`, and :211/:213 call `Int(days.rounded())` / `Int(hours.rounded())`, which trap on a finite value like 1e300. The value arrives through flexibleDoubleIfPresent (AppConfig.swift:199-203) at OpenAIWireTypes.swift:76 and reaches the label code via :145. The problem is who can send that value. The URL is a hard-coded constant, `https://chatgpt.com/backend-api/wham/usage` (OpenAIProvider.swift:22, used at :135). OpenAI has no base_url setting in the config, unlike Kimi, DeepSeek and xAI, so a user or local attacker cannot redirect the request. The finding itself says TLS rules out a network MITM, and chatgpt.com also has an SPKI pin baseline (PinBaseline.swift:47). The only party that can put 1e300 in limit_window_seconds is the vendor's own first-party server, either hostile or compromised. That is the trusted data source the app exists to display, not an attacker-controlled input across a trust boundary. A hostile chatgpt.com already controls every number the app shows and can make the monitor useless by returning 500s or bogus data. No attacker below the vendor can reach this path. This is a robustness bug worth fixing with an isFinite check plus an upper bound, or Int(exactly:). It is not a security finding, because no attacker-controlled source can be cited.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:22",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:135",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinBaseline.swift:47",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:76",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:145",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:207",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:211",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199"
+        ],
+        "_task": "a7e9fc4cd0b1ae236"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The trap is real. OpenAIWireTypes.swift:207 only checks s > 0, and :211/:213 call Int(Double.rounded()) with no range check. flexibleDoubleIfPresent (AppConfig.swift:199-202) accepts any finite JSON Double such as 1e300, and the path runs through toSnapshot at OpenAIWireTypes.swift:145. The claimed damage has no security weight, though. The only source is the hardcoded URL https://chatgpt.com/backend-api/wham/usage (OpenAIProvider.swift:22) over TLS, and the finding itself rules out a network MITM. So the only 'attacker' is the vendor, which is the trusted source of this data. That vendor can already make the card useless by returning an error, garbage or nothing. A crash instead of an error card adds almost nothing: the local monitor stops while the payload is served, and the finding says the bad payload is not cached, so it does not persist. No data is exposed, no dangerous write happens, and no trust boundary is crossed. This is a robustness bug worth fixing with an isFinite check plus an upper bound, or with Int(exactly:). It is not a vulnerability with real impact.",
+        "cited_paths": [
+          "Sources/AiTaskbarProviders/OpenAIWireTypes.swift:145",
+          "Sources/AiTaskbarProviders/OpenAIWireTypes.swift:207",
+          "Sources/AiTaskbarProviders/OpenAIWireTypes.swift:211",
+          "Sources/AiTaskbarProviders/OpenAIWireTypes.swift:213",
+          "Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "Sources/AiTaskbarProviders/OpenAIProvider.swift:22"
+        ],
+        "_task": "a8e137f91862cb45f"
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "I found no defense between the source and the trap. Source: the response of the fixed host https://chatgpt.com/backend-api/wham/usage (OpenAIProvider.swift:22). The field limit_window_seconds goes through flexibleDoubleIfPresent (OpenAIWireTypes.swift:76, AppConfig.swift:199-203). That helper only runs try? decodeIfPresent(Double.self), with no range or isFinite check, so 1e300 arrives as a finite Double. toSnapshot/window() (OpenAIWireTypes.swift:143-145) calls kind.label(from:) whenever used_percent is present. humanLabel (OpenAIWireTypes.swift:207) only checks `s > 0`. Lines 211 and 213 then run `Int(days.rounded())` / `Int(hours.rounded())`. In Swift, Int(Double) on an out-of-range value is a runtime trap. A trap is not a thrown error, so no try?/catch further up (CachedFetch, provider) can catch it. There is no clamp, no Int(exactly:), and no type-system barrier. The only real limiter is the threat model: the attacker has to control the vendor response itself, since the host is fixed and TLS protects it. That limits severity (LOW, DoS of a local app). It does not supply a mitigation.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:22",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:76",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:145",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:207",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:211",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIWireTypes.swift:213"
+        ],
+        "_task": "a6f825101d2019bf8"
+      }
+    },
+    "C10": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The trap is real, but no attacker can reach it. ZAIWireTypes.swift:83-84 calls Int(Double) with no range check, and AppConfig.swift:199-203 accepts any JSON Double, so a value like 1e19 would abort the process. The problem is the source. It is the response from a hardcoded HTTPS endpoint (ZAIProvider.swift:10, `https://api.z.ai/api/monitor/usage/quota/limit`), which the user cannot configure: there is no base_url knob, unlike Kimi. So the only parties who can shape that JSON are (a) Z.AI itself, the first-party vendor the user already trusts with their API key, or (b) someone who breaks TLS, which gives far more than a crash. The other path, poisoning the DiskCache, needs write access as the same local user under the 0700 Application Support directory, which is already full compromise. The finding admits this by listing 'attacker controls or influences the Z.AI API response' as an assumed precondition, not a demonstrated one. No attacker-controlled source reaches the sink in the default deployment. This is a robustness bug (a vendor schema quirk crashes the app, and the cached payload makes it crash again), not an exploitable vulnerability. Fixing it with Int(exactly:) is still worthwhile as hardening.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:83",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:84",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIProvider.swift:10",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIProvider.swift:50"
+        ],
+        "_task": "a14686799bec41f12"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The trap itself is real. ZAIWireTypes.swift:83-84 runs Int(_:) on an unchecked Double from AppConfig.swift:199-203, and Int(1e19) aborts the process. The damage the finding claims does not hold up, though. (1) There is no crash loop from the cache. In CachedFetch.swift:34-36 the fetch path calls decode(data) before cache.writePayload(data), so the trap fires before the payload is written. A bad response never reaches the DiskCache, and later cache or stale-fallback decodes read only earlier good payloads. The persistence half of the impact is false. (2) What remains is a one-off crash of a local menu-bar monitor, and only when the response is shaped this way. The response comes from a hardcoded HTTPS host (ZAIProvider.swift:10, https://api.z.ai/...). Only Z.AI itself, or a TLS man-in-the-middle, can shape it, and either one can already deny the same data by returning an error or false numbers. The crash exposes no data, corrupts no state or credentials, and only takes down a display app that the user restarts. Beyond that failure mode, the added harm is negligible. The main impact claim is refuted, and the rest is a robustness bug (non-exact Int conversion), not a security impact.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:83",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/CachedFetch.swift:34",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/CachedFetch.swift:36",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIProvider.swift:10"
+        ],
+        "_task": "a67c4f2e9f1301607"
+      },
+      "DEFENSES": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "The sink is real. At ZAIWireTypes.swift:83-84, `.map { Int($0) }` runs on a Double from flexibleDoubleIfPresent (AppConfig.swift:199-203), and nothing checks range or finiteness first. So a value like 1e19 would crash the app instead of throwing an error. Nothing in the decode path stops that crash. What does not hold is the attacker-controlled source. The only input is the response from a hard-coded HTTPS endpoint: ZAIProvider.swift:10 `private static let usageURL = URL(string: \"https://api.z.ai/api/monitor/usage/quota/limit\")!`, used unchanged at ZAIProvider.swift:44. The Z.AI config has no user-set base_url, so the request cannot be redirected to a host the attacker runs. The system's default TLS handling (ATS) blocks a third party from changing the body in transit. The only party that can shape this JSON is the vendor itself, which is already trusted with the user's API key and with the data the app shows, or someone who has already broken TLS. The finding's precondition, 'attacker controls or influences the Z.AI API response', takes that control for granted and never shows it. The poisoned DiskCache also cannot be reached independently, because it only ever stores this same trusted payload. So the fixed host plus TLS is an effective defense against an outside attacker, and item 1 of the proof standard (a source the attacker controls) fails. Separate note: this is still worth fixing as a robustness bug. Switching to `Int(exactly:)` after rounding, or checking the range first, would stop a malformed vendor response from crashing the app. It is not a vulnerability as the finding describes it.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:83",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:84",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIProvider.swift:10",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIProvider.swift:44"
+        ],
+        "_task": "ab80afde492857171"
+      }
+    },
+    "C11": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The only attacker-controlled input is the GitHub Releases response for config.ownerRepo (UpdateChecker.swift:150). The finding admits this needs publish rights on the maintainer's release repo, through a stolen account or token. That repo is the product's trust root, not a surface an outside attacker can reach. The transport is locked down: HTTPS, a host allow-list for the DMG and checksum URLs (isAllowedDownloadURL, :182, :226), and a pinned HTTPClient (:239-241). So no network attacker or third party can inject a release. The code checks what the finding says it checks: size at :248-254, and a SHA-256 at :255-260 that is skipped when missing because of try? at :185. Nothing runs automatically. The DMG is only moved at :265 and revealed at :275, and the user still has to mount it, drag the app and launch it. Whoever can publish a release can also change the README and the release page, so the same attacker already reaches every new install. Missing quarantine and team-ID pinning would be defence in depth against a compromised trust root, not a reachable bypass in the default deployment. Quarantine alone would not stop a release signed with some other Developer ID anyway. The claimed attack path starts from a privileged-compromise premise, so the source is not attacker-controlled under the reachability lens.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:150",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:182",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:185",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:226",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:265",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:275"
+        ],
+        "_task": "ac0469d0f9a4dce91"
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The precondition is heavy: the attacker must be able to publish on the release repo. Given that, the claimed damage holds. (1) Source: every integrity input comes from the attacker's own release. The size comes from the asset metadata (UpdateChecker.swift:193). The SHA comes from a sibling checksums-*.txt asset in that release, fetched with try? (:179-186), and the check is skipped when it is nil (:259). (2) Dangerous operation: the DMG is moved into ~/Downloads (:265) and revealed in Finder (:275), and the user is told to drag the app into /Applications. (3) No effective mitigation: nothing in UpdateChecker checks the signature or team ID. CodeSignatureInfo.currentTeamID (Sources/AiTaskbarCore/Util/CodeSignatureInfo.swift:42) is never called from the update path. The download is a plain session.download (HTTPClient.swift:71) in an app that is not sandboxed (Resources/entitlements.plist:14-15, app-sandbox false). Resources/Info.plist has no LSFileQuarantineEnabled, and there is no xattr code. So the file gets no com.apple.quarantine flag, and the Gatekeeper check the comment at :267-274 relies on never runs for an unsigned app. The impact is real and specific: CLAUDE.md keeps the Developer ID key off the repo on purpose, so compromising GitHub alone should not be enough to ship code that runs. This path makes it enough. The result is arbitrary code running as the user, with access to the Claude and Codex credentials the app handles.",
+        "cited_paths": [
+          "Sources/AiTaskbarApp/UpdateChecker.swift:179",
+          "Sources/AiTaskbarApp/UpdateChecker.swift:186",
+          "Sources/AiTaskbarApp/UpdateChecker.swift:259",
+          "Sources/AiTaskbarApp/UpdateChecker.swift:265",
+          "Sources/AiTaskbarApp/UpdateChecker.swift:275",
+          "Sources/AiTaskbarCore/Networking/HTTPClient.swift:71",
+          "Sources/AiTaskbarCore/Util/CodeSignatureInfo.swift:42",
+          "Resources/entitlements.plist:14",
+          "Resources/Info.plist"
+        ],
+        "_task": "a226ed269ded94d1a"
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "I looked for any defense between the GitHub release metadata and the DMG being handed to the user, and found none that holds up against someone who controls the release. (1) Source: the tag, asset URL, size and checksums asset all come from the releases/latest JSON (UpdateChecker.swift:159-196). The SHA comes from a sibling asset in the same release, fetched with `try?` at :186, so a missing or unparseable checksums file leaves dmgSHA256 nil. (2) Sink: at :265 the DMG is moved into ~/Downloads, and at :275 it is revealed in Finder. The size check (:252-258) and the hash check (:259-264) only compare against values from that same release, and the hash check is skipped when there is no checksum. isAllowedDownloadURL (:282-288) only pins the host to GitHub, and GitHub is where the attacker publishes. (3) Missing mitigation: HTTPClient.swift:71 is a plain session.download. Searching Sources/ and Resources/ for quarantine or LSFileQuarantineEnabled finds nothing, and entitlements.plist:14-15 sets app-sandbox false. So the file never gets com.apple.quarantine, and the comment at :267-274 relying on Gatekeeper is not backed by code. UpdateChecker never checks a code signature or team ID, and no key outside the release (for example an EdDSA key like Sparkle uses) exists. The attacker does need to be able to publish a release, which is the REACHABILITY lens's call. Under DEFENSES, nothing in the code stops the attack once that is possible.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:186",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:259",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:265",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:275",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/HTTPClient.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Resources/entitlements.plist:14"
+        ],
+        "_task": "af9bff8b92d2ff402"
+      }
+    },
+    "C12": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The claim assumes something the app does not do. Its only source is a secret file that already has a loose mode, set by the user, a backup restore or another tool. No attacker controls that input or this code path. The behaviour it describes is real: AtomicFileWrite.swift:27 calls replaceItemAt, which may keep dest's old metadata. But no default-deploy path gets from there to an exposed secret. (1) config.toml: ConfigLoader.swift:75-80 resets the mode to 0600 on every load() before any rewrite (ConfigLoader.swift:110/189/276), so a loose mode does not survive startup. (2) The DiskCache, UsageHistoryStore, PinStore and OpenAIResetJournal files all sit under directories that Paths.swift:19-22 and :35-38 re-chmod to 0700 on every access (PinStore.swift:27-29 does the same). Other uids cannot traverse those directories, whatever the mode of the files inside. (3) ~/.codex/auth.json is written only by FileCredentialReader.writeBack (FileCredentialReader.swift:74). That runs only when manage_oauth_refresh is on, which defaults to false (CLAUDE.md hard rule, AnthropicConfig/OpenAIConfig). The Codex CLI creates the file at 0600, so the user would have to opt in and also loosen the file by hand. The 'other local user' in the exploit story has no route to cause any of these preconditions. What remains is a hardening and test gap (no test pre-creates a 0644 dest), not a reachable vulnerability.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:27",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/ConfigLoader.swift:75",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:19",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:35",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinStore.swift:27",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:74"
+        ],
+        "_task": "af266d65bc8d91171"
+      },
+      "IMPACT": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The mechanism is real. AtomicFileWrite.swift:27 calls replaceItemAt with default options, which keeps the destination's existing permissions, and that path is only taken when the destination file already exists (AtomicFileWrite.swift:26). The claimed damage does not hold up, though. (1) The write never loosens anything. A file that was 0644 before is 0644 after, and anything the app creates itself goes through moveItem (line 29) at 0600. So the exposure is whatever someone else caused beforehand, and the write adds no new disclosure. (2) config.toml is tightened back to 0600 on every load (ConfigLoader.swift:74-78), before save() at ConfigLoader.swift:110 ever runs. (3) Every app-owned secret file lives under the Application Support or Caches directory for ai-taskbar, and both are forced to 0700 (Paths.swift:19-22 and 34-37). Other local users cannot traverse into those directories, so a 0644 mode on a file inside them exposes nothing. (4) The only secret outside those directories is ~/.codex/auth.json. It is rewritten only through FileCredentialReader.writeBack (FileCredentialReader.swift:74), which runs only with the opt-in manage_oauth_refresh = true (off by default per CLAUDE.md), and the Codex CLI owns that file's mode. At most this is a hardening and test gap: a promise to tighten on write that is not kept. It is not a real exposure of sensitive data, let alone a HIGH one.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:26",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:27",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:29",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/ConfigLoader.swift:74",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/ConfigLoader.swift:110",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:19",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:34",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:74"
+        ],
+        "_task": "a5cac94f44308e449"
+      },
+      "DEFENSES": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "I didn't check whether replaceItemAt keeps the old mode (AtomicFileWrite.swift:27). Even if it does, other code blocks the claimed exposure or it never occurs. (1) config.toml: ConfigLoader.load() sets the file to 0o600 on every load (ConfigLoader.swift:74-79), before any save() at :110, :189 or :276. The file also lives in the app support dir, which is reset to 0o700 on every access (Paths.swift:19-22). A loose config.toml is therefore tightened on the next launch, and other uids can't reach it through the 0700 parent directory anyway. (2) DiskCache, UsageHistoryStore and PinStore files sit under caches/app-support dirs that are forced to 0o700 (Paths.swift:19-22, :35-38; PinStore.swift:28). A 0644 mode on a file inside cannot be read by another local user, because the directory cannot be traversed. (3) ~/.codex/auth.json is written back (FileCredentialReader.swift:74) only in opt-in manage_oauth_refresh mode, which is off by default (AnthropicProvider.swift:28, OpenAIProvider.swift:38). In that case the file was already 0644 before the app touched it, so the app creates no new exposure; at worst it fails to tighten a file another tool left loose. There is a real hardening gap: the explicit mode isn't re-applied after replaceItemAt, and no test pre-creates a 0644 destination. But that doesn't produce the claimed HIGH-severity leak of secrets to other local users in the default deployment.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:27",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/ConfigLoader.swift:74",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:19",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:35",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinStore.swift:28",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:74",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:38"
+        ],
+        "_task": "af21435b799a6a6bb"
+      }
+    },
+    "C13": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The code path is real, and there is no clamp anywhere along it. A finite 1e300 from the wire is accepted by flexibleDoubleIfPresent (AppConfig.swift:199-203) and passes unchanged through AnthropicWireTypes.swift:140-147 and UsageWindow.swift:15-20. It is then written to disk by recordHistory (VendorViewModel.swift:235,274-276, into UsageHistoryStore.swift:56). computePeakDay picks it as the max (AnalyticsAggregator.swift:29,51), and Int() traps on it (AnalyticsFormatters.swift:46,48). The problem is the source. It is not controlled by an attacker in any realistic threat model for this local single-user app. The value arrives only in an authenticated HTTPS response. Every vendor base URL is https-only and host-allowlisted (AppConfig.swift:452-458 and the matching validators at 559, 626, 715). Pinned hosts also get SPKI TOFU pinning (PinningDelegate.swift:6-40). So the finding needs either a malicious or compromised first-party vendor, or a MITM holding a trusted root. The trusted-root case has to beat pinning too, and anyone in that position can already read the OAuth and API tokens the app sends, which is far worse than crashing the Analytics view. A vendor sending garbage is a robustness bug, not an attacker reaching a sink. The finding offers no path where an unprivileged party controls the utilization field. Side note (not the claim voted on): the missing finite/range clamp before Int() is still worth fixing as a hardening step.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:452",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:6",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:140",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:235",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:56",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:29",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:48"
+        ],
+        "_task": "a1c32e00326857647"
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The crash described in the finding is real, and it persists as claimed. Source: AnthropicWireTypes.swift:71 decodes utilization through flexibleDoubleIfPresent (AppConfig.swift:199-203). That function only decodes the value and never checks its range or finiteness, so 1e300 is accepted. AnthropicWireTypes.swift:147 then passes it straight into UsageWindow.utilizationPercent. UsageWindow.swift:15-20 does not clamp it, and UsageSnapshot.swift:71 carries it into maxUtilization as the max. Persistence: VendorViewModel.swift:234 calls recordHistory, and UsageHistoryStore.swift:56-67 appends the sample without validation. The Double is finite, so the JSON encoder accepts it. On load, UsageHistoryStore.swift:113-114 filters only by timestamp (cutoff), not by value. Sink: AnalyticsAggregator.swift:21-55 computePeakDay picks the largest daily max (1e300 > 0.5, and the variance check does not remove it). The result reaches the summary at AnalyticsAggregator.swift:121/157. VendorAnalyticsCardView.swift:145 calls AnalyticsFormatters.peakDayText, and AnalyticsFormatters.swift:46/48 runs Int(record.utilizationPercent). Int(Double) on a value that does not fit in Int traps at runtime, so the process aborts. Nothing between source and sink clamps the value or uses Int(exactly:). The crash repeats every time Analytics opens, including after relaunch, until the sample ages out of the 90-day window or the JSONL is deleted by hand. So the claimed damage holds. The real harm is availability of a local app, and the attacker must control the vendor's response (a malicious or compromised vendor, or a MITM with a trusted certificate). MEDIUM is therefore generous; I would call it LOW. Separately, ZAIWireTypes.swift:84-85 also calls Int() on unit/number without a check. That is a different bug and does not affect this vote.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:234",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:56",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:113",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:29",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:145",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:48"
+        ],
+        "_task": "a1abb6b39354d4c63"
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "I found no check anywhere between the vendor's JSON and Int(). (1) Source: AnthropicWireTypes.swift:71 decodes `utilization` through flexibleDoubleIfPresent (AppConfig.swift:199-203). That helper is a plain Double decode with no range or isFinite check, so a finite value like 1e300 is accepted. toSnapshot (AnthropicWireTypes.swift:140-147) passes the value into UsageWindow as is, and UsageWindow.init (UsageWindow.swift:15-20) stores it unchanged. (2) Persistence: VendorViewModel.swift:235 calls recordHistory(snapshot.maxUtilization), which reaches UsageHistoryStore.append (UsageHistoryStore.swift:56-58). append encodes the raw Double. JSONEncoder only rejects non-finite values, and 1e300 is finite, so it is written to disk. load (UsageHistoryStore.swift:92-125) decodes it back and only filters by timestamp. (3) Aggregation: computePeakDay (AnalyticsAggregator.swift:29-47) takes the per-day max() with no clamp and returns it as utilizationPercent. AnalyticsAggregator.swift:121 and :157 put that result into summary.peakDay. (4) Sink: VendorAnalyticsCardView.swift:143-145 renders AnalyticsFormatters.peakDayText. At AnalyticsFormatters.swift:46 and :48 it calls Int(record.utilizationPercent), and Int() of a Double at or above about 9.22e18 traps at runtime. The only isFinite check in the model layer (UsageSnapshot.swift:325) is on a different path, notifications above 90%, and there is no clamp in Providers, History or the aggregator. I found no framework, type-system or middleware protection. Whether a malicious vendor or TLS MITM is a realistic attacker is a question for the REACHABILITY lens. It does not change that nothing on this path would stop the crash.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:20",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:235",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:56",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:113",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:29",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:121",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:145",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:48"
+        ],
+        "_task": "acb5b037ca3bfb087"
+      }
+    },
+    "C14": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The data path is real and nothing clamps it. AnthropicWireTypes.swift:71 decodes `utilization` into a Double with no bounds check. UsageSnapshot.swift:70 (`maxUtilization`) passes it on unchanged, VendorViewModel.swift:235/276 writes it to history, VendorViewModel.swift:150-155 reloads it within the 24h window, and SparklineView.swift:46/116/126 calls Int(...rounded()) without clamping. So a value of 1e300 would reach the trap. What fails is the claimed source. The only way to inject that value is a JSON usage response from the vendor's own API: Anthropic, OpenAI, or xAI over HTTPS to a fixed host. Kimi/Gemini base_url is host-allowlisted (AppConfig.swift:432-446), and PinningDelegate.swift:50-56 never accepts a certificate the system rejects. In the default deploy, the only parties who can write that response are the vendor itself or a MITM holding a CA trusted by the system. Both are outside the threat model, and neither is an attacker who can reach this code. The other route is the history JSONL file. That needs local write access as the same user, which already means full control of that user account. The 'One attacker-controlled usage response' precondition is assumed, never shown. What remains is a robustness bug: a missing clamp on vendor data. It is not an attacker-reachable vulnerability. OpenRouter already clamps with min(...,100) at OpenRouterWireTypes.swift:150; Anthropic, XAI and OpenAI do not.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:70",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:150",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/SparklineView.swift:126",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:432",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:50"
+        ],
+        "_task": "a7c1ccfd209116d4a"
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "The crash described in the finding is real, and nothing along the path stops it. (1) Source: the wire decoder takes any finite Double for utilization with no range check (AnthropicWireTypes.swift:71, via AppConfig.swift:199-203). UsageWindow.swift:20 stores it as-is, UsageSnapshot.swift:71 takes the max of the windows, and VendorViewModel.swift:274-276 appends that value to history. UsageHistoryStore.swift:56-58 writes it to JSONL. 1e300 encodes fine; only inf/NaN would fail. (2) Reload: VendorViewModel.swift:150-155 loads 24h of samples on every launch, and neither load() nor SparklineView.swift:24 (time filter only) checks the value. (3) Sink: SparklineView.swift:46 sets maxPercent to the largest sample. yFor at :58-60 clamps only the drawing coordinates. The label at :126 runs Int(maxPercent.rounded()) when maxPercent > current+5, and :116 runs Int(last.max.rounded()). In Swift, Int(Double) traps when the value is out of range, so the app hard-crashes when the expanded card renders. So the claimed damage holds: the popover crashes on every relaunch until the sample falls out of the 24h window, and the user has no in-app fix because the popover crashes before they can act. Impact is availability only: no data is disclosed or written beyond the one bad number. The attacker must control an HTTPS response from an allowlisted vendor host, which is a strong precondition. That makes the finding's LOW severity right, but the harm itself is real.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:71",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:274",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:56",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:150",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/SparklineView.swift:46",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/SparklineView.swift:116",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/SparklineView.swift:126"
+        ],
+        "_task": "a2f33b7d2a84a9e3a"
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "Nothing between the wire and the Int() conversion checks that the value is finite or clamps it. (1) Source: AnthropicWireTypes.swift:71 decodes utilization with flexibleDoubleIfPresent (AppConfig.swift:199-203), which accepts any Double, so 1e300 passes. toSnapshot (AnthropicWireTypes.swift:140-147) passes the percent straight into UsageWindow, and its init (UsageWindow.swift:15-20) just stores it. (2) Propagation: UsageSnapshot.swift:70-71 maxUtilization is a plain max(). VendorViewModel.swift:235 then calls recordHistory, and :274-284 appends the value to disk and to memory with no check. UsageHistoryStore.append (:56-57) encodes it as is. load(since:) (:92-126) filters only on the timestamp, so the sample is reloaded on every launch while it stays inside the 24h window (VendorViewModel.swift:149-155). (3) Sink: SparklineView.swift:24 filters on time only, and :46 maxPercent is an unclamped max(). The yFor closure (:57-58) clamps to 0...100, but only for drawing. The labels at :116 (Int(last.max.rounded())) and :126 (Int(maxPercent.rounded()), guarded at :125 only by maxPercent > currentPercent + 5) convert a Double far above Int.max to Int. That traps at runtime in Swift, and there is no isFinite or range check first. I found no framework, type-system or middleware defense on this path. Whether an attacker can control the TLS vendor response is a reachability question, not a defenses one.",
+        "cited_paths": [
+          "Sources/AiTaskbarProviders/AnthropicWireTypes.swift:71",
+          "Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "Sources/AiTaskbarCore/Models/UsageWindow.swift:20",
+          "Sources/AiTaskbarCore/Models/UsageSnapshot.swift:71",
+          "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:235",
+          "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:276",
+          "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:57",
+          "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:116",
+          "Sources/AiTaskbarApp/Views/SparklineView.swift:46",
+          "Sources/AiTaskbarApp/Views/SparklineView.swift:116",
+          "Sources/AiTaskbarApp/Views/SparklineView.swift:126"
+        ],
+        "_task": "a973d2f8c0d3e60ab"
+      }
+    },
+    "C15": {
+      "REACHABILITY": {
+        "verdict": "FALSE_POSITIVE",
+        "lens": "REACHABILITY",
+        "reasoning": "The arithmetic bug is real. In ZAIWireTypes.swift:180-189, entries that are each > 0 are summed with no finiteness check, so two usage values of 1e308 give an infinite total, the share becomes inf/inf = NaN, and VendorSectionView.swift:638 calls Int() on it. But the attacker source is not established. The JSON comes only from a hardcoded endpoint: ZAIProvider.swift:10 is `URL(string: \"https://api.z.ai/api/monitor/usage/quota/limit\")`, which is not user-configurable. Nothing is on the path except the first-party vendor over TLS, and the config also has a pin_hosts option (AppConfig.swift:124). To send 1e308 values, an attacker would have to be Z.AI or OpenRouter themselves, or break TLS. The finding's only precondition is 'Attacker-controlled response', with no path that gets there. The cached copy of the payload sits in the user's own 0700 Application Support directory, so tampering with it requires the same user account, which is not an attacker boundary. flexibleDoubleIfPresent (AppConfig.swift:199-203) does accept any finite Double, so the robustness bug (a crash if the vendor sends absurd values) is worth fixing with a clamp, but it is not reachable by an attacker as written.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIProvider.swift:10",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:180",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift:638",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199"
+        ],
+        "_task": "a3e40d779e4b9415f"
+      },
+      "IMPACT": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "IMPACT",
+        "reasoning": "I traced the claimed damage through the code and it holds. ZAIModelUsage.usage is decoded as a Double with no finiteness check (ZAIWireTypes.swift:108, AppConfig.swift:199-203). The only filter is `used > 0` (ZAIWireTypes.swift:180), and values are summed under the same modelCode (ZAIWireTypes.swift:181). Two entries of 1e308 for one model add up to +inf. `totalUsage > 0` is still true for inf (ZAIWireTypes.swift:184-185), so percent = inf/inf*100 = NaN (ZAIWireTypes.swift:189). OpenRouter does the same thing (OpenRouterWireTypes.swift:168-177). ModelShare's init stores percent without clamping (UsageSnapshot.swift:388-392). The view calls Int(m.percent.rounded()) at VendorSectionView.swift:608 and :638. Swift's Int(Double) init traps on NaN even in release builds, so the whole menu-bar process crashes, not just the popover. The raw payload is what gets cached, so every render within the TTL, or from stale fallback, crashes again. The impact is availability only: no data leaks and nothing sensitive is written. It lasts until a normal response replaces the cache, which fits the LOW severity. Whether an attacker can actually shape the Z.AI/OpenRouter response over TLS is a reachability question, not part of this lens. Separate from this finding: two distinct models at 1e308 each give 0% rather than NaN, so only same-code summing triggers the crash.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:108",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:180-189",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenRouterWireTypes.swift:168-177",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:388-392",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199-203",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift:608",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift:638"
+        ],
+        "_task": "a9d900e6aa5722b14"
+      },
+      "DEFENSES": {
+        "verdict": "TRUE_POSITIVE",
+        "lens": "DEFENSES",
+        "reasoning": "I found no defense between the server response and the trap. Decoding: ZAIWireTypes.swift:108 reads `usage` through flexibleDoubleIfPresent (AppConfig.swift:199-203). That function only decodes a Double or an Int64. It has no isFinite or range check, and 1e308 is a finite JSON number that JSONDecoder accepts. Aggregation: ZAIWireTypes.swift:179-181 only requires used > 0. It then sums per modelCode, so two entries of 1e308 under the same code give totals[code] = +inf. totalUsage (line 184) is inf, which passes the `> 0` check at line 185. Line 189 then computes inf/inf*100 = NaN. ModelShare.init (UsageSnapshot.swift:388-392) stores percent unchanged, with no clamp. The isFinite guards in the codebase cover utilizationPercent (UsageSnapshot.swift:325, OpenAIResetController.swift:32) and credits (CreditBaseline.swift), never ModelShare.percent. Render: VendorSectionView.swift:618 only checks that the list is non-empty. Line 638 then runs Int(m.percent.rounded()), and Swift's Int(Double) is a runtime trap on NaN. The same pattern is at :608 for OpenRouter. The source is the vendor's HTTPS response, so the attacker is the vendor itself or someone who can rewrite its responses. That is a weak attacker model, but it is a reachability question, not a defenses one. Under the DEFENSES lens, neither the framework, the type system nor a guard at a higher layer prevents the crash.",
+        "cited_paths": [
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:108",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:180",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/ZAIWireTypes.swift:189",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageSnapshot.swift:388",
+          "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift:638"
+        ],
+        "_task": "ae3b73f00d54e08f9"
+      }
+    }
+  }
+}

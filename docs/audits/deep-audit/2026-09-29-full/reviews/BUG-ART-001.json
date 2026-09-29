@@ -1,0 +1,90 @@
+{
+  "id": "BUG-ART-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 04:03:28 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The defect is fixed. In scanLines (ClaudeSessionScanner.swift ~l.310-322), every line that has a non-empty message.id and requestId now goes through mergeKeyed under the key id+NUL+requestId. mergeKeyed (~l.223) keeps the record with the larger output_tokens; on a tie the newer record overwrites the old one, so the last one seen wins. Lines missing either id are added directly, as before. The dedup covers all three routes. (1) Within a file: scanLines. (2) Across files: keyedAll is filled from every freshly scanned file (~l.108) and from every memo replay (~l.91), and folded once after the loop (~l.125). (3) The public scan(data:) API calls fold internally. Memo replays hold only the id-less totals in today/week; the keyed records are stored separately in Entry.keyed (ScanMemo.swift ~l.56) and are never folded into the aggregates, so nothing counts twice. When a file grows after being counted from the memo, its size or mtime changes and lookup misses (ScanMemo lookup compares size, mtime and day). The file is rescanned and store replaces the whole entry, while the other file's keys come from the memo and are merged, not summed. No double count. Memory: keyed data is kept per entry and bounded by the lines in the file. memo.retain(paths: seenPaths), which is unchanged, drops files that left the window. Today vs last-7: inToday and inWeek are computed with the same rule as before, including the fail-safe that sends an unparseable timestamp to both buckets and increments the counter once, as in the original. The memo is invalidated when startOfToday changes, and sevenDaysAgo is derived from startOfToday, so stored flags cannot go stale. Tests: I ran --filter ClaudeSessionScanner through scripts/with-test-toolchain.sh: 18/18 green. Reversal proof: I copied the two production files to the scratchpad, ran git checkout on them and ran the suite again: RED with 13 issues across 5 of the 6 new tests (for example inputTokens 200 vs 100, outputTokens 90 vs 80). The id-less test passes both before and after, which is expected because it guards against a regression. I copied the files back; git diff --stat shows 5 files and the current diff is byte-identical (cmp) to reviews/diffs/BUG-ART-001.diff. Non-blocking notes: (a) the test 'cross-file dedup holds when one file replays from the memo' uses two files with the same record. If a variant of the fix forgot to store keyed in the memo, that test would still pass, because the rescanned file alone yields 100/50. It proves there is no double count, but not that keyed data survives the memo. A replay test with a single file, or with different keys, would close that gap. (b) Between files, ties with equal output_tokens are settled by FileManager enumeration order, which is not deterministic. That only matters if duplicates with equal output_tokens differ in input or cache counts.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+        "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:108",
+        "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:125",
+        "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:223",
+        "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:315",
+        "Sources/AiTaskbarCore/Cost/ScanMemo.swift:56",
+        "Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift:380"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The fix is proportionate and adds no debt. (1) Repo conventions: no new try? or swallowed errors. The only try? in the new code is the temp-dir cleanup in the test's defer, which is best-effort and allowed by the CLAUDE.md rule. The new ScanMemo.KeyedUsage is a Sendable struct with no [String: Any]. The new tests use Swift Testing. Every #expect compares Int? to Int, which is not a Boolean form, so the vacuous-Bool rule does not apply. The doc note is added to CLAUDE.md and AGENTS.md with identical content (both files are 38607 bytes with the same index hash), which follows the always-update-docs rule. (2) No duplicated logic: the dedup rule lives in one function, mergeKeyed (ClaudeSessionScanner.swift:223). All three paths call it: line scan (:317), memo replay (:91) and fresh scan (:108). fold (:229) is also shared by estimate and scan(). The old 'missing timestamp counts in both buckets' branch was reduced to inToday/inWeek flags without changing what it does, and unparseableTimestamps is still incremented only when ts == nil. (3) Complexity: scanLines keeps the same nesting as the old scan body. The if/else at the end of the loop is 2 levels deep and fits on screen. The file went from about 285 to 326 lines. (4) Names still match behavior. scan() is now a thin wrapper around scanLines + fold, but it is not ceremony: it keeps the internal API that 9 existing tests call and adds the fold step so it dedups too, which the new test scan_dedups_within_data covers. The tie-break described in the comment ('ties going to the last seen') matches the code: `>` returns early, so an equal count overwrites. (5) ScanMemo.Entry gained `keyed` with a default of [:], so the change is additive. ClaudeSessionScanner is the only user of ScanMemo. (6) I did not run the build or check-swift-warnings.sh, as the orchestrator instructed. Reading the diff, I found nothing that should raise a warning: no unused bindings, and mergeKeyed and fold are both called.",
+      "required_changes": [],
+      "new_findings": [
+        "LOW/cosmetic: ClaudeSessionScanner.mergeKeyed (Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:223) is `internal` but no test or other file calls it. It could be `private` like fold/scanLines.",
+        "LOW/memory: the memo now keeps one KeyedUsage per response for every file in the 7-day window (ScanMemo.swift Entry.keyed). This is probably fine at the current scale, but if the number of transcripts grows it would be worth measuring the memo's resident size.",
+        "INFO: the dedup is not mirrored in Sources/AiTaskbarValidate/main.swift. It is not mandatory (only wire types require a golden test and validate fixtures), but it would give a quick sanity double-check like other Cost helpers have."
+      ],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:108",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:202",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:223",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:229",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:317",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ScanMemo.swift:28",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift:299",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md:362"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The diff touches 5 files and each one belongs to BUG-ART-001. ClaudeSessionScanner.swift: requestId and message.id are now decoded, lines are deduped per key across files through mergeKeyed/fold, and memo replays merge hit.keyed. ScanMemo.swift: KeyedUsage is new and Entry gains `keyed`, so dedup still works on replayed files. ClaudeSessionScannerTests.swift covers the fix. CLAUDE.md and AGENTS.md get the same 7-line note on the token-semantics rule, and `cmp` confirms the two files are byte-identical. On contracts: ScanMemo is in-memory only (ScanMemo.swift:24), so no serialized format changed and nothing needs migrating. Entry.init's new `keyed` parameter defaults to [:], so the call site in CodexSessionScanner.swift:148 still compiles unchanged. VendorSnapshot and CostEstimate/ModelUsage are unchanged. KeyedUsage is a new public type, but it lives inside ScanMemo and needs only the ModelUsage Equatable/Sendable conformance that already exists (CostEstimate.swift:3). The diff adds no dependency, host, secret file, entitlement or unsafe code. Cost is one dictionary entry per keyed line, bounded by the number of unique responses in the 7-day window, with no extra I/O on the scan path. README only mentions ClaudeSessionScanner in architecture lists (README.md:402, :692) and never describes how lines are counted, so it did not need an update. The fix adds no user-facing text, so Localizable needs nothing. The untracked docs/audits/ directory holds the pipeline's own audit artifacts and is not part of this diff.",
+      "required_changes": [],
+      "new_findings": [
+        "Low-severity sibling check for the correctness lens: the memo stores each keyed record's inToday/inWeek at scan time. It is invalidated only by computedForDay, size and mtime, so a record that drifts past sevenDaysAgo during the day keeps inWeek=true until the day rolls over. The unkeyed today/week totals already behaved this way before the fix, so this is not a regression."
+      ],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:125",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ScanMemo.swift:24",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ScanMemo.swift:58",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:148",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CostEstimate.swift:3",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md:402"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [
+    "LOW/cosmetic: ClaudeSessionScanner.mergeKeyed (Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:223) is `internal` but no test or other file calls it. It could be `private` like fold/scanLines.",
+    "LOW/memory: the memo now keeps one KeyedUsage per response for every file in the 7-day window (ScanMemo.swift Entry.keyed). This is probably fine at the current scale, but if the number of transcripts grows it would be worth measuring the memo's resident size.",
+    "INFO: the dedup is not mirrored in Sources/AiTaskbarValidate/main.swift. It is not mandatory (only wire types require a golden test and validate fixtures), but it would give a quick sanity double-check like other Cost helpers have.",
+    "Low-severity sibling check for the correctness lens: the memo stores each keyed record's inToday/inWeek at scan time. It is invalidated only by computedForDay, size and mtime, so a record that drifts past sevenDaysAgo during the day keeps inWeek=true until the day rolls over. The unkeyed today/week totals already behaved this way before the fix, so this is not a regression."
+  ],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

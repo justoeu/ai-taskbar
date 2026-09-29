@@ -1,0 +1,24 @@
+{
+ "verdict": "APROVA",
+ "lens": "SCOPE",
+ "reasoning": "git status shows two touched files, and both tie to BUG-ART-002. (1) /Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:83-130 moves the opencode merge out of the convenience init into `nonisolated static func mergingOpencode`. The function is internal, not public, and is reachable only via @testable, so no exported contract changes. It stops adding opencode dollars to usdToday/usdLast7Days. Tokens still merge into totalsByModel. The call site at :136 is a one-line replacement. (2) Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift is a new test file covering the new pure function (OpenAI, Z.AI with a cost opencode reported, and a vendor seen only through opencode). No new dependency, host, secret file, entitlement, or persisted format. CostEstimate is built with the same fields as before, and nothing serialized changes shape. The diff adds no hidden cost: it removes the PricingTable.lookup/CostMath calls from the provider closure. Sister route: the popover path (Sources/AiTaskbarApp/Views/CostFooterView.swift:198) already shows opencode's recorded cost as its own line and never folds it into byVendor (CostEstimator.swift:26 says so explicitly), so there is no copied line left unfixed. Docs: README.md:31 already says opencode dollars are 'never added on top' of the vendor total, and the fix brings Analytics in line with it. CLAUDE.md already states the rule. CHANGELOG is generated at release time. No lockstep file was left behind.",
+ "required_changes": [],
+ "new_findings": [
+  {
+   "severity": "LOW",
+   "lens": "consistency/ux",
+   "title": "Analytics shows $0 per-model breakdown lines for pay-per-token opencode models, while the popover shows the cost opencode recorded",
+   "detail": "mergingOpencode puts `0.0` for every opencode model into modelBreakdownToday/Last7Days (AnalyticsStore.swift:92-93). For a model seen only through opencode on a pay-per-token vendor (e.g. xAI), Analytics lists it at $0.00, but CostFooterView.swift:198-210 shows costLast7DaysByModel (e.g. $7.50) for the same model. README.md:31 says pay-per-token traffic 'shows the cost opencode itself recorded, as a breakdown'. Consider showing tokens only (skip the $0 breakdown entry) or showing the recorded cost as a breakdown that is not added to the total, so the two views agree."
+  }
+ ],
+ "unrelated_files": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:83",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:136",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift:1",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/CostFooterView.swift:198",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:26",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md:31"
+ ],
+ "_task": "a4b8d7ddb85fe89b7"
+}

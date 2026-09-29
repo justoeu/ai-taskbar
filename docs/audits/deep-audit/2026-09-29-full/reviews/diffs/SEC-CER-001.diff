@@ -1,0 +1,830 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 1550c1b..7eb5a8b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -260,6 +260,11 @@ cleanly on `[skip release]` heads.
+ - The two DMG names are a contract with `UpdateChecker.pickDMGAsset`:
+   `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon) and `ai-taskbar-X.Y.Z.dmg`
+   (universal). Renaming either breaks in-app update downloads.
++- The in-app download **fails closed** without a matching line in the
++  release's `checksums-X.Y.Z.txt` (so `make publish` must keep uploading it),
++  requires the DMG's `.app` to be signed by the running app's Developer ID
++  team (skipped on ad-hoc builds), and sets `com.apple.quarantine` so
++  Gatekeeper assesses it. See `UpdateChecker.download` + `DMGVerifier.swift`.
+ 
+ ### DMG release runbook (generating the signed DMG)
+ 
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 1550c1b..7eb5a8b 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -260,6 +260,11 @@ cleanly on `[skip release]` heads.
+ - The two DMG names are a contract with `UpdateChecker.pickDMGAsset`:
+   `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon) and `ai-taskbar-X.Y.Z.dmg`
+   (universal). Renaming either breaks in-app update downloads.
++- The in-app download **fails closed** without a matching line in the
++  release's `checksums-X.Y.Z.txt` (so `make publish` must keep uploading it),
++  requires the DMG's `.app` to be signed by the running app's Developer ID
++  team (skipped on ad-hoc builds), and sets `com.apple.quarantine` so
++  Gatekeeper assesses it. See `UpdateChecker.download` + `DMGVerifier.swift`.
+ 
+ ### DMG release runbook (generating the signed DMG)
+ 
+diff --git a/README.md b/README.md
+index 1c2a7c1..df87ef0 100644
+--- a/README.md
++++ b/README.md
+@@ -82,6 +82,8 @@ The app runs on macOS 13+ (Ventura). Building the app requires Swift 6.2+; Comma
+ 
+ Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly, compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
+ 
++Before the DMG is shown, the app checks it against the release's `checksums-*.txt` (a release without one is refused), confirms the app inside is signed by the same Developer ID team as the installed app, and marks the file with `com.apple.quarantine` so Gatekeeper checks it when you open it. If any step fails, the download is deleted.
++
+ ## Setup per provider
+ 
+ The app **reads existing credentials** — you don't need to paste API keys for the OAuth-based ones.
+diff --git a/Sources/AiTaskbarApp/DMGVerifier.swift b/Sources/AiTaskbarApp/DMGVerifier.swift
+new file mode 100644
+index 0000000..e89eb51
+--- /dev/null
++++ b/Sources/AiTaskbarApp/DMGVerifier.swift
+@@ -0,0 +1,124 @@
++import Foundation
++import Security
++import os
++import AiTaskbarCore
++
++/// Last check on a downloaded, checksum-verified update DMG before it is
++/// revealed to the user (SEC-CER-001). Size and checksum come from the same
++/// GitHub release as the DMG, so they only prove "these are the bytes the
++/// release published". This seam anchors trust OUTSIDE the release.
++public protocol DMGVerifying: Sendable {
++    func verify(dmgAt url: URL) async throws
++}
++
++/// Production verifier: the single top-level `.app` inside the DMG must carry
++/// a valid Apple-anchored signature from the SAME team as the running app.
++/// Ad-hoc dev builds have no team to anchor on, so the check is skipped (and
++/// logged) instead of failing every dev update.
++public struct TeamSignatureDMGVerifier: DMGVerifying {
++    /// Not user-facing: `UpdateChecker` maps any verifier error to the
++    /// localized `updates_signature_invalid` message.
++    public enum Failure: Error, Equatable {
++        case invalidTeamID
++        /// `hdiutil` could not be launched at all.
++        case launchFailed(String)
++        /// `hdiutil` did not finish (child exit and stdout drain) within the budget.
++        case timedOut
++        /// `hdiutil` exited non-zero. The associated value is its status.
++        case hdiutilExited(Int32)
++        /// `hdiutil attach` succeeded but its plist names no mount point.
++        case mountFailed
++        /// Unmounting the verified image failed. Wraps the underlying failure.
++        /// Logged only: by then the verdict is already decided.
++        indirect case detachFailed(Failure)
++        case noSingleApp
++        case signatureRejected(OSStatus)
++    }
++
++    public let teamID: String?
++    public let timeout: TimeInterval
++    private static let hdiutil = URL(fileURLWithPath: "/usr/bin/hdiutil")
++
++    public init(teamID: String? = CodeSignatureInfo.currentTeamID(), timeout: TimeInterval = 60) {
++        self.teamID = teamID
++        self.timeout = timeout
++    }
++
++    public func verify(dmgAt url: URL) async throws {
++        guard let teamID else {
++            AppLog.updates.notice("ad-hoc build: skipping DMG team-signature check")
++            return
++        }
++        // The team ID is interpolated into a requirement string: accept only
++        // the 10-char uppercase-alphanumeric shape Apple issues.
++        guard Self.isWellFormedTeamID(teamID) else { throw Failure.invalidTeamID }
++        let timeout = self.timeout
++        try await Task.detached(priority: .userInitiated) {
++            try Self.verifyBlocking(dmg: url, teamID: teamID, timeout: timeout)
++        }.value
++    }
++
++    static func isWellFormedTeamID(_ s: String) -> Bool {
++        s.count == 10 && s.unicodeScalars.allSatisfy { ("A"..."Z").contains($0) || ("0"..."9").contains($0) }
++    }
++
++    private static func verifyBlocking(dmg: URL, teamID: String, timeout: TimeInterval) throws {
++        let root = FileManager.default.temporaryDirectory
++            .appendingPathComponent("ai-taskbar-verify-\(UUID().uuidString)", isDirectory: true)
++        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
++        defer { try? FileManager.default.removeItem(at: root) } // best-effort: empty after detach
++        let plist = try runHdiutil(["attach", "-nobrowse", "-readonly", "-noautoopen",
++                                    "-mountrandom", root.path, "-plist", dmg.path],
++                                   timeout: timeout)
++        let mountPoint = try mountPoint(fromAttachPlist: plist)
++        defer {
++            do {
++                _ = try runHdiutil(["detach", mountPoint, "-force"], timeout: 30)
++            } catch let failure as Failure {
++                AppLog.updates.error("\(String(describing: Failure.detachFailed(failure)), privacy: .public)")
++            } catch {
++                AppLog.updates.error("hdiutil detach failed: \(String(describing: error), privacy: .public)")
++            }
++        }
++        let apps = try FileManager.default.contentsOfDirectory(atPath: mountPoint)
++            .filter { $0.hasSuffix(".app") }
++        guard apps.count == 1 else { throw Failure.noSingleApp }
++        try checkSignature(of: URL(fileURLWithPath: mountPoint).appendingPathComponent(apps[0]),
++                           teamID: teamID)
++    }
++
++    static func checkSignature(of app: URL, teamID: String) throws {
++        var code: SecStaticCode?
++        var status = SecStaticCodeCreateWithPath(app as CFURL, [], &code)
++        guard status == errSecSuccess, let code else { throw Failure.signatureRejected(status) }
++        var requirement: SecRequirement?
++        let text = "anchor apple generic and certificate leaf[subject.OU] = \"\(teamID)\""
++        status = SecRequirementCreateWithString(text as CFString, [], &requirement)
++        guard status == errSecSuccess, let requirement else { throw Failure.signatureRejected(status) }
++        let flags = SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures
++                               | kSecCSCheckNestedCode)
++        status = SecStaticCodeCheckValidity(code, flags, requirement)
++        guard status == errSecSuccess else { throw Failure.signatureRejected(status) }
++    }
++
++    static func mountPoint(fromAttachPlist data: Data) throws -> String {
++        let root = try PropertyListSerialization.propertyList(from: data, format: nil)
++        guard let dict = root as? [String: Any],
++              let entities = dict["system-entities"] as? [[String: Any]],
++              let mount = entities.compactMap({ $0["mount-point"] as? String }).first
++        else { throw Failure.mountFailed }
++        return mount
++    }
++
++    private static func runHdiutil(_ args: [String], timeout: TimeInterval) throws -> Data {
++        let outcome: BoundedProcess.Outcome
++        do {
++            outcome = try BoundedProcess.run(executable: hdiutil, arguments: args, timeout: timeout)
++        } catch {
++            throw Failure.launchFailed(error.localizedDescription)
++        }
++        guard !outcome.timedOut else { throw Failure.timedOut }
++        guard outcome.status == 0 else { throw Failure.hdiutilExited(outcome.status) }
++        return outcome.stdout
++    }
++}
+diff --git a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+index 0432f31..b41ee2b 100644
+--- a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+@@ -113,6 +113,9 @@
+ "updates_bad_repo" = "Set `[updates] owner_repo = \"yourname/ai-taskbar\"` in config to enable.";
+ "updates_no_stable" = "Only a pre-release is published; set `include_prereleases = true` to consider it.";
+ "updates_no_asset" = "Release exists but no .dmg asset attached.";
++"updates_no_checksum" = "Release has no checksum for this .dmg, so it cannot be verified. Download it from the release page instead.";
++"updates_signature_invalid" = "The downloaded app is not signed by the same developer as this one. The download was deleted.";
++"updates_quarantine_failed" = "Could not mark the download for a Gatekeeper check. The download was deleted.";
+ 
+ // Model breakdown
+ "models_label" = "Models";
+diff --git a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+index a25b9d3..e297bb1 100644
+--- a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+@@ -112,6 +112,9 @@
+ "updates_bad_repo" = "Define `[updates] owner_repo = \"tuusuario/ai-taskbar\"` en config para activar.";
+ "updates_no_stable" = "Solo hay un pre-release; define `include_prereleases = true` para considerarlo.";
+ "updates_no_asset" = "La versión existe pero no tiene un .dmg adjunto.";
++"updates_no_checksum" = "La versión no tiene checksum para este .dmg, así que no se puede verificar. Descárgalo desde la página de la versión.";
++"updates_signature_invalid" = "La app descargada no está firmada por el mismo desarrollador que esta. La descarga se eliminó.";
++"updates_quarantine_failed" = "No se pudo marcar la descarga para la verificación de Gatekeeper. La descarga se eliminó.";
+ 
+ // Model breakdown
+ "models_label" = "Modelos";
+diff --git a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+index 69888d0..56cd80f 100644
+--- a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+@@ -112,6 +112,9 @@
+ "updates_bad_repo" = "Defina `[updates] owner_repo = \"seuuser/ai-taskbar\"` no config para ativar.";
+ "updates_no_stable" = "Só há um pre-release; defina `include_prereleases = true` para considerá-lo.";
+ "updates_no_asset" = "A versão existe mas não tem nenhum .dmg anexado.";
++"updates_no_checksum" = "A versão não tem checksum para este .dmg, então ele não pode ser verificado. Baixe pela página da versão.";
++"updates_signature_invalid" = "O app baixado não é assinado pelo mesmo desenvolvedor deste. O download foi apagado.";
++"updates_quarantine_failed" = "Não foi possível marcar o download para verificação do Gatekeeper. O download foi apagado.";
+ 
+ // Model breakdown
+ "models_label" = "Modelos";
+diff --git a/Sources/AiTaskbarApp/UpdateChecker.swift b/Sources/AiTaskbarApp/UpdateChecker.swift
+index 1504bcf..8a76243 100644
+--- a/Sources/AiTaskbarApp/UpdateChecker.swift
++++ b/Sources/AiTaskbarApp/UpdateChecker.swift
+@@ -35,7 +35,8 @@ public final class UpdateChecker: ObservableObject {
+         public let publishedAt: Date?
+         public let dmgURL: URL?
+         public let dmgSize: Int64?
+-        /// Optional SHA-256 hex from a sibling `checksums-*.txt` asset.
++        /// SHA-256 hex from a sibling `checksums-*.txt` asset. nil means the
++        /// release cannot be verified, and `download(_:)` refuses it.
+         public let dmgSHA256: String?
+     }
+ 
+@@ -60,15 +61,27 @@ public final class UpdateChecker: ObservableObject {
+     public let currentVersion: String
+     public let userDefaults: UserDefaults
+     private let http: HTTPClient
++    /// Where the DMG lands; nil → the user's ~/Downloads (tests inject a temp dir).
++    private let downloadsDirectory: URL?
++    private let revealInFinder: @MainActor (URL) -> Void
++    private let dmgVerifier: any DMGVerifying
+ 
+     public init(config: UpdatesConfig,
+                 currentVersion: String? = nil,
+                 http: HTTPClient = .init(),
+-                userDefaults: UserDefaults = .standard) {
++                userDefaults: UserDefaults = .standard,
++                downloadsDirectory: URL? = nil,
++                revealInFinder: @escaping @MainActor (URL) -> Void = {
++                    NSWorkspace.shared.activateFileViewerSelecting([$0])
++                },
++                dmgVerifier: any DMGVerifying = TeamSignatureDMGVerifier()) {
+         self.config = config
+         self.currentVersion = currentVersion ?? Self.bundleVersion()
+         self.http = http
+         self.userDefaults = userDefaults
++        self.downloadsDirectory = downloadsDirectory
++        self.revealInFinder = revealInFinder
++        self.dmgVerifier = dmgVerifier
+         self.dismissedTag = userDefaults.string(forKey: Self.dismissedTagKey)
+     }
+ 
+@@ -183,7 +196,13 @@ public final class UpdateChecker: ObservableObject {
+             if let dmgName = asset?.name,
+                let cURL = checksumsAsset.flatMap({ URL(string: $0.browser_download_url) }),
+                Self.isAllowedDownloadURL(cURL) {
+-                dmgSHA = try? await self.fetchChecksum(for: dmgName, from: cURL)
++                do {
++                    dmgSHA = try await self.fetchChecksum(for: dmgName, from: cURL)
++                } catch {
++                    // Not fatal for the CHECK (the update still shows), but
++                    // download() fails closed on a nil checksum (SEC-CER-001).
++                    AppLog.updates.error("checksum fetch failed: \(String(describing: error), privacy: .public)")
++                }
+             }
+             return Release(
+                 tag: raw.tag_name,
+@@ -227,18 +246,27 @@ public final class UpdateChecker: ObservableObject {
+             status = .failed(message: L10n.localizedString("updates_bad_repo"))
+             return
+         }
++        // Fail closed: no checksum from the release's checksums-*.txt means
++        // nothing ties these bytes to what was published (SEC-CER-001).
++        guard let wantSHA = release.dmgSHA256?.lowercased(), !wantSHA.isEmpty else {
++            status = .failed(message: L10n.localizedString("updates_no_checksum"))
++            return
++        }
+         status = .downloading(progress: 0, latest: release)
+         // Drop the DMG in ~/Downloads (NOT the system temp dir) so the user
+         // can find it later from Finder's sidebar. Falls back to temp if the
+         // Downloads directory can't be resolved (rare — sandbox edge case).
+-        let downloadsDir = FileManager.default.urls(for: .downloadsDirectory,
+-                                                    in: .userDomainMask).first
++        let downloadsDir = downloadsDirectory
++            ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+             ?? FileManager.default.temporaryDirectory
+         let dest = downloadsDir.appendingPathComponent("ai-taskbar-\(release.tag).dmg")
+         try? FileManager.default.removeItem(at: dest)
+ 
+         Task { [weak self] in
+             guard let self else { return }
++            // Whatever is on disk and not yet handed to the user; deleted on
++            // every failure path (LEAK-FAN-004).
++            var pending: URL?
+             do {
+                 // Route through the injected HTTPClient (pinned/ephemeral),
+                 // never URLSession.shared (ARCH-ATL-001 / SEC-SEN-002).
+@@ -246,6 +274,7 @@ public final class UpdateChecker: ObservableObject {
+                 req.setValue("ai-taskbar/\(self.currentVersion)",
+                              forHTTPHeaderField: "User-Agent")
+                 let (tmp, http) = try await self.http.download(req)
++                pending = tmp
+                 guard (200..<300).contains(http.statusCode) else {
+                     throw AppError.http(status: http.statusCode, body: "DMG download")
+                 }
+@@ -256,13 +285,28 @@ public final class UpdateChecker: ObservableObject {
+                         throw AppError.other("DMG size mismatch (got \(size), expected \(expected))")
+                     }
+                 }
+-                if let want = release.dmgSHA256?.lowercased(), !want.isEmpty {
+-                    let got = try Self.sha256Hex(ofFileAt: tmp)
+-                    guard got == want else {
+-                        throw AppError.other("DMG checksum mismatch")
+-                    }
++                guard try Self.sha256Hex(ofFileAt: tmp) == wantSHA else {
++                    throw AppError.other("DMG checksum mismatch")
++                }
++                // Size and checksum come from the same release; anchor trust
++                // outside it: the contained .app must be signed by our team.
++                do {
++                    try await self.dmgVerifier.verify(dmgAt: tmp)
++                } catch {
++                    AppLog.updates.error("DMG signature check failed: \(String(describing: error), privacy: .public)")
++                    throw AppError.other(L10n.localizedString("updates_signature_invalid"))
+                 }
+                 try FileManager.default.moveItem(at: tmp, to: dest)
++                pending = dest
++                // URLSession downloads carry no quarantine, so Gatekeeper
++                // would never assess the DMG or the app copied out of it.
++                do {
++                    try Self.applyQuarantine(to: dest)
++                } catch {
++                    AppLog.updates.error("quarantine xattr failed: \(String(describing: error), privacy: .public)")
++                    throw AppError.other(L10n.localizedString("updates_quarantine_failed"))
++                }
++                pending = nil
+                 self.status = .downloaded(localURL: dest, latest: release)
+                 // Reveal the DMG in Finder so the user can drag the new app
+                 // into /Applications. We deliberately do NOT auto-open the
+@@ -272,13 +316,30 @@ public final class UpdateChecker: ObservableObject {
+                 // that far without an explicit user gesture. The user
+                 // double-clicking in Finder gives Gatekeeper a chance to
+                 // surface its warning before anything runs.
+-                NSWorkspace.shared.activateFileViewerSelecting([dest])
++                self.revealInFinder(dest)
+             } catch {
++                if let pending {
++                    try? FileManager.default.removeItem(at: pending) // best-effort cleanup
++                }
+                 self.status = .failed(message: error.localizedDescription)
+             }
+         }
+     }
+ 
++    /// Sets `com.apple.quarantine` so Gatekeeper assesses the DMG (and the
++    /// app copied out of it) on first open. Throws the POSIX errno on failure.
++    nonisolated internal static func applyQuarantine(to url: URL, now: Date = Date()) throws {
++        let value = String(format: "0083;%08x;ai-taskbar;%@",
++                           UInt32(truncatingIfNeeded: Int(now.timeIntervalSince1970)),
++                           UUID().uuidString)
++        let rc = value.withCString { ptr in
++            setxattr(url.path, "com.apple.quarantine", ptr, strlen(ptr), 0, 0)
++        }
++        guard rc == 0 else {
++            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
++        }
++    }
++
+     nonisolated internal static func isAllowedDownloadURL(_ url: URL) -> Bool {
+         guard let scheme = url.scheme?.lowercased(), scheme == "https",
+               let host = url.host?.lowercased() else { return false }
+diff --git a/Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift b/Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift
+index 36c3465..f9bda94 100644
+--- a/Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift
++++ b/Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift
+@@ -132,56 +132,26 @@ public final class SecurityToolCredentialReader: Sendable {
+     }
+ 
+     private func runTool(service: String, account: String?, keychainPaths: [String]) throws -> Data {
+-        let process = Process()
+-        process.executableURL = executable
+-        process.arguments = Self.arguments(service: service, account: account, keychainPaths: keychainPaths)
+-        process.standardInput = FileHandle.nullDevice
+-        process.standardError = FileHandle.nullDevice
+-        let stdout = Pipe()
+-        process.standardOutput = stdout
+-
+-        let exited = DispatchSemaphore(value: 0)
+-        process.terminationHandler = { _ in exited.signal() }
++        let outcome: BoundedProcess.Outcome
+         do {
+-            try process.run()
++            outcome = try BoundedProcess.run(
++                executable: executable,
++                arguments: Self.arguments(service: service, account: account, keychainPaths: keychainPaths),
++                timeout: timeout)
+         } catch {
+             throw Failure.launchFailed(error.localizedDescription)
+         }
+-
+-        // Drain stdout concurrently so a child that writes more than the pipe
+-        // buffer can never deadlock against our wait below.
+-        let output = OSAllocatedUnfairLock(initialState: Data())
+-        let drained = DispatchSemaphore(value: 0)
+-        let reader = stdout.fileHandleForReading
+-        DispatchQueue.global(qos: .userInitiated).async {
+-            let data = reader.readDataToEndOfFile()
+-            output.withLock { $0 = data }
+-            drained.signal()
+-        }
+-
+-        // One deadline for everything: child exit, then drain.
+-        let deadline = DispatchTime.now() + timeout
+-        if exited.wait(timeout: deadline) == .timedOut {
+-            process.terminate()
+-            if exited.wait(timeout: .now() + 1) == .timedOut {
+-                kill(process.processIdentifier, SIGKILL)
+-                _ = exited.wait(timeout: .now() + 1)
+-            }
+-            let drainedInTime = drained.wait(timeout: .now() + 1) == .success
++        if outcome.timedOut {
+             // Race window: the child may have finished cleanly right as the
+             // budget lapsed. A complete, decodable answer is a success, not an
+             // hour-long outage.
+-            if drainedInTime, !process.isRunning, process.terminationReason == .exit,
+-               process.terminationStatus == 0,
+-               let secret = Self.decodeOutput(output.withLock { $0 }) {
++            if outcome.exitedCleanly, let secret = Self.decodeOutput(outcome.stdout) {
+                 return secret
+             }
+             throw Failure.timedOut
+         }
+-        guard drained.wait(timeout: deadline) == .success else { throw Failure.timedOut }
+-
+-        guard process.terminationStatus == 0 else { throw Failure.exited(status: process.terminationStatus) }
+-        guard let secret = Self.decodeOutput(output.withLock { $0 }) else { throw Failure.undecodableOutput }
++        guard outcome.status == 0 else { throw Failure.exited(status: outcome.status) }
++        guard let secret = Self.decodeOutput(outcome.stdout) else { throw Failure.undecodableOutput }
+         return secret
+     }
+ 
+diff --git a/Sources/AiTaskbarCore/Util/BoundedProcess.swift b/Sources/AiTaskbarCore/Util/BoundedProcess.swift
+new file mode 100644
+index 0000000..4998f57
+--- /dev/null
++++ b/Sources/AiTaskbarCore/Util/BoundedProcess.swift
+@@ -0,0 +1,85 @@
++import Foundation
++import os
++
++/// Runs a short-lived helper tool under one wall-clock budget. This is the only
++/// copy of the launch / drain / kill logic, shared by the Keychain
++/// `/usr/bin/security` read fallback and the update DMG `hdiutil` check.
++///
++/// - The executable is an absolute URL and the arguments are passed as an
++///   array. Nothing goes through a shell.
++/// - stdin is `/dev/null` and stderr is discarded. stdout is read on a
++///   background thread, so a child that writes more than the pipe buffer
++///   cannot deadlock against the wait.
++/// - A single deadline covers both the child's exit and the stdout drain.
++///   A child still running at the deadline gets SIGTERM, then SIGKILL one
++///   second later.
++///
++/// The call is synchronous and can block for up to `timeout` + ~3 s. Callers
++/// run it off the main actor and off the cooperative pool.
++public enum BoundedProcess {
++    public struct Outcome: Sendable {
++        /// The budget lapsed before the child exited or before stdout was
++        /// fully drained.
++        public let timedOut: Bool
++        /// stdout was read to EOF. If this is false, `stdout` is empty.
++        public let drained: Bool
++        /// nil while the child is still running (it survived SIGKILL's wait).
++        public let terminationReason: Process.TerminationReason?
++        /// The exit status, or the signal number when `terminationReason == .uncaughtSignal`.
++        /// Only meaningful when `terminationReason` is non-nil.
++        public let status: Int32
++        public let stdout: Data
++
++        /// Exited normally with status 0 and stdout complete. This can hold
++        /// even when `timedOut` is true, if the child finished right as the
++        /// budget lapsed. Callers decide whether to accept that case.
++        public var exitedCleanly: Bool { drained && terminationReason == .exit && status == 0 }
++    }
++
++    /// - Throws: whatever `Process.run()` throws if the child cannot be launched.
++    public static func run(executable: URL, arguments: [String], timeout: TimeInterval) throws -> Outcome {
++        let process = Process()
++        process.executableURL = executable
++        process.arguments = arguments
++        process.standardInput = FileHandle.nullDevice
++        process.standardError = FileHandle.nullDevice
++        let stdout = Pipe()
++        process.standardOutput = stdout
++
++        let exited = DispatchSemaphore(value: 0)
++        process.terminationHandler = { _ in exited.signal() }
++        try process.run()
++
++        let output = OSAllocatedUnfairLock(initialState: Data())
++        let drained = DispatchSemaphore(value: 0)
++        let reader = stdout.fileHandleForReading
++        DispatchQueue.global(qos: .userInitiated).async {
++            let data = reader.readDataToEndOfFile()
++            output.withLock { $0 = data }
++            drained.signal()
++        }
++
++        let deadline = DispatchTime.now() + timeout
++        let timedOut: Bool
++        let drainedInTime: Bool
++        if exited.wait(timeout: deadline) == .timedOut {
++            process.terminate()
++            if exited.wait(timeout: .now() + 1) == .timedOut {
++                kill(process.processIdentifier, SIGKILL)
++                _ = exited.wait(timeout: .now() + 1)
++            }
++            timedOut = true
++            drainedInTime = drained.wait(timeout: .now() + 1) == .success
++        } else {
++            drainedInTime = drained.wait(timeout: deadline) == .success
++            timedOut = !drainedInTime
++        }
++
++        let running = process.isRunning
++        return Outcome(timedOut: timedOut,
++                       drained: drainedInTime,
++                       terminationReason: running ? nil : process.terminationReason,
++                       status: running ? 0 : process.terminationStatus,
++                       stdout: drainedInTime ? output.withLock { $0 } : Data())
++    }
++}
+diff --git a/Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift b/Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift
+new file mode 100644
+index 0000000..1433999
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift
+@@ -0,0 +1,220 @@
++import Foundation
++import Testing
++import CryptoKit
++import AiTaskbarCore
++@testable import AiTaskbarApp
++
++/// Serves the same fixed "DMG" body for every request. Immutable, so no
++/// shared mutable state — the suite is still `.serialized` by convention.
++private final class FixedDMGProtocol: URLProtocol {
++    static let body = Data("not-really-a-dmg-but-bytes-are-bytes".utf8)
++    override class func canInit(with request: URLRequest) -> Bool { true }
++    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
++    override func startLoading() {
++        let response = HTTPURLResponse(url: request.url!, statusCode: 200,
++                                       httpVersion: "HTTP/1.1", headerFields: nil)!
++        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
++        client?.urlProtocol(self, didLoad: Self.body)
++        client?.urlProtocolDidFinishLoading(self)
++    }
++    override func stopLoading() {}
++}
++
++private struct StubVerifier: DMGVerifying {
++    struct Rejected: Error {}
++    let accept: Bool
++    let calls = CallCounter()
++    func verify(dmgAt url: URL) async throws {
++        calls.increment()
++        if !accept { throw Rejected() }
++    }
++}
++
++private final class CallCounter: @unchecked Sendable {
++    private let lock = NSLock()
++    private var n = 0
++    func increment() { lock.lock(); n += 1; lock.unlock() }
++    var count: Int { lock.lock(); defer { lock.unlock() }; return n }
++}
++
++@Suite("UpdateChecker DMG download verification (SEC-CER-001)", .serialized)
++@MainActor
++struct UpdateCheckerDownloadTests {
++    private static let bodySHA = SHA256.hash(data: FixedDMGProtocol.body)
++        .map { String(format: "%02x", $0) }.joined()
++
++    private func makeDir() throws -> URL {
++        let dir = FileManager.default.temporaryDirectory
++            .appendingPathComponent("update-dl-\(UUID().uuidString)", isDirectory: true)
++        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
++        return dir
++    }
++
++    private func makeChecker(dir: URL, verifier: StubVerifier) -> UpdateChecker {
++        let name = "test-updates-dl-\(UUID().uuidString)"
++        let defaults = UserDefaults(suiteName: name)!
++        return UpdateChecker(
++            config: UpdatesConfig(enabled: true, ownerRepo: "o/r", includePrereleases: false),
++            currentVersion: "1.0.0",
++            http: .stubbed(protocols: [FixedDMGProtocol.self]),
++            userDefaults: defaults,
++            downloadsDirectory: dir,
++            revealInFinder: { _ in },
++            dmgVerifier: verifier)
++    }
++
++    private func release(sha: String?) -> UpdateChecker.Release {
++        UpdateChecker.Release(
++            tag: "v9.9.9",
++            htmlURL: URL(string: "https://github.com/o/r/releases/tag/v9.9.9")!,
++            prerelease: false, publishedAt: nil,
++            dmgURL: URL(string: "https://github.com/o/r/releases/download/v9.9.9/ai-taskbar-9.9.9.dmg")!,
++            dmgSize: Int64(FixedDMGProtocol.body.count),
++            dmgSHA256: sha)
++    }
++
++    /// Waits for the download Task to leave `.downloading`.
++    private func settle(_ checker: UpdateChecker) async -> UpdateChecker.Status {
++        for _ in 0..<500 {
++            if case .downloading = checker.status {
++                try? await Task.sleep(nanoseconds: 10_000_000) // polling; cancellation irrelevant
++            } else { break }
++        }
++        return checker.status
++    }
++
++    private func isFailed(_ s: UpdateChecker.Status) -> Bool {
++        if case .failed = s { return true }
++        return false
++    }
++
++    private func isDownloaded(_ s: UpdateChecker.Status) -> Bool {
++        if case .downloaded = s { return true }
++        return false
++    }
++
++    private func dest(in dir: URL) -> URL { dir.appendingPathComponent("ai-taskbar-v9.9.9.dmg") }
++
++    @Test("release without a parseable checksum fails closed")
++    func missing_checksum_fails_closed() async throws {
++        let dir = try makeDir()
++        let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true))
++        checker.download(release(sha: nil))
++        let status = await settle(checker)
++        expectTrue(isFailed(status))
++        expectFalse(FileManager.default.fileExists(atPath: dest(in: dir).path))
++    }
++
++    @Test("verified DMG carries the com.apple.quarantine xattr")
++    func downloaded_dmg_is_quarantined() async throws {
++        let dir = try makeDir()
++        let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true))
++        checker.download(release(sha: Self.bodySHA))
++        let status = await settle(checker)
++        expectTrue(isDownloaded(status))
++        let len = getxattr(dest(in: dir).path, "com.apple.quarantine", nil, 0, 0, 0)
++        #expect(len > 0)
++    }
++
++    @Test("team-signature verifier rejection fails and leaves no file")
++    func verifier_rejects() async throws {
++        let dir = try makeDir()
++        let verifier = StubVerifier(accept: false)
++        let checker = makeChecker(dir: dir, verifier: verifier)
++        checker.download(release(sha: Self.bodySHA))
++        let status = await settle(checker)
++        expectTrue(isFailed(status))
++        expectFalse(FileManager.default.fileExists(atPath: dest(in: dir).path))
++        #expect(verifier.calls.count == 1)
++    }
++
++    @Test("team-signature verifier acceptance downloads")
++    func verifier_accepts() async throws {
++        let dir = try makeDir()
++        let verifier = StubVerifier(accept: true)
++        let checker = makeChecker(dir: dir, verifier: verifier)
++        checker.download(release(sha: Self.bodySHA))
++        let status = await settle(checker)
++        expectTrue(isDownloaded(status))
++        #expect(verifier.calls.count == 1)
++    }
++
++    @Test("checksum mismatch fails and leaves no file")
++    func checksum_mismatch() async throws {
++        let dir = try makeDir()
++        let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true))
++        checker.download(release(sha: String(repeating: "0", count: 64)))
++        let status = await settle(checker)
++        expectTrue(isFailed(status))
++        expectFalse(FileManager.default.fileExists(atPath: dest(in: dir).path))
++    }
++}
++
++@Suite("TeamSignatureDMGVerifier")
++struct TeamSignatureDMGVerifierTests {
++    @Test("quarantine on a missing file throws instead of being swallowed")
++    func quarantine_failure_throws() {
++        let url = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).dmg")
++        #expect(throws: POSIXError.self) {
++            try UpdateChecker.applyQuarantine(to: url)
++        }
++    }
++
++    @Test("ad-hoc build (no team) skips the check")
++    func nil_team_skips() async throws {
++        let url = URL(fileURLWithPath: "/nonexistent/x.dmg")
++        try await TeamSignatureDMGVerifier(teamID: nil).verify(dmgAt: url)
++    }
++
++    @Test("malformed team ID is rejected before any requirement is built")
++    func malformed_team() async {
++        let url = URL(fileURLWithPath: "/nonexistent/x.dmg")
++        await #expect(throws: TeamSignatureDMGVerifier.Failure.invalidTeamID) {
++            try await TeamSignatureDMGVerifier(teamID: "5HHL\" or true").verify(dmgAt: url)
++        }
++    }
++
++    @Test("team ID shape")
++    func team_shape() {
++        #expect(TeamSignatureDMGVerifier.isWellFormedTeamID("5HHL78743R"))
++        #expect(!TeamSignatureDMGVerifier.isWellFormedTeamID("5hhl78743r"))
++        #expect(!TeamSignatureDMGVerifier.isWellFormedTeamID("5HHL7874"))
++    }
++
++    @Test("a non-DMG file fails to mount, reported as hdiutil's non-zero exit")
++    func garbage_dmg_fails() async throws {
++        let url = FileManager.default.temporaryDirectory
++            .appendingPathComponent("garbage-\(UUID().uuidString).dmg")
++        try Data("garbage".utf8).write(to: url)
++        defer { try? FileManager.default.removeItem(at: url) } // test cleanup
++        let error = await #expect(throws: TeamSignatureDMGVerifier.Failure.self) {
++            try await TeamSignatureDMGVerifier(teamID: "5HHL78743R", timeout: 20).verify(dmgAt: url)
++        }
++        guard case .hdiutilExited(let status) = error else {
++            Issue.record("expected hdiutilExited, got \(String(describing: error))")
++            return
++        }
++        #expect(status != 0)
++    }
++
++    @Test("an Apple app does not satisfy a third-party team requirement")
++    func apple_app_wrong_team() {
++        let app = URL(fileURLWithPath: "/System/Applications/Calculator.app")
++        #expect(throws: TeamSignatureDMGVerifier.Failure.self) {
++            try TeamSignatureDMGVerifier.checkSignature(of: app, teamID: "5HHL78743R")
++        }
++    }
++
++    @Test("attach plist yields the mount point")
++    func parses_mount_point() throws {
++        let plist: [String: Any] = ["system-entities": [["dev-entry": "/dev/disk9"],
++                                                        ["mount-point": "/tmp/x/dmg.abc"]]]
++        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
++        #expect(try TeamSignatureDMGVerifier.mountPoint(fromAttachPlist: data) == "/tmp/x/dmg.abc")
++        let empty = try PropertyListSerialization.data(fromPropertyList: ["system-entities": []],
++                                                       format: .xml, options: 0)
++        #expect(throws: TeamSignatureDMGVerifier.Failure.mountFailed) {
++            try TeamSignatureDMGVerifier.mountPoint(fromAttachPlist: empty)
++        }
++    }
++}
+diff --git a/Tests/AiTaskbarCoreTests/BoundedProcessTests.swift b/Tests/AiTaskbarCoreTests/BoundedProcessTests.swift
+new file mode 100644
+index 0000000..64a9139
+--- /dev/null
++++ b/Tests/AiTaskbarCoreTests/BoundedProcessTests.swift
+@@ -0,0 +1,58 @@
++import Testing
++import Foundation
++@testable import AiTaskbarCore
++
++@Suite("BoundedProcess", .serialized)
++struct BoundedProcessTests {
++    @Test("a quick child returns its stdout and a clean exit")
++    func happy_path() throws {
++        let outcome = try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/echo"),
++                                             arguments: ["hello", "world"], timeout: 5)
++        #expect(!outcome.timedOut)
++        #expect(outcome.drained)
++        #expect(outcome.terminationReason == .exit)
++        #expect(outcome.status == 0)
++        #expect(outcome.exitedCleanly)
++        #expect(String(decoding: outcome.stdout, as: UTF8.self) == "hello world\n")
++    }
++
++    @Test("a non-zero exit keeps its status")
++    func non_zero_exit() throws {
++        let outcome = try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/sh"),
++                                             arguments: ["-c", "exit 7"], timeout: 5)
++        #expect(!outcome.timedOut)
++        #expect(outcome.status == 7)
++        #expect(!outcome.exitedCleanly)
++    }
++
++    @Test("a child that outlives the budget is terminated and reported as timed out")
++    func timeout_kills_child() throws {
++        let start = Date()
++        let outcome = try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/sleep"),
++                                             arguments: ["30"], timeout: 0.3)
++        #expect(outcome.timedOut)
++        #expect(outcome.terminationReason == .uncaughtSignal)
++        #expect(!outcome.exitedCleanly)
++        #expect(Date().timeIntervalSince(start) < 5)
++    }
++
++    @Test("a child that ignores SIGTERM is SIGKILLed")
++    func sigkill_after_ignored_term() throws {
++        let start = Date()
++        let outcome = try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/sh"),
++                                             arguments: ["-c", "trap '' TERM; while :; do sleep 0.05; done"],
++                                             timeout: 0.3)
++        #expect(outcome.timedOut)
++        #expect(outcome.terminationReason == .uncaughtSignal)
++        #expect(outcome.status == SIGKILL)
++        #expect(Date().timeIntervalSince(start) < 6)
++    }
++
++    @Test("a missing executable throws instead of crashing")
++    func launch_failure() {
++        #expect(throws: (any Error).self) {
++            try BoundedProcess.run(executable: URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString)"),
++                                   arguments: [], timeout: 1)
++        }
++    }
++}

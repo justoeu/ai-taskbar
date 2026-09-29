@@ -1,0 +1,13 @@
+{
+ "verdict": "FALSE_POSITIVE",
+ "lens": "REACHABILITY",
+ "reasoning": "The code path the finding describes does exist and runs in the default deploy. KeychainCredentialReader.swift:36 sets fallback to SecurityToolCredentialReader() by default. At :166, an ACL-blocked read (-25308/-25293) calls readViaSecurityTool, and at :187 that calls itemKeychain before isUnlocked is checked. The query at :211-218 has no kSecUseAuthenticationUI key and is not wrapped in withPromptsSuppressed. KeychainPromptSuppressor.exit() turns interaction back on at depth 0. So the finding breaks the CLAUDE.md hard rule as written. It still fails the proof standard on two of the three points. (1) There is no attacker-controlled source. The triggers are a keychain auto-locking and an unsigned or unauthorized build, which are ordinary system events. No attacker picks the input or can drive the path on demand, so at most the user might see a prompt they did not ask for. (2) The dangerous operation is not established. The finding's own precondition list says it is 'not verified here' that securityd raises an unlock dialog for a kSecReturnRef-only lookup by persistent ref in a locked file keychain. Nothing in the repo shows that it does. This query reads no secret data, and the code that reads secret data (:156, :265) is suppressed and passes UIFail. With the source missing and the sink unconfirmed, the trace cannot be finished. This remains a real inconsistency with the project's own rule, worth fixing as hardening by wrapping :218 in withPromptsSuppressed and adding UIFail. It does not show a reachable attack.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:36",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:166",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:187",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainCredentialReader.swift:218",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/KeychainPromptSuppressor.swift:111"
+ ],
+ "_task": "aa00fef41794ee607"
+}

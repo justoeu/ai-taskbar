@@ -1,0 +1,29 @@
+{
+ "component": "providers-openai-codex",
+ "lens": "injection",
+ "findings": [
+  {
+   "title": "Huge limit_window_seconds in the vendor response crashes the app on Int(Double) conversion",
+   "category": "integer-overflow",
+   "severity": "LOW",
+   "confidence": "high",
+   "path": "Sources/AiTaskbarProviders/OpenAIWireTypes.swift",
+   "line": 211,
+   "symbol": "WindowKind.humanLabel",
+   "snippet": "return \"\\(prefix) (\\(Int(days.rounded()))d)\"",
+   "source": "Response body of GET https://chatgpt.com/backend-api/wham/usage, field rate_limit.primary_window/secondary_window.limit_window_seconds, decoded at OpenAIWireTypes.swift:76 by flexibleDoubleIfPresent",
+   "sink": "OpenAIWireTypes.swift:211 (and :213 for the hours branch): Int(days.rounded())",
+   "description": "limit_window_seconds is decoded into a Double with no range check. humanLabel only checks s > 0. A finite but huge JSON number like 1e300 passes both, days becomes about 1e295, and Int(_:) on an out-of-range Double traps. The process aborts inside decodeSnapshot.",
+   "exploit_scenario": "The vendor endpoint, or anything that controls the response, returns {\"rate_limit\":{\"primary_window\":{\"used_percent\":1,\"limit_window_seconds\":1e300}}}. On every refresh, OpenAIProvider.decodeSnapshot calls toSnapshot, then window(), then kind.label(from:), and the menu-bar app crashes. CachedFetch decodes before it writes the cache (CachedFetch.swift:34-36), so the bad payload is not saved and the crash does not survive a relaunch by itself. It repeats as long as the server keeps sending the value.",
+   "preconditions": [
+    "attacker controls the chatgpt.com usage response (hostile or compromised vendor); TLS rules out a network MITM"
+   ],
+   "impact": "The local monitor app is knocked out (crashes) for as long as the payload is served. No data exposure.",
+   "fix": "Reject non-finite or absurd values before converting, e.g. guard let s = seconds, s.isFinite, s > 0, s < 10 * 365 * 86_400 else { return default }. Or use Int(exactly:) / a clamped conversion so no trap is possible.",
+   "cwe": "CWE-190",
+   "evidence": "OpenAIWireTypes.swift:207 `guard let s = seconds, s > 0` (no upper bound or isFinite check), :211/:213 `Int(days.rounded())` / `Int(hours.rounded())`. SharedCoders.decoder sets no nonConformingFloatDecodingStrategy, so only finite values arrive, but 1e300 is finite and is well past Int.max days.",
+   "component": "providers-openai-codex",
+   "lens": "injection"
+  }
+ ]
+}

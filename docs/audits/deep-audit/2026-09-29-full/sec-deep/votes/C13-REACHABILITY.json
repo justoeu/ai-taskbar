@@ -1,0 +1,16 @@
+{
+ "verdict": "FALSE_POSITIVE",
+ "lens": "REACHABILITY",
+ "reasoning": "The code path is real, and there is no clamp anywhere along it. A finite 1e300 from the wire is accepted by flexibleDoubleIfPresent (AppConfig.swift:199-203) and passes unchanged through AnthropicWireTypes.swift:140-147 and UsageWindow.swift:15-20. It is then written to disk by recordHistory (VendorViewModel.swift:235,274-276, into UsageHistoryStore.swift:56). computePeakDay picks it as the max (AnalyticsAggregator.swift:29,51), and Int() traps on it (AnalyticsFormatters.swift:46,48). The problem is the source. It is not controlled by an attacker in any realistic threat model for this local single-user app. The value arrives only in an authenticated HTTPS response. Every vendor base URL is https-only and host-allowlisted (AppConfig.swift:452-458 and the matching validators at 559, 626, 715). Pinned hosts also get SPKI TOFU pinning (PinningDelegate.swift:6-40). So the finding needs either a malicious or compromised first-party vendor, or a MITM holding a trusted root. The trusted-root case has to beat pinning too, and anyone in that position can already read the OAuth and API tokens the app sends, which is far worse than crashing the Analytics view. A vendor sending garbage is a robustness bug, not an attacker reaching a sink. The finding offers no path where an unprivileged party controls the utilization field. Side note (not the claim voted on): the missing finite/range clamp before Int() is still worth fixing as a hardening step.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:199",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:452",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinningDelegate.swift:6",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:140",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:235",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:56",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:29",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:48"
+ ],
+ "_task": "a1c32e00326857647"
+}

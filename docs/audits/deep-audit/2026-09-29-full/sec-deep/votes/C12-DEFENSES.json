@@ -1,0 +1,15 @@
+{
+ "verdict": "FALSE_POSITIVE",
+ "lens": "DEFENSES",
+ "reasoning": "I didn't check whether replaceItemAt keeps the old mode (AtomicFileWrite.swift:27). Even if it does, other code blocks the claimed exposure or it never occurs. (1) config.toml: ConfigLoader.load() sets the file to 0o600 on every load (ConfigLoader.swift:74-79), before any save() at :110, :189 or :276. The file also lives in the app support dir, which is reset to 0o700 on every access (Paths.swift:19-22). A loose config.toml is therefore tightened on the next launch, and other uids can't reach it through the 0700 parent directory anyway. (2) DiskCache, UsageHistoryStore and PinStore files sit under caches/app-support dirs that are forced to 0o700 (Paths.swift:19-22, :35-38; PinStore.swift:28). A 0644 mode on a file inside cannot be read by another local user, because the directory cannot be traversed. (3) ~/.codex/auth.json is written back (FileCredentialReader.swift:74) only in opt-in manage_oauth_refresh mode, which is off by default (AnthropicProvider.swift:28, OpenAIProvider.swift:38). In that case the file was already 0644 before the app touched it, so the app creates no new exposure; at worst it fails to tighten a file another tool left loose. There is a real hardening gap: the explicit mode isn't re-applied after replaceItemAt, and no test pre-creates a 0644 destination. But that doesn't produce the claimed HIGH-severity leak of secrets to other local users in the default deployment.",
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:27",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/ConfigLoader.swift:74",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:19",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/Paths.swift:35",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/PinStore.swift:28",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:74",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/OpenAIProvider.swift:38"
+ ],
+ "_task": "af21435b799a6a6bb"
+}

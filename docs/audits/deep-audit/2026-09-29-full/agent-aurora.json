@@ -1,0 +1,70 @@
+{
+ "findings": [
+  {
+   "title": "Hardcoded Portuguese error/disclaimer text ships to every locale (Gemini + Grok)",
+   "lens": "quality",
+   "severity": "MEDIUM",
+   "file": "Sources/AiTaskbarProviders/GeminiWireTypes.swift",
+   "line": 57,
+   "category": "hardcoded_non_english_string",
+   "evidence": "GeminiWireTypes.swift:57,71,136: disclaimer literal Para conseguir monitorar o Gemini, e necessario ter o Antigravity instalado e autenticado. (no L10n call, hardcoded in a wire type). Same literal repeated at XAIWireTypes.swift:251 defaultDisclaimer, GeminiProvider.swift:81 AppError.credentials(...), XAIProvider.swift:118 AppError.credentials(...), AntigravityExecutor.swift:58 AppError.credentials(...). Neither GeminiProvider.swift nor XAIProvider.swift ever pass a localized disclaimer argument to toSnapshot(), so the wire-type default always wins. AppError.errorDescription returns the raw message and VendorSectionView.swift:360 renders it verbatim: Text(err.localizedDescription). Meanwhile Localizable.strings in en/pt-BR/es already carries correctly translated gemini_antigravity_disclaimer and xai_grok_disclaimer keys (en.lproj:300,310) that are never referenced from Swift (confirmed via grep across Sources). AiTaskbarValidate/main.swift:156,282,289 pins the Portuguese literal as the expected snapshot value, so the runtime validation suite would fail if this were fixed the naive way.",
+   "impact": "Every non-Portuguese user (the app ships English/Spanish/Portuguese locales) sees Portuguese error text and disclaimers whenever Gemini Antigravity CLI or Grok CLI is missing or unauthenticated, one of the more common first-run states for those two vendors. Direct violation of the hard rule: Never build a user-facing sentence inside a wire type. The correctly localized strings already exist and are dead code, so the fix is mechanical.",
+   "fix": "Have GeminiProvider/XAIProvider pass L10n.localizedString for gemini_antigravity_disclaimer / xai_grok_disclaimer into toSnapshot(disclaimer:) / defaultDisclaimer call sites instead of the hardcoded fallback, and replace the Portuguese AppError.credentials messages in GeminiProvider.swift:81, XAIProvider.swift:118 and AntigravityExecutor.swift:58 with English/localized text. Update the AiTaskbarValidate fixtures to assert the new value.",
+   "confidence": "high",
+   "agent": "Aurora",
+   "severity_original": "HIGH",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "Portuguese literals: GeminiWireTypes.swift:57,71,136; XAIWireTypes.swift:251 (used at :257,:304,:405); GeminiProvider.swift:81; XAIProvider.swift:118; AntigravityExecutor.swift:58,120,141. No provider passes a disclaimer, so the default always wins. The disclaimer is set on SUCCESS snapshots too, so every en/es user sees it on each Gemini/Grok card. It renders verbatim at VendorSectionView.swift:660,729. The keys gemini_antigravity_disclaimer and xai_grok_disclaimer exist in en/es/pt-BR (en.lproj:300,310) with 0 Swift references. It breaks the 'no user-facing sentence in a wire type' rule. Kept at MEDIUM, not HIGH: the text is informational, no function or data is lost, and Gemini/Grok are opt-in secondary vendors.",
+   "verification": "cetico"
+  },
+  {
+   "title": "Dead localization keys present in all three locales but never referenced from Swift",
+   "lens": "quality",
+   "severity": "INFO",
+   "file": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+   "line": 300,
+   "category": "dead_code",
+   "evidence": "grep across Sources/**/*.swift for the literal key finds zero call sites for: quit (en.lproj:19), config (en.lproj:17), open_config_toml (en.lproj:92), models_tooltip_header (en.lproj:119), settings_vendors (en.lproj:135), settings_primary_vendor (en.lproj:137), reorder_vendors_help (en.lproj:211), gemini_antigravity_disclaimer (en.lproj:300), xai_grok_disclaimer (en.lproj:310). Same 9 keys exist verbatim, translated, in pt-BR.lproj and es.lproj, so 27 dead string entries total.",
+   "impact": "No functional failure, but two of these keys (gemini_antigravity_disclaimer, xai_grok_disclaimer) are exactly the correctly translated strings that should replace the hardcoded Portuguese literals in the HIGH finding above; their unused status is the fingerprint of that regression, not an independent typo.",
+   "fix": "Either wire the two disclaimer keys into GeminiWireTypes/XAIWireTypes (see HIGH finding) or delete all 9 dead keys (27 lines across 3 files) if truly obsolete. Add a CI check that every Localizable.strings key is referenced at least once in Sources/AiTaskbarApp.",
+   "confidence": "high",
+   "agent": "Aurora",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "0 Swift references for quit, open_config_toml, models_tooltip_header, settings_vendors, settings_primary_vendor, reorder_vendors_help, gemini_antigravity_disclaimer, xai_grok_disclaimer. 'config' only matches non-L10n strings (AppLog.swift:23, Fixtures.swift:308). No interpolated key construction was found.",
+   "verification": "cetico"
+  },
+  {
+   "title": "UsageHistoryStore.append silently drops samples on encode/open/write failure with zero diagnostic trail",
+   "lens": "quality",
+   "severity": "LOW",
+   "file": "Sources/AiTaskbarCore/History/UsageHistoryStore.swift",
+   "line": 58,
+   "category": "swallowed_error",
+   "evidence": "guard var encoded = try? SharedCoders.encoder.encode(sample) else { return } (line 58) and handle = try? FileHandle(forWritingTo: fileURL) (line 86, inside ensureWriteHandleLocked) both drop the error entirely, no AppLog call, no counter. Contrast with compact() a few lines below (line 151-158) which explicitly does NOT swallow the equivalent AtomicFileWrite.write failure: catch block calls AppLog.lifecycle.error(history compact write failed) with an inline comment stating silent fail lets JSONL grow without bound (LEAK-HYD-001). append() has no equivalent comment or log call for its own failure paths.",
+   "impact": "A disk-full, permission, or sandbox-revocation condition silently stops all history persistence for a vendor; the Analytics view (AnalyticsStore.historyProvider) and sparkline charts just show a growing gap with no error surfaced anywhere, and there is no log line to diagnose it after the fact, unlike the sibling compact() path already hardened for exactly this failure mode.",
+   "fix": "Log via AppLog.lifecycle.error (or a dedicated .history category) on both the encode failure and the ensureWriteHandleLocked nil-return path, mirroring the pattern already used in compact().",
+   "confidence": "medium",
+   "agent": "Aurora",
+   "severity_original": "MEDIUM",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "UsageHistoryStore.swift:58 and :86 use try? with no log, and the write-catch path at :69-72 is silent too. Downgraded from MEDIUM: history is best-effort telemetry (CLAUDE.md allows try? for best-effort), and encoding a two-Double struct cannot realistically fail. The real gap is only diagnosability of a failing open.",
+   "verification": "cetico"
+  },
+  {
+   "title": "PinStore.set/clear swallow TLS-pin persistence failures with no log",
+   "lens": "quality",
+   "severity": "LOW",
+   "file": "Sources/AiTaskbarCore/Networking/PinStore.swift",
+   "line": 59,
+   "category": "swallowed_error",
+   "evidence": "try? AtomicFileWrite.write(Data(hash.utf8), to: fileURL(for: key), permissions: 0o600) (set, line 59) and try? FileManager.default.removeItem(at: fileURL(for: key)) (clear, line 66) discard the error entirely; memo is updated in-memory regardless, so the in-process session behaves correctly but nothing indicates the on-disk TOFU pin never landed.",
+   "impact": "If the pins directory becomes unwritable (permissions changed, disk full), the app silently reverts to re-learning (TOFU) the pin on every relaunch with no record that persistence is broken, a security-adjacent state (the file own header comment calls these pseudo-secrets) that degrades gracefully but invisibly.",
+   "fix": "Log a warning via AppLog (e.g. a .security or .networking category) when the write/remove throws, so a persistently-failing pin store is visible in Console.app instead of only inferable from repeated TOFU behavior.",
+   "confidence": "low",
+   "agent": "Aurora",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "PinStore.swift:59-60 and :66 use try? with no log. The in-memory memo keeps the session correct.",
+   "verification": "cetico"
+  }
+ ]
+}

@@ -1,0 +1,23 @@
+{
+ "verdict": "MUDANCAS",
+ "lens": "QUALITY",
+ "reasoning": "Most of the fix follows the repo's rules. The old `try? await fetchChecksum` was a swallowed error; it is now a do/catch that logs to AppLog.updates (UpdateChecker.swift, around diff line 277). A detach failure is logged instead of dropped. The remaining `try?` calls are all cleanup (temp root, removing `pending`, the pre-existing `dest` removal), which CLAUDE.md allows. The verifier, quarantine and `revealInFinder` are injected so the tests can reach them, and the new Bool asserts use `expectTrue`/`expectFalse` or non-optional `#expect`. The `[String: Any]` in `mountPoint(fromAttachPlist:)` stays local and never crosses an actor, so the hard rule does not apply. The problem is new duplication, which your contract treats as grounds for changes when a fix copies a rule instead of extracting it. `TeamSignatureDMGVerifier.runHdiutil` (DMGVerifier.swift:102-134 in the new file) is a near line-for-line copy of `SecurityToolCredentialReader.runTool` (Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift:134-186). Both use a null stdin/stderr, a Pipe, a terminationHandler that signals a DispatchSemaphore, a background drain into OSAllocatedUnfairLock, one deadline, terminate, a 1 s wait, then SIGKILL. That is about 30 lines of subtle timeout, kill and drain logic. The two copies have already diverged: the original has the race-window check that accepts a clean exit landing right on the deadline, and the copy does not. The next fix to this logic will reach only one of them. `checkSignature` is also a third hand-written SecStaticCode plus SecRequirement block, after `CodexResetProcess.trustedExecutable` (CodexResetProcess.swift:35-43) and CodeSignatureInfo. It is smaller and differs in adding kSecCSCheckNestedCode, so I only record it as a new finding. The copy also has a misleading error name: `runHdiutil` maps timeout, non-zero exit and drain failure all to `Failure.mountFailed`. That includes the `detach` call, so the log reads `hdiutil detach failed: mountFailed` and the exit status is lost. I did not build or run lint, as instructed, so I can't report on new warnings.",
+ "required_changes": [
+  "Extract the bounded-subprocess run (launch with null stdin/stderr, drain stdout concurrently, one deadline, terminate then SIGKILL, return exit status and stdout) into one shared helper in AiTaskbarCore/Util. Use it for `TeamSignatureDMGVerifier.runHdiutil` instead of the copied body, and move `SecurityToolCredentialReader.runTool` onto it too, keeping its race-window acceptance and Failure mapping as caller logic, so there is only one copy of the kill/drain logic.",
+  "Stop reporting every subprocess failure as `Failure.mountFailed`. Use separate cases (for example `timedOut` and `hdiutilExited(Int32)`), or at least a detach-specific case, so the name matches what failed and the exit status is kept for the log."
+ ],
+ "new_findings": [
+  "Code-signature requirement checks are now written out in three places: CodexResetProcess.trustedExecutable, CodeSignatureInfo, and TeamSignatureDMGVerifier.checkSignature. Only the DMG one uses kSecCSCheckNestedCode. Worth consolidating into one Core helper that takes (url, requirement, flags).",
+  "Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift: `makeDir()` creates a UUID temp directory and a UserDefaults suite for each test, and neither is ever removed.",
+  "Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift: the `quarantine_failure_throws` test tests `UpdateChecker.applyQuarantine` but sits in the suite named `TeamSignatureDMGVerifier`, so the suite name does not describe it."
+ ],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/DMGVerifier.swift:102",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/DMGVerifier.swift:78",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift:134",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/CodexResetProcess.swift:35",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift"
+ ],
+ "_task": "ad5ed3c757e88ae6a"
+}

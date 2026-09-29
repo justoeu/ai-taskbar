@@ -1,0 +1,114 @@
+{
+ "findings": [
+  {
+   "agent": "Represa",
+   "lens": "backpressure",
+   "title": "Every vendor usage fetch buffers an unbounded response body (no MaxBytesReader/LimitReader equivalent)",
+   "severity": "LOW",
+   "confidence": "high",
+   "path": "Sources/AiTaskbarCore/Networking/HTTPClient.swift",
+   "line": 101,
+   "category": "unbounded-network-read",
+   "evidence": "HTTPClient.send() calls try await session.data(for: req) with no size ceiling (lines 101-127). HTTPClient.fetchPayload (Sources/AiTaskbarProviders/CachedFetch.swift:116) is a thin wrapper around send used by AnthropicProvider.swift:128, ZAIProvider.swift:50, KimiProvider.swift:48, OpenAIProvider.swift:143, DeepSeekProvider.swift:48 and GeminiProvider.swift:94; sendDecoding (HTTPClient.swift:193-209, also unbounded send) backs OpenRouterProvider.swift:64/79 and XAIProvider.swift:153; OAuthRefresher.swift:28 (Anthropic/OpenAI token refresh) uses send directly too. sendBounded(_:maximumResponseBytes:) (HTTPClient.swift:132-188, capped at 2 MiB) already exists but is only wired into the status sources (StatuspageSource.swift:168/190, RSSStatusSource.swift:54, DeepSeekStatusSource.swift:120), never into the usage/OAuth path that runs on every 300 s scheduled tick for every configured vendor.",
+   "impact": "A compromised, misconfigured, or MITM-proxied vendor endpoint (or a misbehaving CDN edge) returning a multi-GB body causes URLSession to buffer the entire response into memory before send() returns; timeoutIntervalForResource=30s bounds duration but not size. This runs inside the process-wide refreshAll() fan-out for every vendor card, so one bad response can spike RSS enough to get the LSUIElement menu-bar app killed by jetsam, taking every vendor usage display down with it.",
+   "fix": "Route AnthropicProvider/OpenAIProvider/ZAIProvider/KimiProvider/DeepSeekProvider/GeminiProvider/OpenRouterProvider/XAIProvider/OAuthRefresher through sendBounded (or add a fetchPayload(maximumResponseBytes:) overload) with a small cap (2-4 MiB), matching StatuspageSource/RSSStatusSource.",
+   "test_red_green": {
+    "name": "vendorFetchRejectsOversizedResponse",
+    "assert_before": "StubURLProtocol streams a 500 MB body for a vendor usage endpoint; AnthropicProvider.fetch()/http.fetchPayload(req) completes successfully with the whole body materialized in Data, no cap.",
+    "assert_after": "The same stub response causes fetchPayload/sendDecoding to throw AppError.transport once N bytes have been read, and peak memory growth stays bounded near N regardless of body size."
+   },
+   "severity_original": "HIGH",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "HTTPClient.swift:108 session.data(for:) has no size cap, and sendBounded (:132) is used only by the status sources. Downgraded from HIGH: every endpoint is a hard-coded first-party HTTPS host or an allowlisted one. The attacker would need TLS control of that vendor, or a user-trusted MITM CA, and either one already exposes the bearer tokens, which is far worse than an OOM. The 30 s resource timeout (:17) limits duration but not size. This is defense-in-depth.",
+   "verification": "cetico"
+  },
+  {
+   "agent": "Represa",
+   "lens": "backpressure",
+   "title": "Antigravity (Gemini) subprocess drains stdout/stderr sequentially and unbounded, with no SIGKILL escalation on timeout",
+   "severity": "LOW",
+   "confidence": "high",
+   "path": "Sources/AiTaskbarProviders/AntigravityExecutor.swift",
+   "line": 101,
+   "category": "subprocess-pipe-deadlock",
+   "evidence": "fetchUsageJSON() calls stdout.fileHandleForReading.readDataToEndOfFile() (line 101) then stderr.fileHandleForReading.readDataToEndOfFile() (line 102) then process.waitUntilExit() (line 103), all synchronous and sequential, unlike SecurityToolCredentialReader.runTool which explicitly drains its single pipe on a separate queue to avoid this deadlock (SecurityToolCredentialReader.swift:151-160). If agy writes more than the pipe buffer (~64 KB) to stderr while stdout is being read to EOF (or vice versa), the child blocks writing and the parent blocks reading: deadlock. The 35 s watchdog timer (lines 82-91) only calls process.terminate() (SIGTERM, line 88) with no SIGKILL escalation like CodexResetProcess.deinit (CodexResetProcess.swift:84-89). Neither readDataToEndOfFile() call has any size cap.",
+   "impact": "Runs on every scheduled Gemini/Antigravity refresh (300 s cadence). A verbose agy stderr dump exceeding the pipe buffer, combined with a slow stdout writer, stalls a DispatchQueue.global thread until SIGTERM succeeds (only if agy does not trap it) or never resolves, leaving that provider card stuck loading. A malicious agy build could emit unbounded stdout with no memory ceiling before the timer fires.",
+   "fix": "Drain stdout and stderr concurrently on separate queues (same pattern as SecurityToolCredentialReader), cap each stream captured size (e.g. 4 MiB), and escalate the timeout handler to SIGKILL after a short grace period.",
+   "test_red_green": {
+    "name": "antigravityExecutorSurvivesOversizedStderr",
+    "assert_before": "A stub agy script writing 10 MB to stderr before any stdout output causes fetchUsageJSON() to hang past the 35 s deadline.",
+    "assert_after": "The same stub completes within a bounded time and returns captured output or a timeout error, with the child guaranteed killed via SIGKILL."
+   },
+   "severity_original": "HIGH",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "The mechanism is as described: sequential drains at AntigravityExecutor.swift:101-102, SIGTERM only at :88, no size cap. Downgraded from HIGH: the timer makes it a 35 s failure, not a permanent deadlock, because agy is a Go binary and SIGTERM's default action terminates it. The real agy writes 1.8 KB stdout and 0 B stderr (measured). A 'malicious agy build' is out of scope: whoever replaced ~/.local/bin/agy already has code execution as the user.",
+   "verification": "cetico"
+  },
+  {
+   "agent": "Represa",
+   "lens": "backpressure",
+   "title": "UpdateChecker fetches GitHub Releases API and checksums file with no response-size cap",
+   "severity": "LOW",
+   "confidence": "high",
+   "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
+   "line": 159,
+   "category": "unbounded-network-read",
+   "evidence": "fetchLatest() (line 159: let (data, response) = try await http.send(req)) decodes the GitHub releases/latest JSON with no size limit, and fetchChecksum(for:from:) (line 294) fetches an arbitrary checksums-*.txt asset the same way. Both use the unbounded http.send() path, not sendBounded, even though download() (line 248, for the DMG) streams to a temp file.",
+   "impact": "If api.github.com or a githubusercontent asset host is compromised, DNS-hijacked, or proxied maliciously, the JSON/text body has no upper bound before being fully buffered. Runs on a 24 h timer, low-frequency, but still the exact GitHub-releases-API-in-UpdateChecker antipattern with no defense despite sendBounded existing in the same client.",
+   "fix": "Use http.sendBounded(req, maximumResponseBytes: 256*1024) for both fetchLatest and fetchChecksum.",
+   "test_red_green": {
+    "name": "updateCheckerRejectsOversizedReleaseResponse",
+    "assert_before": "StubURLProtocol returns a 200 MB body for releases/latest; fetchLatest() fully buffers it before decode fails.",
+    "assert_after": "fetchLatest()/fetchChecksum() throw a bounded-size transport error once the response exceeds a small cap, without buffering the full body."
+   },
+   "severity_original": "MEDIUM",
+   "cetico_verdict": "CONFIRMADO",
+   "cetico_evidence": "UpdateChecker.swift:159 and :294 use the unbounded send(). The same reasoning as BP-REP-001 applies: TLS to github.com, a 24 h cadence, defense-in-depth only.",
+   "verification": "cetico"
+  },
+  {
+   "agent": "Represa",
+   "lens": "backpressure",
+   "title": "Cost scanners buffer and decode a JSONL line with no max-length guard, unlike the Codex RPC reader 1 MiB cap",
+   "severity": "INFO",
+   "confidence": "medium",
+   "path": "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
+   "line": 203,
+   "category": "unbounded-local-read",
+   "evidence": "ClaudeSessionScanner.scan (ClaudeSessionScanner.swift:199-221) and CodexSessionScanner.scan (CodexSessionScanner.swift:319-334) both compute lineEnd via firstIndex(of: newline) ?? end. If a .jsonl transcript has no newline (or one absurdly long line), the entire remaining mmap-ed file becomes one line: scanned for byte markers and, if matched, handed whole to JSONDecoder. No cap analogous to CodexResetProcess.readLine guard buffer.count < 1_048_576 (CodexResetProcess.swift:141). Task.isCancelled is only checked per-file, so a single pathological line blocks that cancellation point too.",
+   "impact": "Claude/Codex transcript jsonl files are normally well-formed, but are user/session-writable (a huge pasted blob or corrupted write could produce one giant unterminated line). A multi-GB single line forces full decode-time memory and CPU pressure with no ceiling, on the cost-estimation path that runs every refresh cycle, uncancellable mid-line.",
+   "fix": "Cap scanned line length (e.g. 4-8 MiB) and skip past longer lines by seeking the next newline instead of decoding, mirroring CodexResetProcess.readLine explicit bound.",
+   "test_red_green": {
+    "name": "sessionScannerSkipsOversizedLine",
+    "assert_before": "A synthetic 2 GB single-line JSONL fixture (no trailing newline) causes ClaudeSessionScanner.scan/CodexSessionScanner.scan to allocate and scan the full 2 GB buffer before returning.",
+    "assert_after": "The same fixture is skipped once its unterminated line exceeds the cap, and the scan returns quickly with the line excluded from totals."
+   },
+   "severity_original": "MEDIUM",
+   "cetico_verdict": "REFUTADO",
+   "cetico_evidence": "There is no amplification. The file is mmapped (ClaudeSessionScanner.swift:91, .mappedIfSafe) and the scan is linear in file size whether or not it has newlines. Only lines carrying both the usage and type:assistant markers get decoded (:210-211), and those are exactly the lines that must be decoded to count cost, so a length cap would under-count. The input is the user's own transcript files, and the memo skips unchanged files. No realistic vector.",
+   "verification": "cetico"
+  },
+  {
+   "agent": "Represa",
+   "lens": "backpressure",
+   "title": "Codex auth.json read with no size cap",
+   "severity": "INFO",
+   "confidence": "medium",
+   "path": "Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift",
+   "line": 91,
+   "category": "unbounded-local-read",
+   "evidence": "FileCredentialReader.readFromDisk() does data = try Data(contentsOf: path) (line 91) with no size limit before JSON-decoding it. Runs on every OpenAI/Codex provider fetch and inside CodexResetProcess reset flow.",
+   "impact": "Bounded practical risk since the file is owned by the trusted Codex CLI and normally a few KB, but if replaced by a very large file (disk corruption, runaway process, compromised CLI) the read has no ceiling and fully buffers before decode can fail. Matches the named auth.json-huge antipattern directly; defense-in-depth rather than an exploitable hot path.",
+   "fix": "Stat the file first and reject above a sane ceiling (e.g. 1 MiB) before calling Data(contentsOf:), surfacing AppError.schema instead of an unbounded read.",
+   "test_red_green": {
+    "name": "fileCredentialReaderRejectsOversizedAuthFile",
+    "assert_before": "A 500 MB auth.json fixture is read in full via Data(contentsOf:) before decode fails.",
+    "assert_after": "readFromDisk() checks file size up front and throws immediately for files above the cap, without materializing the full contents."
+   },
+   "severity_original": "LOW",
+   "cetico_verdict": "REFUTADO",
+   "cetico_evidence": "auth.json is a 0600 file owned by the user (FileCredentialReader.swift:91). Anyone who can write a huge one already controls the user's Codex credentials. The finding itself says 'bounded practical risk'. No vector.",
+   "verification": "cetico"
+  }
+ ]
+}

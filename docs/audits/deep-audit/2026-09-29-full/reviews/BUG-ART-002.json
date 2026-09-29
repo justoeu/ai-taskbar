@@ -1,0 +1,89 @@
+{
+  "id": "BUG-ART-002",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 04:24:43 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The defect is fixed. In AnalyticsStore.swift:93-99, a vendor that only opencode reports gets usdToday and usdLast7Days of 0, and its per-model breakdowns are keyed at $0. In AnalyticsStore.swift:115-116, an existing vendor keeps existing.usdToday and existing.usdLast7Days unchanged. The only opencode path left in AnalyticsStore is the convenience init at :133-134, which now calls mergingOpencode, so no second path adds opencode dollars. The round-2 change does exactly what QUALITY asked. computedToday and computedLast7 had become always 0 in round 1, so `mergedX[m, default: 0] += 0` is the same as inserting the key only when it is missing (:102-109). Existing per-model dollars are kept, new models appear at $0, and tokens still merge through CostAggregator.add (:110-113). The behaviour matches the semantics approved in round 1. Test run: `scripts/with-test-toolchain.sh swift test --no-parallel --filter \"AnalyticsOpencodeMerge|AnalyticsStore\"` passed 10 tests in 2 suites. Reversal check: I put dollar addition back into the merge only, in both branches (tokens priced plus opencode-reported cost). AnalyticsOpencodeMerge then failed 3 of 4 tests with 6 issues (openai 13 vs 12, zai 20.5 vs 12, gemini 4 vs 0). The tokens-only test still passed, which is correct because it checks tokens, not dollars. I restored the fixed file from the scratchpad backup, and `git diff -- Sources Tests` matched the saved diff exactly. I did not use git stash. Note: CostFooterView.swift:198 still reads scan.costLast7DaysByModel. That was already there before this patch, is a separate per-client row, and does not affect the vendor totals this finding is about.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:93",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:102",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:115",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:133",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift:27",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/CostFooterView.swift:198"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Both round-1 required changes are applied in Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift, in mergingOpencode (around lines 81-127).\n\n(1) The always-zero computedToday/computedLast7 dictionaries are gone, along with the misleading `computed*` names. The opencode-only branch now builds its $0 breakdown inline with `scan.todayByModel.mapValues { _ in 0 }`, which says what it does.\n\n(2) The `merged*[m, default: 0] += c` loops are replaced by key-only inserts (`for m in scan.todayByModel.keys where mergedToday[m] == nil { mergedToday[m] = 0 }`). The code no longer looks like it adds opencode cost. usdToday and usdLast7Days are carried over from `existing` with nothing added.\n\nNo new regressions:\n- Nesting stays at 3 levels at most (for, if/else, for-where).\n- The static function is pure and nonisolated, with no swallowed errors or try?.\n- The comment explains why (opencode is a client, not a vendor) instead of restating the code.\n- The tests use Swift Testing with one fact per #expect and compare optional Double and Int values only, so the expectTrue/expectFalse rule for optional Bools does not apply.\n- The test names match what they assert.\n\nPer instructions I did not build or run the warning check. Reading the diff, nothing looks likely to warn: the PricingTable/CostMath calls were removed and no local goes unused. The `if dict[v] == nil {} else if let existing = dict[v]` pattern existed before this fix and is out of scope.",
+      "required_changes": [],
+      "new_findings": [
+        "Pre-existing: the `if dict[v] == nil { ... } else if let existing = dict[v]` pattern in AnalyticsStore.mergingOpencode could be a single `if let existing = dict[v] { ... } else { ... }`. It is out of scope for this fix.",
+        "Carried over from round 1: OpencodeScan.costTodayByModel and costLast7DaysByModel (Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:15-16) no longer feed Analytics. Check that the remaining reader, CostFooterView.swift:198, does not show dollars for subscription (OpenAI) traffic."
+      ],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:81",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift:1",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:15",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/CostFooterView.swift:198"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Round 2 changes only what QUALITY asked for, and nothing beyond it. The `computed*` maps that always held zero are gone. The `merged*[m, default: 0] += c` loops are replaced by a key-only insert (`for m in scan.*ByModel.keys where merged*[m] == nil { merged*[m] = 0 }`, AnalyticsStore.swift:102-108). The opencode-only branch now builds its zero-dollar breakdown directly with `mapValues { _ in 0 }` (:93-94). `git diff --stat` still lists exactly two files, and both tie to BUG-ART-002: Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift (the pure static `mergingOpencode` function, which is internal and reachable only through @testable, so it is not a public contract, plus the one-line call site at :136) and Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift (the new test file, unchanged since round 1). docs/audits/ is untracked audit output, not part of the fix. The diff adds no dependency, host, secret file or entitlement, and no persisted or serialized format changes. CostEstimate is built with the same fields as before. It adds no hidden cost either: the PricingTable/CostMath calls are removed and the key inserts are O(models). The docs already agree with the new behaviour (README.md:31, CLAUDE.md 'opencode is a client'), so no lockstep file is missing. The sister route is CostFooterView.swift:198, the popover footer. It shows opencode's cost as a separate line and never adds it to the vendor total, so no copied line was left unfixed. My round-1 LOW finding still stands: Analytics shows $0 breakdown rows while the popover shows the cost opencode recorded. It is a consistency issue and does not block.",
+      "required_changes": [],
+      "new_findings": [
+        {
+          "severity": "LOW",
+          "lens": "consistency/ux",
+          "title": "Analytics shows $0 per-model breakdown rows for opencode models on pay-per-token vendors, while the popover shows the cost opencode recorded",
+          "detail": "Carried over from round 1. AnalyticsStore.swift:93-94 and :102-108 insert a 0 for each opencode model. CostFooterView.swift:198-210 shows costLast7DaysByModel for the same model. README.md:31 promises the recorded cost as a breakdown. Either show tokens only or show the recorded cost as a breakdown that is not added to the total."
+        }
+      ],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:83",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:102",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:136",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsOpencodeMergeTests.swift:1",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/CostFooterView.swift:198",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md:31"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [
+    "Pre-existing: the `if dict[v] == nil { ... } else if let existing = dict[v]` pattern in AnalyticsStore.mergingOpencode could be a single `if let existing = dict[v] { ... } else { ... }`. It is out of scope for this fix.",
+    "Carried over from round 1: OpencodeScan.costTodayByModel and costLast7DaysByModel (Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:15-16) no longer feed Analytics. Check that the remaining reader, CostFooterView.swift:198, does not show dollars for subscription (OpenAI) traffic.",
+    {
+      "severity": "LOW",
+      "lens": "consistency/ux",
+      "title": "Analytics shows $0 per-model breakdown rows for opencode models on pay-per-token vendors, while the popover shows the cost opencode recorded",
+      "detail": "Carried over from round 1. AnalyticsStore.swift:93-94 and :102-108 insert a 0 for each opencode model. CostFooterView.swift:198-210 shows costLast7DaysByModel for the same model. README.md:31 promises the recorded cost as a breakdown. Either show tokens only or show the recorded cost as a breakdown that is not added to the total."
+    }
+  ],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

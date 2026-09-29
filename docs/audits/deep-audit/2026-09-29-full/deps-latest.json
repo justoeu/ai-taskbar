@@ -1,0 +1,127 @@
+{
+  "generated_at": "2026-09-29T03:05:20.536Z",
+  "root": "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d",
+  "stack": {
+    "root": "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d",
+    "languages": [
+      "python",
+      "swift"
+    ],
+    "frameworks": [
+      "spm",
+      "swift-app"
+    ],
+    "package_managers": [
+      "spm"
+    ],
+    "ecosystems": [
+      "spm"
+    ],
+    "manifests": [
+      {
+        "kind": "spm-resolved",
+        "path": "Package.resolved"
+      },
+      {
+        "kind": "spm",
+        "path": "Package.swift"
+      }
+    ],
+    "signals": [],
+    "catalog": "catalogs/classic-bugs.md"
+  },
+  "policy": {
+    "stable_only": true,
+    "exclude": "alpha|beta|rc|pre|preview|dev|canary|snapshot|experimental|nightly|unstable|next|pseudo-versions|maven-milestones",
+    "include_dev": true,
+    "include_indirect": false
+  },
+  "summary": {
+    "checked": 1,
+    "outdated": 0,
+    "up_to_date": 1,
+    "errors": 0,
+    "by_bump": {
+      "major": 0,
+      "minor": 0,
+      "patch": 0
+    },
+    "by_ecosystem": {
+      "spm": {
+        "checked": 1,
+        "outdated": 0
+      }
+    },
+    "languages": [
+      "python",
+      "swift"
+    ],
+    "frameworks": [
+      "spm",
+      "swift-app"
+    ]
+  },
+  "update_map": {
+    "stack": {
+      "languages": [
+        "python",
+        "swift"
+      ],
+      "frameworks": [
+        "spm",
+        "swift-app"
+      ],
+      "ecosystems": [
+        "spm"
+      ],
+      "package_managers": [
+        "spm"
+      ],
+      "manifests": [
+        {
+          "kind": "spm-resolved",
+          "path": "Package.resolved"
+        },
+        {
+          "kind": "spm",
+          "path": "Package.swift"
+        }
+      ]
+    },
+    "by_ecosystem": {
+      "spm": {
+        "total": 1,
+        "outdated": 0,
+        "up_to_date": 1,
+        "updates": []
+      }
+    },
+    "suggestions": [],
+    "batches": [
+      {
+        "id": "stack-detected",
+        "title": "Detected stack: spm, swift-app",
+        "priority": "info",
+        "packages": [],
+        "rationale": "Languages: python, swift · Ecosystems: spm"
+      }
+    ]
+  },
+  "runner_errors": [],
+  "packages": [
+    {
+      "ecosystem": "spm",
+      "name": "LebJe/TOMLKit",
+      "repo_url": "https://github.com/LebJe/TOMLKit.git",
+      "manifest": "Package.swift",
+      "declared": "0.6.0",
+      "current": "0.6.0",
+      "dev": false,
+      "current_source": "Package.resolved",
+      "latest_stable": "0.6.0",
+      "outdated": false,
+      "bump": "none"
+    }
+  ],
+  "findings_count": 0
+}

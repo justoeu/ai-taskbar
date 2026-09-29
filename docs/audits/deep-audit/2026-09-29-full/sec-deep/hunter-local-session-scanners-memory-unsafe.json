@@ -1,0 +1,30 @@
+{
+ "component": "local-session-scanners",
+ "lens": "memory-unsafe",
+ "findings": [
+  {
+   "title": "A crafted opencode message crashes the app: the output + reasoning addition does not saturate",
+   "category": "integer-overflow",
+   "severity": "LOW",
+   "confidence": "high",
+   "path": "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift",
+   "line": 197,
+   "symbol": "OpencodeScanner.scan(now:providerGroups:dbPath:)",
+   "snippet": "outputTokens: max(0, output) + max(0, reasoning),",
+   "source": "The JSON `data` column of the `message` table in ~/.local/share/opencode/opencode.db: $.tokens.output and $.tokens.reasoning (OpencodeScanner.swift:141-142)",
+   "sink": "Swift's checked `+` on two Int values, each clamped only from below (OpencodeScanner.swift:197)",
+   "description": "The scanner reads two per-group sums from SQLite: sum($.tokens.output) and sum($.tokens.reasoning). Each is clamped with max(0, x), which puts no upper bound on either value, and then the two are added with Swift's `+`, which traps on overflow. Only this addition skips CostAggregator.saturatingAdd. The CodexSessionScanner and ClaudeSessionScanner paths use it or clamp their subtractions.",
+   "exploit_scenario": "Write one assistant row into opencode.db with providerID set to a tracked alias (such as openai), a recent time_created, and tokens.output = 9223372036854775807 plus tokens.reasoning = 1. A REAL such as 1e300 also works, because sqlite3_column_int64 clamps it to Int64.max. SQLite's sum() does not overflow on a single row. On the next refresh the Swift addition hits SIGTRAP and the menu-bar app exits. The row stays in the database, so every relaunch and refresh crashes again until the row is removed.",
+   "preconditions": [
+    "Write access to ~/.local/share/opencode/opencode.db (another tool or a prompt-injected agent running as the same user)",
+    "opencode cost scanning is enabled for at least one vendor"
+   ],
+   "impact": "Persistent denial of service: the app crashes on every refresh cycle, so all usage monitoring stops.",
+   "fix": "Use CostAggregator.saturatingAdd(max(0, output), max(0, reasoning)). Better still, clamp each column to a sane per-group ceiling before any arithmetic.",
+   "cwe": "CWE-190",
+   "evidence": "L187 `let reasoning = Int(sqlite3_column_int64(stmt, 5))`; L197 uses a bare `+`. By contrast CostAggregator.add (CostAggregator.swift:16-30) and ClaudeSessionScanner L232 use saturatingAdd.",
+   "component": "opencode-sqlite-scanner",
+   "lens": "memory-unsafe"
+  }
+ ]
+}

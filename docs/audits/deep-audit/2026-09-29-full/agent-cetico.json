@@ -1,0 +1,30 @@
+{
+ "findings": [
+  {
+   "title": "FileCredentialReader converts a JWT exp date to milliseconds with a trapping Int64(Double) conversion",
+   "lens": "classic_bugs",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift",
+   "line": 168,
+   "category": "integer-overflow",
+   "evidence": "Int64(date.timeIntervalSince1970 * 1000) traps when a JWT exp is huge (e.g. 1e300); raised by Cético B while verifying BEST-ATE-003.",
+   "impact": "Crash on a malformed local auth.json token; input is a user-owned CLI file, so LOW.",
+   "fix": "Guard isFinite and range, or use Int64(exactly:) with a fallback.",
+   "confidence": "medium",
+   "agent": "Cético"
+  },
+  {
+   "title": "SettingsViewModel.reloadFromDisk doc comment is false: original is a let and only draft is replaced",
+   "lens": "quality",
+   "severity": "INFO",
+   "path": "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift",
+   "line": 55,
+   "category": "name-lies",
+   "evidence": "Raised by Cético C while verifying VERB-LAC-006: original is declared let (:27), reloadFromDisk only replaces draft (:58), so wiring it as documented would leave hasUnsavedChanges true.",
+   "impact": "Misleading doc on dead code.",
+   "fix": "Delete the dead method (VERB-LAC-006) or fix both the doc and the implementation.",
+   "confidence": "high",
+   "agent": "Cético"
+  }
+ ]
+}

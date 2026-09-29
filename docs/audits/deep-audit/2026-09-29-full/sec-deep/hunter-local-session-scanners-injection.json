@@ -1,0 +1,30 @@
+{
+ "component": "local-session-scanners",
+ "lens": "injection",
+ "findings": [
+  {
+   "title": "Session JSONL files are memory-mapped, so truncating one mid-scan raises SIGBUS",
+   "category": "buffer-overflow",
+   "severity": "LOW",
+   "confidence": "medium",
+   "path": "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
+   "line": 91,
+   "symbol": "ClaudeSessionScanner.estimate(now:projectsDir:)",
+   "snippet": "guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }",
+   "source": "Any *.jsonl file under ~/.claude/projects (ClaudeSessionScanner.swift:58-66) or ~/.codex/sessions (CodexSessionScanner.swift:102-106)",
+   "sink": "Mapped Data read byte by byte in scan(data:), via firstIndex(of:) and range(of:) at ClaudeSessionScanner.swift:203-211; the same pattern is at CodexSessionScanner.swift:128 and 322-329",
+   "description": "On a local volume, .mappedIfSafe mmaps the file. If the file shrinks after mapping, touching a page past the new end of file raises SIGBUS, which Swift cannot catch. No snapshot, file lock or read-copy guard covers the mapped bytes while the line scanner walks them.",
+   "exploit_scenario": "A same-user process creates a large *.jsonl with a recent mtime in ~/.claude/projects/x/ and truncates and rewrites it in a tight loop. When a refresh maps the file and the scanner touches a page past the truncated end, the process dies with SIGBUS. Refreshes run every 300 s and on every launch, so the crash repeats.",
+   "preconditions": [
+    "Write access to ~/.claude/projects or ~/.codex/sessions",
+    "Winning a race between the mmap and the scan, which is easy to repeat because every refresh re-maps changed files"
+   ],
+   "impact": "Repeatable crash of the menu-bar app (denial of service). Nothing is disclosed.",
+   "fix": "Read with a regular read (no .mappedIfSafe, or .uncached), or read from an open FileHandle into an owned buffer so a concurrent truncation can only produce a short read.",
+   "cwe": "CWE-367",
+   "evidence": "ClaudeSessionScanner.swift:91 and CodexSessionScanner.swift:128 both use [.mappedIfSafe]; the scan loops then iterate the whole mapped Data.",
+   "component": "local-session-scanners",
+   "lens": "injection"
+  }
+ ]
+}

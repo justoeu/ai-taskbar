@@ -1,0 +1,15 @@
+{
+ "verdict": "FALSE_POSITIVE",
+ "lens": "REACHABILITY",
+ "reasoning": "The code does what the finding says. With the default config, no pinning runs. pin_hosts defaults to [] (AppConfig.swift:106/119). AppEnvironment.swift:30 then builds a plain HTTPClient(), and HTTPClient.swift:39-40 returns an unpinned client for an empty list. PinningDelegate.swift:36 only reaches PinBaseline.pin(for:) at line 63 when the host is already in pinnedHosts. So the baseline entries in PinBaseline.swift:44-57 are never used by default, and the UI strings in en.lproj/Localizable.strings:153/190/210 are wrong when they say the baseline pins are active. The attack still does not hold up under this lens. There is no attacker-controlled source in the default deployment: the attack needs a forged certificate that the victim's system already trusts. The listed ways to get one are a corporate TLS-inspection proxy, an MDM profile, malware that installed a root CA, or a CA mis-issuance. A proxy or MDM profile is installed by whoever manages the machine. A malware root CA requires admin-level trust changes, and an attacker with that access can read the credential stores directly. Mis-issuance is speculative, and no code path shows it. Also, the same OAuth tokens are read from the Keychain item and ~/.codex/auth.json that the Claude Code and Codex CLIs keep current, and those CLIs call the same hosts using only system trust. An attacker who controls a trusted CA gets the tokens from them anyway, so this app is not what gives the attacker access. What is left is a missing extra layer of protection plus misleading UI text and doc comments, which is a documentation and correctness bug. The standard of proof requires a demonstrated attacker-controlled source, so the vote is FALSE_POSITIVE.",
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/PinningDelegate.swift:36",
+  "Sources/AiTaskbarCore/Networking/PinningDelegate.swift:63",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:39",
+  "Sources/AiTaskbarApp/AppEnvironment.swift:30",
+  "Sources/AiTaskbarCore/Config/AppConfig.swift:106",
+  "Sources/AiTaskbarCore/Networking/PinBaseline.swift:44",
+  "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:210"
+ ],
+ "_task": "aca500646a788e213"
+}

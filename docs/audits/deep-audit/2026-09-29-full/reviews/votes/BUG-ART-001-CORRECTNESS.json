@@ -1,0 +1,17 @@
+{
+ "verdict": "APROVA",
+ "lens": "CORRECTNESS",
+ "reasoning": "The defect is fixed. In scanLines (ClaudeSessionScanner.swift ~l.310-322), every line that has a non-empty message.id and requestId now goes through mergeKeyed under the key id+NUL+requestId. mergeKeyed (~l.223) keeps the record with the larger output_tokens; on a tie the newer record overwrites the old one, so the last one seen wins. Lines missing either id are added directly, as before. The dedup covers all three routes. (1) Within a file: scanLines. (2) Across files: keyedAll is filled from every freshly scanned file (~l.108) and from every memo replay (~l.91), and folded once after the loop (~l.125). (3) The public scan(data:) API calls fold internally. Memo replays hold only the id-less totals in today/week; the keyed records are stored separately in Entry.keyed (ScanMemo.swift ~l.56) and are never folded into the aggregates, so nothing counts twice. When a file grows after being counted from the memo, its size or mtime changes and lookup misses (ScanMemo lookup compares size, mtime and day). The file is rescanned and store replaces the whole entry, while the other file's keys come from the memo and are merged, not summed. No double count. Memory: keyed data is kept per entry and bounded by the lines in the file. memo.retain(paths: seenPaths), which is unchanged, drops files that left the window. Today vs last-7: inToday and inWeek are computed with the same rule as before, including the fail-safe that sends an unparseable timestamp to both buckets and increments the counter once, as in the original. The memo is invalidated when startOfToday changes, and sevenDaysAgo is derived from startOfToday, so stored flags cannot go stale. Tests: I ran --filter ClaudeSessionScanner through scripts/with-test-toolchain.sh: 18/18 green. Reversal proof: I copied the two production files to the scratchpad, ran git checkout on them and ran the suite again: RED with 13 issues across 5 of the 6 new tests (for example inputTokens 200 vs 100, outputTokens 90 vs 80). The id-less test passes both before and after, which is expected because it guards against a regression. I copied the files back; git diff --stat shows 5 files and the current diff is byte-identical (cmp) to reviews/diffs/BUG-ART-001.diff. Non-blocking notes: (a) the test 'cross-file dedup holds when one file replays from the memo' uses two files with the same record. If a variant of the fix forgot to store keyed in the memo, that test would still pass, because the rescanned file alone yields 100/50. It proves there is no double count, but not that keyed data survives the memo. A replay test with a single file, or with different keys, would close that gap. (b) Between files, ties with equal output_tokens are settled by FileManager enumeration order, which is not deterministic. That only matters if duplicates with equal output_tokens differ in input or cache counts.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:91",
+  "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:108",
+  "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:125",
+  "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:223",
+  "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:315",
+  "Sources/AiTaskbarCore/Cost/ScanMemo.swift:56",
+  "Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift:380"
+ ],
+ "test_reversal_checked": true,
+ "_task": "acb5631ffc4df86d0"
+}

@@ -1,0 +1,20 @@
+{
+ "verdict": "APROVA",
+ "lens": "CORRECTNESS",
+ "reasoning": "The defect is fixed and the tests catch it. (1) The fail-open route is closed. UpdateChecker.swift:249-253 refuses download() when dmgSHA256 is nil or empty, and this runs before any byte is fetched. :288 compares the checksum unconditionally, so the old `if let want` bypass is gone. The try? on fetchChecksum (:199-205) is now logged, and a nil result still leads to the fail-closed refusal. The only other code that opens anything is :378, which opens htmlURL in the browser and is not a second download route. (2) Test proof: the targeted suite passes (24 tests). For the reversal I built a pre-fix variant that keeps only the injection seams: optional checksum, no verifier call, no quarantine, no cleanup. It went RED with 7 issues in 4 tests: missing_checksum_fails_closed, downloaded_dmg_is_quarantined (len -1), verifier_rejects (calls 0) and verifier_accepts (calls 0). After restoring, `git diff -- Sources Tests README.md CLAUDE.md AGENTS.md` is byte-identical to reviews/diffs/SEC-CER-001.diff. (3) The fix targets the cause. Trust is now anchored outside the release, in the running app's own team ID. (4) Happy path for a real Developer-ID release: `codesign -v --strict --deep -R='anchor apple generic and certificate leaf[subject.OU] = \"5HHL78743R\"' /Applications/AiTaskbar.app` passes. The DMG layout (Makefile:162-165: one AiTaskbar.app, an Applications symlink and README.txt) meets the apps.count == 1 check. v0.23.5 on GitHub ships checksums-0.23.5.txt, and `make publish` (Makefile:339-340) uploads it with the DMGs before flipping the release from draft. Only the latest release is ever offered, so older releases without checksums do not matter. If a release were ever missing its checksums file, the user would get a clear error pointing to the release page, which is the intended fail-closed behavior. The blocking hdiutil and SecStaticCode work runs in Task.detached (DMGVerifier.swift:45-47), so it is off the MainActor. The pre-existing sha256Hex call on main is not touched by this fix. The verifier uses no continuation, only `.value`, so there is no resume-once risk. On a successful attach, detach sits in a defer that runs before the temp-root removal (the defers run in reverse order), so it also runs when checkSignature throws. Requirement string: the team ID comes from our own signature (CodeSignatureInfo.currentTeamID) and is checked against a 10-character [A-Z0-9] shape before it is inserted (:41, :50-52), so it is injection-safe. On quarantine failure, the file is removed via `pending = dest`. Minor issues, not blocking: (a) DMGVerifier.swift:59-73: if `hdiutil attach` succeeds but the plist has no mount-point, or attach is killed on timeout after it already mounted, no detach runs and a device node or mount leaks under the temp root. (b) Nothing tests tmp cleanup on failure: checksum_mismatch also passes on the pre-fix code, because dest never existed there either. (c) I could not run an end-to-end mount and verify of a real release DMG because none exists locally. The requirement itself was checked against the installed Developer-ID build.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/UpdateChecker.swift:199",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:249",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:288",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:303",
+  "Sources/AiTaskbarApp/DMGVerifier.swift:45",
+  "Sources/AiTaskbarApp/DMGVerifier.swift:50",
+  "Sources/AiTaskbarApp/DMGVerifier.swift:59",
+  "Sources/AiTaskbarApp/DMGVerifier.swift:80",
+  "Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift:98",
+  "Makefile:339"
+ ],
+ "test_reversal_checked": true,
+ "_task": "a22e380dca4b83623"
+}
