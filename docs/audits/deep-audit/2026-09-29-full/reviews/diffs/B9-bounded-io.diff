@@ -1,0 +1,816 @@
+diff --git a/Sources/AiTaskbarCore/Networking/HTTPClient.swift b/Sources/AiTaskbarCore/Networking/HTTPClient.swift
+index c4f5ecb..27e9afc 100644
+--- a/Sources/AiTaskbarCore/Networking/HTTPClient.swift
++++ b/Sources/AiTaskbarCore/Networking/HTTPClient.swift
+@@ -4,6 +4,12 @@ public final class HTTPClient: @unchecked Sendable {
+     private let session: URLSession
+     public let defaultTimeout: TimeInterval
+ 
++    /// Ceiling on a `send` / `sendDecoding` body (8 MiB). The largest real
++    /// usage payload we have a fixture for is ~4 KB, so this is ~2000x
++    /// headroom while still refusing a runaway or hostile body before it is
++    /// buffered and written to `DiskCache` (BP-REP-001).
++    public static let defaultMaximumResponseBytes = 8 * 1024 * 1024
++
+     /// Process-wide ephemeral session. Differences from `URLSession.shared`:
+     ///   - No URLCache → drops ~4 MB RAM + 20 MB on-disk that we never use
+     ///     (our `DiskCache` is the source of truth).
+@@ -105,32 +111,19 @@ public final class HTTPClient: @unchecked Sendable {
+     /// validate suite can confirm ephemeral semantics.
+     public var sessionConfiguration: URLSessionConfiguration { session.configuration }
+ 
+-    public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
++    /// Sends `request` with URLSession's default redirect handling (vendor
++    /// APIs keep whatever redirects they rely on today) and refuses a body
++    /// larger than `maximumResponseBytes` instead of buffering it whole.
++    public func send(
++        _ request: URLRequest,
++        maximumResponseBytes: Int = HTTPClient.defaultMaximumResponseBytes
++    ) async throws -> (Data, HTTPURLResponse) {
+         try Task.checkCancellation()
+-        var req = request
+-        if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
+-            req.timeoutInterval = defaultTimeout
+-        }
+-        do {
+-            let (data, response) = try await session.data(for: req)
+-            try Task.checkCancellation()
+-            guard let http = response as? HTTPURLResponse else {
+-                throw AppError.transport("non-HTTP response")
+-            }
+-            return (data, http)
+-        } catch let appErr as AppError {
+-            throw appErr
+-        } catch is CancellationError {
+-            throw CancellationError()
+-        } catch let urlErr as URLError {
+-            // URLSession surfaces task cancellation as URLError.cancelled.
+-            // Re-throw as Swift CancellationError so callers can handle it
+-            // uniformly.
+-            if urlErr.code == .cancelled { throw CancellationError() }
+-            throw AppError.transport("URLError \(urlErr.code.rawValue): \(urlErr.localizedDescription)")
+-        } catch {
+-            throw AppError.transport(error.localizedDescription)
++        guard maximumResponseBytes >= 0 else {
++            throw AppError.transport("invalid bounded HTTP request")
+         }
++        return try await readBounded(request, maximumResponseBytes: maximumResponseBytes,
++                                     delegate: nil)
+     }
+ 
+     /// Streams a bounded response while allowing redirects only inside the
+@@ -146,16 +139,24 @@ public final class HTTPClient: @unchecked Sendable {
+         guard maximumResponseBytes >= 0, let origin = request.url else {
+             throw AppError.transport("invalid bounded HTTP request")
+         }
++        let redirectDelegate = BoundedRedirectDelegate(origin: origin, allow: allowRedirect)
++        return try await readBounded(request, maximumResponseBytes: maximumResponseBytes,
++                                     delegate: redirectDelegate)
++    }
++
++    /// Shared capped streaming read. A nil `delegate` leaves redirects to the
++    /// session's own policy, exactly as `session.data(for:)` did for `send`.
++    private func readBounded(
++        _ request: URLRequest,
++        maximumResponseBytes: Int,
++        delegate: (any URLSessionTaskDelegate)?
++    ) async throws -> (Data, HTTPURLResponse) {
+         var req = request
+         if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
+             req.timeoutInterval = defaultTimeout
+         }
+-        let redirectDelegate = BoundedRedirectDelegate(origin: origin, allow: allowRedirect)
+         do {
+-            let (bytes, response) = try await session.bytes(
+-                for: req,
+-                delegate: redirectDelegate
+-            )
++            let (bytes, response) = try await session.bytes(for: req, delegate: delegate)
+             try Task.checkCancellation()
+             guard let http = response as? HTTPURLResponse else {
+                 throw AppError.transport("non-HTTP response")
+diff --git a/Sources/AiTaskbarCore/Util/BoundedProcess.swift b/Sources/AiTaskbarCore/Util/BoundedProcess.swift
+index 4998f57..4c6b63f 100644
+--- a/Sources/AiTaskbarCore/Util/BoundedProcess.swift
++++ b/Sources/AiTaskbarCore/Util/BoundedProcess.swift
+@@ -3,16 +3,18 @@ import os
+ 
+ /// Runs a short-lived helper tool under one wall-clock budget. This is the only
+ /// copy of the launch / drain / kill logic, shared by the Keychain
+-/// `/usr/bin/security` read fallback and the update DMG `hdiutil` check.
++/// `/usr/bin/security` read fallback, the update DMG `hdiutil` check and the
++/// Antigravity `agy` usage call.
+ ///
+ /// - The executable is an absolute URL and the arguments are passed as an
+ ///   array. Nothing goes through a shell.
+-/// - stdin is `/dev/null` and stderr is discarded. stdout is read on a
+-///   background thread, so a child that writes more than the pipe buffer
+-///   cannot deadlock against the wait.
+-/// - A single deadline covers both the child's exit and the stdout drain.
+-///   A child still running at the deadline gets SIGTERM, then SIGKILL one
+-///   second later.
++/// - stdin is `/dev/null`. stderr is discarded unless `Options.stderrBytes`
++///   asks for it. Each captured stream is read on its own background thread,
++///   so a child that fills either pipe buffer cannot deadlock against the
++///   wait or against the other stream.
++/// - A single deadline covers both the child's exit and the drains. A child
++///   still running at the deadline, cancelled, or over its stdout cap gets
++///   SIGTERM, then SIGKILL one second later.
+ ///
+ /// The call is synchronous and can block for up to `timeout` + ~3 s. Callers
+ /// run it off the main actor and off the cooperative pool.
+@@ -29,6 +31,13 @@ public enum BoundedProcess {
+         /// Only meaningful when `terminationReason` is non-nil.
+         public let status: Int32
+         public let stdout: Data
++        /// At most `Options.stderrBytes` of stderr; empty when not captured.
++        public var stderr = Data()
++        /// stdout went over `Options.maximumStdoutBytes`; the child was
++        /// killed and `stdout` is empty.
++        public var stdoutExceeded = false
++        /// `Options.cancellation` fired; the child was killed.
++        public var cancelled = false
+ 
+         /// Exited normally with status 0 and stdout complete. This can hold
+         /// even when `timedOut` is true, if the child finished right as the
+@@ -36,50 +45,151 @@ public enum BoundedProcess {
+         public var exitedCleanly: Bool { drained && terminationReason == .exit && status == 0 }
+     }
+ 
+-    /// - Throws: whatever `Process.run()` throws if the child cannot be launched.
+-    public static func run(executable: URL, arguments: [String], timeout: TimeInterval) throws -> Outcome {
++    /// Thread-safe flag a caller flips (e.g. from a task cancellation
++    /// handler) to make a running `run` kill its child.
++    public final class Cancellation: Sendable {
++        private let flag = OSAllocatedUnfairLock(initialState: false)
++        public init() {}
++        public func cancel() { flag.withLock { $0 = true } }
++        public var isCancelled: Bool { flag.withLock { $0 } }
++    }
++
++    /// Opt-in extras. The defaults reproduce the original behavior exactly.
++    public struct Options: Sendable {
++        /// Child environment; nil inherits ours.
++        public var environment: [String: String]?
++        /// Keep up to this many bytes of stderr (the rest is drained and
++        /// dropped); nil sends stderr to `/dev/null`.
++        public var stderrBytes: Int?
++        /// Reject stdout past this many bytes; nil is unbounded.
++        public var maximumStdoutBytes: Int?
++        public var cancellation: Cancellation?
++
++        public init(environment: [String: String]? = nil,
++                    stderrBytes: Int? = nil,
++                    maximumStdoutBytes: Int? = nil,
++                    cancellation: Cancellation? = nil) {
++            self.environment = environment
++            self.stderrBytes = stderrBytes
++            self.maximumStdoutBytes = maximumStdoutBytes
++            self.cancellation = cancellation
++        }
++    }
++
++    /// - Throws: `CancellationError` when already cancelled, otherwise
++    ///   whatever `Process.run()` throws if the child cannot be launched.
++    public static func run(executable: URL, arguments: [String], timeout: TimeInterval,
++                           options: Options = Options()) throws -> Outcome {
++        if options.cancellation?.isCancelled == true { throw CancellationError() }
+         let process = Process()
+         process.executableURL = executable
+         process.arguments = arguments
++        if let environment = options.environment { process.environment = environment }
+         process.standardInput = FileHandle.nullDevice
+-        process.standardError = FileHandle.nullDevice
+         let stdout = Pipe()
+         process.standardOutput = stdout
++        let stderr = options.stderrBytes == nil ? nil : Pipe()
++        process.standardError = stderr ?? FileHandle.nullDevice
+ 
+         let exited = DispatchSemaphore(value: 0)
+         process.terminationHandler = { _ in exited.signal() }
+         try process.run()
+ 
+-        let output = OSAllocatedUnfairLock(initialState: Data())
+-        let drained = DispatchSemaphore(value: 0)
+-        let reader = stdout.fileHandleForReading
+-        DispatchQueue.global(qos: .userInitiated).async {
+-            let data = reader.readDataToEndOfFile()
+-            output.withLock { $0 = data }
+-            drained.signal()
+-        }
++        let exceeded = OSAllocatedUnfairLock(initialState: false)
++        let out = drain(stdout.fileHandleForReading, keep: options.maximumStdoutBytes,
++                        onOverflow: { exceeded.withLock { $0 = true } })
++        let err = stderr.map { drain($0.fileHandleForReading, keep: options.stderrBytes, onOverflow: nil) }
++
++        // Polling is only needed when something other than exit can end the
++        // wait; without it this is the original single blocking wait.
++        let stop: (() -> Bool)? = options.cancellation == nil && options.maximumStdoutBytes == nil
++            ? nil
++            : { options.cancellation?.isCancelled == true || exceeded.withLock { $0 } }
+ 
+         let deadline = DispatchTime.now() + timeout
+         let timedOut: Bool
+         let drainedInTime: Bool
+-        if exited.wait(timeout: deadline) == .timedOut {
++        if wait(exited, until: deadline, stop: stop) != .signalled {
+             process.terminate()
+             if exited.wait(timeout: .now() + 1) == .timedOut {
+                 kill(process.processIdentifier, SIGKILL)
+                 _ = exited.wait(timeout: .now() + 1)
+             }
+-            timedOut = true
+-            drainedInTime = drained.wait(timeout: .now() + 1) == .success
++            timedOut = stop?() != true
++            let tail = DispatchTime.now() + 1
++            drainedInTime = out.done.wait(timeout: tail) == .success
++                && (err?.done.wait(timeout: tail) ?? .success) == .success
+         } else {
+-            drainedInTime = drained.wait(timeout: deadline) == .success
+-            timedOut = !drainedInTime
++            drainedInTime = wait(out.done, until: deadline, stop: stop) == .signalled
++                && (err.map { wait($0.done, until: deadline, stop: stop) } ?? .signalled) == .signalled
++            timedOut = !drainedInTime && stop?() != true
+         }
+ 
+         let running = process.isRunning
+-        return Outcome(timedOut: timedOut,
+-                       drained: drainedInTime,
+-                       terminationReason: running ? nil : process.terminationReason,
+-                       status: running ? 0 : process.terminationStatus,
+-                       stdout: drainedInTime ? output.withLock { $0 } : Data())
++        let overflow = exceeded.withLock { $0 }
++        var outcome = Outcome(timedOut: timedOut,
++                              drained: drainedInTime && !overflow,
++                              terminationReason: running ? nil : process.terminationReason,
++                              status: running ? 0 : process.terminationStatus,
++                              stdout: drainedInTime && !overflow ? out.data.withLock { $0 } : Data())
++        outcome.stderr = err?.data.withLock { $0 } ?? Data()
++        outcome.stdoutExceeded = overflow
++        outcome.cancelled = options.cancellation?.isCancelled == true
++        return outcome
++    }
++
++    private struct Drain: Sendable {
++        let data: OSAllocatedUnfairLock<Data>
++        let done: DispatchSemaphore
++    }
++
++    /// Reads `handle` to EOF on a background thread. With `keep == nil` the
++    /// whole stream is kept (original behavior). Otherwise only `keep` bytes
++    /// are kept: with `onOverflow` the read stops and reports the overflow,
++    /// without it the excess is read and dropped so the child never blocks.
++    private static func drain(_ handle: FileHandle, keep: Int?,
++                              onOverflow: (@Sendable () -> Void)?) -> Drain {
++        let result = Drain(data: OSAllocatedUnfairLock(initialState: Data()), done: DispatchSemaphore(value: 0))
++        DispatchQueue.global(qos: .userInitiated).async {
++            defer { result.done.signal() }
++            guard let keep else {
++                let data = handle.readDataToEndOfFile()
++                result.data.withLock { $0 = data }
++                return
++            }
++            var kept = Data()
++            while true {
++                let chunk = handle.availableData
++                if chunk.isEmpty { break }
++                if kept.count + chunk.count > keep {
++                    if let onOverflow {
++                        onOverflow()
++                        return
++                    }
++                    kept.append(chunk.prefix(keep - kept.count))
++                } else {
++                    kept.append(chunk)
++                }
++            }
++            let final = kept
++            result.data.withLock { $0 = final }
++        }
++        return result
++    }
++
++    private enum WaitResult { case signalled, deadline, stopped }
++
++    private static func wait(_ semaphore: DispatchSemaphore, until deadline: DispatchTime,
++                             stop: (() -> Bool)?) -> WaitResult {
++        guard let stop else {
++            return semaphore.wait(timeout: deadline) == .success ? .signalled : .deadline
++        }
++        while true {
++            if stop() { return .stopped }
++            let now = DispatchTime.now()
++            if now >= deadline { return .deadline }
++            let slice = min(deadline, now + .milliseconds(25))
++            if semaphore.wait(timeout: slice) == .success { return .signalled }
++        }
+     }
+ }
+diff --git a/Sources/AiTaskbarProviders/AntigravityExecutor.swift b/Sources/AiTaskbarProviders/AntigravityExecutor.swift
+index f6b0e00..2d03720 100644
+--- a/Sources/AiTaskbarProviders/AntigravityExecutor.swift
++++ b/Sources/AiTaskbarProviders/AntigravityExecutor.swift
+@@ -17,9 +17,17 @@ public protocol AntigravityExecuting: Sendable {
+ /// Production implementation that locates and invokes `agy` via `Process`.
+ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+     public let customPath: String?
+-
+-    public init(customPath: String? = nil) {
++    /// Wall-clock budget for one `agy` run.
++    public let timeout: TimeInterval
++    /// Largest stdout accepted from `agy`; more is rejected, not parsed.
++    public let maximumOutputBytes: Int
++
++    public init(customPath: String? = nil,
++                timeout: TimeInterval = 35,
++                maximumOutputBytes: Int = 4 * 1024 * 1024) {
+         self.customPath = customPath
++        self.timeout = timeout
++        self.maximumOutputBytes = maximumOutputBytes
+     }
+ 
+     /// Resolves the URL to the `agy` binary. Checks customPath, then standard
+@@ -57,92 +65,86 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+             throw AppError.guidance(.antigravityNotFound)
+         }
+ 
+-        let process = Process()
+-        process.executableURL = exe
+-        process.arguments = ["--output-format", "json", "--print", "/usage"]
+-        process.standardInput = FileHandle.nullDevice
+-
+-        let stdout = Pipe()
+-        let stderr = Pipe()
+-        process.standardOutput = stdout
+-        process.standardError = stderr
+-
+         // Ensure PATH includes the directories where agy and its tools live
+         var env = ProcessInfo.processInfo.environment
+         let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+         let currentPath = env["PATH"] ?? ""
+         let extraPaths = "\(homePath)/.local/bin:/opt/homebrew/bin:/usr/local/bin"
+         env["PATH"] = currentPath.isEmpty ? extraPaths : "\(extraPaths):\(currentPath)"
+-        process.environment = env
+-
+-        return try await withCheckedThrowingContinuation { continuation in
+-            DispatchQueue.global(qos: .userInitiated).async {
+-                let timedOut = OSAllocatedUnfairLock(initialState: false)
+-                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+-                timer.schedule(deadline: .now() + 35)
+-                timer.setEventHandler {
+-                    timedOut.withLock { $0 = true }
+-                    if process.isRunning {
+-                        process.terminate()
+-                    }
+-                }
+-                timer.resume()
+-
+-                do {
+-                    try process.run()
+-                } catch {
+-                    timer.cancel()
+-                    continuation.resume(throwing: AppError.io("Failed to run agy: \(error.localizedDescription)"))
+-                    return
+-                }
+-
+-                let outData = stdout.fileHandleForReading.readDataToEndOfFile()
+-                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+-                process.waitUntilExit()
+-                timer.cancel()
+-
+-                if timedOut.withLock({ $0 }) {
+-                    continuation.resume(throwing: AppError.guidance(.antigravityTimedOut))
+-                    return
+-                }
+ 
+-                let errStr = String(data: errData, encoding: .utf8) ?? ""
+-                let outStr = String(data: outData, encoding: .utf8) ?? ""
+-
+-                // Extract clean error message from structured agy JSON if available
+-                let structuredError = Self.extractStructuredError(outData: outData, errData: errData)
+-
+-                if process.terminationStatus != 0 || structuredError != nil {
+-                    let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
+-                    if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
+-                        continuation.resume(throwing: AppError.guidance(.antigravityNotAuthenticated))
+-                    } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
+-                        continuation.resume(throwing: AppError.guidance(.antigravityUnavailable))
+-                    } else if let structured = structuredError {
+-                        if structured == "context canceled" {
+-                            continuation.resume(throwing: AppError.guidance(.antigravityCanceled))
+-                        } else {
+-                            continuation.resume(throwing: AppError.io("agy: \(structured)"))
+-                        }
+-                    } else {
+-                        let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+-                            ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
+-                            : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
+-                        let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
+-                        let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
+-                        continuation.resume(throwing: AppError.io("agy failed (exit \(process.terminationStatus)): \(clean)"))
++        // BoundedProcess drains stdout and stderr concurrently (no two-pipe
++        // deadlock), caps both, and escalates SIGTERM to SIGKILL. The
++        // cancellation handler kills the child when the refresh is cancelled.
++        let options = BoundedProcess.Options(environment: env,
++                                             stderrBytes: Self.stderrBytes,
++                                             maximumStdoutBytes: maximumOutputBytes,
++                                             cancellation: BoundedProcess.Cancellation())
++        let timeout = self.timeout
++        let outcome: BoundedProcess.Outcome = try await withTaskCancellationHandler {
++            try await withCheckedThrowingContinuation { continuation in
++                DispatchQueue.global(qos: .userInitiated).async {
++                    do {
++                        continuation.resume(returning: try BoundedProcess.run(
++                            executable: exe,
++                            arguments: ["--output-format", "json", "--print", "/usage"],
++                            timeout: timeout,
++                            options: options))
++                    } catch is CancellationError {
++                        continuation.resume(throwing: CancellationError())
++                    } catch {
++                        continuation.resume(throwing: AppError.io("Failed to run agy: \(error.localizedDescription)"))
+                     }
+-                    return
+                 }
++            }
++        } onCancel: {
++            options.cancellation?.cancel()
++        }
++        if outcome.cancelled { throw CancellationError() }
++        return try classify(outcome)
++    }
+ 
+-                if outStr.contains("not logged in") || outStr.contains("error getting token source") {
+-                    continuation.resume(throwing: AppError.guidance(.antigravityNotAuthenticated))
+-                    return
+-                }
++    /// stderr is only mined for an error message; keep its head, drop the rest.
++    static let stderrBytes = 64 * 1024
+ 
+-                continuation.resume(returning: outData)
++    private func classify(_ outcome: BoundedProcess.Outcome) throws -> Data {
++        if outcome.stdoutExceeded {
++            throw AppError.io("agy output exceeds \(maximumOutputBytes) bytes")
++        }
++        if outcome.timedOut || !outcome.drained {
++            throw AppError.guidance(.antigravityTimedOut)
++        }
++        let outData = outcome.stdout
++        let errData = outcome.stderr
++        let errStr = String(data: errData, encoding: .utf8) ?? ""
++        let outStr = String(data: outData, encoding: .utf8) ?? ""
++
++        // Extract clean error message from structured agy JSON if available
++        let structuredError = Self.extractStructuredError(outData: outData, errData: errData)
++
++        if outcome.status != 0 || outcome.terminationReason != .exit || structuredError != nil {
++            let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
++            if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
++                throw AppError.guidance(.antigravityNotAuthenticated)
++            } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
++                throw AppError.guidance(.antigravityUnavailable)
++            } else if let structured = structuredError {
++                if structured == "context canceled" {
++                    throw AppError.guidance(.antigravityCanceled)
++                }
++                throw AppError.io("agy: \(structured)")
+             }
++            let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
++                ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
++                : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
++            let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
++            let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
++            throw AppError.io("agy failed (exit \(outcome.status)): \(clean)")
++        }
++
++        if outStr.contains("not logged in") || outStr.contains("error getting token source") {
++            throw AppError.guidance(.antigravityNotAuthenticated)
+         }
++        return outData
+     }
+ 
+     private static func extractStructuredError(outData: Data, errData: Data) -> String? {
+diff --git a/Tests/AiTaskbarCoreTests/BoundedProcessTests.swift b/Tests/AiTaskbarCoreTests/BoundedProcessTests.swift
+index 64a9139..8177117 100644
+--- a/Tests/AiTaskbarCoreTests/BoundedProcessTests.swift
++++ b/Tests/AiTaskbarCoreTests/BoundedProcessTests.swift
+@@ -48,6 +48,79 @@ struct BoundedProcessTests {
+         #expect(Date().timeIntervalSince(start) < 6)
+     }
+ 
++    // BP-REP-002: the opt-in stderr capture drains concurrently with stdout.
++    @Test("captured stderr is drained concurrently and kept up to its cap")
++    func stderr_captured_with_cap() throws {
++        let start = Date()
++        let outcome = try BoundedProcess.run(
++            executable: URL(fileURLWithPath: "/bin/sh"),
++            arguments: ["-c", "s=eeeeeeeeee; i=0; while [ $i -lt 15 ]; do s=\"$s$s\"; i=$((i+1)); done; printf '%s' \"$s\" >&2; printf ok"],
++            timeout: 3,
++            options: .init(stderrBytes: 1000))
++        #expect(outcome.exitedCleanly)
++        #expect(String(decoding: outcome.stdout, as: UTF8.self) == "ok")
++        #expect(outcome.stderr.count == 1000)
++        #expect(Date().timeIntervalSince(start) < 2.5)
++    }
++
++    @Test("stdout over its cap kills the child and is reported, not returned")
++    func stdout_cap_rejects() throws {
++        let start = Date()
++        let outcome = try BoundedProcess.run(
++            executable: URL(fileURLWithPath: "/bin/sh"),
++            arguments: ["-c", "while :; do printf xxxxxxxxxxxxxxxx; done"],
++            timeout: 10,
++            options: .init(maximumStdoutBytes: 4096))
++        #expect(outcome.stdoutExceeded)
++        #expect(!outcome.timedOut)
++        #expect(outcome.stdout.isEmpty)
++        #expect(!outcome.exitedCleanly)
++        #expect(Date().timeIntervalSince(start) < 5)
++    }
++
++    @Test("a stdout within its cap is returned whole")
++    func stdout_cap_allows_small() throws {
++        let outcome = try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/echo"),
++                                             arguments: ["hi"], timeout: 5,
++                                             options: .init(maximumStdoutBytes: 4096))
++        #expect(outcome.exitedCleanly)
++        #expect(!outcome.stdoutExceeded)
++        #expect(String(decoding: outcome.stdout, as: UTF8.self) == "hi\n")
++    }
++
++    @Test("cancellation mid-run kills the child well before the budget")
++    func cancellation_kills_child() throws {
++        let token = BoundedProcess.Cancellation()
++        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { token.cancel() }
++        let start = Date()
++        let outcome = try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/sleep"),
++                                             arguments: ["30"], timeout: 20,
++                                             options: .init(cancellation: token))
++        #expect(outcome.cancelled)
++        #expect(!outcome.timedOut)
++        #expect(outcome.terminationReason == .uncaughtSignal)
++        #expect(Date().timeIntervalSince(start) < 5)
++    }
++
++    @Test("an already-cancelled token never launches the child")
++    func cancelled_before_launch() {
++        let token = BoundedProcess.Cancellation()
++        token.cancel()
++        #expect(throws: CancellationError.self) {
++            try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/echo"),
++                                   arguments: [], timeout: 1,
++                                   options: .init(cancellation: token))
++        }
++    }
++
++    @Test("a custom environment reaches the child")
++    func environment_passed() throws {
++        let outcome = try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/sh"),
++                                             arguments: ["-c", "printf %s \"$B9_PROBE\""], timeout: 5,
++                                             options: .init(environment: ["B9_PROBE": "yes"]))
++        #expect(String(decoding: outcome.stdout, as: UTF8.self) == "yes")
++    }
++
+     @Test("a missing executable throws instead of crashing")
+     func launch_failure() {
+         #expect(throws: (any Error).self) {
+diff --git a/Tests/AiTaskbarCoreTests/HTTPClientTests.swift b/Tests/AiTaskbarCoreTests/HTTPClientTests.swift
+index a8ecfbe..0f5a5bb 100644
+--- a/Tests/AiTaskbarCoreTests/HTTPClientTests.swift
++++ b/Tests/AiTaskbarCoreTests/HTTPClientTests.swift
+@@ -265,6 +265,74 @@ struct HTTPClientTests {
+         StubURLProtocol.reset()
+     }
+ 
++    // BP-REP-001 / LEAK-FAN-006: the vendor usage + OAuth path (`send`,
++    // `sendDecoding`, `fetchPayload`) must not buffer an arbitrarily large
++    // body. 9 MiB is over the 8 MiB default cap.
++    @Test("send rejects a body larger than the default cap")
++    func send_rejects_oversized_body() async {
++        let oversized = Data(repeating: 0x61, count: 9 * 1024 * 1024)
++        StubURLProtocol.handler = { _ in .init(data: oversized) }
++        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
++        var message = ""
++        do {
++            let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/usage")!))
++            Issue.record("expected an oversize failure, got \(data.count) bytes")
++        } catch let error as AppError {
++            if case .transport(let m) = error { message = m }
++        } catch {
++            Issue.record("expected AppError, got \(error)")
++        }
++        #expect(message.contains("exceeds \(HTTPClient.defaultMaximumResponseBytes) bytes"))
++        StubURLProtocol.reset()
++    }
++
++    @Test("sendDecoding inherits the default response cap")
++    func sendDecoding_rejects_oversized_body() async {
++        struct Out: Decodable { let n: Int }
++        let oversized = Data(repeating: 0x20, count: 9 * 1024 * 1024)
++        StubURLProtocol.handler = { _ in .init(data: oversized) }
++        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
++        var transport = false
++        do {
++            _ = try await http.sendDecoding(URLRequest(url: URL(string: "https://example.com/u")!), as: Out.self)
++        } catch let error as AppError {
++            if case .transport = error { transport = true }
++        } catch {}
++        #expect(transport)
++        StubURLProtocol.reset()
++    }
++
++    @Test("the default cap is at least 50x the largest vendor fixture")
++    func default_cap_is_generous() {
++        let largest = [Fixtures.anthropicUsage200, Fixtures.openaiUsage200,
++                       Fixtures.statuspageIncidentsWindow200].map { $0.utf8.count }.max() ?? 0
++        #expect(HTTPClient.defaultMaximumResponseBytes >= 50 * largest)
++    }
++
++    @Test("send still returns a real vendor fixture verbatim")
++    func send_accepts_fixture() async throws {
++        let body = Data(Fixtures.anthropicUsage200.utf8)
++        StubURLProtocol.handler = { _ in .init(data: body) }
++        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
++        let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/usage")!))
++        #expect(data == body)
++        StubURLProtocol.reset()
++    }
++
++    // `send` keeps URLSession's default redirect handling; only
++    // `sendBounded` restricts origins.
++    @Test("send still follows a cross-origin redirect")
++    func send_follows_cross_origin_redirect() async throws {
++        StubURLProtocol.handler = { request in
++            if request.url?.host == "api2.example" { return .init(data: Data("moved".utf8)) }
++            return .init(status: 302, data: Data(), redirectURL: URL(string: "https://api2.example/u")!)
++        }
++        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
++        let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/u")!))
++        #expect(data == Data("moved".utf8))
++        StubURLProtocol.reset()
++    }
++
+     // LEAK-FAN-004: a download whose response is rejected after URLSession
+     // already wrote the body must not leave that temp file behind.
+     @Test("download rejecting a non-HTTP response deletes the temp file")
+diff --git a/Tests/AiTaskbarProvidersTests/AntigravityExecutorProcessTests.swift b/Tests/AiTaskbarProvidersTests/AntigravityExecutorProcessTests.swift
+new file mode 100644
+index 0000000..e24617d
+--- /dev/null
++++ b/Tests/AiTaskbarProvidersTests/AntigravityExecutorProcessTests.swift
+@@ -0,0 +1,155 @@
++import Testing
++import Foundation
++import os
++@testable import AiTaskbarCore
++@testable import AiTaskbarProviders
++
++/// BP-REP-002 / DUP-ECO-004 / LEAK-FAN-001 / RACE-CRO-008: the `agy` child
++/// must be drained concurrently, bounded, killed on cancellation and
++/// SIGKILLed when it ignores SIGTERM. Every test runs a throwaway `/bin/sh`
++/// script from a temp dir, never a real `agy`.
++@Suite("ProcessAntigravityExecutor bounded I/O", .serialized)
++struct AntigravityExecutorProcessTests {
++    /// Temp dir holding the fake `agy` and the pid file it writes.
++    private struct FakeAgy {
++        let dir: URL
++        let script: String
++        let pidFile: URL
++
++        init(body: String) throws {
++            dir = URL(fileURLWithPath: NSTemporaryDirectory())
++                .appendingPathComponent("ai-taskbar-agy-\(UUID().uuidString)")
++            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
++            pidFile = dir.appendingPathComponent("pid")
++            script = dir.appendingPathComponent("agy").path
++            let text = "#!/bin/sh\necho $$ > '\(pidFile.path)'\n\(body)\n"
++            try text.write(toFile: script, atomically: true, encoding: .utf8)
++            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
++        }
++
++        var pid: pid_t? {
++            guard let s = try? String(contentsOf: pidFile, encoding: .utf8) else { return nil }
++            return pid_t(s.trimmingCharacters(in: .whitespacesAndNewlines))
++        }
++
++        /// Test cleanup only: a leftover child from a RED run is SIGKILLed so
++        /// the suite never leaks it.
++        func cleanUp() {
++            if let pid, kill(pid, 0) == 0 { kill(pid, SIGKILL) }
++            try? FileManager.default.removeItem(at: dir) // best-effort temp cleanup
++        }
++    }
++
++    private final class Box: Sendable {
++        let state = OSAllocatedUnfairLock<Result<Data, any Error>?>(initialState: nil)
++    }
++
++    /// Polls for the task's result so a hanging executor fails the test
++    /// instead of hanging the suite.
++    private func result(of box: Box, within seconds: Double) async -> Result<Data, any Error>? {
++        let deadline = Date().addingTimeInterval(seconds)
++        while Date() < deadline {
++            if let r = box.state.withLock({ $0 }) { return r }
++            try? await Task.sleep(nanoseconds: 20_000_000)
++        }
++        return box.state.withLock { $0 }
++    }
++
++    private func start(_ exec: ProcessAntigravityExecutor) -> (Box, Task<Void, Never>) {
++        let box = Box()
++        let task = Task {
++            do {
++                let data = try await exec.fetchUsageJSON()
++                box.state.withLock { $0 = .success(data) }
++            } catch {
++                box.state.withLock { $0 = .failure(error) }
++            }
++        }
++        return (box, task)
++    }
++
++    private func isGone(_ pid: pid_t) -> Bool {
++        kill(pid, 0) == -1 && errno == ESRCH
++    }
++
++    /// 327,680 bytes of `e`, produced by shell builtins only so the script
++    /// has no child processes that could outlive it.
++    private static let bigString = "s=eeeeeeeeee; i=0; while [ $i -lt 15 ]; do s=\"$s$s\"; i=$((i+1)); done"
++
++    @Test("more than 128 KB on stderr does not stall the read until the timeout")
++    func large_stderr_completes_promptly() async throws {
++        let fake = try FakeAgy(body: """
++        \(Self.bigString)
++        printf '%s' "$s" >&2
++        printf '%s' '{"ok":true}'
++        """)
++        defer { fake.cleanUp() }
++        let started = Date()
++        let (box, _) = start(ProcessAntigravityExecutor(customPath: fake.script, timeout: 3))
++        let outcome = await result(of: box, within: 8)
++        let elapsed = Date().timeIntervalSince(started)
++        var body = ""
++        if case .success(let data)? = outcome { body = String(decoding: data, as: UTF8.self) }
++        #expect(body == #"{"ok":true}"#, "outcome: \(String(describing: outcome))")
++        #expect(elapsed < 2.5)
++    }
++
++    @Test("cancelling the refresh kills the agy child")
++    func cancellation_kills_child() async throws {
++        let fake = try FakeAgy(body: "exec /bin/sleep 30")
++        defer { fake.cleanUp() }
++        let (box, task) = start(ProcessAntigravityExecutor(customPath: fake.script, timeout: 20))
++        var waited = 0
++        while fake.pid == nil && waited < 250 {
++            try await Task.sleep(nanoseconds: 20_000_000)
++            waited += 1
++        }
++        let pid = try #require(fake.pid)
++        task.cancel()
++        let outcome = await result(of: box, within: 3)
++        var cancelled = false
++        if case .failure(let error)? = outcome { cancelled = error is CancellationError }
++        #expect(cancelled, "outcome: \(String(describing: outcome))")
++        #expect(isGone(pid))
++    }
++
++    @Test("a child that ignores SIGTERM is SIGKILLed at the deadline")
++    func sigterm_ignored_escalates_to_sigkill() async throws {
++        let fake = try FakeAgy(body: "trap '' TERM\nwhile :; do sleep 0.05; done")
++        defer { fake.cleanUp() }
++        let (box, _) = start(ProcessAntigravityExecutor(customPath: fake.script, timeout: 0.5))
++        let outcome = await result(of: box, within: 6)
++        var timedOut = false
++        if case .failure(let error)? = outcome {
++            timedOut = (error as? AppError) == .guidance(.antigravityTimedOut)
++        }
++        #expect(timedOut, "outcome: \(String(describing: outcome))")
++        let pid = try #require(fake.pid)
++        #expect(isGone(pid))
++    }
++
++    @Test("stdout larger than the cap is rejected instead of buffered")
++    func oversized_stdout_rejected() async throws {
++        let fake = try FakeAgy(body: "\(Self.bigString)\nprintf '%s' \"$s\"")
++        defer { fake.cleanUp() }
++        let (box, _) = start(ProcessAntigravityExecutor(customPath: fake.script, timeout: 5,
++                                                        maximumOutputBytes: 64 * 1024))
++        let outcome = await result(of: box, within: 8)
++        var message = ""
++        if case .failure(let error)? = outcome, case .io(let m)? = error as? AppError { message = m }
++        #expect(message.contains("exceeds 65536 bytes"), "outcome: \(String(describing: outcome))")
++    }
++
++    @Test("stderr noise under the cap still maps to the not-logged-in guidance")
++    func stderr_still_classified() async throws {
++        let fake = try FakeAgy(body: "echo 'Error: not logged in' >&2\nexit 1")
++        defer { fake.cleanUp() }
++        let (box, _) = start(ProcessAntigravityExecutor(customPath: fake.script, timeout: 5))
++        let outcome = await result(of: box, within: 8)
++        var guidance = false
++        if case .failure(let error)? = outcome {
++            guidance = (error as? AppError) == .guidance(.antigravityNotAuthenticated)
++        }
++        #expect(guidance)
++    }
++}

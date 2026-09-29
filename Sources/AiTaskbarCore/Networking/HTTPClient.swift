@@ -4,6 +4,12 @@ public final class HTTPClient: @unchecked Sendable {
     private let session: URLSession
     public let defaultTimeout: TimeInterval
 
+    /// Ceiling on a `send` / `sendDecoding` body (8 MiB). The largest real
+    /// usage payload we have a fixture for is ~4 KB, so this is ~2000x
+    /// headroom while still refusing a runaway or hostile body before it is
+    /// buffered and written to `DiskCache` (BP-REP-001).
+    public static let defaultMaximumResponseBytes = 8 * 1024 * 1024
+
     /// Process-wide ephemeral session. Differences from `URLSession.shared`:
     ///   - No URLCache → drops ~4 MB RAM + 20 MB on-disk that we never use
     ///     (our `DiskCache` is the source of truth).
@@ -105,32 +111,19 @@ public final class HTTPClient: @unchecked Sendable {
     /// validate suite can confirm ephemeral semantics.
     public var sessionConfiguration: URLSessionConfiguration { session.configuration }
 
-    public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    /// Sends `request` with URLSession's default redirect handling (vendor
+    /// APIs keep whatever redirects they rely on today) and refuses a body
+    /// larger than `maximumResponseBytes` instead of buffering it whole.
+    public func send(
+        _ request: URLRequest,
+        maximumResponseBytes: Int = HTTPClient.defaultMaximumResponseBytes
+    ) async throws -> (Data, HTTPURLResponse) {
         try Task.checkCancellation()
-        var req = request
-        if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
-            req.timeoutInterval = defaultTimeout
+        guard maximumResponseBytes >= 0 else {
+            throw AppError.transport("invalid bounded HTTP request")
         }
-        do {
-            let (data, response) = try await session.data(for: req)
-            try Task.checkCancellation()
-            guard let http = response as? HTTPURLResponse else {
-                throw AppError.transport("non-HTTP response")
-            }
-            return (data, http)
-        } catch let appErr as AppError {
-            throw appErr
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let urlErr as URLError {
-            // URLSession surfaces task cancellation as URLError.cancelled.
-            // Re-throw as Swift CancellationError so callers can handle it
-            // uniformly.
-            if urlErr.code == .cancelled { throw CancellationError() }
-            throw AppError.transport("URLError \(urlErr.code.rawValue): \(urlErr.localizedDescription)")
-        } catch {
-            throw AppError.transport(error.localizedDescription)
-        }
+        return try await readBounded(request, maximumResponseBytes: maximumResponseBytes,
+                                     delegate: nil)
     }
 
     /// Streams a bounded response while allowing redirects only inside the
@@ -146,16 +139,24 @@ public final class HTTPClient: @unchecked Sendable {
         guard maximumResponseBytes >= 0, let origin = request.url else {
             throw AppError.transport("invalid bounded HTTP request")
         }
+        let redirectDelegate = BoundedRedirectDelegate(origin: origin, allow: allowRedirect)
+        return try await readBounded(request, maximumResponseBytes: maximumResponseBytes,
+                                     delegate: redirectDelegate)
+    }
+
+    /// Shared capped streaming read. A nil `delegate` leaves redirects to the
+    /// session's own policy, exactly as `session.data(for:)` did for `send`.
+    private func readBounded(
+        _ request: URLRequest,
+        maximumResponseBytes: Int,
+        delegate: (any URLSessionTaskDelegate)?
+    ) async throws -> (Data, HTTPURLResponse) {
         var req = request
         if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
             req.timeoutInterval = defaultTimeout
         }
-        let redirectDelegate = BoundedRedirectDelegate(origin: origin, allow: allowRedirect)
         do {
-            let (bytes, response) = try await session.bytes(
-                for: req,
-                delegate: redirectDelegate
-            )
+            let (bytes, response) = try await session.bytes(for: req, delegate: delegate)
             try Task.checkCancellation()
             guard let http = response as? HTTPURLResponse else {
                 throw AppError.transport("non-HTTP response")

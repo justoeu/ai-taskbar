@@ -1,0 +1,80 @@
+{
+ "batch": "B9-bounded-io",
+ "results": [
+  {
+   "id": "BP-REP-001",
+   "outcome": "fixed",
+   "tests": [
+    "HTTPClientTests#send_rejects_oversized_body",
+    "HTTPClientTests#sendDecoding_rejects_oversized_body",
+    "HTTPClientTests#default_cap_is_generous",
+    "HTTPClientTests#send_accepts_fixture",
+    "HTTPClientTests#send_follows_cross_origin_redirect"
+   ],
+   "red": "Expectation failed: (message → \"\").contains(\"exceeds \\(HTTPClient.defaultMaximumResponseBytes) bytes\" → \"exceeds 8388608 bytes\")",
+   "reversal": "ok"
+  },
+  {
+   "id": "LEAK-FAN-006",
+   "outcome": "fixed",
+   "tests": [
+    "HTTPClientTests#sendDecoding_rejects_oversized_body"
+   ],
+   "red": "Expectation failed: transport",
+   "reversal": "ok"
+  },
+  {
+   "id": "BP-REP-002",
+   "outcome": "fixed",
+   "tests": [
+    "AntigravityExecutorProcessTests#large_stderr_completes_promptly",
+    "AntigravityExecutorProcessTests#oversized_stdout_rejected"
+   ],
+   "red": "Expectation failed: (elapsed → 3.0921449661254883) < 2.5 ; (message → \"\").contains(\"exceeds 65536 bytes\")",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-ECO-004",
+   "outcome": "fixed",
+   "tests": [
+    "AntigravityExecutorProcessTests#sigterm_ignored_escalates_to_sigkill",
+    "BoundedProcessTests#stderr_captured_with_cap"
+   ],
+   "red": "Expectation failed: isGone(pid → 36217)",
+   "reversal": "ok"
+  },
+  {
+   "id": "LEAK-FAN-001",
+   "outcome": "fixed",
+   "tests": [
+    "AntigravityExecutorProcessTests#cancellation_kills_child",
+    "BoundedProcessTests#cancellation_kills_child"
+   ],
+   "red": "Expectation failed: cancelled ; Expectation failed: isGone(pid → 36127)",
+   "reversal": "ok"
+  },
+  {
+   "id": "RACE-CRO-008",
+   "outcome": "fixed",
+   "tests": [
+    "AntigravityExecutorProcessTests#large_stderr_completes_promptly"
+   ],
+   "red": "Expectation failed: (body → \"\") == (#\"{\"ok\":true}\"# → \"{\"ok\":true}\")",
+   "reversal": "ok"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1044,
+  "coverage": "92.49%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Networking/HTTPClient.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Util/BoundedProcess.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AntigravityExecutor.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/HTTPClientTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/BoundedProcessTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/AntigravityExecutorProcessTests.swift"
+ ]
+}

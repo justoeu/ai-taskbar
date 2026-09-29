@@ -1,0 +1,65 @@
+{
+  "id": "DUP-ECO-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 15:47:00 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The duplicated logic is removed: agy now goes through the single BoundedProcess implementation, which has the concurrent drain and the SIGKILL escalation. Reversal test: `sigterm_ignored_escalates_to_sigkill` is RED on HEAD (timedOut false, pid still alive) and GREEN with the fix. The default path used by SecurityToolCredentialReader.swift:137 and DMGVerifier.swift:163 is unchanged. With default Options: stderrBytes nil still means /dev/null, keep nil still means readDataToEndOfFile, stop nil still means the original plain semaphore waits, `timedOut = stop?() != true` gives true in the timeout branch and `!drainedInTime` otherwise, and overflow is always false. The Outcome fields therefore match the old ones exactly. The SecurityToolCredentialReader tests pass inside the filtered run (286/286).",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:103",
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:112",
+        "Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift:137"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "This is the right fix for a clone that had drifted apart: instead of copying the drain and SIGTERM/SIGKILL logic from SecurityToolCredentialReader into AntigravityExecutor, the diff extends the single shared BoundedProcess (header doc at BoundedProcess.swift:4-7 now lists all three callers) with opt-in Options whose defaults keep the old behavior. The two existing callers (SecurityToolCredentialReader.swift:137, DMGVerifier.swift:163) are unchanged, and the stop == nil path still does the original single blocking wait. No clone is left behind.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:4",
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:58",
+        "Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift:137",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:163"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "BoundedProcess.swift:58-79: Options defaults to all-nil, so both existing callers get the original behavior. SecurityToolCredentialReader.swift:137 and DMGVerifier.swift:163 pass no options: stdin is /dev/null, stderr goes to FileHandle.nullDevice, and stop == nil keeps the original single blocking wait with no 25 ms polling. The 5 s budget and the SIGTERM-then-SIGKILL escalation are unchanged. Outcome.timedOut/exitedCleanly still mean the same thing for them. The CLAUDE.md /usr/bin/security fallback rules therefore still hold: exact args, stdin /dev/null, stderr discarded, payload not logged, 5 s kill. The doc comment was updated to list agy as the third caller.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:81",
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:96",
+        "Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift:137",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:163"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

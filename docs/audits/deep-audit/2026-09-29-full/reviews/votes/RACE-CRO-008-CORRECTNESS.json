@@ -1,0 +1,12 @@
+{
+ "id": "RACE-CRO-008",
+ "verdict": "APROVA",
+ "reasoning": "stderr is drained on its own thread at the same time as stdout (BoundedProcess `drain` for `err`), so a child that writes more than 64 KB to stderr no longer blocks. Reversal test: `large_stderr_completes_promptly` fails on HEAD (body '' and elapsed 3.09 s against a limit of 2.5 s) and passes with the fix. After restoring, the working-tree diff is byte-identical to B9-bounded-io.diff (checked with cmp).",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:99"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a95d86996b3a25c05",
+ "batch": "B9-bounded-io"
+}

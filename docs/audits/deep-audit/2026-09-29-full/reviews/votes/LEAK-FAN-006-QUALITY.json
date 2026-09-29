@@ -1,0 +1,12 @@
+{
+ "id": "LEAK-FAN-006",
+ "verdict": "APROVA",
+ "reasoning": "This is the same site as BP-REP-001. sendDecoding (HTTPClient.swift:203) picks up the cap through send's default parameter, so no per-caller change is needed and nothing is duplicated at OpenRouter/xAI/OAuthRefresher. The test name sendDecoding_rejects_oversized_body describes what it checks.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:203"
+ ],
+ "lens": "QUALITY",
+ "_task": "ae421429758c3031a",
+ "batch": "B9-bounded-io"
+}

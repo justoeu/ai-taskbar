@@ -1,0 +1,13 @@
+{
+ "id": "BP-REP-002",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarProviders/AntigravityExecutor.swift:75-104: the hand-written Process/Pipe/timer/continuation block (about 90 lines, 6 levels of nesting) is replaced by BoundedProcess.run plus a flat classify(_:) that throws instead of resuming a continuation in 7 places. Nesting drops from 6 to 3 levels. The stdout cap (maximumOutputBytes) and the stderr cap (static stderrBytes, with a comment giving the reason) are named and injectable. An oversized stdout becomes an AppError.io that users can see, not a silent truncation.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/AntigravityExecutor.swift:20",
+  "Sources/AiTaskbarProviders/AntigravityExecutor.swift:109"
+ ],
+ "lens": "QUALITY",
+ "_task": "ae421429758c3031a",
+ "batch": "B9-bounded-io"
+}

@@ -1,0 +1,12 @@
+{
+ "id": "LEAK-FAN-006",
+ "verdict": "APROVA",
+ "reasoning": "HTTPClient.swift:201: sendDecoding inherits the cap through send(). The only file touched is the one the finding names, and the test is in Tests/AiTaskbarCoreTests/HTTPClientTests.swift.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:201"
+ ],
+ "lens": "SCOPE",
+ "_task": "a99a5f89e1b1e1a26",
+ "batch": "B9-bounded-io"
+}

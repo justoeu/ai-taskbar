@@ -1,0 +1,42 @@
+[
+ [
+  "SCOPE",
+  "README.md:300 says agy runs with a 'safe 15-second budget'. The code used 35 s at HEAD and still does (AntigravityExecutor.swift:26). This drift predates the batch, but the budget is now a public knob, so the README should be fixed to 35 s. It could also mention the 4 MiB stdout / 64 KiB stderr caps."
+ ],
+ [
+  "SCOPE",
+  "Optional doc sync: CLAUDE.md:270 documents the sendBounded caps for UpdateChecker but says nothing about the new 8 MiB default on send/sendDecoding (HTTPClient.defaultMaximumResponseBytes). It would help to add one line under Architecture or Hard rules, so nobody later adds an uncapped data(for:) path. It is not required: no existing doc statement is now wrong."
+ ],
+ [
+  "SCOPE",
+  "Hidden cost for the performance lens: every vendor send() now goes through session.bytes(for:) and iterates AsyncBytes one byte at a time, calling Task.checkCancellation() per byte (HTTPClient.swift:176-183). Before, it was a single data(for:) call. This is negligible at ~4 KB payloads every 300 s, but a chunked read, or checking cancellation every N bytes, would avoid per-byte overhead near the 8 MiB cap."
+ ],
+ [
+  "QUALITY",
+  "HTTPClient.swift:120 and :139 repeat the same 'guard maximumResponseBytes >= 0' check with the same message in send and sendBounded. It could move into readBounded (cosmetic, low priority)."
+ ],
+ [
+  "QUALITY",
+  "BoundedProcess.swift:117,125: 'timedOut = stop?() != true' encodes 'stopped by cancellation or overflow, so not a timeout' with no comment. It is correct but hard to read. A comment or a named local would help."
+ ],
+ [
+  "QUALITY",
+  "BoundedProcess.run has grown to about 60 lines, and Outcome mixes memberwise 'let' fields with 'var' fields that are set after init. That is acceptable for a backward-compatible init, but a follow-up could make them all init parameters."
+ ],
+ [
+  "QUALITY",
+  "readBounded (HTTPClient.swift:174-181) now runs Task.checkCancellation() and a guard on every byte for every vendor fetch, not only the status sources. That is harmless for payloads of about 4 KB, but reading in chunks would be cheaper if a large body ever becomes normal (perf lens, not a regression the fix introduced)."
+ ],
+ [
+  "QUALITY",
+  "The new tests assert wall-clock limits (< 2.5 s, < 5 s) to detect a deadlock. These could be flaky on a loaded CI runner. Watch them."
+ ],
+ [
+  "CORRECTNESS",
+  "PERF (low): HTTPClient.readBounded (Sources/AiTaskbarCore/Networking/HTTPClient.swift:177) reads one byte per iteration and calls Task.checkCancellation() per byte. Measured with -O: 4 KB goes from 0.105 to 0.187 ms, 1 MiB goes from 0.18 to 21.4 ms (about 115x). This now applies to every vendor fetch, not just status sources. Reading bytes in chunks, or using a URLSessionDataDelegate that counts didReceive data, would remove the cost."
+ ],
+ [
+  "CORRECTNESS",
+  "LEAK (residual, low): BoundedProcess drain threads (Sources/AiTaskbarCore/Util/BoundedProcess.swift `drain`) block in availableData or readDataToEndOfFile until every holder of the pipe's write end closes it. A grandchild that inherits the pipe (for example an agy daemon, which was not confirmed) keeps one GCD thread and one fd pinned after run() returns. Only the direct child is ever killed; there is no process-group kill."
+ ]
+]

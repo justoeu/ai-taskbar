@@ -1255,7 +1255,7 @@
     "impact": "A compromised, misconfigured, or MITM-proxied vendor endpoint (or a misbehaving CDN edge) returning a multi-GB body causes URLSession to buffer the entire response into memory before send() returns; timeoutIntervalForResource=30s bounds duration but not size. This runs inside the process-wide refreshAll() fan-out for every vendor card, so one bad response can spike RSS enough to get the LSUIElement menu-bar app killed by jetsam, taking every vendor usage display down with it.",
     "fix": "Route AnthropicProvider/OpenAIProvider/ZAIProvider/KimiProvider/DeepSeekProvider/GeminiProvider/OpenRouterProvider/XAIProvider/OAuthRefresher through sendBounded (or add a fetchPayload(maximumResponseBytes:) overload) with a small cap (2-4 MiB), matching StatuspageSource/RSSStatusSource.",
     "test_red_green": {
-      "name": "vendorFetchRejectsOversizedResponse",
+      "name": "HTTPClientTests#send_rejects_oversized_body,HTTPClientTests#sendDecoding_rejects_oversized_body,HTTPClientTests#default_cap_is_generous,HTTPClientTests#send_accepts_fixture,HTTPClientTests#send_follows_cross_origin_redirect",
       "assert_before": "StubURLProtocol streams a 500 MB body for a vendor usage endpoint; AnthropicProvider.fetch()/http.fetchPayload(req) completes successfully with the whole body materialized in Data, no cap.",
       "assert_after": "The same stub response causes fetchPayload/sendDecoding to throw AppError.transport once N bytes have been read, and peak memory growth stays bounded near N regardless of body size."
     },
@@ -1264,9 +1264,40 @@
     "cetico_evidence": "HTTPClient.swift:108 session.data(for:) has no size cap, and sendBounded (:132) is used only by the status sources. Downgraded from HIGH: every endpoint is a hard-coded first-party HTTPS host or an allowlisted one. The attacker would need TLS control of that vendor, or a user-trusted MITM CA, and either one already exposes the bearer tokens, which is far worse than an OOM. The 30 s resource timeout (:17) limits duration but not size. This is defense-in-depth.",
     "verification": "cetico",
     "domain": "backpressure",
-    "status": "open",
+    "status": "resolved",
     "id": "BP-REP-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "HTTPClientTests#send_rejects_oversized_body,HTTPClientTests#sendDecoding_rejects_oversized_body,HTTPClientTests#default_cap_is_generous,HTTPClientTests#send_accepts_fixture,HTTPClientTests#send_follows_cross_origin_redirect",
+    "resolved_at": "2026-09-29 15:46:59 UTC",
+    "resolved_note": "batch B9-bounded-io",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:46:59 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste HTTPClientTests#send_rejects_oversized_body,HTTPClientTests#sendDecoding_rejects_oversized_body,HTTPClientTests#default_cap_is_generous,HTTPClientTests#send_accepts_fixture,HTTPClientTests#send_follows_cross_origin_redirect · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Represa",
@@ -1281,7 +1312,7 @@
     "impact": "Runs on every scheduled Gemini/Antigravity refresh (300 s cadence). A verbose agy stderr dump exceeding the pipe buffer, combined with a slow stdout writer, stalls a DispatchQueue.global thread until SIGTERM succeeds (only if agy does not trap it) or never resolves, leaving that provider card stuck loading. A malicious agy build could emit unbounded stdout with no memory ceiling before the timer fires.",
     "fix": "Drain stdout and stderr concurrently on separate queues (same pattern as SecurityToolCredentialReader), cap each stream captured size (e.g. 4 MiB), and escalate the timeout handler to SIGKILL after a short grace period.",
     "test_red_green": {
-      "name": "antigravityExecutorSurvivesOversizedStderr",
+      "name": "AntigravityExecutorProcessTests#large_stderr_completes_promptly,AntigravityExecutorProcessTests#oversized_stdout_rejected",
       "assert_before": "A stub agy script writing 10 MB to stderr before any stdout output causes fetchUsageJSON() to hang past the 35 s deadline.",
       "assert_after": "The same stub completes within a bounded time and returns captured output or a timeout error, with the child guaranteed killed via SIGKILL."
     },
@@ -1290,9 +1321,40 @@
     "cetico_evidence": "The mechanism is as described: sequential drains at AntigravityExecutor.swift:101-102, SIGTERM only at :88, no size cap. Downgraded from HIGH: the timer makes it a 35 s failure, not a permanent deadlock, because agy is a Go binary and SIGTERM's default action terminates it. The real agy writes 1.8 KB stdout and 0 B stderr (measured). A 'malicious agy build' is out of scope: whoever replaced ~/.local/bin/agy already has code execution as the user.",
     "verification": "cetico",
     "domain": "backpressure",
-    "status": "open",
+    "status": "resolved",
     "id": "BP-REP-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AntigravityExecutorProcessTests#large_stderr_completes_promptly,AntigravityExecutorProcessTests#oversized_stdout_rejected",
+    "resolved_at": "2026-09-29 15:47:00 UTC",
+    "resolved_note": "batch B9-bounded-io",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:46:59 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#large_stderr_completes_promptly,AntigravityExecutorProcessTests#oversized_stdout_rejected · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Represa",
@@ -2324,15 +2386,46 @@
     "cetico_evidence": "Duplicate of BP-REP-002 / RACE-CRO-008. SecurityToolCredentialReader.swift:151-168 already drains concurrently and escalates to SIGKILL, but AntigravityExecutor.swift:101-103 does neither. Impact bounded at 35 s.",
     "verification": "cetico",
     "domain": "duplication",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AntigravityExecutor.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "AntigravityExecutorProcessTests#sigterm_ignored_escalates_to_sigkill,BoundedProcessTests#stderr_captured_with_cap",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-ECO-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AntigravityExecutorProcessTests#sigterm_ignored_escalates_to_sigkill,BoundedProcessTests#stderr_captured_with_cap",
+    "resolved_at": "2026-09-29 15:47:00 UTC",
+    "resolved_note": "batch B9-bounded-io",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:47:00 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#sigterm_ignored_escalates_to_sigkill,BoundedProcessTests#stderr_captured_with_cap · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "in_progress": false
   },
   {
     "title": "Untrusted Double to Int conversions in ZAIWireTypes/OpenAIWireTypes/GeminiWireTypes bypass the codebase's own safe-conversion pattern (Int(exactly:)), unlike CostAggregator's documented trap-avoidance discipline",
@@ -2457,7 +2550,7 @@
     "impact": "Starves DispatchQueue.global (also used by the SecurityToolCredentialReader drain) and leaks fds and child processes over long uptime. Even without the descendant case, a stderr-heavy agy turns every Gemini refresh into a 35 s timeout.",
     "fix": "Drain stdout and stderr concurrently (readabilityHandler or two async reads), each capped at a byte limit (e.g. 1 MiB). Wrap the continuation in withTaskCancellationHandler so cancellation terminates the child and resumes once. On timeout, close the parent read ends and SIGKILL after SIGTERM, ideally for the whole process group.",
     "test_red_green": {
-      "name": "AntigravityExecutorTests.stderrFloodDoesNotDeadlock + cancelTerminatesChild",
+      "name": "AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child",
       "assert_before": "A customPath script writing 200 KB to stderr first takes >= 35 s; one that backgrounds sleep 600 holding stdout never returns; after Task.cancel the child pid is still alive",
       "assert_after": "Both return in < 2 s with a bounded error; after cancel, kill(pid,0) == ESRCH within 1 s; fd count unchanged after 50 iterations"
     },
@@ -2466,10 +2559,41 @@
     "cetico_evidence": "AntigravityExecutor.swift:80-103: the drains are sequential, and withCheckedThrowingContinuation has no withTaskCancellationHandler, so a cancel does not kill the child. The worker is still freed within 35 s via SIGTERM. The descendant-holds-pipe leak did not reproduce: the real agy's --bg-updater child did not keep the pipe, and the call exited normally.",
     "verification": "cetico",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AntigravityExecutor.swift",
     "id": "LEAK-FAN-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child",
+    "resolved_at": "2026-09-29 15:47:00 UTC",
+    "resolved_note": "batch B9-bounded-io",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:47:00 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Fantasma",
@@ -2676,7 +2800,7 @@
     "impact": "Transient, not retained: an oversized body from an allowlisted or compromised endpoint forces an arbitrarily large allocation per 300 s refresh and the same bytes are written to the disk cache.",
     "fix": "Route provider, OAuth and update JSON through sendBounded (2-4 MiB), or give send() a default cap.",
     "test_red_green": {
-      "name": "HTTPClientTests.sendRejectsOversizedBody",
+      "name": "HTTPClientTests#sendDecoding_rejects_oversized_body",
       "assert_before": "64 MiB stub body -> data.count == 64 MiB",
       "assert_after": "throws exceeds; peak <= cap"
     },
@@ -2684,10 +2808,41 @@
     "cetico_evidence": "Duplicate of BP-REP-001, same site: HTTPClient.swift:108. The same downgrade reasoning applies.",
     "verification": "cetico",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Networking/HTTPClient.swift",
     "id": "LEAK-FAN-006",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "HTTPClientTests#sendDecoding_rejects_oversized_body",
+    "resolved_at": "2026-09-29 15:46:59 UTC",
+    "resolved_note": "batch B9-bounded-io",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:46:59 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste HTTPClientTests#sendDecoding_rejects_oversized_body · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "in_progress": false
   },
   {
     "lens": "memleak",
@@ -2896,7 +3051,7 @@
     "fix": "Drain stderr concurrently, using a readabilityHandler or a second DispatchQueue read, as SecurityToolCredentialReader already does for stdout.",
     "failure_scenario": "agy writes 100 KB to stderr, then JSON to stdout, then exits. Its stderr write blocks at 64 KB while our thread waits for stdout EOF. The timer terminates the child at 35 s and the call fails with timedOut.",
     "test_red_green": {
-      "name": "antigravity_largeStderr_noDeadlock",
+      "name": "AntigravityExecutorProcessTests#large_stderr_completes_promptly",
       "assert_before": "Point the executor at a script that prints 200 KB to stderr and '{}' to stdout. Expect completion in < 2 s. FAILS today (~35 s, timeout error).",
       "assert_after": "Returns stdout promptly."
     },
@@ -2904,9 +3059,40 @@
     "cetico_evidence": "AntigravityExecutor.swift:101-103 drains stdout to EOF, then stderr, then waits. If stderr goes over the pipe buffer, the call blocks until the 35 s SIGTERM (:88) and then fails with a timeout. The damage is bounded: the call ends at 35 s. Measured with the real agy: 0 B stderr, so there is no trigger today.",
     "verification": "cetico",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "id": "RACE-CRO-008",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AntigravityExecutorProcessTests#large_stderr_completes_promptly",
+    "resolved_at": "2026-09-29 15:47:00 UTC",
+    "resolved_note": "batch B9-bounded-io",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:47:00 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AntigravityExecutorProcessTests#large_stderr_completes_promptly · revisão approved (3/3) · batch B9-bounded-io"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",

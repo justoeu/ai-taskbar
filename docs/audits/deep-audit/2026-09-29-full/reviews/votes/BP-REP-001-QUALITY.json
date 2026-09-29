@@ -1,0 +1,14 @@
+{
+ "id": "BP-REP-001",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Networking/HTTPClient.swift:114-127,149-195: the fix extracts the existing sendBounded streaming loop into a private readBounded that both send and sendBounded use. It does not add a second capped reader. The URLError/Cancellation mapping that was duplicated between send and sendBounded now lives in one place. No new try?, no errors swallowed: an oversized body throws AppError.transport with the cap in the message. The default cap is a named constant with a documented rationale (line 7-11). Redirect behavior is kept as before through the nil delegate, and the doc comment says so.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:7",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:114",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:149"
+ ],
+ "lens": "QUALITY",
+ "_task": "ae421429758c3031a",
+ "batch": "B9-bounded-io"
+}

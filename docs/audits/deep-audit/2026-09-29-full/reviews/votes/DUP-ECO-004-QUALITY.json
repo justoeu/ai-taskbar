@@ -1,0 +1,15 @@
+{
+ "id": "DUP-ECO-004",
+ "verdict": "APROVA",
+ "reasoning": "This is the right fix for a clone that had drifted apart: instead of copying the drain and SIGTERM/SIGKILL logic from SecurityToolCredentialReader into AntigravityExecutor, the diff extends the single shared BoundedProcess (header doc at BoundedProcess.swift:4-7 now lists all three callers) with opt-in Options whose defaults keep the old behavior. The two existing callers (SecurityToolCredentialReader.swift:137, DMGVerifier.swift:163) are unchanged, and the stop == nil path still does the original single blocking wait. No clone is left behind.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:4",
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:58",
+  "Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift:137",
+  "Sources/AiTaskbarApp/DMGVerifier.swift:163"
+ ],
+ "lens": "QUALITY",
+ "_task": "ae421429758c3031a",
+ "batch": "B9-bounded-io"
+}

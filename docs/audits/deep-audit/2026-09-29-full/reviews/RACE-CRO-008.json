@@ -1,0 +1,58 @@
+{
+  "id": "RACE-CRO-008",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 15:47:00 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "stderr is drained on its own thread at the same time as stdout (BoundedProcess `drain` for `err`), so a child that writes more than 64 KB to stderr no longer blocks. Reversal test: `large_stderr_completes_promptly` fails on HEAD (body '' and elapsed 3.09 s against a limit of 2.5 s) and passes with the fix. After restoring, the working-tree diff is byte-identical to B9-bounded-io.diff (checked with cmp).",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:99"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "BoundedProcess.drain (BoundedProcess.swift:147-175) gives each stream its own background reader, and the no-onOverflow mode keeps reading and throwing away excess stderr, so the child never blocks. The doc comment explains both modes accurately. The test name large_stderr_completes_promptly matches what it asserts. The only try? calls in the new tests are best-effort temp cleanup and pid-file probes, which CLAUDE.md allows, and the Bool assertions are all non-optional #expect forms, which are safe.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:147",
+        "Tests/AiTaskbarProvidersTests/AntigravityExecutorProcessTests.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "BoundedProcess.swift:103-104: stdout and stderr are now drained concurrently, which removes the sequential read deadlock. The change is confined to BoundedProcess plus the agy caller. No other file is touched.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/BoundedProcess.swift:103"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

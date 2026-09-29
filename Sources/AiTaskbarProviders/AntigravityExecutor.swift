@@ -17,9 +17,17 @@ public protocol AntigravityExecuting: Sendable {
 /// Production implementation that locates and invokes `agy` via `Process`.
 public struct ProcessAntigravityExecutor: AntigravityExecuting {
     public let customPath: String?
+    /// Wall-clock budget for one `agy` run.
+    public let timeout: TimeInterval
+    /// Largest stdout accepted from `agy`; more is rejected, not parsed.
+    public let maximumOutputBytes: Int
 
-    public init(customPath: String? = nil) {
+    public init(customPath: String? = nil,
+                timeout: TimeInterval = 35,
+                maximumOutputBytes: Int = 4 * 1024 * 1024) {
         self.customPath = customPath
+        self.timeout = timeout
+        self.maximumOutputBytes = maximumOutputBytes
     }
 
     /// Resolves the URL to the `agy` binary. Checks customPath, then standard
@@ -57,92 +65,86 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
             throw AppError.guidance(.antigravityNotFound)
         }
 
-        let process = Process()
-        process.executableURL = exe
-        process.arguments = ["--output-format", "json", "--print", "/usage"]
-        process.standardInput = FileHandle.nullDevice
-
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-
         // Ensure PATH includes the directories where agy and its tools live
         var env = ProcessInfo.processInfo.environment
         let homePath = FileManager.default.homeDirectoryForCurrentUser.path
         let currentPath = env["PATH"] ?? ""
         let extraPaths = "\(homePath)/.local/bin:/opt/homebrew/bin:/usr/local/bin"
         env["PATH"] = currentPath.isEmpty ? extraPaths : "\(extraPaths):\(currentPath)"
-        process.environment = env
 
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let timedOut = OSAllocatedUnfairLock(initialState: false)
-                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
-                timer.schedule(deadline: .now() + 35)
-                timer.setEventHandler {
-                    timedOut.withLock { $0 = true }
-                    if process.isRunning {
-                        process.terminate()
+        // BoundedProcess drains stdout and stderr concurrently (no two-pipe
+        // deadlock), caps both, and escalates SIGTERM to SIGKILL. The
+        // cancellation handler kills the child when the refresh is cancelled.
+        let options = BoundedProcess.Options(environment: env,
+                                             stderrBytes: Self.stderrBytes,
+                                             maximumStdoutBytes: maximumOutputBytes,
+                                             cancellation: BoundedProcess.Cancellation())
+        let timeout = self.timeout
+        let outcome: BoundedProcess.Outcome = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        continuation.resume(returning: try BoundedProcess.run(
+                            executable: exe,
+                            arguments: ["--output-format", "json", "--print", "/usage"],
+                            timeout: timeout,
+                            options: options))
+                    } catch is CancellationError {
+                        continuation.resume(throwing: CancellationError())
+                    } catch {
+                        continuation.resume(throwing: AppError.io("Failed to run agy: \(error.localizedDescription)"))
                     }
                 }
-                timer.resume()
-
-                do {
-                    try process.run()
-                } catch {
-                    timer.cancel()
-                    continuation.resume(throwing: AppError.io("Failed to run agy: \(error.localizedDescription)"))
-                    return
-                }
-
-                let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                timer.cancel()
-
-                if timedOut.withLock({ $0 }) {
-                    continuation.resume(throwing: AppError.guidance(.antigravityTimedOut))
-                    return
-                }
-
-                let errStr = String(data: errData, encoding: .utf8) ?? ""
-                let outStr = String(data: outData, encoding: .utf8) ?? ""
-
-                // Extract clean error message from structured agy JSON if available
-                let structuredError = Self.extractStructuredError(outData: outData, errData: errData)
-
-                if process.terminationStatus != 0 || structuredError != nil {
-                    let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
-                    if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
-                        continuation.resume(throwing: AppError.guidance(.antigravityNotAuthenticated))
-                    } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
-                        continuation.resume(throwing: AppError.guidance(.antigravityUnavailable))
-                    } else if let structured = structuredError {
-                        if structured == "context canceled" {
-                            continuation.resume(throwing: AppError.guidance(.antigravityCanceled))
-                        } else {
-                            continuation.resume(throwing: AppError.io("agy: \(structured)"))
-                        }
-                    } else {
-                        let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
-                            : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
-                        let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
-                        continuation.resume(throwing: AppError.io("agy failed (exit \(process.terminationStatus)): \(clean)"))
-                    }
-                    return
-                }
-
-                if outStr.contains("not logged in") || outStr.contains("error getting token source") {
-                    continuation.resume(throwing: AppError.guidance(.antigravityNotAuthenticated))
-                    return
-                }
-
-                continuation.resume(returning: outData)
             }
+        } onCancel: {
+            options.cancellation?.cancel()
         }
+        if outcome.cancelled { throw CancellationError() }
+        return try classify(outcome)
+    }
+
+    /// stderr is only mined for an error message; keep its head, drop the rest.
+    static let stderrBytes = 64 * 1024
+
+    private func classify(_ outcome: BoundedProcess.Outcome) throws -> Data {
+        if outcome.stdoutExceeded {
+            throw AppError.io("agy output exceeds \(maximumOutputBytes) bytes")
+        }
+        if outcome.timedOut || !outcome.drained {
+            throw AppError.guidance(.antigravityTimedOut)
+        }
+        let outData = outcome.stdout
+        let errData = outcome.stderr
+        let errStr = String(data: errData, encoding: .utf8) ?? ""
+        let outStr = String(data: outData, encoding: .utf8) ?? ""
+
+        // Extract clean error message from structured agy JSON if available
+        let structuredError = Self.extractStructuredError(outData: outData, errData: errData)
+
+        if outcome.status != 0 || outcome.terminationReason != .exit || structuredError != nil {
+            let fullErr = [structuredError, errStr, outStr].compactMap { $0 }.joined(separator: " ")
+            if fullErr.contains("not logged in") || fullErr.contains("UNAUTHENTICATED") || fullErr.contains("error getting token source") {
+                throw AppError.guidance(.antigravityNotAuthenticated)
+            } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
+                throw AppError.guidance(.antigravityUnavailable)
+            } else if let structured = structuredError {
+                if structured == "context canceled" {
+                    throw AppError.guidance(.antigravityCanceled)
+                }
+                throw AppError.io("agy: \(structured)")
+            }
+            let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
+                : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstLine = raw.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? raw
+            let clean = firstLine.count > 120 ? String(firstLine.prefix(120)) + "…" : firstLine
+            throw AppError.io("agy failed (exit \(outcome.status)): \(clean)")
+        }
+
+        if outStr.contains("not logged in") || outStr.contains("error getting token source") {
+            throw AppError.guidance(.antigravityNotAuthenticated)
+        }
+        return outData
     }
 
     private static func extractStructuredError(outData: Data, errData: Data) -> String? {

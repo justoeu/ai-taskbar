@@ -265,6 +265,74 @@ struct HTTPClientTests {
         StubURLProtocol.reset()
     }
 
+    // BP-REP-001 / LEAK-FAN-006: the vendor usage + OAuth path (`send`,
+    // `sendDecoding`, `fetchPayload`) must not buffer an arbitrarily large
+    // body. 9 MiB is over the 8 MiB default cap.
+    @Test("send rejects a body larger than the default cap")
+    func send_rejects_oversized_body() async {
+        let oversized = Data(repeating: 0x61, count: 9 * 1024 * 1024)
+        StubURLProtocol.handler = { _ in .init(data: oversized) }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        var message = ""
+        do {
+            let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/usage")!))
+            Issue.record("expected an oversize failure, got \(data.count) bytes")
+        } catch let error as AppError {
+            if case .transport(let m) = error { message = m }
+        } catch {
+            Issue.record("expected AppError, got \(error)")
+        }
+        #expect(message.contains("exceeds \(HTTPClient.defaultMaximumResponseBytes) bytes"))
+        StubURLProtocol.reset()
+    }
+
+    @Test("sendDecoding inherits the default response cap")
+    func sendDecoding_rejects_oversized_body() async {
+        struct Out: Decodable { let n: Int }
+        let oversized = Data(repeating: 0x20, count: 9 * 1024 * 1024)
+        StubURLProtocol.handler = { _ in .init(data: oversized) }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        var transport = false
+        do {
+            _ = try await http.sendDecoding(URLRequest(url: URL(string: "https://example.com/u")!), as: Out.self)
+        } catch let error as AppError {
+            if case .transport = error { transport = true }
+        } catch {}
+        #expect(transport)
+        StubURLProtocol.reset()
+    }
+
+    @Test("the default cap is at least 50x the largest vendor fixture")
+    func default_cap_is_generous() {
+        let largest = [Fixtures.anthropicUsage200, Fixtures.openaiUsage200,
+                       Fixtures.statuspageIncidentsWindow200].map { $0.utf8.count }.max() ?? 0
+        #expect(HTTPClient.defaultMaximumResponseBytes >= 50 * largest)
+    }
+
+    @Test("send still returns a real vendor fixture verbatim")
+    func send_accepts_fixture() async throws {
+        let body = Data(Fixtures.anthropicUsage200.utf8)
+        StubURLProtocol.handler = { _ in .init(data: body) }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/usage")!))
+        #expect(data == body)
+        StubURLProtocol.reset()
+    }
+
+    // `send` keeps URLSession's default redirect handling; only
+    // `sendBounded` restricts origins.
+    @Test("send still follows a cross-origin redirect")
+    func send_follows_cross_origin_redirect() async throws {
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "api2.example" { return .init(data: Data("moved".utf8)) }
+            return .init(status: 302, data: Data(), redirectURL: URL(string: "https://api2.example/u")!)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let (data, _) = try await http.send(URLRequest(url: URL(string: "https://example.com/u")!))
+        #expect(data == Data("moved".utf8))
+        StubURLProtocol.reset()
+    }
+
     // LEAK-FAN-004: a download whose response is rejected after URLSession
     // already wrote the body must not leave that temp file behind.
     @Test("download rejecting a non-HTTP response deletes the temp file")

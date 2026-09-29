@@ -1,0 +1,14 @@
+{
+ "id": "DUP-ECO-004",
+ "verdict": "APROVA",
+ "reasoning": "The duplicated logic is removed: agy now goes through the single BoundedProcess implementation, which has the concurrent drain and the SIGKILL escalation. Reversal test: `sigterm_ignored_escalates_to_sigkill` is RED on HEAD (timedOut false, pid still alive) and GREEN with the fix. The default path used by SecurityToolCredentialReader.swift:137 and DMGVerifier.swift:163 is unchanged. With default Options: stderrBytes nil still means /dev/null, keep nil still means readDataToEndOfFile, stop nil still means the original plain semaphore waits, `timedOut = stop?() != true` gives true in the timeout branch and `!drainedInTime` otherwise, and overflow is always false. The Outcome fields therefore match the old ones exactly. The SecurityToolCredentialReader tests pass inside the filtered run (286/286).",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:103",
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:112",
+  "Sources/AiTaskbarCore/Credentials/SecurityToolCredentialReader.swift:137"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a95d86996b3a25c05",
+ "batch": "B9-bounded-io"
+}

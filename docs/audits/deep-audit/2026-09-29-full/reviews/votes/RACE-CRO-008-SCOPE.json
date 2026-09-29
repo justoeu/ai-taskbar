@@ -1,0 +1,12 @@
+{
+ "id": "RACE-CRO-008",
+ "verdict": "APROVA",
+ "reasoning": "BoundedProcess.swift:103-104: stdout and stderr are now drained concurrently, which removes the sequential read deadlock. The change is confined to BoundedProcess plus the agy caller. No other file is touched.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/BoundedProcess.swift:103"
+ ],
+ "lens": "SCOPE",
+ "_task": "a99a5f89e1b1e1a26",
+ "batch": "B9-bounded-io"
+}
