@@ -1,0 +1,12 @@
+{
+ "id": "DUP-ECO-002",
+ "verdict": "APROVA",
+ "reasoning": "A one-line change at OpencodeScanner.swift:198 that reuses the existing CostAggregator.saturatingAdd. No new surface.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:198"
+ ],
+ "lens": "SCOPE",
+ "_task": "a5ef7717d5d494bbe",
+ "batch": "B2-scanners"
+}

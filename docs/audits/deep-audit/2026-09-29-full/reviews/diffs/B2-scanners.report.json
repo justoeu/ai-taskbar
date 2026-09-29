@@ -1,0 +1,111 @@
+{
+ "batch": "B2-scanners",
+ "results": [
+  {
+   "id": "BUG-ART-006",
+   "outcome": "fixed",
+   "tests": [
+    "ClaudeSessionScannerTests#seven_day_window_boundary",
+    "CodexSessionScannerEstimateTests#seven_day_window_boundary",
+    "OpencodeScannerTests#seven_day_window_boundary",
+    "CodexLogScannerSQLiteTests#seven_day_window_boundary",
+    "CostWindowTests#spans_seven_calendar_days",
+    "CostWindowTests#dst_keeps_midnight"
+   ],
+   "red": "Expectation failed: (est.usdLast7Days → 15.0) == (reference.usdLast7Days → 5.0)  [opencode: (inputTokens → 100) == 10]",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-ECO-001",
+   "outcome": "fixed",
+   "tests": [
+    "same as BUG-ART-006 (same root cause, one fix)"
+   ],
+   "red": "same as BUG-ART-006",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-005",
+   "outcome": "fixed",
+   "tests": [
+    "CodexSessionScannerTests#repeated_token_count_is_billed_once",
+    "CodexSessionScannerTests#same_last_with_advanced_total_is_billed",
+    "CodexSessionScannerTests#events_without_total_are_not_deduped"
+   ],
+   "red": "Expectation failed: (result.today[\"gpt-5.5\"]?.inputTokens → 1200) == 600",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-ECO-002",
+   "outcome": "fixed",
+   "tests": [
+    "OpencodeScannerTests#output_plus_reasoning_saturates"
+   ],
+   "red": "swiftpm-testing-helper ... exited with unexpected signal code 5 (SIGTRAP)",
+   "reversal": "ok"
+  },
+  {
+   "id": "LEAK-FAN-002",
+   "outcome": "fixed",
+   "tests": [
+    "ClaudeSessionScannerTests#cancelled_scan_keeps_memo",
+    "CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo"
+   ],
+   "red": "Expectation failed: (memo.count → 0) == 2",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-013",
+   "outcome": "fixed",
+   "tests": [
+    "CostEstimatorLoadingTests#failed_opencode_scan_keeps_previous_rows"
+   ],
+   "red": "Expectation failed: (e.opencode[.openai]?.last7DaysByModel[\"gpt-5.5\"]?.inputTokens → nil) == 42",
+   "reversal": "ok"
+  },
+  {
+   "id": "TEST-MAE-001",
+   "outcome": "fixed",
+   "tests": [
+    "ClaudeSessionScannerTests#duplicate_key_across_files_with_memo_replay"
+   ],
+   "red": "mutation: memo.store(... keyed: [:]) -> Expectation failed: (inputTokens → 100) == 110",
+   "reversal": "n/a"
+  },
+  {
+   "id": "LEAK-MAE-001",
+   "outcome": "fixed",
+   "tests": [
+    "KeyedUsageCompactTests#stride_is_compact",
+    "KeyedUsageCompactTests#standard_round_trips",
+    "KeyedUsageCompactTests#fast_round_trips",
+    "KeyedUsageCompactTests#other_shapes_round_trip"
+   ],
+   "red": "Expectation failed: (MemoryLayout<ScanMemo.KeyedUsage>.stride → 144) <= 80",
+   "reversal": "ok"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 893,
+  "coverage": "91.88%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CostWindow.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexLogScanner.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/ScanMemo.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/CostWindowTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/CodexSessionScannerTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/OpencodeScannerTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/CodexLogScannerTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/ScanMemoTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift"
+ ]
+}

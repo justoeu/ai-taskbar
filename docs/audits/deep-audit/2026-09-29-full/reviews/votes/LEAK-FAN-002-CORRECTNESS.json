@@ -1,0 +1,13 @@
+{
+ "id": "LEAK-FAN-002",
+ "verdict": "APROVA",
+ "reasoning": "ClaudeSessionScanner.swift:134 and CodexSessionScanner.swift:159 now prune the memo only when the walk was not cancelled. The walk loop stops early on cancellation, which is how seenPaths ended up partial. The memo gets injected in tests through a new internal seam, and production behaviour is unchanged. Reversal check: I removed the guard and got RED, memo.count 0 vs 2, in both scanners.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:134",
+  "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:159"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "af5a535570231f94f",
+ "batch": "B2-scanners"
+}

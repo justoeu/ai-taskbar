@@ -1,0 +1,58 @@
+{
+  "id": "BUG-ART-005",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 12:56:50 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "CodexSessionScanner.swift:384-386 skips an event only when total_token_usage exists and is equal, across all five fields, to the previous total in the same file. previousTotal is local to scan(data:) and the memo always rescans a whole file, so no state carries over between files or across a partial read. A genuine turn always moves the running total, so it is never dropped. That includes a turn whose last_token_usage matches the previous one: the same_last_with_advanced_total_is_billed test covers it. Events with no total are kept. Reversal check: I removed the skip and got RED, 1200 vs 600 (and 800/400, 200/100). Minor note: total_token_usage is now decoded, so if one of its fields ever arrived as a non-integer, the whole line would count as a decodeFailure. Real payloads are integers, so this is not a blocker.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:384"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The dedup at CodexSessionScanner.swift:236-238 is three flat lines with no extra nesting. Its comment explains why the event is skipped, not what the code does. The file-level doc comment (lines 159-164) was updated to match the new behaviour, so it still tells the truth. `total_token_usage` is decoded only to be compared, and its doc comment says so. Making Usage Equatable is the minimum needed. Each case has its own test: a repeat, a same-size turn that advances the total, and events with no total. The overflow test (lines 594-598) was changed to use distinct running totals so it keeps testing what its name says. The names match the behaviour.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:236",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/CodexSessionScannerTests.swift:603"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The change stays inside CodexSessionScanner.swift. It decodes total_token_usage (L264-274) only to compare it with the previous event and never bills it, and the check lives inside the existing per-file loop (L379-386). No public type, on-disk format or new I/O is added. The doc comment at L41-51 was updated. OpencodeScanner does not have the same problem: it reads one row per message, not events carrying a running total.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:379"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

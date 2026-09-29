@@ -1,0 +1,863 @@
+diff --git a/README.md b/README.md
+index efce5b4..526b663 100644
+--- a/README.md
++++ b/README.md
+@@ -27,7 +27,7 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
+ - **Per-window utilization** with color thresholds (green → yellow → red) — for Claude this includes the 5-hour session, 7-day weekly, any **per-model weekly windows** (e.g. Fable), and a **usage-credits** meter (shown with the money spent/limit, e.g. `R$556.68 / R$600.00`). Model windows are parsed generically from the API's `limits[]`, so a newly-launched model appears without an app update.
+ - **Reset countdown** ("resets 4 hrs, 12 min"; once the reset passes it shows "reset due — awaiting auto-refresh…" instead of counting back up)
+ - **24-hour sparkline** with dashed threshold lines, current value, and peak marker
+-- **Daily + 7-day cost estimates** computed locally from your CLI logs
++- **Daily + 7-day cost estimates** computed locally from your CLI logs (7 days = today plus the six previous local days, the same window for every source)
+ - **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
+ - **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
+ - **Consumption & Analytics view** — usage share and cost share across LLMs for Today / Week / Month. Cost covers only what the local scanners keep (today and the last 7 days), so **Month shows usage but no cost** rather than relabelling the 7-day figure. OpenRouter's 30-day activity and xAI's billing-cycle spend stay on their own cards, which name those windows, and are never counted as 7-day cost. Vendors without a session counter show the number of models used, not "sessions"
+diff --git a/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift b/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift
+index f981bff..b9c2da1 100644
+--- a/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift
++++ b/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift
+@@ -18,7 +18,7 @@ public final class CostEstimator: ObservableObject {
+     /// from the size and contents of the current user's on-disk histories.
+     private let claudeEstimate: @Sendable () -> CostEstimate
+     private let codexEstimate: @Sendable () -> CostEstimate
+-    private let opencodeScan: @Sendable ([String: [String]]) -> [String: OpencodeScan]
++    private let opencodeScan: @Sendable ([String: [String]]) -> [String: OpencodeScan]?
+ 
+     /// Usage that reached a vendor through opencode rather than that vendor's
+     /// own CLI, keyed by the vendor it was billed to.
+@@ -53,7 +53,7 @@ public final class CostEstimator: ObservableObject {
+     private var inFlight: Task<Void, Never>?
+     /// The opencode scan, tracked separately so it can be cancelled without
+     /// touching the scan that owns `isLoading`.
+-    private var opencodeTask: Task<Void, Never>?
++    private(set) var opencodeTask: Task<Void, Never>?
+     /// Bumped on every `refresh`. A task only writes state if this still
+     /// matches the value it captured — otherwise a scan superseded while a
+     /// NEWER one was already running would clear that newer scan's `isLoading`
+@@ -70,13 +70,19 @@ public final class CostEstimator: ObservableObject {
+     public init() {
+         self.claudeEstimate = { ClaudeSessionScanner.estimate() }
+         self.codexEstimate = { CodexCost.estimate() }
+-        self.opencodeScan = { OpencodeScanner.scan(providerGroups: $0) ?? [:] }
++        // A missing database means opencode is not installed: genuinely no
++        // rows. Any other nil is a read failure and stays nil.
++        self.opencodeScan = { groups in
++            guard FileManager.default.fileExists(atPath: OpencodeScanner.defaultDatabasePath())
++            else { return [:] }
++            return OpencodeScanner.scan(providerGroups: groups)
++        }
+     }
+ 
+     internal init(
+         claudeEstimate: @escaping @Sendable () -> CostEstimate,
+         codexEstimate: @escaping @Sendable () -> CostEstimate,
+-        opencodeScan: @escaping @Sendable ([String: [String]]) -> [String: OpencodeScan]
++        opencodeScan: @escaping @Sendable ([String: [String]]) -> [String: OpencodeScan]?
+     ) {
+         self.claudeEstimate = claudeEstimate
+         self.codexEstimate = codexEstimate
+@@ -161,16 +167,23 @@ public final class CostEstimator: ObservableObject {
+         opencodeTask = Task.detached(priority: .utility) {
+             let groups = Dictionary(uniqueKeysWithValues:
+                 Self.opencodeProviders.map { ($0.key.rawValue, $0.value) })
++            // nil = the database exists but could not be read (open, prepare
++            // or step failed). That is not "no usage": keep the rows the card
++            // shows and let the next refresh retry (BUG-ART-013).
+             let rawScans = opencodeScan(groups)
+-            let scans: [VendorId: OpencodeScan] = Dictionary(
+-                uniqueKeysWithValues: rawScans.compactMap { key, scan in
+-                guard let vendor = VendorId(rawValue: key), !scan.isEmpty else { return nil }
+-                return (vendor, scan)
+-            })
+             guard !Task.isCancelled else { return }
++            if rawScans == nil {
++                AppLog.cost.error("opencode scan failed; keeping the previous rows")
++            }
++            let scans: [VendorId: OpencodeScan]? = rawScans.map { raw in
++                Dictionary(uniqueKeysWithValues: raw.compactMap { key, scan in
++                    guard let vendor = VendorId(rawValue: key), !scan.isEmpty else { return nil }
++                    return (vendor, scan)
++                })
++            }
+             await MainActor.run { [self] in
+                 guard self.generation == gen else { return }
+-                self.opencode = scans
++                if let scans { self.opencode = scans }
+                 self.opencodeTask = nil
+             }
+         }
+diff --git a/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift b/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift
+index 9512f84..610b137 100644
+--- a/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift
++++ b/Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift
+@@ -18,6 +18,14 @@ public enum ClaudeSessionScanner {
+ 
+     public static func estimate(now: Date = .init(),
+                                 projectsDir: URL? = nil) -> CostEstimate {
++        estimate(now: now, projectsDir: projectsDir, memo: memo)
++    }
++
++    /// Memo seam: tests pass their own `ScanMemo` so they can observe what a
++    /// scan keeps or evicts without racing other suites on the shared one.
++    internal static func estimate(now: Date,
++                                  projectsDir: URL?,
++                                  memo: ScanMemo) -> CostEstimate {
+         let projects: URL = projectsDir ?? FileManager.default
+             .homeDirectoryForCurrentUser
+             .appendingPathComponent(".claude/projects")
+@@ -45,9 +53,9 @@ public enum ClaudeSessionScanner {
+                                 note: "Could not enumerate ~/.claude/projects.")
+         }
+ 
+-        let cal = Calendar.current
+-        let startOfToday = cal.startOfDay(for: now)
+-        let sevenDaysAgo = startOfToday.addingTimeInterval(-7 * 86_400)
++        let window = CostWindow(now: now)
++        let startOfToday = window.startOfToday
++        let sevenDaysAgo = window.startOfLast7Days
+ 
+         var totalsToday: [String: ModelUsage] = [:]
+         var totalsLast7: [String: ModelUsage] = [:]
+@@ -120,8 +128,10 @@ public enum ClaudeSessionScanner {
+                                                  keyed: fileKeyed))
+             }
+         }
+-        // Files that aged out of the window stop being tracked.
+-        memo.retain(paths: seenPaths)
++        // Files that aged out of the window stop being tracked. Only after a
++        // complete walk: a cancelled one saw a partial set, and pruning to it
++        // would evict every file it had not reached yet (LEAK-FAN-002).
++        if !Task.isCancelled { memo.retain(paths: seenPaths) }
+         fold(keyedAll, totalsToday: &totalsToday, totalsLast7: &totalsLast7)
+ 
+         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)
+diff --git a/Sources/AiTaskbarCore/Cost/CodexLogScanner.swift b/Sources/AiTaskbarCore/Cost/CodexLogScanner.swift
+index 1060009..c3adc39 100644
+--- a/Sources/AiTaskbarCore/Cost/CodexLogScanner.swift
++++ b/Sources/AiTaskbarCore/Cost/CodexLogScanner.swift
+@@ -29,8 +29,9 @@ public enum CodexLogScanner {
+         }
+         defer { sqlite3_close(db) }
+ 
+-        let sevenDaysAgo = Int(now.timeIntervalSince1970) - 7 * 86_400
+-        let startOfToday = Int(Calendar.current.startOfDay(for: now).timeIntervalSince1970)
++        let window = CostWindow(now: now)
++        let sevenDaysAgo = Int(window.startOfLast7Days.timeIntervalSince1970)
++        let startOfToday = Int(window.startOfToday.timeIntervalSince1970)
+ 
+         let sql = """
+             SELECT ts, feedback_log_body
+diff --git a/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift b/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift
+index 27bc086..43c5f9a 100644
+--- a/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift
++++ b/Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift
+@@ -39,8 +39,12 @@ import Foundation
+ ///    `droppedEmptyUsage` counts them rather than letting them vanish.
+ ///  - Summing every `last_token_usage` across a file reproduces the file's
+ ///    final `total_token_usage`, so per-turn deltas can be bucketed by
+-///    timestamp without double counting. (Using `total_token_usage` instead
+-///    would count the running total once per event.) Held on all 20 files
++///    timestamp without double counting — once repeated events are dropped:
++///    Codex re-emits a `token_count` whose `total_token_usage` did not move
++///    (1,459 of 23,996 events in a 7-day sample, +6% if billed), so an event
++///    whose running total equals the previous event's is skipped. (Billing
++///    `total_token_usage` itself would count the running total once per
++///    event; it is only compared.) Held on all 20 files
+ ///    with data, including forked/resumed sessions, which do not replay turns
+ ///    — for the three fields we bill. Codex folds the all-zero-split events
+ ///    above into its running `total_tokens` while contributing nothing to the
+@@ -64,7 +68,8 @@ public enum CodexSessionScanner {
+     /// alone would silently hand the display to the dead sqlite scanner the
+     /// moment OpenAI ships a model id we don't price yet.
+     internal static func estimateDetailed(now: Date = .init(),
+-                                          sessionsDir: URL? = nil)
++                                          sessionsDir: URL? = nil,
++                                          memo: ScanMemo = CodexSessionScanner.memo)
+     -> (estimate: CostEstimate, sawUsage: Bool) {
+         let sessions = sessionsDir ?? Paths.defaultCodexSessions()
+         // `FileManager.enumerator` returns a NON-nil enumerator that yields
+@@ -89,9 +94,9 @@ public enum CodexSessionScanner {
+                                  note: "Could not enumerate ~/.codex/sessions."), false)
+         }
+ 
+-        let cal = Calendar.current
+-        let startOfToday = cal.startOfDay(for: now)
+-        let sevenDaysAgo = startOfToday.addingTimeInterval(-7 * 86_400)
++        let window = CostWindow(now: now)
++        let startOfToday = window.startOfToday
++        let sevenDaysAgo = window.startOfLast7Days
+ 
+         var totalsToday: [String: ModelUsage] = [:]
+         var totalsLast7: [String: ModelUsage] = [:]
+@@ -150,7 +155,8 @@ public enum CodexSessionScanner {
+                                                  today: fileToday, week: fileWeek))
+             }
+         }
+-        memo.retain(paths: seenPaths)
++        // See ClaudeSessionScanner: never prune to a cancelled walk's partial set.
++        if !Task.isCancelled { memo.retain(paths: seenPaths) }
+ 
+         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.openai)
+         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.openai)
+@@ -255,11 +261,16 @@ public enum CodexSessionScanner {
+ 
+             struct Info: Decodable {
+                 let last_token_usage: Usage?
++                /// Session running total. Only compared with the previous
++                /// event's, never billed.
++                let total_token_usage: Usage?
+ 
+-                struct Usage: Decodable {
++                struct Usage: Decodable, Equatable {
+                     let input_tokens: Int?
+                     let cached_input_tokens: Int?
+                     let output_tokens: Int?
++                    let reasoning_output_tokens: Int?
++                    let total_tokens: Int?
+                 }
+             }
+         }
+@@ -285,6 +296,7 @@ public enum CodexSessionScanner {
+         loss: inout ScanLoss
+     ) {
+         var currentModel: String?
++        var previousTotal: RolloutLine.Payload.Info.Usage?
+         var pending: [(usage: ModelUsage, timestamp: Date?)] = []
+         var undated = 0
+ 
+@@ -364,6 +376,15 @@ public enum CodexSessionScanner {
+                   let last = payload.info?.last_token_usage
+             else { continue }
+ 
++            // Codex re-emits a `token_count` whose running total did not move,
++            // repeating the previous turn's `last_token_usage`. Billing it
++            // again over-reported a real week by ~6% (BUG-ART-005). An
++            // unchanged total means no new tokens, so the event is skipped;
++            // an event without a total carries no such signal and is kept.
++            let total = payload.info?.total_token_usage
++            if let total, total == previousTotal { continue }
++            if let total { previousTotal = total }
++
+             // Clamp BOTH ends. `min` alone caps the ceiling and leaves the
+             // floor open, which is not a theoretical gap: a line declaring
+             // `cached_input_tokens: -5000` made `input - cached` grow the
+diff --git a/Sources/AiTaskbarCore/Cost/CostWindow.swift b/Sources/AiTaskbarCore/Cost/CostWindow.swift
+new file mode 100644
+index 0000000..69187ac
+--- /dev/null
++++ b/Sources/AiTaskbarCore/Cost/CostWindow.swift
+@@ -0,0 +1,33 @@
++import Foundation
++
++/// The single definition of the cost cards' two windows, shared by every
++/// local scanner (Claude transcripts, Codex rollouts and logs, opencode).
++///
++/// "Last 7 days" is **today plus the six previous local calendar days**:
++/// it starts at local midnight six days before today. Two things fixed that
++/// choice:
++///
++/// - The scanners are summed into one figure (`AnalyticsStore`), so their
++///   windows must agree. They did not: Claude and Codex used
++///   `startOfToday - 7 * 86_400` (today plus seven full prior days, i.e. up
++///   to eight calendar days) while opencode used a rolling `now - 7 * 86_400`.
++/// - The transcript memos (`ScanMemo`) are invalidated per day and store
++///   per-record `inWeek` flags. A calendar-day boundary is constant for the
++///   whole day, so a replayed flag stays correct; a rolling cutoff would
++///   drift under the memo within a day.
++///
++/// Built with `Calendar.date(byAdding:)` rather than `86_400`-second steps so a
++/// DST transition inside the window does not shift the boundary by an hour.
++public struct CostWindow: Sendable, Equatable {
++    /// Local midnight at the start of `now`'s day.
++    public let startOfToday: Date
++    /// Local midnight six days before `startOfToday`.
++    public let startOfLast7Days: Date
++
++    public init(now: Date, calendar: Calendar = .current) {
++        let startOfToday = calendar.startOfDay(for: now)
++        self.startOfToday = startOfToday
++        self.startOfLast7Days = calendar.date(byAdding: .day, value: -6, to: startOfToday)
++            ?? startOfToday.addingTimeInterval(-6 * 86_400)
++    }
++}
+diff --git a/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift b/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift
+index 3cc8dd6..518da52 100644
+--- a/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift
++++ b/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift
+@@ -123,9 +123,9 @@ public enum OpencodeScanner {
+ 
+         // opencode stores epoch MILLISECONDS in `time_created`, while the rest
+         // of this module works in seconds.
+-        let sevenDaysAgoMs = Int64((now.timeIntervalSince1970 - 7 * 86_400) * 1000)
+-        let startOfTodayMs = Int64(Calendar.current.startOfDay(for: now)
+-            .timeIntervalSince1970 * 1000)
++        let window = CostWindow(now: now)
++        let sevenDaysAgoMs = Int64(window.startOfLast7Days.timeIntervalSince1970 * 1000)
++        let startOfTodayMs = Int64(window.startOfToday.timeIntervalSince1970 * 1000)
+ 
+         // Grouping by (model, is_today) lets one pass fill both windows. The
+         // `time_created` column is used for the range rather than the JSON's
+@@ -194,7 +194,8 @@ public enum OpencodeScanner {
+             // maps straight across with no subtraction.
+             let usage = ModelUsage(
+                 inputTokens: max(0, input),
+-                outputTokens: max(0, output) + max(0, reasoning),
++                // Each column fits Int64, their sum need not: saturate.
++                outputTokens: CostAggregator.saturatingAdd(max(0, output), max(0, reasoning)),
+                 cacheReadTokens: max(0, cacheRead),
+                 cacheCreateTokens: max(0, cacheWrite))
+ 
+diff --git a/Sources/AiTaskbarCore/Cost/ScanMemo.swift b/Sources/AiTaskbarCore/Cost/ScanMemo.swift
+index ec14c27..da05e34 100644
+--- a/Sources/AiTaskbarCore/Cost/ScanMemo.swift
++++ b/Sources/AiTaskbarCore/Cost/ScanMemo.swift
+@@ -28,17 +28,73 @@ public final class ScanMemo: @unchecked Sendable {
+     /// One API response identified by a request key (Claude: message.id +
+     /// requestId). Kept un-aggregated because the same response can be
+     /// written to several files, and dedup has to happen across all of them.
++    ///
++    /// Stored compactly because the memo holds one per response in the window:
++    /// 35k on a heavy machine (1.1 GB of transcripts), ~15 MB resident with the
++    /// 15-field `ModelUsage` inline (LEAK-MAE-001). A Claude record fills only
++    /// five counts, with the fast subsets either zero or equal to them, so that
++    /// shape keeps five `Int`s and a flag (stride 144 -> 72 bytes, ~9 MB on the
++    /// same data). Any other shape keeps its exact value in `boxed`, so the
++    /// round trip is lossless whatever the producer.
+     public struct KeyedUsage: Sendable, Equatable {
+         public let model: String
+-        public let usage: ModelUsage
+         public let inToday: Bool
+         public let inWeek: Bool
++        private let isFast: Bool
++        private let input: Int
++        private let output: Int
++        private let cacheRead: Int
++        private let cacheCreate: Int
++        private let cacheCreate1h: Int
++        private let boxed: Boxed?
++
++        private final class Boxed: Sendable {
++            let usage: ModelUsage
++            init(_ usage: ModelUsage) { self.usage = usage }
++        }
+ 
+         public init(model: String, usage: ModelUsage, inToday: Bool, inWeek: Bool) {
+             self.model = model
+-            self.usage = usage
+             self.inToday = inToday
+             self.inWeek = inWeek
++            let isFast = usage.fastInputTokens != 0 || usage.fastOutputTokens != 0
++                || usage.fastCacheReadTokens != 0 || usage.fastCacheCreateTokens != 0
++                || usage.fastCacheCreate1hTokens != 0
++            self.isFast = isFast
++            self.input = usage.inputTokens
++            self.output = usage.outputTokens
++            self.cacheRead = usage.cacheReadTokens
++            self.cacheCreate = usage.cacheCreateTokens
++            self.cacheCreate1h = usage.cacheCreate1hTokens
++            let compact = Self.expand(input: input, output: output, cacheRead: cacheRead,
++                                      cacheCreate: cacheCreate, cacheCreate1h: cacheCreate1h,
++                                      isFast: isFast)
++            self.boxed = compact == usage ? nil : Boxed(usage)
++        }
++
++        public var usage: ModelUsage {
++            if let boxed { return boxed.usage }
++            return Self.expand(input: input, output: output, cacheRead: cacheRead,
++                               cacheCreate: cacheCreate, cacheCreate1h: cacheCreate1h,
++                               isFast: isFast)
++        }
++
++        public static func == (lhs: KeyedUsage, rhs: KeyedUsage) -> Bool {
++            lhs.model == rhs.model && lhs.inToday == rhs.inToday
++                && lhs.inWeek == rhs.inWeek && lhs.usage == rhs.usage
++        }
++
++        private static func expand(input: Int, output: Int, cacheRead: Int,
++                                   cacheCreate: Int, cacheCreate1h: Int,
++                                   isFast: Bool) -> ModelUsage {
++            ModelUsage(inputTokens: input, outputTokens: output,
++                       cacheReadTokens: cacheRead, cacheCreateTokens: cacheCreate,
++                       cacheCreate1hTokens: cacheCreate1h,
++                       fastInputTokens: isFast ? input : 0,
++                       fastOutputTokens: isFast ? output : 0,
++                       fastCacheReadTokens: isFast ? cacheRead : 0,
++                       fastCacheCreateTokens: isFast ? cacheCreate : 0,
++                       fastCacheCreate1hTokens: isFast ? cacheCreate1h : 0)
+         }
+     }
+ 
+diff --git a/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift b/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
+index 3c52774..4532f36 100644
+--- a/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
++++ b/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
+@@ -73,9 +73,45 @@ struct CostEstimatorLoadingTests {
+         #expect(e.byVendor[.openai] != nil)
+     }
+ 
++    /// BUG-ART-013. `OpencodeScanner` returns nil when the database exists but
++    /// cannot be read (open / prepare / step failure, e.g. after a schema
++    /// change). That used to become `[:]` and wipe the rows the card was
++    /// showing, so a transient read failure looked like "no opencode usage".
++    @MainActor
++    @Test("a failed opencode scan keeps the previously published rows")
++    func failed_opencode_scan_keeps_previous_rows() async throws {
++        var usage = OpencodeScan()
++        usage.last7DaysByModel["gpt-5.5"] = ModelUsage(inputTokens: 42)
++        let first = usage
++        let calls = ScanCallCounter()
++        let e = CostEstimator(
++            claudeEstimate: { CostEstimate(usdToday: 0, usdLast7Days: 0) },
++            codexEstimate: { CostEstimate(usdToday: 0, usdLast7Days: 0) },
++            opencodeScan: { _ in calls.next() == 1 ? ["openai": first] : nil }
++        )
++        e.refresh()
++        await e.opencodeTask?.value
++        try await settle(e)
++        #expect(e.opencode[.openai]?.last7DaysByModel["gpt-5.5"]?.inputTokens == 42)
++
++        e.refresh(force: true)
++        await e.opencodeTask?.value
++        try await settle(e)
++        #expect(calls.count == 2)
++        #expect(e.opencode[.openai]?.last7DaysByModel["gpt-5.5"]?.inputTokens == 42)
++    }
++
+     // REMOVED: two tests that read as coverage and were not. One claimed to
+     // guard the generation token, the other opencode's independence; both kept
+     // passing with the protection deleted, because the races they describe
+     // cannot be forced without a seam to slow a scanner down. Better no test
+     // than a green one that guards nothing — see the note on `generation`.
+ }
++
++/// Thread-safe call counter for the detached opencode scan stub.
++private final class ScanCallCounter: @unchecked Sendable {
++    private let lock = NSLock()
++    private var calls = 0
++    func next() -> Int { lock.lock(); defer { lock.unlock() }; calls += 1; return calls }
++    var count: Int { lock.lock(); defer { lock.unlock() }; return calls }
++}
+diff --git a/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift b/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift
+index 06bc7d9..08ba10b 100644
+--- a/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift
++++ b/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift
+@@ -377,24 +377,83 @@ struct ClaudeSessionScannerTests {
+         #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 50)
+     }
+ 
++    /// TEST-MAE-001. The replaying file (`orig`) carries a key only it has
++    /// (`msg_U`) next to one it shares with the re-scanned file (`msg_E`). A
++    /// memo that stored no keyed records would lose `msg_U` on replay (a total
++    /// of 100/50); one that folded replayed records straight into the totals
++    /// instead of merging them would count `msg_E` twice (210/105). Only the
++    /// correct replay yields 110/55. The earlier version of this test used a
++    /// single shared record, so dropping `keyed` from the memo still passed.
+     @Test("cross-file dedup holds when one file replays from the memo")
+     func duplicate_key_across_files_with_memo_replay() throws {
+         let now = Date()
+         let ts = ISO8601DateFormatter().string(from: now)
+-        let line = Self.keyedLine(timestamp: ts, messageId: "msg_E", requestId: "req_E",
+-                                  input: 100, output: 50)
+-        let root = try Self.makeProjects(["orig.jsonl": [line], "resumed.jsonl": [line]])
++        let shared = Self.keyedLine(timestamp: ts, messageId: "msg_E", requestId: "req_E",
++                                    input: 100, output: 50)
++        let onlyInOrig = Self.keyedLine(timestamp: ts, messageId: "msg_U", requestId: "req_U",
++                                        input: 10, output: 5)
++        let root = try Self.makeProjects(["orig.jsonl": [shared, onlyInOrig],
++                                          "resumed.jsonl": [shared]])
+         defer { try? FileManager.default.removeItem(at: root) }
+-        _ = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
++        let memo = ScanMemo()
++        _ = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
+         // Grow one file so it re-scans while the other replays from the memo.
+         let resumed = root.appendingPathComponent("proj/resumed.jsonl")
+         let handle = try FileHandle(forWritingTo: resumed)
+         try handle.seekToEnd()
+         try handle.write(contentsOf: Data((#"{"role":"user","content":"hi"}"# + "\n").utf8))
+         try handle.close()
+-        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
+-        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
+-        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 50)
++        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 110)
++        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 55)
++    }
++
++    /// LEAK-FAN-002. A cancelled scan breaks out of the walk having visited
++    /// only some files. Pruning the memo to that partial set evicted every
++    /// entry it had not reached, so the next scan re-parsed everything cold.
++    @Test("a cancelled scan does not evict memo entries it never reached")
++    func cancelled_scan_keeps_memo() async throws {
++        let now = Date()
++        let ts = ISO8601DateFormatter().string(from: now)
++        let root = try Self.makeProjects([
++            "a.jsonl": [Self.keyedLine(timestamp: ts, messageId: "m1", requestId: "r1", input: 1)],
++            "b.jsonl": [Self.keyedLine(timestamp: ts, messageId: "m2", requestId: "r2", input: 1)],
++        ])
++        defer { try? FileManager.default.removeItem(at: root) }
++        let memo = ScanMemo()
++        _ = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
++        #expect(memo.count == 2)
++        await Task {
++            withUnsafeCurrentTask { $0?.cancel() }
++            _ = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
++        }.value
++        #expect(memo.count == 2)
++    }
++
++    /// BUG-ART-006. "Last 7 days" is today plus the six previous local days.
++    /// The old cutoff (`startOfToday - 7 * 86_400`) kept a record one second
++    /// before that window, i.e. up to eight calendar days.
++    @Test("the 7-day window starts at local midnight six days before today")
++    func seven_day_window_boundary() throws {
++        let cal = Calendar.current
++        let now = try #require(cal.date(from: DateComponents(year: 2026, month: 3, day: 18, hour: 12)))
++        let windowStart = try #require(cal.date(byAdding: .day, value: -6,
++                                                to: cal.startOfDay(for: now)))
++        let iso = ISO8601DateFormatter()
++        let inside = Self.keyedLine(timestamp: iso.string(from: windowStart.addingTimeInterval(1)),
++                                    messageId: nil, requestId: nil, input: 1_000_000)
++        let outside = Self.keyedLine(timestamp: iso.string(from: windowStart.addingTimeInterval(-1)),
++                                     messageId: nil, requestId: nil, input: 2_000_000)
++        let both = try Self.makeProjects(["s.jsonl": [inside, outside]])
++        let insideOnly = try Self.makeProjects(["s.jsonl": [inside]])
++        defer {
++            try? FileManager.default.removeItem(at: both)
++            try? FileManager.default.removeItem(at: insideOnly)
++        }
++        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: both, memo: ScanMemo())
++        let reference = ClaudeSessionScanner.estimate(now: now, projectsDir: insideOnly, memo: ScanMemo())
++        #expect(reference.usdLast7Days > 0)
++        #expect(est.usdLast7Days == reference.usdLast7Days)
+     }
+ 
+     @Test("lines missing message.id or requestId are still counted, each one")
+diff --git a/Tests/AiTaskbarCoreTests/CodexLogScannerTests.swift b/Tests/AiTaskbarCoreTests/CodexLogScannerTests.swift
+index 5394737..3ef5bb8 100644
+--- a/Tests/AiTaskbarCoreTests/CodexLogScannerTests.swift
++++ b/Tests/AiTaskbarCoreTests/CodexLogScannerTests.swift
+@@ -106,6 +106,29 @@ struct CodexLogScannerSQLiteTests {
+         #expect(est.modelBreakdownLast7Days["gpt-5-mini"] != nil)
+     }
+ 
++    /// BUG-ART-006: the legacy Codex source fills the same card, so it uses
++    /// the shared "today + six previous local days" window too.
++    @Test("the 7-day window starts at local midnight six days before today")
++    func seven_day_window_boundary() throws {
++        let cal = Calendar.current
++        let now = try #require(cal.date(from: DateComponents(year: 2026, month: 3, day: 18, hour: 12)))
++        let windowStart = try #require(cal.date(byAdding: .day, value: -6,
++                                                to: cal.startOfDay(for: now)))
++        let start = Int(windowStart.timeIntervalSince1970)
++        let inside = (ts: start + 1, body: "model=gpt-5 total_usage_tokens=1000000")
++        let outside = (ts: start - 1, body: "model=gpt-5 total_usage_tokens=2000000")
++        let both = try buildSyntheticDB(rows: [inside, outside])
++        let insideOnly = try buildSyntheticDB(rows: [inside])
++        defer {
++            try? FileManager.default.removeItem(at: both)
++            try? FileManager.default.removeItem(at: insideOnly)
++        }
++        let est = CodexLogScanner.estimate(now: now, dbPath: both.path)
++        let reference = CodexLogScanner.estimate(now: now, dbPath: insideOnly.path)
++        #expect(reference.usdLast7Days > 0)
++        #expect(est.usdLast7Days == reference.usdLast7Days)
++    }
++
+     @Test("estimate returns zero when synthetic DB has no matching rows")
+     func estimate_zero_when_no_matching_rows() throws {
+         let url = try buildSyntheticDB(rows: [
+diff --git a/Tests/AiTaskbarCoreTests/CodexSessionScannerTests.swift b/Tests/AiTaskbarCoreTests/CodexSessionScannerTests.swift
+index 6168a71..7bcd9d0 100644
+--- a/Tests/AiTaskbarCoreTests/CodexSessionScannerTests.swift
++++ b/Tests/AiTaskbarCoreTests/CodexSessionScannerTests.swift
+@@ -11,12 +11,13 @@ struct CodexSessionScannerTests {
+                          input: Int,
+                          cached: Int,
+                          output: Int,
+-                         reasoning: Int = 0) -> String {
++                         reasoning: Int = 0,
++                         runningTotal: Int? = nil) -> String {
+         let ctx = """
+         {"timestamp":"\(timestamp)","type":"turn_context","payload":{"model":"\(model)","reasoning_effort":"high"}}
+         """
+         let tc = """
+-        {"timestamp":"\(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":\(input),"cached_input_tokens":\(cached),"output_tokens":\(output),"reasoning_output_tokens":\(reasoning),"total_tokens":\(input + output)},"last_token_usage":{"input_tokens":\(input),"cached_input_tokens":\(cached),"output_tokens":\(output),"reasoning_output_tokens":\(reasoning),"total_tokens":\(input + output)}}}}
++        {"timestamp":"\(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":\(input),"cached_input_tokens":\(cached),"output_tokens":\(output),"reasoning_output_tokens":\(reasoning),"total_tokens":\(runningTotal ?? (input + output))},"last_token_usage":{"input_tokens":\(input),"cached_input_tokens":\(cached),"output_tokens":\(output),"reasoning_output_tokens":\(reasoning),"total_tokens":\(input + output)}}}}
+         """
+         return ctx + "\n" + tc + "\n"
+     }
+@@ -307,12 +308,64 @@ struct CodexSessionScannerTests {
+         let iso = ISO8601DateFormatter()
+         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+         let ts = iso.string(from: now)
+-        let jsonl = rollout(model: "gpt-5.5", timestamp: ts, input: Int.max, cached: 0, output: 0)
+-            + rollout(model: "gpt-5.5", timestamp: ts, input: Int.max, cached: 0, output: 0)
++        // Distinct running totals: two genuine turns, not one event repeated.
++        let jsonl = rollout(model: "gpt-5.5", timestamp: ts, input: Int.max, cached: 0, output: 0,
++                            runningTotal: 1)
++            + rollout(model: "gpt-5.5", timestamp: ts, input: Int.max, cached: 0, output: 0,
++                      runningTotal: 2)
+         let result = scan(jsonl, now: now)
+         #expect(result.today["gpt-5.5"]?.inputTokens == Int.max)
+     }
+ 
++    /// BUG-ART-005. Codex re-emits a `token_count` whose `total_token_usage`
++    /// did not move (and whose `last_token_usage` repeats the previous turn).
++    /// Billing each one counted the same turn twice: +6% on a real week.
++    @Test("a repeated token_count with an unchanged running total is billed once")
++    func repeated_token_count_is_billed_once() {
++        let now = Date(timeIntervalSince1970: 1_784_000_000)
++        let iso = ISO8601DateFormatter()
++        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
++        let turn = rollout(model: "gpt-5.5", timestamp: iso.string(from: now),
++                           input: 1000, cached: 400, output: 100, runningTotal: 1100)
++        let repeatedEvent = String(turn.split(separator: "\n")[1]) + "\n"
++        let result = scan(turn + repeatedEvent, now: now)
++        #expect(result.today["gpt-5.5"]?.inputTokens == 600)
++        #expect(result.today["gpt-5.5"]?.cacheReadTokens == 400)
++        #expect(result.today["gpt-5.5"]?.outputTokens == 100)
++    }
++
++    /// The dedup keys on the running total, not on the per-turn numbers: two
++    /// genuine turns that happen to be the same size advance the total and
++    /// must both be billed.
++    @Test("an identical turn that advances the running total is billed again")
++    func same_last_with_advanced_total_is_billed() {
++        let now = Date(timeIntervalSince1970: 1_784_000_000)
++        let iso = ISO8601DateFormatter()
++        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
++        let ts = iso.string(from: now)
++        let jsonl = rollout(model: "gpt-5.5", timestamp: ts,
++                            input: 1000, cached: 0, output: 100, runningTotal: 1100)
++            + rollout(model: "gpt-5.5", timestamp: ts,
++                      input: 1000, cached: 0, output: 100, runningTotal: 2200)
++        let result = scan(jsonl, now: now)
++        #expect(result.today["gpt-5.5"]?.inputTokens == 2000)
++        #expect(result.today["gpt-5.5"]?.outputTokens == 200)
++    }
++
++    /// Events without `total_token_usage` carry no signal to dedup on, so
++    /// they keep being billed individually (the pre-existing behaviour).
++    @Test("token_count events without a running total are never deduped")
++    func events_without_total_are_not_deduped() {
++        let now = Date(timeIntervalSince1970: 1_784_000_000)
++        let iso = ISO8601DateFormatter()
++        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
++        let ts = iso.string(from: now)
++        let ctx = #"{"timestamp":"\#(ts)","type":"turn_context","payload":{"model":"gpt-5.5"}}"#
++        let tc = #"{"timestamp":"\#(ts)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":500,"cached_input_tokens":0,"output_tokens":50}}}}"#
++        let result = scan([ctx, tc, tc].joined(separator: "\n") + "\n", now: now)
++        #expect(result.today["gpt-5.5"]?.inputTokens == 1000)
++    }
++
+     /// Regression: a line that clears the byte prefilter but fails to decode
+     /// used to `continue` with no counter — the exact silent-drift failure
+     /// mode that killed the sqlite scanner this file replaces.
+@@ -410,6 +463,59 @@ struct CodexSessionScannerEstimateTests {
+         #expect(est.isApproximate)
+     }
+ 
++    /// BUG-ART-006: the same "today + six previous local days" window as the
++    /// Claude and opencode scanners; `startOfToday - 7 * 86_400` kept eight.
++    @Test("the 7-day window starts at local midnight six days before today")
++    func seven_day_window_boundary() throws {
++        let cal = Calendar.current
++        let now = try #require(cal.date(from: DateComponents(year: 2026, month: 3, day: 18, hour: 12)))
++        let windowStart = try #require(cal.date(byAdding: .day, value: -6,
++                                                to: cal.startOfDay(for: now)))
++        let iso = ISO8601DateFormatter()
++        func turn(at date: Date, input: Int) -> String {
++            let ts = iso.string(from: date)
++            return """
++            {"timestamp":"\(ts)","type":"turn_context","payload":{"model":"gpt-5.5"}}
++            {"timestamp":"\(ts)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":\(input),"cached_input_tokens":0,"output_tokens":0}}}}
++
++            """
++        }
++        let inside = turn(at: windowStart.addingTimeInterval(1), input: 1_000_000)
++        let outside = turn(at: windowStart.addingTimeInterval(-1), input: 2_000_000)
++        let both = try makeTree(files: [inside, outside])
++        let insideOnly = try makeTree(files: [inside])
++        defer {
++            try? FileManager.default.removeItem(at: both)
++            try? FileManager.default.removeItem(at: insideOnly)
++        }
++        let est = CodexSessionScanner.estimateDetailed(now: now, sessionsDir: both, memo: ScanMemo()).estimate
++        let reference = CodexSessionScanner.estimateDetailed(now: now, sessionsDir: insideOnly,
++                                                             memo: ScanMemo()).estimate
++        #expect(reference.usdLast7Days > 0)
++        #expect(est.usdLast7Days == reference.usdLast7Days)
++    }
++
++    /// LEAK-FAN-002: a cancelled walk must not prune the memo to the partial
++    /// set of files it reached.
++    @Test("a cancelled scan does not evict memo entries it never reached")
++    func cancelled_scan_keeps_memo() async throws {
++        let ts = ISO8601DateFormatter().string(from: Date())
++        let line = """
++        {"timestamp":"\(ts)","type":"turn_context","payload":{"model":"gpt-5.5"}}
++
++        """
++        let root = try makeTree(files: [line, line])
++        defer { try? FileManager.default.removeItem(at: root) }
++        let memo = ScanMemo()
++        _ = CodexSessionScanner.estimateDetailed(sessionsDir: root, memo: memo)
++        #expect(memo.count == 2)
++        await Task {
++            withUnsafeCurrentTask { $0?.cancel() }
++            _ = CodexSessionScanner.estimateDetailed(sessionsDir: root, memo: memo)
++        }.value
++        #expect(memo.count == 2)
++    }
++
+     @Test("estimate on a missing directory returns the no-directory note")
+     func estimate_missing_dir() {
+         let missing = URL(fileURLWithPath: "/tmp/ai-taskbar-codex-missing-\(UUID().uuidString)")
+diff --git a/Tests/AiTaskbarCoreTests/CostWindowTests.swift b/Tests/AiTaskbarCoreTests/CostWindowTests.swift
+new file mode 100644
+index 0000000..d1a5f8b
+--- /dev/null
++++ b/Tests/AiTaskbarCoreTests/CostWindowTests.swift
+@@ -0,0 +1,36 @@
++import Testing
++import Foundation
++@testable import AiTaskbarCore
++
++@Suite("CostWindow — the shared today / last-7-days definition")
++struct CostWindowTests {
++    private func calendar(_ zone: String) throws -> Calendar {
++        var cal = Calendar(identifier: .gregorian)
++        cal.timeZone = try #require(TimeZone(identifier: zone))
++        return cal
++    }
++
++    @Test("last 7 days = today plus the six previous local days")
++    func spans_seven_calendar_days() throws {
++        let cal = try calendar("America/Sao_Paulo")
++        let now = try #require(cal.date(from: DateComponents(year: 2026, month: 9, day: 29,
++                                                             hour: 23, minute: 59)))
++        let window = CostWindow(now: now, calendar: cal)
++        let today = cal.dateComponents([.year, .month, .day, .hour, .minute], from: window.startOfToday)
++        let start = cal.dateComponents([.year, .month, .day, .hour, .minute], from: window.startOfLast7Days)
++        #expect(today == DateComponents(year: 2026, month: 9, day: 29, hour: 0, minute: 0))
++        #expect(start == DateComponents(year: 2026, month: 9, day: 23, hour: 0, minute: 0))
++    }
++
++    /// A 23-hour day inside the window must not move the boundary off
++    /// midnight, which fixed `86_400`-second steps would do.
++    @Test("a DST transition inside the window keeps the start at local midnight")
++    func dst_keeps_midnight() throws {
++        let cal = try calendar("America/New_York")   // DST began 2026-03-08
++        let now = try #require(cal.date(from: DateComponents(year: 2026, month: 3, day: 10, hour: 12)))
++        let window = CostWindow(now: now, calendar: cal)
++        let start = cal.dateComponents([.year, .month, .day, .hour], from: window.startOfLast7Days)
++        #expect(start == DateComponents(year: 2026, month: 3, day: 4, hour: 0))
++        #expect(window.startOfToday.timeIntervalSince(window.startOfLast7Days) == 6 * 86_400 - 3_600)
++    }
++}
+diff --git a/Tests/AiTaskbarCoreTests/OpencodeScannerTests.swift b/Tests/AiTaskbarCoreTests/OpencodeScannerTests.swift
+index f779c61..331fc64 100644
+--- a/Tests/AiTaskbarCoreTests/OpencodeScannerTests.swift
++++ b/Tests/AiTaskbarCoreTests/OpencodeScannerTests.swift
+@@ -262,6 +262,44 @@ struct OpencodeScannerTests {
+         expectTrue(scan?.todayByModel.isEmpty == true)
+     }
+ 
++    /// BUG-ART-006: the window is "today + the six previous local days",
++    /// shared with the Claude and Codex scanners. The old rolling
++    /// `now - 7 * 86_400` cutoff disagreed with theirs and was added to them.
++    @Test("the 7-day window starts at local midnight six days before today")
++    func seven_day_window_boundary() throws {
++        let cal = Calendar.current
++        let windowStart = try #require(cal.date(byAdding: .day, value: -6,
++                                                to: cal.startOfDay(for: now)))
++        let startMs = Int64(windowStart.timeIntervalSince1970 * 1000)
++        let db = FixtureDB(rows: [
++            (model: "m", provider: "p", role: "assistant",
++             createdMs: startMs + 1_000, input: 10, output: 0, reasoning: 0,
++             cacheRead: 0, cacheWrite: 0, cost: 1),          // just inside
++            (model: "m", provider: "p", role: "assistant",
++             createdMs: startMs - 1_000, input: 90, output: 0, reasoning: 0,
++             cacheRead: 0, cacheWrite: 0, cost: 9),          // just outside
++        ])
++        let scan = OpencodeScanner.scan(now: now, provider: "p", dbPath: db.path)
++        #expect(scan?.last7DaysByModel["m"]?.inputTokens == 10)
++        #expect(scan?.costLast7DaysByModel["m"] == 1)
++    }
++
++    /// DUP-ECO-002: output and reasoning each fit in Int64 (SQLite's sum()
++    /// would have raised otherwise), but their sum need not. A bare `+`
++    /// trapped and took the whole menu-bar app down with it; the combined
++    /// count saturates like every other token sum.
++    @Test("output + reasoning near Int.max saturates instead of trapping")
++    func output_plus_reasoning_saturates() {
++        let huge = Int.max / 2 + 1
++        let db = FixtureDB(rows: [
++            (model: "m", provider: "p", role: "assistant",
++             createdMs: msAgo(60), input: 0, output: huge, reasoning: huge,
++             cacheRead: 0, cacheWrite: 0, cost: 0),
++        ])
++        let scan = OpencodeScanner.scan(now: now, provider: "p", dbPath: db.path)
++        #expect(scan?.last7DaysByModel["m"]?.outputTokens == Int.max)
++    }
++
+     /// Absent database must be distinguishable from a database with no usage:
+     /// "opencode isn't installed" and "you used nothing" are different cards.
+     @Test("a missing database returns nil rather than an empty scan")
+diff --git a/Tests/AiTaskbarCoreTests/ScanMemoTests.swift b/Tests/AiTaskbarCoreTests/ScanMemoTests.swift
+index c8c0384..d103cde 100644
+--- a/Tests/AiTaskbarCoreTests/ScanMemoTests.swift
++++ b/Tests/AiTaskbarCoreTests/ScanMemoTests.swift
+@@ -54,6 +54,53 @@ struct ScanMemoTests {
+     }
+ }
+ 
++/// LEAK-MAE-001. The memo keeps one `KeyedUsage` per Claude response in the
++/// 7-day window: 35k records on a heavy machine (1.1 GB of transcripts),
++/// measured at ~15 MB resident with the full 15-field `ModelUsage` inline.
++/// Claude records only ever fill five counts plus a fast flag, so that shape is
++/// stored compactly; anything else keeps its exact value out of line.
++@Suite("ScanMemo.KeyedUsage — compact storage")
++struct KeyedUsageCompactTests {
++    @Test("a Claude-shaped record is stored in at most 80 bytes inline")
++    func stride_is_compact() {
++        #expect(MemoryLayout<ScanMemo.KeyedUsage>.stride <= 80)
++    }
++
++    @Test("a standard record round-trips exactly")
++    func standard_round_trips() {
++        let usage = ModelUsage(inputTokens: 1, outputTokens: 2, cacheReadTokens: 3,
++                               cacheCreateTokens: 4, cacheCreate1hTokens: 5)
++        let record = ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: true, inWeek: false)
++        #expect(record.usage == usage)
++        #expect(record.model == "m")
++        #expect(record.inToday)
++        #expect(!record.inWeek)
++    }
++
++    @Test("a fast-mode record round-trips exactly")
++    func fast_round_trips() {
++        let usage = ModelUsage(inputTokens: 1, outputTokens: 2, cacheReadTokens: 3,
++                               cacheCreateTokens: 4, cacheCreate1hTokens: 5,
++                               fastInputTokens: 1, fastOutputTokens: 2, fastCacheReadTokens: 3,
++                               fastCacheCreateTokens: 4, fastCacheCreate1hTokens: 5)
++        let record = ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: true, inWeek: true)
++        #expect(record.usage == usage)
++    }
++
++    /// Not a shape the Claude scanner produces today, but the type must never
++    /// silently drop a field someone adds a producer for.
++    @Test("a record outside the compact shape keeps every field")
++    func other_shapes_round_trip() {
++        let usage = ModelUsage(inputTokens: 10, outputTokens: 20,
++                               longContextInputTokens: 10, fastOutputTokens: 7)
++        let record = ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: false, inWeek: true)
++        #expect(record.usage == usage)
++        #expect(record == ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: false, inWeek: true))
++        #expect(record != ScanMemo.KeyedUsage(model: "m", usage: ModelUsage(inputTokens: 10),
++                                              inToday: false, inWeek: true))
++    }
++}
++
+ @Suite("ClaudeSessionScanner memoization is observable", .serialized)
+ struct ClaudeScannerMemoTests {
+     /// The end-to-end property that matters: a second scan of unchanged files

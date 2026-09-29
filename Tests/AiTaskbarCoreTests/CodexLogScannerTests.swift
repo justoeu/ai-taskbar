@@ -106,6 +106,29 @@ struct CodexLogScannerSQLiteTests {
         #expect(est.modelBreakdownLast7Days["gpt-5-mini"] != nil)
     }
 
+    /// BUG-ART-006: the legacy Codex source fills the same card, so it uses
+    /// the shared "today + six previous local days" window too.
+    @Test("the 7-day window starts at local midnight six days before today")
+    func seven_day_window_boundary() throws {
+        let cal = Calendar.current
+        let now = try #require(cal.date(from: DateComponents(year: 2026, month: 3, day: 18, hour: 12)))
+        let windowStart = try #require(cal.date(byAdding: .day, value: -6,
+                                                to: cal.startOfDay(for: now)))
+        let start = Int(windowStart.timeIntervalSince1970)
+        let inside = (ts: start + 1, body: "model=gpt-5 total_usage_tokens=1000000")
+        let outside = (ts: start - 1, body: "model=gpt-5 total_usage_tokens=2000000")
+        let both = try buildSyntheticDB(rows: [inside, outside])
+        let insideOnly = try buildSyntheticDB(rows: [inside])
+        defer {
+            try? FileManager.default.removeItem(at: both)
+            try? FileManager.default.removeItem(at: insideOnly)
+        }
+        let est = CodexLogScanner.estimate(now: now, dbPath: both.path)
+        let reference = CodexLogScanner.estimate(now: now, dbPath: insideOnly.path)
+        #expect(reference.usdLast7Days > 0)
+        #expect(est.usdLast7Days == reference.usdLast7Days)
+    }
+
     @Test("estimate returns zero when synthetic DB has no matching rows")
     func estimate_zero_when_no_matching_rows() throws {
         let url = try buildSyntheticDB(rows: [

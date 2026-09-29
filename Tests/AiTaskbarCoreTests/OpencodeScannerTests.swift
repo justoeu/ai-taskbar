@@ -262,6 +262,44 @@ struct OpencodeScannerTests {
         expectTrue(scan?.todayByModel.isEmpty == true)
     }
 
+    /// BUG-ART-006: the window is "today + the six previous local days",
+    /// shared with the Claude and Codex scanners. The old rolling
+    /// `now - 7 * 86_400` cutoff disagreed with theirs and was added to them.
+    @Test("the 7-day window starts at local midnight six days before today")
+    func seven_day_window_boundary() throws {
+        let cal = Calendar.current
+        let windowStart = try #require(cal.date(byAdding: .day, value: -6,
+                                                to: cal.startOfDay(for: now)))
+        let startMs = Int64(windowStart.timeIntervalSince1970 * 1000)
+        let db = FixtureDB(rows: [
+            (model: "m", provider: "p", role: "assistant",
+             createdMs: startMs + 1_000, input: 10, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 1),          // just inside
+            (model: "m", provider: "p", role: "assistant",
+             createdMs: startMs - 1_000, input: 90, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 9),          // just outside
+        ])
+        let scan = OpencodeScanner.scan(now: now, provider: "p", dbPath: db.path)
+        #expect(scan?.last7DaysByModel["m"]?.inputTokens == 10)
+        #expect(scan?.costLast7DaysByModel["m"] == 1)
+    }
+
+    /// DUP-ECO-002: output and reasoning each fit in Int64 (SQLite's sum()
+    /// would have raised otherwise), but their sum need not. A bare `+`
+    /// trapped and took the whole menu-bar app down with it; the combined
+    /// count saturates like every other token sum.
+    @Test("output + reasoning near Int.max saturates instead of trapping")
+    func output_plus_reasoning_saturates() {
+        let huge = Int.max / 2 + 1
+        let db = FixtureDB(rows: [
+            (model: "m", provider: "p", role: "assistant",
+             createdMs: msAgo(60), input: 0, output: huge, reasoning: huge,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+        ])
+        let scan = OpencodeScanner.scan(now: now, provider: "p", dbPath: db.path)
+        #expect(scan?.last7DaysByModel["m"]?.outputTokens == Int.max)
+    }
+
     /// Absent database must be distinguishable from a database with no usage:
     /// "opencode isn't installed" and "you used nothing" are different cards.
     @Test("a missing database returns nil rather than an empty scan")

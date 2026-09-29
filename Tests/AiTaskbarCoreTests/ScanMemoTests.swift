@@ -54,6 +54,53 @@ struct ScanMemoTests {
     }
 }
 
+/// LEAK-MAE-001. The memo keeps one `KeyedUsage` per Claude response in the
+/// 7-day window: 35k records on a heavy machine (1.1 GB of transcripts),
+/// measured at ~15 MB resident with the full 15-field `ModelUsage` inline.
+/// Claude records only ever fill five counts plus a fast flag, so that shape is
+/// stored compactly; anything else keeps its exact value out of line.
+@Suite("ScanMemo.KeyedUsage — compact storage")
+struct KeyedUsageCompactTests {
+    @Test("a Claude-shaped record is stored in at most 80 bytes inline")
+    func stride_is_compact() {
+        #expect(MemoryLayout<ScanMemo.KeyedUsage>.stride <= 80)
+    }
+
+    @Test("a standard record round-trips exactly")
+    func standard_round_trips() {
+        let usage = ModelUsage(inputTokens: 1, outputTokens: 2, cacheReadTokens: 3,
+                               cacheCreateTokens: 4, cacheCreate1hTokens: 5)
+        let record = ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: true, inWeek: false)
+        #expect(record.usage == usage)
+        #expect(record.model == "m")
+        #expect(record.inToday)
+        #expect(!record.inWeek)
+    }
+
+    @Test("a fast-mode record round-trips exactly")
+    func fast_round_trips() {
+        let usage = ModelUsage(inputTokens: 1, outputTokens: 2, cacheReadTokens: 3,
+                               cacheCreateTokens: 4, cacheCreate1hTokens: 5,
+                               fastInputTokens: 1, fastOutputTokens: 2, fastCacheReadTokens: 3,
+                               fastCacheCreateTokens: 4, fastCacheCreate1hTokens: 5)
+        let record = ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: true, inWeek: true)
+        #expect(record.usage == usage)
+    }
+
+    /// Not a shape the Claude scanner produces today, but the type must never
+    /// silently drop a field someone adds a producer for.
+    @Test("a record outside the compact shape keeps every field")
+    func other_shapes_round_trip() {
+        let usage = ModelUsage(inputTokens: 10, outputTokens: 20,
+                               longContextInputTokens: 10, fastOutputTokens: 7)
+        let record = ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: false, inWeek: true)
+        #expect(record.usage == usage)
+        #expect(record == ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: false, inWeek: true))
+        #expect(record != ScanMemo.KeyedUsage(model: "m", usage: ModelUsage(inputTokens: 10),
+                                              inToday: false, inWeek: true))
+    }
+}
+
 @Suite("ClaudeSessionScanner memoization is observable", .serialized)
 struct ClaudeScannerMemoTests {
     /// The end-to-end property that matters: a second scan of unchanged files

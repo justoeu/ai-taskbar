@@ -18,6 +18,14 @@ public enum ClaudeSessionScanner {
 
     public static func estimate(now: Date = .init(),
                                 projectsDir: URL? = nil) -> CostEstimate {
+        estimate(now: now, projectsDir: projectsDir, memo: memo)
+    }
+
+    /// Memo seam: tests pass their own `ScanMemo` so they can observe what a
+    /// scan keeps or evicts without racing other suites on the shared one.
+    internal static func estimate(now: Date,
+                                  projectsDir: URL?,
+                                  memo: ScanMemo) -> CostEstimate {
         let projects: URL = projectsDir ?? FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects")
@@ -45,9 +53,9 @@ public enum ClaudeSessionScanner {
                                 note: "Could not enumerate ~/.claude/projects.")
         }
 
-        let cal = Calendar.current
-        let startOfToday = cal.startOfDay(for: now)
-        let sevenDaysAgo = startOfToday.addingTimeInterval(-7 * 86_400)
+        let window = CostWindow(now: now)
+        let startOfToday = window.startOfToday
+        let sevenDaysAgo = window.startOfLast7Days
 
         var totalsToday: [String: ModelUsage] = [:]
         var totalsLast7: [String: ModelUsage] = [:]
@@ -120,8 +128,10 @@ public enum ClaudeSessionScanner {
                                                  keyed: fileKeyed))
             }
         }
-        // Files that aged out of the window stop being tracked.
-        memo.retain(paths: seenPaths)
+        // Files that aged out of the window stop being tracked. Only after a
+        // complete walk: a cancelled one saw a partial set, and pruning to it
+        // would evict every file it had not reached yet (LEAK-FAN-002).
+        if !Task.isCancelled { memo.retain(paths: seenPaths) }
         fold(keyedAll, totalsToday: &totalsToday, totalsLast7: &totalsLast7)
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)

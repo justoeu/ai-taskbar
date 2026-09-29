@@ -1,0 +1,13 @@
+{
+ "id": "BUG-ART-013",
+ "verdict": "APROVA",
+ "reasoning": "The changes are confined to CostEstimator.swift. The opencodeScan closure type became Optional, but only in a private property and the internal test init. The public init() keeps a missing database meaning 'opencode not installed', which returns [:] as before. The new fileExists call runs inside the detached utility task, not on the main thread. The move from private to private(set) on opencodeTask (L56) is an internal test hook, not public surface. The new AppLog.cost.error line logs no payload.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:73",
+  "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:56"
+ ],
+ "lens": "SCOPE",
+ "_task": "a5ef7717d5d494bbe",
+ "batch": "B2-scanners"
+}

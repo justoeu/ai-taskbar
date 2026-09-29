@@ -1,0 +1,14 @@
+{
+ "id": "BUG-ART-013",
+ "verdict": "APROVA",
+ "reasoning": "The failure is not silently swallowed. A nil scan now logs `AppLog.cost.error` (CostEstimator.swift:72-74) and keeps the previous rows, and a missing database still produces [:]. Widening `opencodeTask` to `private(set)` is a small change made only so the test can observe it. The test helper ScanCallCounter uses an NSLock, which is acceptable in a test. Weak spot, not caused by this fix: CostEstimator.swift:76 repeats the fileExists check that OpencodeScanner.swift:102 already does. The duplication exists because the scanner returns the same nil for four causes: missing database, open/step failure, cancellation and a duplicate alias. That flaw predates this fix. Splitting those cases would widen scope, so I record it as a new finding.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:72",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/CostEstimator.swift:76",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:62"
+ ],
+ "lens": "QUALITY",
+ "_task": "a2287e2dcba425aca",
+ "batch": "B2-scanners"
+}

@@ -73,9 +73,45 @@ struct CostEstimatorLoadingTests {
         #expect(e.byVendor[.openai] != nil)
     }
 
+    /// BUG-ART-013. `OpencodeScanner` returns nil when the database exists but
+    /// cannot be read (open / prepare / step failure, e.g. after a schema
+    /// change). That used to become `[:]` and wipe the rows the card was
+    /// showing, so a transient read failure looked like "no opencode usage".
+    @MainActor
+    @Test("a failed opencode scan keeps the previously published rows")
+    func failed_opencode_scan_keeps_previous_rows() async throws {
+        var usage = OpencodeScan()
+        usage.last7DaysByModel["gpt-5.5"] = ModelUsage(inputTokens: 42)
+        let first = usage
+        let calls = ScanCallCounter()
+        let e = CostEstimator(
+            claudeEstimate: { CostEstimate(usdToday: 0, usdLast7Days: 0) },
+            codexEstimate: { CostEstimate(usdToday: 0, usdLast7Days: 0) },
+            opencodeScan: { _ in calls.next() == 1 ? ["openai": first] : nil }
+        )
+        e.refresh()
+        await e.opencodeTask?.value
+        try await settle(e)
+        #expect(e.opencode[.openai]?.last7DaysByModel["gpt-5.5"]?.inputTokens == 42)
+
+        e.refresh(force: true)
+        await e.opencodeTask?.value
+        try await settle(e)
+        #expect(calls.count == 2)
+        #expect(e.opencode[.openai]?.last7DaysByModel["gpt-5.5"]?.inputTokens == 42)
+    }
+
     // REMOVED: two tests that read as coverage and were not. One claimed to
     // guard the generation token, the other opencode's independence; both kept
     // passing with the protection deleted, because the races they describe
     // cannot be forced without a seam to slow a scanner down. Better no test
     // than a green one that guards nothing — see the note on `generation`.
+}
+
+/// Thread-safe call counter for the detached opencode scan stub.
+private final class ScanCallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    func next() -> Int { lock.lock(); defer { lock.unlock() }; calls += 1; return calls }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return calls }
 }

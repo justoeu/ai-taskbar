@@ -1,0 +1,57 @@
+{
+  "id": "TEST-MAE-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 12:56:51 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "This one only adds a test, duplicate_key_across_files_with_memo_replay (ClaudeSessionScannerTests.swift:388). It passes. The Ferreiro reports it goes RED under the mutation keyed:[:], giving 100 vs 110. There is no production change to revert, so reversal does not apply. It is the first test that drives cross-file dedup through a memo replay.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift:388"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The strengthened test at ClaudeSessionScannerTests.swift:447-483 keeps its name, which still describes it. Its comment lists the two mutations it catches: 100/50 when nothing keyed is stored, and 210/105 when replayed records are folded in. It uses a private ScanMemo, so it no longer races other suites on the shared one. It has one #expect per fact.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift:454"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The change is a test only, in Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift, and it uses the memo seam added for LEAK-FAN-002. No production files are touched for this id.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

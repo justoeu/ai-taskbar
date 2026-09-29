@@ -351,7 +351,7 @@
     "fix": "Decode total_token_usage, track the previous total per file, and skip an event whose total did not increase.",
     "failure_scenario": "Two consecutive identical token_count lines (last input 10000, total_tokens 50000) book 20,000 input where 10,000 is correct.",
     "test_red_green": {
-      "name": "codexScannerSkipsRepeatedTokenCount",
+      "name": "CodexSessionScannerTests#repeated_token_count_is_billed_once,CodexSessionScannerTests#same_last_with_advanced_total_is_billed,CodexSessionScannerTests#events_without_total_are_not_deduped",
       "assert_before": "inputTokens == 20000",
       "assert_after": "inputTokens == 10000"
     },
@@ -359,10 +359,41 @@
     "cetico_evidence": "CodexSessionScanner.swift:363-398 records every token_count with a non-empty last_token_usage and never reads total_token_usage. I re-measured on ~/.codex/sessions over 7 days: 1,459 of 23,996 events repeat the previous total_tokens, and 1,315 of those also repeat an identical last_token_usage. Summed last is 3.091B vs 2.913B from total deltas (+6.1%). total_token_usage never decreased, so the delta signal is reliable.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift",
     "id": "BUG-ART-005",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "CodexSessionScannerTests#repeated_token_count_is_billed_once,CodexSessionScannerTests#same_last_with_advanced_total_is_billed,CodexSessionScannerTests#events_without_total_are_not_deduped",
+    "resolved_at": "2026-09-29 12:56:50 UTC",
+    "resolved_note": "batch B2-scanners",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:56:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste CodexSessionScannerTests#repeated_token_count_is_billed_once,CodexSessionScannerTests#same_last_with_advanced_total_is_billed,CodexSessionScannerTests#events_without_total_are_not_deduped · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -377,7 +408,7 @@
     "fix": "Use cal.date(byAdding: .day, value: -6, to: startOfToday) everywhere, opencode included.",
     "failure_scenario": "now = Tue 10:00. A turn from last Tue 09:00 (8 calendar days back) is counted by the Claude/Codex scanners but not by opencode.",
     "test_red_green": {
-      "name": "sevenDayWindowIsSevenCalendarDays",
+      "name": "ClaudeSessionScannerTests#seven_day_window_boundary,CodexSessionScannerEstimateTests#seven_day_window_boundary,OpencodeScannerTests#seven_day_window_boundary,CodexLogScannerSQLiteTests#seven_day_window_boundary,CostWindowTests#spans_seven_calendar_days,CostWindowTests#dst_keeps_midnight",
       "assert_before": "record at startOfToday-7d+1h counted",
       "assert_after": "excluded; startOfToday-6d counted"
     },
@@ -385,10 +416,41 @@
     "cetico_evidence": "ClaudeSessionScanner.swift:50 and CodexSessionScanner.swift:94 use startOfToday-7*86400, which covers today plus 7 full prior days (up to 8 calendar days). OpencodeScanner.swift:126 uses now-7*86400, and AnalyticsStore.swift:138 adds the two windows together.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
     "id": "BUG-ART-006",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "ClaudeSessionScannerTests#seven_day_window_boundary,CodexSessionScannerEstimateTests#seven_day_window_boundary,OpencodeScannerTests#seven_day_window_boundary,CodexLogScannerSQLiteTests#seven_day_window_boundary,CostWindowTests#spans_seven_calendar_days,CostWindowTests#dst_keeps_midnight",
+    "resolved_at": "2026-09-29 12:56:50 UTC",
+    "resolved_note": "batch B2-scanners",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:56:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#seven_day_window_boundary,CodexSessionScannerEstimateTests#seven_day_window_boundary,OpencodeScannerTests#seven_day_window_boundary,CodexLogScannerSQLiteTests#seven_day_window_boundary,CostWindowTests#spans_seven_calendar_days,CostWindowTests#dst_keeps_midnight · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "in_progress": false
   },
   {
     "title": "Hardcoded Portuguese error/disclaimer text ships to every locale (Gemini + Grok)",
@@ -1094,7 +1156,7 @@
     "fix": "Keep the Optional through: on nil, keep the previous value and log.",
     "failure_scenario": "opencode holds a write lock during a refresh, so the scan returns nil and the Models section loses its opencode rows.",
     "test_red_green": {
-      "name": "opencodeNilScanKeepsPreviousRows",
+      "name": "CostEstimatorLoadingTests#failed_opencode_scan_keeps_previous_rows",
       "assert_before": "opencode empty",
       "assert_after": "opencode unchanged"
     },
@@ -1102,10 +1164,41 @@
     "cetico_evidence": "CostEstimator.swift:73 turns a nil scan into [:], and L165-173 publishes it, wiping the previous opencode rows. OpencodeScanner returns nil on open, prepare or non-DONE step (L111, L155, L211). The SQLITE_BUSY vector is weak: opencode's DB is a WAL reader, and there is no busy_timeout. Schema drift or a prepare failure clearly triggers it.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift",
     "id": "BUG-ART-013",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "CostEstimatorLoadingTests#failed_opencode_scan_keeps_previous_rows",
+    "resolved_at": "2026-09-29 12:56:51 UTC",
+    "resolved_note": "batch B2-scanners",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:56:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste CostEstimatorLoadingTests#failed_opencode_scan_keeps_previous_rows · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -1528,15 +1621,46 @@
     "cetico_evidence": "Same root cause as BUG-ART-006 (ClaudeSessionScanner.swift:50, CodexSessionScanner.swift:94 vs OpencodeScanner.swift:126). Fold it into BUG-ART-006 and do not fix it twice.",
     "verification": "cetico",
     "domain": "duplication",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "same as BUG-ART-006 (same root cause, one fix)",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-ECO-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "same as BUG-ART-006 (same root cause, one fix)",
+    "resolved_at": "2026-09-29 12:56:50 UTC",
+    "resolved_note": "batch B2-scanners",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:56:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste same as BUG-ART-006 (same root cause, one fix) · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "in_progress": false
   },
   {
     "title": "OpencodeScanner combines tokens with a bare trapping addition before handing off to CostAggregator, bypassing the saturatingAdd invariant built for exactly this hazard",
@@ -1554,15 +1678,46 @@
     "cetico_evidence": "OpencodeScanner.swift:197 does a bare `max(0, output) + max(0, reasoning)`. SQLite sum() raises on overflow, so each column fits Int64, but two values above 2^62 still make Swift's + trap. The only vector is a corrupted or crafted local opencode.db, which is user-owned, hence LOW.",
     "verification": "cetico",
     "domain": "duplication",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/OpencodeScanner.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "OpencodeScannerTests#output_plus_reasoning_saturates",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-ECO-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "OpencodeScannerTests#output_plus_reasoning_saturates",
+    "resolved_at": "2026-09-29 12:56:51 UTC",
+    "resolved_note": "batch B2-scanners",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:56:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste OpencodeScannerTests#output_plus_reasoning_saturates · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "in_progress": false
   },
   {
     "title": "AntigravityExecutor lacks the concurrent-drain plus SIGKILL escalation that SecurityToolCredentialReader established for the identical subprocess-hang hazard",
@@ -1677,7 +1832,7 @@
     "impact": "Bounded (7-day window), not a leak. But the next pass re-parses cold (the file comment measures 191 MB / 839 files, 2-6 s CPU) and briefly maps large Data again, so supersession churn means repeated cold scans and RSS spikes.",
     "fix": "Only prune when the walk finished: `if !Task.isCancelled { memo.retain(paths: seenPaths) }` in both scanners.",
     "test_red_green": {
-      "name": "ScanMemoTests.cancelledScanKeepsUnvisitedEntries",
+      "name": "ClaudeSessionScannerTests#cancelled_scan_keeps_memo,CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo",
       "assert_before": "memo seeded with N files; scan cancelled after the first file -> memo.count == 1",
       "assert_after": "memo.count == N; a completed scan still prunes aged-out paths"
     },
@@ -1685,10 +1840,41 @@
     "cetico_evidence": "ClaudeSessionScanner.swift:65 breaks on cancel, and :116 memo.retain(paths: seenPaths) still runs with the partial set. CodexSessionScanner.swift:105/:153 does the same. CostEstimator.swift:103 cancels scans when a new one supersedes them. The result is a cold rescan (CPU) and no leak.",
     "verification": "cetico",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift",
     "id": "LEAK-FAN-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "ClaudeSessionScannerTests#cancelled_scan_keeps_memo,CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo",
+    "resolved_at": "2026-09-29 12:56:51 UTC",
+    "resolved_note": "batch B2-scanners",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:56:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#cancelled_scan_keeps_memo,CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Fantasma",
@@ -1804,14 +1990,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "KeyedUsageCompactTests#stride_is_compact,KeyedUsageCompactTests#standard_round_trips,KeyedUsageCompactTests#fast_round_trips,KeyedUsageCompactTests#other_shapes_round_trip",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "LEAK-MAE-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "KeyedUsageCompactTests#stride_is_compact,KeyedUsageCompactTests#standard_round_trips,KeyedUsageCompactTests#fast_round_trips,KeyedUsageCompactTests#other_shapes_round_trip",
+    "resolved_at": "2026-09-29 12:56:52 UTC",
+    "resolved_note": "batch B2-scanners",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:56:52 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste KeyedUsageCompactTests#stride_is_compact,KeyedUsageCompactTests#standard_round_trips,KeyedUsageCompactTests#fast_round_trips,KeyedUsageCompactTests#other_shapes_round_trip · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",
@@ -2406,14 +2623,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "ClaudeSessionScannerTests#duplicate_key_across_files_with_memo_replay",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "ClaudeSessionScannerTests#duplicate_key_across_files_with_memo_replay",
+    "resolved_at": "2026-09-29 12:56:51 UTC",
+    "resolved_note": "batch B2-scanners",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 12:56:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste ClaudeSessionScannerTests#duplicate_key_across_files_with_memo_replay · revisão approved (3/3) · batch B2-scanners"
+    ],
+    "in_progress": false
   },
   {
     "lens": "tests",

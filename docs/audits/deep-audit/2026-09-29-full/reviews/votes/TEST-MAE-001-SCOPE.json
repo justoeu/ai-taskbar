@@ -1,0 +1,12 @@
+{
+ "id": "TEST-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "The change is a test only, in Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift, and it uses the memo seam added for LEAK-FAN-002. No production files are touched for this id.",
+ "required_changes": [],
+ "cited_paths": [
+  "Tests/AiTaskbarCoreTests/ClaudeSessionScannerTests.swift"
+ ],
+ "lens": "SCOPE",
+ "_task": "a5ef7717d5d494bbe",
+ "batch": "B2-scanners"
+}

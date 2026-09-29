@@ -1,0 +1,12 @@
+{
+ "id": "LEAK-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "ScanMemo.swift KeyedUsage now keeps five Ints and a fast flag. Any usage whose compact form does not equal the original is stored in full in `boxed`, so the round trip is lossless even for fields that expand() does not model. The custom == compares the rebuilt usage, which keeps the old semantics. Reversal check: with ScanMemo.swift restored from HEAD, the stride test went RED at 144 vs 80. The round-trip tests passed on the fixed code.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/ScanMemo.swift:57"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "af5a535570231f94f",
+ "batch": "B2-scanners"
+}

@@ -123,9 +123,9 @@ public enum OpencodeScanner {
 
         // opencode stores epoch MILLISECONDS in `time_created`, while the rest
         // of this module works in seconds.
-        let sevenDaysAgoMs = Int64((now.timeIntervalSince1970 - 7 * 86_400) * 1000)
-        let startOfTodayMs = Int64(Calendar.current.startOfDay(for: now)
-            .timeIntervalSince1970 * 1000)
+        let window = CostWindow(now: now)
+        let sevenDaysAgoMs = Int64(window.startOfLast7Days.timeIntervalSince1970 * 1000)
+        let startOfTodayMs = Int64(window.startOfToday.timeIntervalSince1970 * 1000)
 
         // Grouping by (model, is_today) lets one pass fill both windows. The
         // `time_created` column is used for the range rather than the JSON's
@@ -194,7 +194,8 @@ public enum OpencodeScanner {
             // maps straight across with no subtraction.
             let usage = ModelUsage(
                 inputTokens: max(0, input),
-                outputTokens: max(0, output) + max(0, reasoning),
+                // Each column fits Int64, their sum need not: saturate.
+                outputTokens: CostAggregator.saturatingAdd(max(0, output), max(0, reasoning)),
                 cacheReadTokens: max(0, cacheRead),
                 cacheCreateTokens: max(0, cacheWrite))
 
