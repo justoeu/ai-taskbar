@@ -24,6 +24,9 @@ public final class RefreshScheduler: ObservableObject {
     /// on cancellation is fine: the loop re-checks `Task.isCancelled`.
     typealias Sleeper = @MainActor (TimeInterval) async -> Void
     private let sleeper: Sleeper
+    /// Suspends the update-check loop; defaults to `sleeper`. Separate so a
+    /// test can script the daily cadence without mixing in refresh ticks.
+    private let updateSleeper: Sleeper
     /// The time a tick is dispatched at, which bounds how long a hung fetch
     /// is skipped (`UsageStore.maxInFlightAge`). Tests advance it with the
     /// scripted sleeper instead of waiting on the wall clock.
@@ -53,9 +56,11 @@ public final class RefreshScheduler: ObservableObject {
          minimumInterval: TimeInterval,
          minimumStatusInterval: TimeInterval,
          sleeper: @escaping Sleeper = RefreshScheduler.taskSleep,
+         updateSleeper: Sleeper? = nil,
          clock: @escaping Clock = { .now }) {
         self.store = store
         self.sleeper = sleeper
+        self.updateSleeper = updateSleeper ?? sleeper
         self.clock = clock
         self.statusStore = statusStore
         self.costEstimator = costEstimator
@@ -179,11 +184,18 @@ public final class RefreshScheduler: ObservableObject {
     }
 
     private func startUpdateCheckLoop() {
-        guard updateCheckLoop == nil, updates != nil else { return }
+        guard updateCheckLoop == nil, let updates, updates.config.enabled else { return }
+        let sleeper = self.updateSleeper
         updateCheckLoop = Task { @MainActor [weak self] in
+            // Once per local calendar day (UPDATE-SCHED-001): check at launch
+            // when due, then sleep until the next local day (or 24 h), which
+            // is recomputed from the stored last-check date after every round,
+            // so a manual check from About moves the next one too. The floor
+            // keeps a busy or unrecorded check from spinning.
             self?.updates?.checkIfNeeded()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(86_400))
+                guard let delay = self?.updates?.delayUntilNextCheck() else { break }
+                await sleeper(max(UpdateChecker.minimumRetryDelay, delay))
                 if Task.isCancelled { break }
                 self?.updates?.checkIfNeeded()
             }

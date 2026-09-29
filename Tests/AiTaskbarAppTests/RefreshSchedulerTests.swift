@@ -313,6 +313,75 @@ final class RefreshSchedulerTests {
         #expect(vm.loadingSince == later)
     }
 
+    private func dailyChecker(lastCheck: String, clock: @escaping @MainActor () -> Date) -> UpdateChecker {
+        defaults.set(UpdateCheckDueTests.at(lastCheck).timeIntervalSince1970,
+                     forKey: UpdateChecker.lastCheckKey)
+        return UpdateChecker(
+            config: UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false),
+            currentVersion: "1.0.0",
+            http: .stubbed(protocols: [HangingGitHubProtocol.self]),
+            userDefaults: defaults,
+            calendar: UpdateCheckDueTests.saoPaulo,
+            now: clock)
+    }
+
+    private func updateScheduler(_ checker: UpdateChecker, updateSleeper: ScriptedSleeper) -> RefreshScheduler {
+        RefreshScheduler(store: store([]), statusStore: nil, updates: checker,
+                         interval: 300, minimumInterval: 15, minimumStatusInterval: 300,
+                         sleeper: ScriptedSleeper(returningSleeps: 0).sleeper,
+                         updateSleeper: updateSleeper.sleeper)
+    }
+
+    @Test("relaunch the next day (last check 23:34, now 10:00) checks at launch, then sleeps to midnight")
+    func update_loop_checks_on_relaunch_next_day() async {
+        let now = UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00")
+        let checker = dailyChecker(lastCheck: "2026-09-28T23:34:00-03:00", clock: { now })
+        let updateSleeper = ScriptedSleeper(returningSleeps: 0)
+        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
+
+        scheduler.start()
+        await updateSleeper.waitForSleeps(1)
+        #expect(checker.status == .checking)
+        #expect(updateSleeper.durations == [14 * 3_600])
+        scheduler.stop()
+    }
+
+    @Test("same-day relaunch sleeps the computed delay (not 86400) and checks at the new day")
+    func update_loop_sleeps_until_next_day() async {
+        let base = UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00")
+        let updateSleeper = ScriptedSleeper(returningSleeps: 1)
+        let checker = dailyChecker(lastCheck: "2026-09-29T08:00:00-03:00",
+                                   clock: { [updateSleeper] in base.addingTimeInterval(updateSleeper.elapsed) })
+        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
+
+        scheduler.start()
+        // The first sleep returns at once, so only the settled second one is
+        // a stable point to read both durations from.
+        await updateSleeper.waitForSleeps(2)
+        #expect(checker.status == .checking)
+        #expect(updateSleeper.durations == [14 * 3_600, 86_400])
+        scheduler.stop()
+    }
+
+    @Test("updates disabled: no update loop runs, so nothing sleeps or checks")
+    func update_loop_not_started_when_disabled() async {
+        let checker = UpdateChecker(
+            config: UpdatesConfig(enabled: false, ownerRepo: "test/repo", includePrereleases: false),
+            currentVersion: "1.0.0",
+            http: .stubbed(protocols: [HangingGitHubProtocol.self]),
+            userDefaults: defaults,
+            calendar: UpdateCheckDueTests.saoPaulo,
+            now: { UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00") })
+        let updateSleeper = ScriptedSleeper(returningSleeps: 0)
+        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
+
+        scheduler.start()
+        for _ in 0..<5 { await Task.yield() }
+        #expect(updateSleeper.durations.isEmpty)
+        #expect(checker.status == .idle)
+        scheduler.stop()
+    }
+
     @Test("dropping the last reference releases a started scheduler (LEAK-FAN-008)")
     func started_scheduler_is_released() async {
         let checker = UpdateChecker(

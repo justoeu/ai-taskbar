@@ -282,6 +282,14 @@ cleanly on `[skip release]` heads.
   returns a prerelease, so `include_prereleases = true` reads
   `/releases?per_page=20` and picks the newest non-draft by `Semver` (SemVer
   2.0 prerelease precedence; `beta10` > `beta9`).
+- The automatic update check runs **once per calendar day** — at launch if it
+  has not checked today, and at the start of each new day while running.
+  `UpdateChecker.isCheckDue` (no previous check, an earlier LOCAL day, or
+  >= 24 h) and `delayUntilNextCheck` (next local midnight or +24 h, whichever
+  first, clamped to 60 s...24 h) are pure over an injected `Calendar` + clock;
+  `RefreshScheduler` sleeps that delay and recomputes it after every round
+  from the stored last-check date. A fixed 24 h sleep after a skipped launch
+  check once delayed checks to ~48 h (UPDATE-SCHED-001).
 
 ### DMG release runbook (generating the signed DMG)
 

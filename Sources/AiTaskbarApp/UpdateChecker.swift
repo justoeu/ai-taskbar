@@ -57,6 +57,8 @@ public final class UpdateChecker: ObservableObject {
     nonisolated internal static let maxChecksumsResponseBytes = 64 * 1024
 
     nonisolated public static let cadenceInterval: TimeInterval = 86_400 // 24 hours
+    /// Shortest sleep between update-loop rounds (UPDATE-SCHED-001).
+    nonisolated public static let minimumRetryDelay: TimeInterval = 60
     nonisolated public static let lastCheckKey: String = "ai_taskbar_last_update_check_at"
     nonisolated public static let dismissedTagKey: String = "ai_taskbar_dismissed_update_tag"
 
@@ -71,6 +73,10 @@ public final class UpdateChecker: ObservableObject {
     private let downloadsDirectory: URL?
     private let revealInFinder: @MainActor (URL) -> Void
     private let dmgVerifier: any DMGVerifying
+    /// Local calendar and clock the daily cadence is judged against
+    /// (UPDATE-SCHED-001). Tests inject a fixed time zone and a fake clock.
+    private let calendar: Calendar
+    private let now: @MainActor () -> Date
 
     /// `http` has no default on purpose: the composition root must pass
     /// `env.http`, the pinned client when `pin_hosts` is set (ARCH-ATL-004).
@@ -82,7 +88,9 @@ public final class UpdateChecker: ObservableObject {
                 revealInFinder: @escaping @MainActor (URL) -> Void = {
                     NSWorkspace.shared.activateFileViewerSelecting([$0])
                 },
-                dmgVerifier: any DMGVerifying = TeamSignatureDMGVerifier()) {
+                dmgVerifier: any DMGVerifying = TeamSignatureDMGVerifier(),
+                calendar: Calendar = .autoupdatingCurrent,
+                now: @escaping @MainActor () -> Date = { Date() }) {
         self.config = config
         self.currentVersion = currentVersion ?? Self.bundleVersion()
         self.http = http
@@ -90,6 +98,8 @@ public final class UpdateChecker: ObservableObject {
         self.downloadsDirectory = downloadsDirectory
         self.revealInFinder = revealInFinder
         self.dmgVerifier = dmgVerifier
+        self.calendar = calendar
+        self.now = now
         self.dismissedTag = userDefaults.string(forKey: Self.dismissedTagKey)
     }
 
@@ -103,8 +113,38 @@ public final class UpdateChecker: ObservableObject {
         return Date(timeIntervalSince1970: ts)
     }
 
-    private func recordCheckDate(_ date: Date = Date()) {
-        userDefaults.set(date.timeIntervalSince1970, forKey: Self.lastCheckKey)
+    private func recordCheckDate() {
+        userDefaults.set(now().timeIntervalSince1970, forKey: Self.lastCheckKey)
+    }
+
+    /// Once per local calendar day (UPDATE-SCHED-001): due with no previous
+    /// check, when the last one was on an earlier local day, or after 24 h.
+    /// A last check in the future (clock skew) is not due.
+    nonisolated public static func isCheckDue(lastCheck: Date?, now: Date, calendar: Calendar) -> Bool {
+        guard let lastCheck else { return true }
+        guard lastCheck <= now else { return false }
+        return now.timeIntervalSince(lastCheck) >= cadenceInterval
+            || !calendar.isDate(lastCheck, inSameDayAs: now)
+    }
+
+    /// 0 when due; otherwise the time until the start of the local day after
+    /// the last check or 24 h after it, whichever comes first, kept within
+    /// `minimumRetryDelay...cadenceInterval` so a skewed clock re-evaluates
+    /// daily and a check that could not run does not spin.
+    nonisolated public static func delayUntilNextCheck(lastCheck: Date?, now: Date,
+                                                       calendar: Calendar) -> TimeInterval {
+        guard let lastCheck, !isCheckDue(lastCheck: lastCheck, now: now, calendar: calendar) else {
+            return 0
+        }
+        var next = lastCheck.addingTimeInterval(cadenceInterval)
+        if let nextDay = calendar.dateInterval(of: .day, for: lastCheck)?.end {
+            next = min(next, nextDay)
+        }
+        return min(cadenceInterval, max(minimumRetryDelay, next.timeIntervalSince(now)))
+    }
+
+    public func delayUntilNextCheck() -> TimeInterval {
+        Self.delayUntilNextCheck(lastCheck: lastCheckDate, now: now(), calendar: calendar)
     }
 
     public var isUpdateBannerVisible: Bool {
@@ -133,7 +173,7 @@ public final class UpdateChecker: ObservableObject {
     public func checkIfNeeded(force: Bool = false) {
         guard config.enabled else { return }
         if status.isBusy { return }
-        if !force, let last = lastCheckDate, Date().timeIntervalSince(last) < Self.cadenceInterval {
+        if !force, !Self.isCheckDue(lastCheck: lastCheckDate, now: now(), calendar: calendar) {
             return
         }
         check()

@@ -83,6 +83,8 @@ The app runs on macOS 13+ (Ventura). Building the app requires Swift 6.2+; Comma
 
 Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly (or the release list when `include_prereleases = true`, picking the newest non-draft by SemVer precedence, so `beta10` beats `beta9`), compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
 
+The app also checks on its own, once per calendar day — at launch if it has not checked today, and at the start of each new day while running (or 24 h after the last check, whichever comes first). It only reports what it finds; nothing is downloaded without your click. `[updates] enabled = false` turns this off.
+
 The download only follows redirects to GitHub's release hosts. Before the DMG is shown, the app checks it against the release's `checksums-*.txt` (a release without one is refused), confirms the app inside is signed by the same Developer ID team as the installed app, and marks the file with `com.apple.quarantine` so Gatekeeper checks it when you open it. If any step fails, the download is deleted.
 
 ## Setup per provider
