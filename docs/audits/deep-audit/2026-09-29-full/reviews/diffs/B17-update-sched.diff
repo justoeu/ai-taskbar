@@ -1,0 +1,419 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index b7f261e..ee4240e 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -282,6 +282,14 @@ cleanly on `[skip release]` heads.
+   returns a prerelease, so `include_prereleases = true` reads
+   `/releases?per_page=20` and picks the newest non-draft by `Semver` (SemVer
+   2.0 prerelease precedence; `beta10` > `beta9`).
++- The automatic update check runs **once per calendar day** — at launch if it
++  has not checked today, and at the start of each new day while running.
++  `UpdateChecker.isCheckDue` (no previous check, an earlier LOCAL day, or
++  >= 24 h) and `delayUntilNextCheck` (next local midnight or +24 h, whichever
++  first, clamped to 60 s...24 h) are pure over an injected `Calendar` + clock;
++  `RefreshScheduler` sleeps that delay and recomputes it after every round
++  from the stored last-check date. A fixed 24 h sleep after a skipped launch
++  check once delayed checks to ~48 h (UPDATE-SCHED-001).
+ 
+ ### DMG release runbook (generating the signed DMG)
+ 
+diff --git a/CLAUDE.md b/CLAUDE.md
+index b7f261e..ee4240e 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -282,6 +282,14 @@ cleanly on `[skip release]` heads.
+   returns a prerelease, so `include_prereleases = true` reads
+   `/releases?per_page=20` and picks the newest non-draft by `Semver` (SemVer
+   2.0 prerelease precedence; `beta10` > `beta9`).
++- The automatic update check runs **once per calendar day** — at launch if it
++  has not checked today, and at the start of each new day while running.
++  `UpdateChecker.isCheckDue` (no previous check, an earlier LOCAL day, or
++  >= 24 h) and `delayUntilNextCheck` (next local midnight or +24 h, whichever
++  first, clamped to 60 s...24 h) are pure over an injected `Calendar` + clock;
++  `RefreshScheduler` sleeps that delay and recomputes it after every round
++  from the stored last-check date. A fixed 24 h sleep after a skipped launch
++  check once delayed checks to ~48 h (UPDATE-SCHED-001).
+ 
+ ### DMG release runbook (generating the signed DMG)
+ 
+diff --git a/README.md b/README.md
+index c1f8210..899c18c 100644
+--- a/README.md
++++ b/README.md
+@@ -83,6 +83,8 @@ The app runs on macOS 13+ (Ventura). Building the app requires Swift 6.2+; Comma
+ 
+ Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly (or the release list when `include_prereleases = true`, picking the newest non-draft by SemVer precedence, so `beta10` beats `beta9`), compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
+ 
++The app also checks on its own, once per calendar day — at launch if it has not checked today, and at the start of each new day while running (or 24 h after the last check, whichever comes first). It only reports what it finds; nothing is downloaded without your click. `[updates] enabled = false` turns this off.
++
+ The download only follows redirects to GitHub's release hosts. Before the DMG is shown, the app checks it against the release's `checksums-*.txt` (a release without one is refused), confirms the app inside is signed by the same Developer ID team as the installed app, and marks the file with `com.apple.quarantine` so Gatekeeper checks it when you open it. If any step fails, the download is deleted.
+ 
+ ## Setup per provider
+diff --git a/Sources/AiTaskbarApp/UpdateChecker.swift b/Sources/AiTaskbarApp/UpdateChecker.swift
+index 0326f54..b59e194 100644
+--- a/Sources/AiTaskbarApp/UpdateChecker.swift
++++ b/Sources/AiTaskbarApp/UpdateChecker.swift
+@@ -57,6 +57,8 @@ public final class UpdateChecker: ObservableObject {
+     nonisolated internal static let maxChecksumsResponseBytes = 64 * 1024
+ 
+     nonisolated public static let cadenceInterval: TimeInterval = 86_400 // 24 hours
++    /// Shortest sleep between update-loop rounds (UPDATE-SCHED-001).
++    nonisolated public static let minimumRetryDelay: TimeInterval = 60
+     nonisolated public static let lastCheckKey: String = "ai_taskbar_last_update_check_at"
+     nonisolated public static let dismissedTagKey: String = "ai_taskbar_dismissed_update_tag"
+ 
+@@ -71,6 +73,10 @@ public final class UpdateChecker: ObservableObject {
+     private let downloadsDirectory: URL?
+     private let revealInFinder: @MainActor (URL) -> Void
+     private let dmgVerifier: any DMGVerifying
++    /// Local calendar and clock the daily cadence is judged against
++    /// (UPDATE-SCHED-001). Tests inject a fixed time zone and a fake clock.
++    private let calendar: Calendar
++    private let now: @MainActor () -> Date
+ 
+     /// `http` has no default on purpose: the composition root must pass
+     /// `env.http`, the pinned client when `pin_hosts` is set (ARCH-ATL-004).
+@@ -82,7 +88,9 @@ public final class UpdateChecker: ObservableObject {
+                 revealInFinder: @escaping @MainActor (URL) -> Void = {
+                     NSWorkspace.shared.activateFileViewerSelecting([$0])
+                 },
+-                dmgVerifier: any DMGVerifying = TeamSignatureDMGVerifier()) {
++                dmgVerifier: any DMGVerifying = TeamSignatureDMGVerifier(),
++                calendar: Calendar = .autoupdatingCurrent,
++                now: @escaping @MainActor () -> Date = { Date() }) {
+         self.config = config
+         self.currentVersion = currentVersion ?? Self.bundleVersion()
+         self.http = http
+@@ -90,6 +98,8 @@ public final class UpdateChecker: ObservableObject {
+         self.downloadsDirectory = downloadsDirectory
+         self.revealInFinder = revealInFinder
+         self.dmgVerifier = dmgVerifier
++        self.calendar = calendar
++        self.now = now
+         self.dismissedTag = userDefaults.string(forKey: Self.dismissedTagKey)
+     }
+ 
+@@ -103,8 +113,38 @@ public final class UpdateChecker: ObservableObject {
+         return Date(timeIntervalSince1970: ts)
+     }
+ 
+-    private func recordCheckDate(_ date: Date = Date()) {
+-        userDefaults.set(date.timeIntervalSince1970, forKey: Self.lastCheckKey)
++    private func recordCheckDate() {
++        userDefaults.set(now().timeIntervalSince1970, forKey: Self.lastCheckKey)
++    }
++
++    /// Once per local calendar day (UPDATE-SCHED-001): due with no previous
++    /// check, when the last one was on an earlier local day, or after 24 h.
++    /// A last check in the future (clock skew) is not due.
++    nonisolated public static func isCheckDue(lastCheck: Date?, now: Date, calendar: Calendar) -> Bool {
++        guard let lastCheck else { return true }
++        guard lastCheck <= now else { return false }
++        return now.timeIntervalSince(lastCheck) >= cadenceInterval
++            || !calendar.isDate(lastCheck, inSameDayAs: now)
++    }
++
++    /// 0 when due; otherwise the time until the start of the local day after
++    /// the last check or 24 h after it, whichever comes first, kept within
++    /// `minimumRetryDelay...cadenceInterval` so a skewed clock re-evaluates
++    /// daily and a check that could not run does not spin.
++    nonisolated public static func delayUntilNextCheck(lastCheck: Date?, now: Date,
++                                                       calendar: Calendar) -> TimeInterval {
++        guard let lastCheck, !isCheckDue(lastCheck: lastCheck, now: now, calendar: calendar) else {
++            return 0
++        }
++        var next = lastCheck.addingTimeInterval(cadenceInterval)
++        if let nextDay = calendar.dateInterval(of: .day, for: lastCheck)?.end {
++            next = min(next, nextDay)
++        }
++        return min(cadenceInterval, max(minimumRetryDelay, next.timeIntervalSince(now)))
++    }
++
++    public func delayUntilNextCheck() -> TimeInterval {
++        Self.delayUntilNextCheck(lastCheck: lastCheckDate, now: now(), calendar: calendar)
+     }
+ 
+     public var isUpdateBannerVisible: Bool {
+@@ -133,7 +173,7 @@ public final class UpdateChecker: ObservableObject {
+     public func checkIfNeeded(force: Bool = false) {
+         guard config.enabled else { return }
+         if status.isBusy { return }
+-        if !force, let last = lastCheckDate, Date().timeIntervalSince(last) < Self.cadenceInterval {
++        if !force, !Self.isCheckDue(lastCheck: lastCheckDate, now: now(), calendar: calendar) {
+             return
+         }
+         check()
+diff --git a/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift b/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
+index 7ce86d2..d0253a4 100644
+--- a/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
++++ b/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
+@@ -24,6 +24,9 @@ public final class RefreshScheduler: ObservableObject {
+     /// on cancellation is fine: the loop re-checks `Task.isCancelled`.
+     typealias Sleeper = @MainActor (TimeInterval) async -> Void
+     private let sleeper: Sleeper
++    /// Suspends the update-check loop; defaults to `sleeper`. Separate so a
++    /// test can script the daily cadence without mixing in refresh ticks.
++    private let updateSleeper: Sleeper
+     /// The time a tick is dispatched at, which bounds how long a hung fetch
+     /// is skipped (`UsageStore.maxInFlightAge`). Tests advance it with the
+     /// scripted sleeper instead of waiting on the wall clock.
+@@ -53,9 +56,11 @@ public final class RefreshScheduler: ObservableObject {
+          minimumInterval: TimeInterval,
+          minimumStatusInterval: TimeInterval,
+          sleeper: @escaping Sleeper = RefreshScheduler.taskSleep,
++         updateSleeper: Sleeper? = nil,
+          clock: @escaping Clock = { .now }) {
+         self.store = store
+         self.sleeper = sleeper
++        self.updateSleeper = updateSleeper ?? sleeper
+         self.clock = clock
+         self.statusStore = statusStore
+         self.costEstimator = costEstimator
+@@ -179,11 +184,18 @@ public final class RefreshScheduler: ObservableObject {
+     }
+ 
+     private func startUpdateCheckLoop() {
+-        guard updateCheckLoop == nil, updates != nil else { return }
++        guard updateCheckLoop == nil, let updates, updates.config.enabled else { return }
++        let sleeper = self.updateSleeper
+         updateCheckLoop = Task { @MainActor [weak self] in
++            // Once per local calendar day (UPDATE-SCHED-001): check at launch
++            // when due, then sleep until the next local day (or 24 h), which
++            // is recomputed from the stored last-check date after every round,
++            // so a manual check from About moves the next one too. The floor
++            // keeps a busy or unrecorded check from spinning.
+             self?.updates?.checkIfNeeded()
+             while !Task.isCancelled {
+-                try? await Task.sleep(for: .seconds(86_400))
++                guard let delay = self?.updates?.delayUntilNextCheck() else { break }
++                await sleeper(max(UpdateChecker.minimumRetryDelay, delay))
+                 if Task.isCancelled { break }
+                 self?.updates?.checkIfNeeded()
+             }
+diff --git a/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift b/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
+index dcaae93..a656bea 100644
+--- a/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
++++ b/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
+@@ -313,6 +313,75 @@ final class RefreshSchedulerTests {
+         #expect(vm.loadingSince == later)
+     }
+ 
++    private func dailyChecker(lastCheck: String, clock: @escaping @MainActor () -> Date) -> UpdateChecker {
++        defaults.set(UpdateCheckDueTests.at(lastCheck).timeIntervalSince1970,
++                     forKey: UpdateChecker.lastCheckKey)
++        return UpdateChecker(
++            config: UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false),
++            currentVersion: "1.0.0",
++            http: .stubbed(protocols: [HangingGitHubProtocol.self]),
++            userDefaults: defaults,
++            calendar: UpdateCheckDueTests.saoPaulo,
++            now: clock)
++    }
++
++    private func updateScheduler(_ checker: UpdateChecker, updateSleeper: ScriptedSleeper) -> RefreshScheduler {
++        RefreshScheduler(store: store([]), statusStore: nil, updates: checker,
++                         interval: 300, minimumInterval: 15, minimumStatusInterval: 300,
++                         sleeper: ScriptedSleeper(returningSleeps: 0).sleeper,
++                         updateSleeper: updateSleeper.sleeper)
++    }
++
++    @Test("relaunch the next day (last check 23:34, now 10:00) checks at launch, then sleeps to midnight")
++    func update_loop_checks_on_relaunch_next_day() async {
++        let now = UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00")
++        let checker = dailyChecker(lastCheck: "2026-09-28T23:34:00-03:00", clock: { now })
++        let updateSleeper = ScriptedSleeper(returningSleeps: 0)
++        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
++
++        scheduler.start()
++        await updateSleeper.waitForSleeps(1)
++        #expect(checker.status == .checking)
++        #expect(updateSleeper.durations == [14 * 3_600])
++        scheduler.stop()
++    }
++
++    @Test("same-day relaunch sleeps the computed delay (not 86400) and checks at the new day")
++    func update_loop_sleeps_until_next_day() async {
++        let base = UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00")
++        let updateSleeper = ScriptedSleeper(returningSleeps: 1)
++        let checker = dailyChecker(lastCheck: "2026-09-29T08:00:00-03:00",
++                                   clock: { [updateSleeper] in base.addingTimeInterval(updateSleeper.elapsed) })
++        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
++
++        scheduler.start()
++        // The first sleep returns at once, so only the settled second one is
++        // a stable point to read both durations from.
++        await updateSleeper.waitForSleeps(2)
++        #expect(checker.status == .checking)
++        #expect(updateSleeper.durations == [14 * 3_600, 86_400])
++        scheduler.stop()
++    }
++
++    @Test("updates disabled: no update loop runs, so nothing sleeps or checks")
++    func update_loop_not_started_when_disabled() async {
++        let checker = UpdateChecker(
++            config: UpdatesConfig(enabled: false, ownerRepo: "test/repo", includePrereleases: false),
++            currentVersion: "1.0.0",
++            http: .stubbed(protocols: [HangingGitHubProtocol.self]),
++            userDefaults: defaults,
++            calendar: UpdateCheckDueTests.saoPaulo,
++            now: { UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00") })
++        let updateSleeper = ScriptedSleeper(returningSleeps: 0)
++        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
++
++        scheduler.start()
++        for _ in 0..<5 { await Task.yield() }
++        #expect(updateSleeper.durations.isEmpty)
++        #expect(checker.status == .idle)
++        scheduler.stop()
++    }
++
+     @Test("dropping the last reference releases a started scheduler (LEAK-FAN-008)")
+     func started_scheduler_is_released() async {
+         let checker = UpdateChecker(
+diff --git a/Tests/AiTaskbarAppTests/UpdateCheckDueTests.swift b/Tests/AiTaskbarAppTests/UpdateCheckDueTests.swift
+new file mode 100644
+index 0000000..86a6275
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/UpdateCheckDueTests.swift
+@@ -0,0 +1,141 @@
++import Foundation
++import Testing
++import AiTaskbarCore
++@testable import AiTaskbarApp
++
++/// Fails every request at once, so a check started here never reaches the
++/// real network. Immutable, safe without `.serialized`.
++private final class OfflineDueProtocol: URLProtocol {
++    override class func canInit(with request: URLRequest) -> Bool { true }
++    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
++    override func startLoading() {
++        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
++    }
++    override func stopLoading() {}
++}
++
++/// UPDATE-SCHED-001: a check is due with no previous check, on a new LOCAL
++/// calendar day, or after 24 h; otherwise it waits for whichever comes first.
++/// Every case runs in a fixed calendar and time zone so it is deterministic.
++@Suite("UpdateChecker daily cadence (UPDATE-SCHED-001)")
++struct UpdateCheckDueTests {
++    static let saoPaulo: Calendar = {
++        var calendar = Calendar(identifier: .gregorian)
++        calendar.timeZone = TimeZone(identifier: "America/Sao_Paulo")!
++        return calendar
++    }()
++
++    static func at(_ iso: String) -> Date {
++        ISO8601DateFormatter().date(from: iso)!
++    }
++
++    private func isDue(_ last: Date?, _ now: Date) -> Bool {
++        UpdateChecker.isCheckDue(lastCheck: last, now: now, calendar: Self.saoPaulo)
++    }
++
++    private func delay(_ last: Date?, _ now: Date) -> TimeInterval {
++        UpdateChecker.delayUntilNextCheck(lastCheck: last, now: now, calendar: Self.saoPaulo)
++    }
++
++    @Test("never checked: due now, no delay")
++    func never_checked_is_due() {
++        let now = Self.at("2026-09-29T10:00:00-03:00")
++        #expect(isDue(nil, now))
++        #expect(delay(nil, now) == 0)
++    }
++
++    @Test("checked 10 h ago today: not due, waits until the next local midnight")
++    func same_day_waits_for_midnight() {
++        let last = Self.at("2026-09-29T08:00:00-03:00")
++        let now = Self.at("2026-09-29T18:00:00-03:00")
++        #expect(!isDue(last, now))
++        #expect(delay(last, now) == 6 * 3_600)
++    }
++
++    @Test("checked 23:34 yesterday, reopened 10:00: due immediately")
++    func previous_day_is_due() {
++        let last = Self.at("2026-09-28T23:34:00-03:00")
++        let now = Self.at("2026-09-29T10:00:00-03:00")
++        #expect(isDue(last, now))
++        #expect(delay(last, now) == 0)
++    }
++
++    @Test("checked 25 h ago: due")
++    func older_than_a_day_is_due() {
++        let now = Self.at("2026-09-29T10:00:00-03:00")
++        let last = now.addingTimeInterval(-25 * 3_600)
++        #expect(isDue(last, now))
++    }
++
++    @Test("last check in the future (clock skew): not due, delay capped at 24 h")
++    func future_last_check_is_capped() {
++        let now = Self.at("2026-09-29T10:00:00-03:00")
++        let last = now.addingTimeInterval(2 * 86_400)
++        #expect(!isDue(last, now))
++        #expect(delay(last, now) == UpdateChecker.cadenceInterval)
++    }
++
++    @Test("seconds before midnight: delay floored so a busy check cannot spin")
++    func delay_has_a_floor() {
++        let last = Self.at("2026-09-29T23:59:30-03:00")
++        let now = Self.at("2026-09-29T23:59:50-03:00")
++        #expect(!isDue(last, now))
++        #expect(delay(last, now) == UpdateChecker.minimumRetryDelay)
++    }
++
++    // 2018-11-04 00:00 BRT: clocks jumped to 01:00, so that day starts at 01:00.
++    @Test("DST start (Sao Paulo 2018-11-04): waits for the 01:00 start of day")
++    func dst_start_waits_for_shifted_day_start() {
++        let last = Self.at("2018-11-03T22:00:00-03:00")
++        let now = Self.at("2018-11-03T23:00:00-03:00")
++        #expect(!isDue(last, now))
++        #expect(delay(last, now) == 3_600)
++    }
++
++    @Test("DST start (Sao Paulo 2018-11-04): the new day is due 2 h after the last check")
++    func dst_start_new_day_is_due() {
++        let last = Self.at("2018-11-03T22:00:00-03:00")
++        let now = Self.at("2018-11-04T01:00:00-02:00")
++        #expect(isDue(last, now))
++    }
++
++    // 2019-02-17 00:00 BRST: clocks fell back to 2019-02-16 23:00 (a 25-h day).
++    @Test("DST end (Sao Paulo 2019-02-16, 25 h day): the 24 h bound wins over midnight")
++    func dst_end_uses_24h_bound() {
++        let last = Self.at("2019-02-16T00:30:00-02:00")
++        let now = last.addingTimeInterval(3_600)
++        #expect(!isDue(last, now))
++        #expect(delay(last, now) == 23 * 3_600)
++    }
++
++    @Test("DST end (Sao Paulo 2019-02-16): 24 h later on the same local day is due")
++    func dst_end_same_day_after_24h_is_due() {
++        let last = Self.at("2019-02-16T00:30:00-02:00")
++        let now = last.addingTimeInterval(86_400)
++        let sameDay = Self.saoPaulo.isDate(last, inSameDayAs: now)
++        #expect(sameDay)
++        #expect(isDue(last, now))
++    }
++
++    @Test("checkIfNeeded checks on a relaunch the next local day and records that time")
++    @MainActor
++    func check_if_needed_runs_on_new_day() {
++        let name = "test-update-due-\(UUID().uuidString)"
++        let defaults = UserDefaults(suiteName: name)!
++        defer { defaults.removePersistentDomain(forName: name) }
++        defaults.set(Self.at("2026-09-28T23:34:00-03:00").timeIntervalSince1970,
++                     forKey: UpdateChecker.lastCheckKey)
++        let now = Self.at("2026-09-29T10:00:00-03:00")
++        let checker = UpdateChecker(
++            config: UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false),
++            currentVersion: "1.0.0",
++            http: .stubbed(protocols: [OfflineDueProtocol.self]),
++            userDefaults: defaults,
++            calendar: Self.saoPaulo,
++            now: { now })
++
++        checker.checkIfNeeded()
++        #expect(checker.status == .checking)
++        expectTrue(checker.lastCheckDate == now)
++    }
++}

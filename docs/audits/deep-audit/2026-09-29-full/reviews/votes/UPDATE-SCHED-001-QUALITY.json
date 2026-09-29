@@ -1,0 +1,16 @@
+{
+ "id": "UPDATE-SCHED-001",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/UpdateChecker.swift:123-144: isCheckDue and delayUntilNextCheck(lastCheck:now:calendar:) are nonisolated static and pure, with no I/O. Their names match what they do: the static delay returns 0 when a check is due, and otherwise a delay clamped to minimumRetryDelay...cadenceInterval, which the doc comment says. No nesting beyond one guard plus one if-let. The daily rule is extracted once: checkIfNeeded (:176) and the instance delayUntilNextCheck (:146-148) both call it, so it is not copied. The seams are minimal and have safe defaults: calendar defaults to .autoupdatingCurrent, now is `@MainActor () -> Date` with default { Date() }, and updateSleeper falls back to sleeper (RefreshScheduler.swift:59,63). Calendar is Sendable, and the @MainActor closure is stored on a @MainActor class, so there is no new concurrency hazard. recordCheckDate now uses the injected clock and no longer takes a default Date() parameter, which removes a second time source. RefreshScheduler.swift:196-198 drops the inline `try? await Task.sleep` in favour of the injected Sleeper. The only remaining try? is the existing, documented best-effort cancel in taskSleep (:36-40), which fits the CLAUDE.md try? policy. No error is swallowed. Tests: UpdateCheckDueTests.swift uses one #expect per fact, pins the time zone (Sao_Paulo) and exercises both DST edges. The only optional-Bool condition, `checker.lastCheckDate == now` (:139), correctly goes through expectTrue. The non-optional #expect(isDue(...)) and #expect(!isDue(...)) forms are allowed by the CLAUDE.md rule. Test names match their assertions. The Ferreiro report shows validate green: 0 warnings, 93.14% coverage.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:123",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:176",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:187",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/UpdateCheckDueTests.swift:139",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:368"
+ ],
+ "lens": "QUALITY",
+ "_task": "aae0c2565da30bc3a",
+ "batch": "B17-update-sched"
+}

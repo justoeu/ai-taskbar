@@ -8,9 +8,9 @@
 
 **Lentes:** Bugs clássicos · Segurança · Arquitetura · Qualidade · Performance · Testes · Boas práticas · Backpressure · Complexidade · Dependências · Duplicação · Memory leak · Race · Verbosidade · N+1
 
-**Resumo:** 161 tasks · 137 resolvidas · 0 em progresso · 0 pendentes · 16 refutadas · 8 aceitas · **100% fechadas** · ✅ nenhum HIGH aberto
+**Resumo:** 168 tasks · 138 resolvidas · 0 em progresso · 6 pendentes · 16 refutadas · 8 aceitas · **96% fechadas** · ✅ nenhum HIGH aberto
 
-**Revisão das correções (painel Nêmesis · Hígia · Jano):** 137/137 aprovadas
+**Revisão das correções (painel Nêmesis · Hígia · Jano):** 138/138 aprovadas
 
 Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · `[-]` refutado · `[!]` aceito
 
@@ -25,7 +25,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 - [x] **SEC-CER-001** · Segurança · HIGH · `Sources/AiTaskbarApp/UpdateChecker.swift:265` — Update DMG accepted with no integrity anchor outside the release and no quarantine flag, so Gatekeeper never checks it · resp: Cérbero · teste: `UpdateCheckerDownloadTests#missing_checksum_fails_closed,downloaded_dmg_is_quarantined,verifier_rejects,verifier_accepts` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste UpdateCheckerDownloadTests#missing_checksum_fails_closed,downloaded_dmg_is_quarantined,verifier_rejects,verifier_accepts · revisão approved (3/3) · audit/deep-audit-2026-09-29; review round 2; residual: ad-hoc builds skip team check (quarantine still applies)
 
-### MEDIUM (10/10 resolvidos)
+### MEDIUM (11/11 resolvidos)
 
 - [x] **ARCH-ATL-001** · Arquitetura · MEDIUM · `Sources/AiTaskbarProviders/GeminiWireTypes.swift:57` — Hard-coded Portuguese user-facing sentences built inside Providers wire types/providers; the matching localized keys are dead · resp: Atlas · teste: `same as CQ-AUR-001 (duplicate, merged)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste same as CQ-AUR-001 (duplicate, merged) · revisão approved (3/3) · batch B4-i18n
@@ -47,8 +47,10 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste AtomicFileWriteTests#existing_loose_destination_is_tightened,AtomicFileWriteTests#symlinked_destination_is_refused · revisão approved (3/3) · batch B6-files-tests
 - [x] **TEST-ARG-002** · Testes · MEDIUM · `Sources/AiTaskbarProviders/AnthropicProvider.swift:88` — The canPersistCredentials guard that stops rotation of a /usr/bin/security-fallback credential is never tested at provider level · resp: Argus · teste: `AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated · revisão approved (3/3) · batch B6-files-tests
+- [x] **UPDATE-SCHED-001** · Bugs clássicos · MEDIUM · `Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:160` — Update check loop sleeps a fixed 86400 s after a launch check that UpdateChecker skips when the last check is < 24 h old, so the real gap reaches ~48 h · resp: Maestro · teste: `UpdateCheckDueTests#same_day_waits_for_midnight,UpdateCheckDueTests#previous_day_is_due,UpdateCheckDueTests#never_checked_is_due,UpdateCheckDueTests#older_than_a_day_is_due,UpdateCheckDueTests#future_last_check_is_capped,UpdateCheckDueTests#delay_has_a_floor,UpdateCheckDueTests#dst_start_waits_for_shifted_day_start,UpdateCheckDueTests#dst_start_new_day_is_due,UpdateCheckDueTests#dst_end_uses_24h_bound,UpdateCheckDueTests#dst_end_same_day_after_24h_is_due,UpdateCheckDueTests#check_if_needed_runs_on_new_day,RefreshSchedulerTests#update_loop_checks_on_relaunch_next_day,RefreshSchedulerTests#update_loop_sleeps_until_next_day,RefreshSchedulerTests#update_loop_not_started_when_disabled` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste UpdateCheckDueTests#same_day_waits_for_midnight,UpdateCheckDueTests#previous_day_is_due,UpdateCheckDueTests#never_checked_is_due,UpdateCheckDueTests#older_than_a_day_is_due,UpdateCheckDueTests#future_last_check_is_capped,UpdateCheckDueTests#delay_has_a_floor,UpdateCheckDueTests#dst_start_waits_for_shifted_day_start,UpdateCheckDueTests#dst_start_new_day_is_due,UpdateCheckDueTests#dst_end_uses_24h_bound,UpdateCheckDueTests#dst_end_same_day_after_24h_is_due,UpdateCheckDueTests#check_if_needed_runs_on_new_day,RefreshSchedulerTests#update_loop_checks_on_relaunch_next_day,RefreshSchedulerTests#update_loop_sleeps_until_next_day,RefreshSchedulerTests#update_loop_not_started_when_disabled · revisão approved (3/3) · batch B17-update-sched
 
-### LOW (101/104 resolvidos)
+### LOW (101/107 resolvidos)
 
 - [x] **ARCH-ATL-002** · Arquitetura · LOW · `Sources/AiTaskbarProviders/AnthropicWireTypes.swift:161` — UsageWindow.label is both English display text and the identity key; Anthropic scoped vs flat Opus (7d) can collide despite a comment claiming dedupe · resp: Atlas · teste: `AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat · revisão approved (3/3) · batch B11-app-lows
@@ -114,6 +116,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste ConfigLoaderTests#ensure_unreadable_config_throws_and_keeps_file · revisão approved (3/3) · batch B15-core-followups
 - [x] **BUG-MAE-009** · Bugs clássicos · LOW · `Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:316` — 429 cooldown is stamped from dispatch time, not response arrival, so a slow 429 gets a shorter cooldown · resp: Maestro · teste: `VendorViewModelRateLimitTests#cooldown_starts_at_response_arrival` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste VendorViewModelRateLimitTests#cooldown_starts_at_response_arrival · revisão approved (3/3) · batch B16-final
+- [ ] **BUG-MAE-011** · Bugs clássicos · LOW · `Sources/AiTaskbarApp/NotificationService.swift:203` — Failed-delivery unmark drops the key instead of restoring the previously delivered lower mark, so a later lower reading can re-send an already delivered threshold · resp: Maestro · teste: —
 - [x] **CPX-DED-003** · Complexidade · LOW · `Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:81` — AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic · resp: Dédalo · teste: `AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#*` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#* · revisão approved (3/3) · batch B1-analytics
 - [x] **CPX-DED-004** · Complexidade · LOW · `Sources/AiTaskbarApp/Views/VendorSectionView.swift:575` — VendorSectionView.extras(for:) switch measures over the cyclomatic ceiling but is a plain per-vendor dispatch, not tangled logic - real gap is duplicated openrouter/zai blocks with no test · resp: Dédalo · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -148,6 +151,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste CachedFetchEdgeTests#guidance_stays_in_memory_on_the_stale_path · revisão approved (3/3) · batch B15-core-followups
 - [x] **CQ-MAE-017** · Qualidade · LOW · `CLAUDE.md` — CLAUDE.md/AGENTS.md do not document .github/dependabot.yml, its [skip release] prefix, or that the swift ecosystem watches TOMLKit · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B16-final
+- [ ] **CQ-MAE-018** · Qualidade · LOW · `Sources/AiTaskbarApp` — Percent formatting repeated at ~15 App sites with inconsistent rounding (notification title truncates 92.9 to 92, cards round) · resp: Maestro · teste: —
 - [x] **DEP-MAE-002** · Dependências · LOW · `.github/workflows/ci.yml:23` — SHA-pinned actions have no updater: no .github/dependabot.yml for github-actions · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B15-core-followups
 - [x] **DEP-PRI-001** · Dependências · LOW · `.github/workflows/auto-tag.yml:46` — GitHub Actions checked out via floating major tag, not commit SHA · resp: Prisma · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -190,6 +194,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste HTTPClientTests#cap_is_exact_across_chunks · revisão approved (3/3) · batch B15-core-followups
 - [x] **PERF-MAE-003** · Performance · LOW · `Sources/AiTaskbarProviders/AnthropicProvider.swift:55` — Anthropic label priming reads Keychain twice on cold fetch and retries every tick when it keeps failing (no negative memo); OpenAIProvider r · resp: Maestro · teste: `OAuthKeychainConcurrencyTests#anthropic_cold_fetch_reads_keychain_once,DiskCacheTests#has_fresh_payload_matches_ttl_boundary` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#anthropic_cold_fetch_reads_keychain_once,DiskCacheTests#has_fresh_payload_matches_ttl_boundary · revisão approved (3/3) · batch B15-core-followups
+- [ ] **PERF-MAE-004** · Performance · LOW · `Sources/AiTaskbarApp/NotificationService.swift:127` — With notification permission denied, every tick above a threshold makes one failed add() and one error-level log line indefinitely · resp: Maestro · teste: —
 - [x] **RACE-CRO-001** · Race · LOW · `Sources/AiTaskbarProviders/OpenAIProvider.swift:109` — OAuth single-flight is broken: the losing Task is created (and starts) before the CAS, so concurrent callers each run their own refresh-token exchange · resp: Cronos · teste: `OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears · revisão approved (3/3) · batch B10-oauth-keychain
 - [x] **RACE-CRO-002** · Race · LOW · `Sources/AiTaskbarProviders/OpenAIProvider.swift:94` — A refresh can use a refresh_token another caller already rotated (credential read before the await, no re-read or CAS inside the flight) · resp: Cronos · teste: `OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -265,7 +270,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 - [x] **VERB-MAE-001** · Verbosidade · LOW · `Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:136` — AnalyticsStore.defaultEstimates ignores its snapshots parameter; currentSnapshots computed each refresh for nothing · resp: Maestro · teste: `AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring · revisão approved (3/3) · batch B14-app-followups
 
-### INFO (23/44 resolvidos)
+### INFO (23/47 resolvidos)
 
 - [x] **ARCH-ATL-007** · Arquitetura · INFO · `Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:48` — Flame severity color rule duplicated in 3 places and diverging from SeverityColor · resp: Atlas · teste: `SeverityColorFlameTests (6 cases)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SeverityColorFlameTests (6 cases) · revisão approved (3/3) · batch B11-app-lows
@@ -300,6 +305,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: refutado · Cetico: auth.json is a 0600 file owned by the user (FileCredentialReader.swift:91). Anyone who can write a huge one already controls the user's Codex credentials. The finding itself says 'bounded practical risk'. No vector.
 - [x] **BUG-ART-012** · Bugs clássicos · INFO · `Sources/AiTaskbarCore/Util/Semver.swift:24` — Pre-release suffixes compare lexicographically, so beta10 < beta9 · resp: Artemis · teste: `SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases · revisão approved (3/3) · batch B8-updater
+- [ ] **BUG-MAE-010** · Bugs clássicos · INFO · `Sources/AiTaskbarProviders/GeminiProvider.swift:508` — Cached agy path treats only status == ERROR as an error while the live path also treats a non-empty error with another status as an error · resp: Maestro · teste: —
 - [-] **CPX-DED-001** · Complexidade · INFO · `Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:19` — ClaudeSessionScanner.estimate fuses dir-walk, memo, aggregation and note-priority logic in one untested orchestrator · resp: Dédalo · teste: —
   > refutado: Cetico: The premise 'untested orchestrator' is false. estimate(projectsDir:) is tested end to end on its note branches: missing dir (ClaudeSessionScannerTests.swift:142-149), empty dir (:151-160), unpriced-model note (:230-246). Leftover function length is style (swiftlint could not be reproduced: sourcekitd missing).
   > progresso 2026-09-29: refutado · Cetico: The premise 'untested orchestrator' is false. estimate(projectsDir:) is tested end to end on its note branches: missing dir (ClaudeSessionScannerTests.swift:142-149), empty dir (:151-160), unpriced-model note (:230-246). Leftover function length is style (swiftlint could not be reproduced: sourcekitd missing).
@@ -322,6 +328,8 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: aceito (divida-cosmetica) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
 - [x] **CQ-MAE-016** · Qualidade · INFO · `Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:284` — OpencodeScanner .unavailable groups caller configuration errors with SQLite read failures · resp: Maestro · teste: `CostEstimatorLoadingTests#opencode_aliases_are_disjoint,#opencode_aliases_are_non_empty` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste CostEstimatorLoadingTests#opencode_aliases_are_disjoint,#opencode_aliases_are_non_empty · revisão approved (3/3) · batch B16-final
+- [ ] **CQ-MAE-019** · Qualidade · INFO · `Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:290` — lastNetworkFetch = .now reads the wall clock next to the injected clock; default clock is not monotonic · resp: Maestro · teste: —
+- [ ] **CQ-MAE-020** · Qualidade · INFO · `config.example.toml:93` — gemini.prefer_antigravity, xai.prefer_grok_cli and xai.grok_base_url have no Settings UI controls (config-file-only) · resp: Maestro · teste: —
 - [x] **DEP-MAE-001** · Dependências · INFO · `Makefile:339` — Fail-closed update checksum makes the checksums upload in make publish a hard requirement with no guard · resp: Maestro · teste: `SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON) · revisão approved (3/3) · batch B8-updater
 - [-] **DUP-ECO-003** · Duplicação · INFO · `Sources/AiTaskbarProviders/RSSStatusSource.swift:287` — safeSourceURL host/scheme validation duplicated between RSSStatusSource and StatuspageSource with different scheme-recovery behavior · resp: Eco · teste: —
@@ -384,7 +392,12 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 
 ## Ainda aberto
 
-_Nada aberto._ 🎉
+- **BUG-MAE-011** (LOW) — Failed-delivery unmark drops the key instead of restoring the previously delivered lower mark, so a later lower reading can re-send an already delivered threshold · plano: Keep the prior mark and restore it on failure
+- **CQ-MAE-018** (LOW) — Percent formatting repeated at ~15 App sites with inconsistent rounding (notification title truncates 92.9 to 92, cards round) · plano: One shared percent formatter used by cards, tooltip and notification title
+- **PERF-MAE-004** (LOW) — With notification permission denied, every tick above a threshold makes one failed add() and one error-level log line indefinitely · plano: Skip re-arming (or downgrade the log) when authorization is known denied
+- **BUG-MAE-010** (INFO) — Cached agy path treats only status == ERROR as an error while the live path also treats a non-empty error with another status as an error · plano: Share one predicate between live and cached paths
+- **CQ-MAE-019** (INFO) — lastNetworkFetch = .now reads the wall clock next to the injected clock; default clock is not monotonic · plano: Use self.clock() consistently; consider ContinuousClock for elapsed time
+- **CQ-MAE-020** (INFO) — gemini.prefer_antigravity, xai.prefer_grok_cli and xai.grok_base_url have no Settings UI controls (config-file-only) · plano: Accept as config-file-only knobs, or add Settings controls
 
 ## Roadmap de libs / dependências
 
@@ -394,6 +407,7 @@ _Toda lib pesquisada está no latest stable._ ✅
 
 ## Log de iterações
 
+- **2026-09-29 18:57:12 UTC** — resolvido UPDATE-SCHED-001 (teste: UpdateCheckDueTests#same_day_waits_for_midnight,UpdateCheckDueTests#previous_day_is_due,UpdateCheckDueTests#never_checked_is_due,UpdateCheckDueTests#older_than_a_day_is_due,UpdateCheckDueTests#future_last_check_is_capped,UpdateCheckDueTests#delay_has_a_floor,UpdateCheckDueTests#dst_start_waits_for_shifted_day_start,UpdateCheckDueTests#dst_start_new_day_is_due,UpdateCheckDueTests#dst_end_uses_24h_bound,UpdateCheckDueTests#dst_end_same_day_after_24h_is_due,UpdateCheckDueTests#check_if_needed_runs_on_new_day,RefreshSchedulerTests#update_loop_checks_on_relaunch_next_day,RefreshSchedulerTests#update_loop_sleeps_until_next_day,RefreshSchedulerTests#update_loop_not_started_when_disabled) — batch B17-update-sched
 - **2026-09-29 18:44:01 UTC** — aceito TEST-MAE-008 (intencional) — won-t-fix: Setting COVERAGE_FLOOR explicitly empty turns the floor off; that is the documented local-experiment behavior. Makefile ?=90 and CI pass 90
 - **2026-09-29 18:44:01 UTC** — aceito PERF-MAE-001 (intencional) — won-t-fix: fsync on every write is the deliberate durability choice for credential/cache files
 - **2026-09-29 18:44:00 UTC** — aceito CQ-MAE-013 (divida-cosmetica) — won-t-fix: Cosmetic output mix
@@ -453,8 +467,3 @@ _Toda lib pesquisada está no latest stable._ ✅
 - **2026-09-29 16:43:29 UTC** — resolvido BEST-ATE-009 (teste: n/a) — batch B12-cleanup
 - **2026-09-29 16:43:29 UTC** — resolvido BEST-ATE-008 (teste: n/a) — batch B12-cleanup
 - **2026-09-29 16:43:29 UTC** — resolvido CPX-DED-005 (teste: SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty) — batch B12-cleanup
-- **2026-09-29 16:43:29 UTC** — resolvido CPX-DED-004 (teste: n/a) — batch B12-cleanup
-
-## ✅ RODADA FECHADA
-
-Todos os 161 achados têm desfecho: 137 resolvidos · 16 refutados · 8 aceitos. Nenhum aberto.

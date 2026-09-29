@@ -1,0 +1,60 @@
+{
+ "findings": [
+  {
+   "lens": "classic_bugs",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
+   "line": 189,
+   "title": "Invalid [updates] owner_repo returns before recordCheckDate, so the check stays due and the loop wakes every 60 s instead of daily",
+   "evidence": "check() early-returns on an invalid owner_repo before recording the attempt (raised by Nemesis, remediation B17)",
+   "fix": "Record the attempt date (or back off to the next day) on a config error",
+   "impact": "60 s wake-ups with status reset to failed; no network traffic",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B17"
+  },
+  {
+   "lens": "quality",
+   "severity": "LOW",
+   "path": "docs/SDD-auto-update-checker.md",
+   "line": 19,
+   "title": "SDD-auto-update-checker still states the old minimum-24 h rule and the invariant never check within 24 h",
+   "evidence": "The calendar-day rule of UPDATE-SCHED-001 intentionally breaks that invariant (raised by Jano, remediation B17)",
+   "fix": "Update the SDD to the calendar-day rule with a pointer to UPDATE-SCHED-001",
+   "impact": "Someone could restore the 24 h floor from the spec",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B17"
+  },
+  {
+   "lens": "duplication",
+   "severity": "INFO",
+   "path": "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift",
+   "line": 198,
+   "title": "Minimum update-retry floor applied both in delayUntilNextCheck and again in the loop",
+   "evidence": "max(minimumRetryDelay, delay) repeated (raised by Higia, remediation B17)",
+   "fix": "Have the instance delay return the floored value",
+   "impact": "Two places own one rule",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B17"
+  },
+  {
+   "lens": "tests",
+   "severity": "INFO",
+   "path": "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift",
+   "line": 368,
+   "title": "update_loop_not_started_when_disabled proves absence with 5 Task.yield() calls",
+   "evidence": "Weak negative proof; guard is synchronous (raised by Higia, remediation B17)",
+   "fix": "Assert on the loop task handle being nil instead",
+   "impact": "None today",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B17"
+  }
+ ]
+}

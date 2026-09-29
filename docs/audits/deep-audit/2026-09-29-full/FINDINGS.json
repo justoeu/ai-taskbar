@@ -811,13 +811,44 @@
     "agent": "Maestro",
     "origin": "user item relayed by coordinator 2026-09-29",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
-    "blocks_pr": false
+    "resolved_test": "UpdateCheckDueTests#same_day_waits_for_midnight,UpdateCheckDueTests#previous_day_is_due,UpdateCheckDueTests#never_checked_is_due,UpdateCheckDueTests#older_than_a_day_is_due,UpdateCheckDueTests#future_last_check_is_capped,UpdateCheckDueTests#delay_has_a_floor,UpdateCheckDueTests#dst_start_waits_for_shifted_day_start,UpdateCheckDueTests#dst_start_new_day_is_due,UpdateCheckDueTests#dst_end_uses_24h_bound,UpdateCheckDueTests#dst_end_same_day_after_24h_is_due,UpdateCheckDueTests#check_if_needed_runs_on_new_day,RefreshSchedulerTests#update_loop_checks_on_relaunch_next_day,RefreshSchedulerTests#update_loop_sleeps_until_next_day,RefreshSchedulerTests#update_loop_not_started_when_disabled",
+    "resolved_at": "2026-09-29 18:57:12 UTC",
+    "resolved_note": "batch B17-update-sched",
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckDueTests#same_day_waits_for_midnight,UpdateCheckDueTests#previous_day_is_due,UpdateCheckDueTests#never_checked_is_due,UpdateCheckDueTests#older_than_a_day_is_due,UpdateCheckDueTests#future_last_check_is_capped,UpdateCheckDueTests#delay_has_a_floor,UpdateCheckDueTests#dst_start_waits_for_shifted_day_start,UpdateCheckDueTests#dst_start_new_day_is_due,UpdateCheckDueTests#dst_end_uses_24h_bound,UpdateCheckDueTests#dst_end_same_day_after_24h_is_due,UpdateCheckDueTests#check_if_needed_runs_on_new_day,RefreshSchedulerTests#update_loop_checks_on_relaunch_next_day,RefreshSchedulerTests#update_loop_sleeps_until_next_day,RefreshSchedulerTests#update_loop_not_started_when_disabled · revisão approved (3/3) · batch B17-update-sched"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 18:57:12 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "agent": "Atlas",
@@ -2487,6 +2518,29 @@
     "blocks_pr": false
   },
   {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
+    "line": 189,
+    "title": "Invalid [updates] owner_repo returns before recordCheckDate, so the check stays due and the loop wakes every 60 s instead of daily",
+    "evidence": "check() early-returns on an invalid owner_repo before recording the attempt (raised by Nemesis, remediation B17)",
+    "fix": "Record the attempt date (or back off to the next day) on a config error",
+    "impact": "60 s wake-ups with status reset to failed; no network traffic",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B17",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-012",
+    "blocks_pr": false
+  },
+  {
     "title": "AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic",
     "lens": "complexity",
     "severity": "LOW",
@@ -3437,6 +3491,29 @@
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-018",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "docs/SDD-auto-update-checker.md",
+    "line": 19,
+    "title": "SDD-auto-update-checker still states the old minimum-24 h rule and the invariant never check within 24 h",
+    "evidence": "The calendar-day rule of UPDATE-SCHED-001 intentionally breaks that invariant (raised by Jano, remediation B17)",
+    "fix": "Update the SDD to the calendar-day rule with a pointer to UPDATE-SCHED-001",
+    "impact": "Someone could restore the 24 h floor from the spec",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B17",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-021",
     "blocks_pr": false
   },
   {
@@ -7938,6 +8015,29 @@
     "in_progress": false
   },
   {
+    "lens": "duplication",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift",
+    "line": 198,
+    "title": "Minimum update-retry floor applied both in delayUntilNextCheck and again in the loop",
+    "evidence": "max(minimumRetryDelay, delay) repeated (raised by Higia, remediation B17)",
+    "fix": "Have the instance delay return the floored value",
+    "impact": "Two places own one rule",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B17",
+    "domain": "duplication",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "DUP-MAE-005",
+    "blocks_pr": false
+  },
+  {
     "agent": "Fantasma",
     "lens": "memleak",
     "severity": "INFO",
@@ -8656,6 +8756,29 @@
     ],
     "blocks_pr": false,
     "in_progress": false
+  },
+  {
+    "lens": "tests",
+    "severity": "INFO",
+    "path": "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift",
+    "line": 368,
+    "title": "update_loop_not_started_when_disabled proves absence with 5 Task.yield() calls",
+    "evidence": "Weak negative proof; guard is synchronous (raised by Higia, remediation B17)",
+    "fix": "Assert on the loop task handle being nil instead",
+    "impact": "None today",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B17",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-011",
+    "blocks_pr": false
   },
   {
     "title": "Two of AppLog seven Logger categories are declared but never logged to",

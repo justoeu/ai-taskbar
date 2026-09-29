@@ -1,0 +1,76 @@
+{
+  "id": "UPDATE-SCHED-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:57:12 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The defect is fixed. UpdateChecker.swift:125-127 (isCheckDue) says a check is due when there is no previous check, when the last check was on an earlier local calendar day (calendar.isDate(_:inSameDayAs:)), or when 24 h or more have passed. A last check in the future is never due (the lastCheck <= now guard). UpdateChecker.swift:133-143 (delayUntilNextCheck) returns 0 when a check is due. Otherwise it returns min(end of lastCheck's local day, lastCheck+24h) - now, clamped to 60 s...86400 s. The checkIfNeeded gate at :176 uses the same predicate, so no second path still applies the old 24 h rule. The loop at RefreshScheduler.swift:187-201 checks at launch, then recomputes the delay from the stored last-check date on every round. It keeps [weak self] (it breaks when self is gone), the Task.isCancelled checks before and after the sleep, and the config.enabled and status.isBusy gates inside checkIfNeeded. recordCheckDate runs before the fetch (UpdateChecker.swift:193), so a network failure does not cause a 60 s retry loop. The production sleeper is still Task.sleep(for:), which uses ContinuousClock, so an overnight system sleep counts toward the midnight wake-up. The tests are deterministic: a fixed Gregorian calendar in America/Sao_Paulo, an injected now, a ScriptedSleeper with no real sleep, a URLProtocol stub that fails or hangs so no network is reached, and a suite-named UserDefaults. The DST cases check out. On 2018-11-04 the day starts at 01:00, so 22:00 -> 23:00 on 11-03 gives a 3600 s delay. On 2019-02-16 the day is 25 h long, so the 24 h bound wins at 23 h, and a check 24 h later on the same local day is due. The relaunch case is covered: 23:34 -> 10:00 the next day checks at launch (RefreshSchedulerTests:344, status .checking), then sleeps 14 h until midnight. I ran the filter UpdateCheckDueTests|RefreshSchedulerTests: 22/22 green. For the reversal I kept the new API so the tests still compile, restored the old behaviour in the code (a 24 h-only predicate, delay = 86400, loop sleep 86400) and re-ran: RED with 12 issues in 8 tests, including the relaunch, same_day, previous_day, both DST-start cases, dst_end_uses_24h_bound, floor and checkIfNeeded tests. I then restored both files, and the working-tree diff is byte-identical to reviews/diffs/B17-update-sched.diff (cmp). On the unrequested change (RefreshScheduler.swift:187, the loop never starts when enabled=false): this is not a regression. UpdateChecker.config is a `let` (UpdateChecker.swift:68). The single UpdateChecker is built once in AiTaskbarApp.swift:21 from env.config.updates, and a Settings save only raises the 'relaunch to apply' banner (SettingsViewModel.swift:8-9). Before the fix, a loop running with enabled=false would have woken daily and checkIfNeeded would have returned at the enabled guard every time. Turning updates on at runtime therefore never took effect before, and cannot now, without a relaunch. After a relaunch, start() evaluates the new config.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:125",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:133",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:176",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:193",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:68",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:187",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AiTaskbarApp.swift:21",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:344",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/UpdateCheckDueTests.swift:59"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/UpdateChecker.swift:123-144: isCheckDue and delayUntilNextCheck(lastCheck:now:calendar:) are nonisolated static and pure, with no I/O. Their names match what they do: the static delay returns 0 when a check is due, and otherwise a delay clamped to minimumRetryDelay...cadenceInterval, which the doc comment says. No nesting beyond one guard plus one if-let. The daily rule is extracted once: checkIfNeeded (:176) and the instance delayUntilNextCheck (:146-148) both call it, so it is not copied. The seams are minimal and have safe defaults: calendar defaults to .autoupdatingCurrent, now is `@MainActor () -> Date` with default { Date() }, and updateSleeper falls back to sleeper (RefreshScheduler.swift:59,63). Calendar is Sendable, and the @MainActor closure is stored on a @MainActor class, so there is no new concurrency hazard. recordCheckDate now uses the injected clock and no longer takes a default Date() parameter, which removes a second time source. RefreshScheduler.swift:196-198 drops the inline `try? await Task.sleep` in favour of the injected Sleeper. The only remaining try? is the existing, documented best-effort cancel in taskSleep (:36-40), which fits the CLAUDE.md try? policy. No error is swallowed. Tests: UpdateCheckDueTests.swift uses one #expect per fact, pins the time zone (Sao_Paulo) and exercises both DST edges. The only optional-Bool condition, `checker.lastCheckDate == now` (:139), correctly goes through expectTrue. The non-optional #expect(isDue(...)) and #expect(!isDue(...)) forms are allowed by the CLAUDE.md rule. Test names match their assertions. The Ferreiro report shows validate green: 0 warnings, 93.14% coverage.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:123",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:176",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:187",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/UpdateCheckDueTests.swift:139",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:368"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "All 7 touched files trace back to the finding. The fix itself is in Sources/AiTaskbarApp/UpdateChecker.swift:116-148, which adds pure isCheckDue and delayUntilNextCheck over an injected Calendar and clock, and in Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:186-201, which replaces the fixed 86_400 s sleep with a delay recomputed each round. The tests are Tests/AiTaskbarAppTests/UpdateCheckDueTests.swift and RefreshSchedulerTests.swift. The docs are README.md:86 and AGENTS.md/CLAUDE.md:285, and cmp confirms AGENTS.md and CLAUDE.md are byte-identical. Both docs say 'once per calendar day — at launch if it has not checked today, and at the start of each new day while running', and no other lockstep doc mentions the update cadence. config.example.toml [updates] never gave a cadence, and the Localizable.strings files have no update/24h/daily wording. Public surface: the new UpdateChecker init parameters (calendar, now) and the internal RefreshScheduler updateSleeper parameter all have defaults, so the one call site at AiTaskbarApp.swift:21 builds unchanged. The new public statics are all in the app target, not a library. No persisted format changed: lastCheckKey still stores an epoch Double, so the value an existing user already has stays valid. No new dependency, host, secret or entitlement. No hidden cost: the loop still wakes at most about once a day, with a 60 s floor on the sleep. The unrequested guard 'updates.config.enabled' at RefreshScheduler.swift:187 is harmless. UpdateChecker.config is a `let` (UpdateChecker.swift:68), and checkIfNeeded already returned early when updates were disabled (UpdateChecker.swift:174). Turning updates on in Settings only takes effect after a relaunch (SettingsViewModel.swift:8-9 'relaunch to apply' banner). So a user who enables updates at runtime sees the same thing before and after the fix: nothing until relaunch, then the loop starts. The guard only stops an idle Task that could never do work. It is small and pinned by update_loop_not_started_when_disabled.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:68",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:116",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/UpdateChecker.swift:174",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:187",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:8",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AiTaskbarApp.swift:21",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/README.md:86",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md:285"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}
