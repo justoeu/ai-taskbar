@@ -8,9 +8,9 @@
 
 **Lentes:** Bugs clássicos · Segurança · Arquitetura · Qualidade · Performance · Testes · Boas práticas · Backpressure · Complexidade · Dependências · Duplicação · Memory leak · Race · Verbosidade · N+1
 
-**Resumo:** 180 tasks · 155 resolvidas · 0 em progresso · 0 pendentes · 16 refutadas · 9 aceitas · **100% fechadas** · ✅ nenhum HIGH aberto
+**Resumo:** 182 tasks · 156 resolvidas · 0 em progresso · 0 pendentes · 16 refutadas · 10 aceitas · **100% fechadas** · ✅ nenhum HIGH aberto
 
-**Revisão das correções (painel Nêmesis · Hígia · Jano):** 155/155 aprovadas
+**Revisão das correções (painel Nêmesis · Hígia · Jano):** 156/156 aprovadas
 
 Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · `[-]` refutado · `[!]` aceito
 
@@ -50,7 +50,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 - [x] **UPDATE-SCHED-001** · Bugs clássicos · MEDIUM · `Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:160` — Update check loop sleeps a fixed 86400 s after a launch check that UpdateChecker skips when the last check is < 24 h old, so the real gap reaches ~48 h · resp: Maestro · teste: `UpdateCheckDueTests#same_day_waits_for_midnight,UpdateCheckDueTests#previous_day_is_due,UpdateCheckDueTests#never_checked_is_due,UpdateCheckDueTests#older_than_a_day_is_due,UpdateCheckDueTests#future_last_check_is_capped,UpdateCheckDueTests#delay_has_a_floor,UpdateCheckDueTests#dst_start_waits_for_shifted_day_start,UpdateCheckDueTests#dst_start_new_day_is_due,UpdateCheckDueTests#dst_end_uses_24h_bound,UpdateCheckDueTests#dst_end_same_day_after_24h_is_due,UpdateCheckDueTests#check_if_needed_runs_on_new_day,RefreshSchedulerTests#update_loop_checks_on_relaunch_next_day,RefreshSchedulerTests#update_loop_sleeps_until_next_day,RefreshSchedulerTests#update_loop_not_started_when_disabled` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste UpdateCheckDueTests#same_day_waits_for_midnight,UpdateCheckDueTests#previous_day_is_due,UpdateCheckDueTests#never_checked_is_due,UpdateCheckDueTests#older_than_a_day_is_due,UpdateCheckDueTests#future_last_check_is_capped,UpdateCheckDueTests#delay_has_a_floor,UpdateCheckDueTests#dst_start_waits_for_shifted_day_start,UpdateCheckDueTests#dst_start_new_day_is_due,UpdateCheckDueTests#dst_end_uses_24h_bound,UpdateCheckDueTests#dst_end_same_day_after_24h_is_due,UpdateCheckDueTests#check_if_needed_runs_on_new_day,RefreshSchedulerTests#update_loop_checks_on_relaunch_next_day,RefreshSchedulerTests#update_loop_sleeps_until_next_day,RefreshSchedulerTests#update_loop_not_started_when_disabled · revisão approved (3/3) · batch B17-update-sched
 
-### LOW (111/114 resolvidos)
+### LOW (112/115 resolvidos)
 
 - [x] **ARCH-ATL-002** · Arquitetura · LOW · `Sources/AiTaskbarProviders/AnthropicWireTypes.swift:161` — UsageWindow.label is both English display text and the identity key; Anthropic scoped vs flat Opus (7d) can collide despite a comment claiming dedupe · resp: Atlas · teste: `AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat · revisão approved (3/3) · batch B11-app-lows
@@ -123,6 +123,8 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste RefreshScheduler#an invalid owner_repo backs off to the next day instead of waking every minute,UpdateChecker Cadence and Banner Visibility Tests#an invalid owner_repo still records the attempt,UpdateChecker Cadence and Banner Visibility Tests#an invalid owner_repo still reports the configuration error · revisão approved (3/3) · batch B18-last-followups
 - [x] **BUG-MAE-013** · Bugs clássicos · LOW · `Sources/AiTaskbarApp/NotificationService.swift:190` — A crossing that failed while notification permission was denied stays marked after the user grants permission · resp: Maestro · teste: `NotificationDeliveryRollbackTests#denied_crossing_is_resent_after_grant,#delivery_rearms_parked_crossing` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste NotificationDeliveryRollbackTests#denied_crossing_is_resent_after_grant,#delivery_rearms_parked_crossing · revisão approved (3/3) · batch B18-r2
+- [x] **BUG-MAE-015** · Bugs clássicos · LOW · `Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:77` — Localizable format keys use %d for 64-bit Swift Int arguments (notif_discreet_body_fmt fed a user-controlled unclamped threshold, plus other %d keys) · resp: Maestro · teste: `IntegerFormatSpecifierTests#discreet_body_is_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#int_keys_are_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#reset_confirm_is_64_bit(en|pt-BR|es),source-ratchet-selftest.sh [4/6],[5/6],[6/6]` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste IntegerFormatSpecifierTests#discreet_body_is_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#int_keys_are_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#reset_confirm_is_64_bit(en|pt-BR|es),source-ratchet-selftest.sh [4/6],[5/6],[6/6] · revisão approved (3/3) · batch B20-format-sweep
 - [x] **CPX-DED-003** · Complexidade · LOW · `Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:81` — AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic · resp: Dédalo · teste: `AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#*` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#* · revisão approved (3/3) · batch B1-analytics
 - [x] **CPX-DED-004** · Complexidade · LOW · `Sources/AiTaskbarApp/Views/VendorSectionView.swift:575` — VendorSectionView.extras(for:) switch measures over the cyclomatic ceiling but is a plain per-vendor dispatch, not tangled logic - real gap is duplicated openrouter/zai blocks with no test · resp: Dédalo · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -289,7 +291,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 - [x] **VERB-MAE-001** · Verbosidade · LOW · `Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:136` — AnalyticsStore.defaultEstimates ignores its snapshots parameter; currentSnapshots computed each refresh for nothing · resp: Maestro · teste: `AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring · revisão approved (3/3) · batch B14-app-followups
 
-### INFO (30/52 resolvidos)
+### INFO (30/53 resolvidos)
 
 - [x] **ARCH-ATL-007** · Arquitetura · INFO · `Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:48` — Flame severity color rule duplicated in 3 places and diverging from SeverityColor · resp: Atlas · teste: `SeverityColorFlameTests (6 cases)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SeverityColorFlameTests (6 cases) · revisão approved (3/3) · batch B11-app-lows
@@ -356,6 +358,10 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 - [!] **CQ-MAE-020** · Qualidade · INFO · `config.example.toml:93` — gemini.prefer_antigravity, xai.prefer_grok_cli and xai.grok_base_url have no Settings UI controls (config-file-only) · resp: Maestro · teste: —
   > aceito (divida-cosmetica): gemini.prefer_antigravity, xai.prefer_grok_cli and xai.grok_base_url can only be changed by editing config.toml
   > consequência: Users have to edit config.toml to change these 3 settings; the defaults (true, true, built-in host) cover the common case · reabre se: A user asks for a Settings control, or a default changes so that most users would need to override it · ratificou: user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+  > progresso 2026-09-29: aceito (divida-cosmetica) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+- [!] **CQ-MAE-024** · Qualidade · INFO · `Sources/AiTaskbarApp/NotificationService.swift:124` — send -> deliveryFinished -> tracker threads four loose values (vendor, label, threshold, token) instead of one crossing reference · resp: Maestro · teste: —
+  > aceito (divida-cosmetica): send -> deliveryFinished -> tracker.{delivered,park,unmark} keep passing (vendor, label, threshold, token) as four separate values.
+  > consequência: No behaviour defect today. A future fifth field could be threaded through some call sites and missed at others. The token check (isCurrent) already rejects a mismatched late completion. · reabre se: A field is added to a pending crossing, or any change touches the tracker's unmark/delivered/park signatures · ratificou: user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
   > progresso 2026-09-29: aceito (divida-cosmetica) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
 - [x] **DEP-MAE-001** · Dependências · INFO · `Makefile:339` — Fail-closed update checksum makes the checksums upload in make publish a hard requirement with no guard · resp: Maestro · teste: `SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON) · revisão approved (3/3) · batch B8-updater
@@ -437,6 +443,8 @@ _Toda lib pesquisada está no latest stable._ ✅
 
 ## Log de iterações
 
+- **2026-09-29 19:58:22 UTC** — aceito CQ-MAE-024 (divida-cosmetica) — won-t-fix: A fix that actually removes the risk means changing NotificationThresholdTracker's mutating API (unmark/delivered/park), and NotificationThresholdTrackerTests calls that API directly, so the change is not covered by the existing tests unchanged. A wrapper inside NotificationService only would leave the tracker boundary taking four loose values, which is where a field could get dropped.
+- **2026-09-29 19:58:22 UTC** — resolvido BUG-MAE-015 (teste: IntegerFormatSpecifierTests#discreet_body_is_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#int_keys_are_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#reset_confirm_is_64_bit(en|pt-BR|es),source-ratchet-selftest.sh [4/6],[5/6],[6/6]) — batch B20-format-sweep
 - **2026-09-29 19:45:12 UTC** — resolvido DUP-MAE-007 (teste: NotificationThresholdTrackerTests (whole suite),NotificationDeliveryRollbackTests (whole suite)) — batch B19-tail
 - **2026-09-29 19:45:12 UTC** — resolvido BUG-MAE-014 (teste: NotificationTitleLocalizationTests#title_format_is_64_bit(en|pt-BR|es)) — batch B19-tail
 - **2026-09-29 19:45:12 UTC** — resolvido CQ-MAE-023 (teste: AnalyticsViewTests#average_usage_rounds,AnalyticsViewTests#average_usage_missing_summary_is_zero,AnalyticsViewTests#average_usage_empty) — batch B19-tail
@@ -495,9 +503,7 @@ _Toda lib pesquisada está no latest stable._ ✅
 - **2026-09-29 18:07:05 UTC** — resolvido BUG-MAE-008 (teste: ConfigLoaderTests#ensure_unreadable_config_throws_and_keeps_file) — batch B15-core-followups
 - **2026-09-29 17:36:52 UTC** — resolvido CQ-MAE-007 (teste: ConfigTopUpTests#symlinked_config_failure_is_reported,ConfigTopUpTests#regular_config_is_topped_up) — batch B14-app-followups
 - **2026-09-29 17:36:51 UTC** — resolvido RACE-MAE-001 (teste: RefreshSchedulerTests#hung_vendor_is_restarted_after_max_age,RefreshSchedulerTests#old_in_flight_fetch_is_restarted,RefreshSchedulerTests#young_in_flight_fetch_is_skipped) — batch B14-app-followups
-- **2026-09-29 17:36:51 UTC** — resolvido TEST-MAE-006 (teste: RefreshSchedulerTests#hung_vendor_does_not_starve_others,RefreshSchedulerTests#healthy_cycle_has_no_backoff) — batch B14-app-followups
-- **2026-09-29 17:36:51 UTC** — resolvido VERB-MAE-001 (teste: AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring) — batch B14-app-followups
 
 ## ✅ RODADA FECHADA
 
-Todos os 180 achados têm desfecho: 155 resolvidos · 16 refutados · 9 aceitos. Nenhum aberto.
+Todos os 182 achados têm desfecho: 156 resolvidos · 16 refutados · 10 aceitos. Nenhum aberto.

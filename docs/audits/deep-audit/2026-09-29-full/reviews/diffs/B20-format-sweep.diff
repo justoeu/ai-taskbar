@@ -1,0 +1,543 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index dcdfa47..4aa0094 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -592,6 +592,16 @@ that came out of fixing that:
+   `UsageHistoryStore.Sample`, at init AND on decode. `validate.sh` rejects
+   bare integer conversions in `*WireTypes.swift` (point-free `Int.init`
+   included), via the same shared script and self-test.
++- **Integer format specifiers in `Localizable.strings` are `%ld`, never
++  `%d` / `%i`.** Every integer a call site formats is a Swift `Int` (64-bit);
++  `%d` reads 32 bits of it, so a discreet notification for an unclamped
++  `notify_at` of 5000000000 printed `705032704%` (BUG-MAE-015). Positional
++  forms are `%1$ld`. If an argument is ever genuinely `Int32`, widen it to
++  `Int` at the call site instead of carving out a `%d`. The same ratchet in
++  `scripts/check-source-ratchets.sh` requires en, pt-BR and es to carry the
++  identical key set and, per key, the identical specifier list (by argument
++  index, so a translation may reorder positional forms); the self-test
++  plants `%d`, `%i`, `%1$d`, `%hd`, a missing key and a mismatched specifier.
+ - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
+   cleanup, marker writes). If a credential write fails, the user must see it.
+ - **Keychain reads AND writes** must run inside
+diff --git a/CLAUDE.md b/CLAUDE.md
+index dcdfa47..4aa0094 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -592,6 +592,16 @@ that came out of fixing that:
+   `UsageHistoryStore.Sample`, at init AND on decode. `validate.sh` rejects
+   bare integer conversions in `*WireTypes.swift` (point-free `Int.init`
+   included), via the same shared script and self-test.
++- **Integer format specifiers in `Localizable.strings` are `%ld`, never
++  `%d` / `%i`.** Every integer a call site formats is a Swift `Int` (64-bit);
++  `%d` reads 32 bits of it, so a discreet notification for an unclamped
++  `notify_at` of 5000000000 printed `705032704%` (BUG-MAE-015). Positional
++  forms are `%1$ld`. If an argument is ever genuinely `Int32`, widen it to
++  `Int` at the call site instead of carving out a `%d`. The same ratchet in
++  `scripts/check-source-ratchets.sh` requires en, pt-BR and es to carry the
++  identical key set and, per key, the identical specifier list (by argument
++  index, so a translation may reorder positional forms); the self-test
++  plants `%d`, `%i`, `%1$d`, `%hd`, a missing key and a mismatched specifier.
+ - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
+   cleanup, marker writes). If a credential write fails, the user must see it.
+ - **Keychain reads AND writes** must run inside
+diff --git a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+index bd672f7..253eec6 100644
+--- a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+@@ -74,7 +74,7 @@
+ "notif_heavy_usage" = "Heavy usage.";
+ "notif_resets_fmt" = "%@ Resets %@.";
+ "notif_discreet_title" = "AI Taskbar";
+-"notif_discreet_body_fmt" = "A monitored window crossed %d%%.";
++"notif_discreet_body_fmt" = "A monitored window crossed %ld%%.";
+ "notif_title_fmt" = "%@ — %@ at %ld%%";
+ 
+ // About panel
+@@ -211,7 +211,7 @@
+ // Public service status
+ "service_status_help" = "Service status";
+ "service_status_ax_label" = "Service status";
+-"service_status_ax_value_fmt" = "%d affected, %d unknown, %d automatic sources";
++"service_status_ax_value_fmt" = "%ld affected, %ld unknown, %ld automatic sources";
+ "service_status_ax_hint" = "Opens public service status for the last six hours.";
+ "service_status_title" = "Service status";
+ "service_status_last_six_hours" = "Last 6 hours";
+@@ -250,7 +250,7 @@
+ "service_status_expand" = "Show incident details";
+ "service_status_collapse" = "Hide incident details";
+ "service_status_components_fmt" = "Components: %@";
+-"service_status_duration_fmt" = "%dh %dm";
++"service_status_duration_fmt" = "%ldh %ldm";
+ "service_status_open_incident" = "Open incident";
+ "service_status_open_page" = "Open official status page";
+ "service_status_timeline_ax_fmt" = "Six-hour timeline: %@";
+@@ -264,7 +264,7 @@
+ "reset_confirm_title" = "Use one rate-limit reset?";
+ "reset_confirm_button" = "Confirm reset";
+ "reset_cancel" = "Cancel";
+-"reset_confirm_message" = "Account: %@\nAvailable resets: %d\nThis consumes one earned reset. Retries reuse the same attempt and cannot consume a second credit for it.";
++"reset_confirm_message" = "Account: %@\nAvailable resets: %ld\nThis consumes one earned reset. Retries reuse the same attempt and cannot consume a second credit for it.";
+ "reset_done" = "Reset confirmed. Updating usage…";
+ "reset_done_refresh_pending" = "Reset confirmed, but usage could not be refreshed yet.";
+ "reset_nothing" = "OpenAI reports no eligible limit to reset.";
+@@ -283,8 +283,8 @@
+ "credits_balance_fmt" = "Credits: %@";
+ "credits_remaining_fmt" = "%@ of %@ left";
+ "credits_unlimited" = "Unlimited credits";
+-"credits_local_msgs_fmt" = "≈ %d–%d local messages on credits";
+-"credits_cloud_msgs_fmt" = "≈ %d–%d cloud messages on credits";
++"credits_local_msgs_fmt" = "≈ %ld–%ld local messages on credits";
++"credits_cloud_msgs_fmt" = "≈ %ld–%ld cloud messages on credits";
+ "credits_funding_now" = "Plan window spent — running on credits";
+ "credits_recalibrate" = "Recalibrate credits bar";
+ "credits_exhausted" = "Credits used up";
+@@ -343,11 +343,11 @@
+ "compare_prev_month_1" = "Previous month";
+ "compare_prev_month_2" = "2 months ago";
+ "compare_vs_prev_week_1" = "vs. previous week";
+-"compare_vs_prev_week_fmt" = "vs. %d weeks ago";
++"compare_vs_prev_week_fmt" = "vs. %ld weeks ago";
+ "compare_vs_prev_day_1" = "vs. yesterday";
+-"compare_vs_prev_day_fmt" = "vs. %d days ago";
++"compare_vs_prev_day_fmt" = "vs. %ld days ago";
+ "compare_vs_prev_month_1" = "vs. previous month";
+-"compare_vs_prev_month_fmt" = "vs. %d months ago";
++"compare_vs_prev_month_fmt" = "vs. %ld months ago";
+ "analytics_delta_quota_help" = "Change in average quota utilization compared to the selected previous period.";
+ "analytics_insufficient_history_short" = "No prior data";
+ "analytics_insufficient_history_help" = "Not enough historical data recorded yet for the selected comparison period.";
+diff --git a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+index 4a25274..0e66c2d 100644
+--- a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+@@ -73,7 +73,7 @@
+ "notif_heavy_usage" = "Uso intenso.";
+ "notif_resets_fmt" = "%@ Se reinicia %@.";
+ "notif_discreet_title" = "AI Taskbar";
+-"notif_discreet_body_fmt" = "Una ventana monitoreada cruzó %d%%.";
++"notif_discreet_body_fmt" = "Una ventana monitoreada cruzó %ld%%.";
+ "notif_title_fmt" = "%@ — %@ al %ld%%";
+ 
+ // About panel
+@@ -210,7 +210,7 @@
+ // Estado público de los servicios
+ "service_status_help" = "Estado de los servicios";
+ "service_status_ax_label" = "Estado de los servicios";
+-"service_status_ax_value_fmt" = "%d afectados, %d desconocidos, %d fuentes automáticas";
++"service_status_ax_value_fmt" = "%ld afectados, %ld desconocidos, %ld fuentes automáticas";
+ "service_status_ax_hint" = "Abre el estado público de los servicios de las últimas seis horas.";
+ "service_status_title" = "Estado de los servicios";
+ "service_status_last_six_hours" = "Últimas 6 horas";
+@@ -249,7 +249,7 @@
+ "service_status_expand" = "Mostrar detalles de incidentes";
+ "service_status_collapse" = "Ocultar detalles de incidentes";
+ "service_status_components_fmt" = "Componentes: %@";
+-"service_status_duration_fmt" = "%dh %dmin";
++"service_status_duration_fmt" = "%ldh %ldmin";
+ "service_status_open_incident" = "Abrir incidente";
+ "service_status_open_page" = "Abrir página oficial de estado";
+ "service_status_timeline_ax_fmt" = "Cronología de seis horas: %@";
+@@ -263,7 +263,7 @@
+ "reset_confirm_title" = "¿Usar un reset de límite?";
+ "reset_confirm_button" = "Confirmar reset";
+ "reset_cancel" = "Cancelar";
+-"reset_confirm_message" = "Cuenta: %@\nResets disponibles: %d\nEsta acción consume un reset ganado. Los reintentos usan la misma clave y no consumen un segundo crédito para ella.";
++"reset_confirm_message" = "Cuenta: %@\nResets disponibles: %ld\nEsta acción consume un reset ganado. Los reintentos usan la misma clave y no consumen un segundo crédito para ella.";
+ "reset_done" = "Reset confirmado. Actualizando uso…";
+ "reset_done_refresh_pending" = "Reset confirmado, pero todavía no se pudo actualizar el uso.";
+ "reset_nothing" = "OpenAI indica que no hay un límite elegible para reset.";
+@@ -282,8 +282,8 @@
+ "credits_balance_fmt" = "Créditos: %@";
+ "credits_remaining_fmt" = "%@ de %@ restantes";
+ "credits_unlimited" = "Créditos ilimitados";
+-"credits_local_msgs_fmt" = "≈ %d–%d mensajes locales con créditos";
+-"credits_cloud_msgs_fmt" = "≈ %d–%d mensajes en la nube con créditos";
++"credits_local_msgs_fmt" = "≈ %ld–%ld mensajes locales con créditos";
++"credits_cloud_msgs_fmt" = "≈ %ld–%ld mensajes en la nube con créditos";
+ "credits_funding_now" = "Ventana del plan agotada — consumiendo créditos";
+ "credits_recalibrate" = "Recalibrar barra de créditos";
+ "credits_exhausted" = "Créditos agotados";
+@@ -342,11 +342,11 @@
+ "compare_prev_month_1" = "Mes anterior";
+ "compare_prev_month_2" = "Hace 2 meses";
+ "compare_vs_prev_week_1" = "vs. semana anterior";
+-"compare_vs_prev_week_fmt" = "vs. hace %d semanas";
++"compare_vs_prev_week_fmt" = "vs. hace %ld semanas";
+ "compare_vs_prev_day_1" = "vs. ayer";
+-"compare_vs_prev_day_fmt" = "vs. hace %d días";
++"compare_vs_prev_day_fmt" = "vs. hace %ld días";
+ "compare_vs_prev_month_1" = "vs. mes anterior";
+-"compare_vs_prev_month_fmt" = "vs. hace %d meses";
++"compare_vs_prev_month_fmt" = "vs. hace %ld meses";
+ "analytics_delta_quota_help" = "Variación en la utilización promedio de cuota en comparación con el período anterior seleccionado.";
+ "analytics_insufficient_history_short" = "Sin datos previos";
+ "analytics_insufficient_history_help" = "Aún no hay suficientes datos registrados en el historial para el período comparativo seleccionado.";
+diff --git a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+index 7461bb8..aa5ba22 100644
+--- a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+@@ -73,7 +73,7 @@
+ "notif_heavy_usage" = "Uso intenso.";
+ "notif_resets_fmt" = "%@ Reseta %@.";
+ "notif_discreet_title" = "AI Taskbar";
+-"notif_discreet_body_fmt" = "Uma janela monitorada ultrapassou %d%%.";
++"notif_discreet_body_fmt" = "Uma janela monitorada ultrapassou %ld%%.";
+ "notif_title_fmt" = "%@ — %@ em %ld%%";
+ 
+ // About panel
+@@ -210,7 +210,7 @@
+ // Status público dos serviços
+ "service_status_help" = "Status dos serviços";
+ "service_status_ax_label" = "Status dos serviços";
+-"service_status_ax_value_fmt" = "%d afetados, %d desconhecidos, %d fontes automáticas";
++"service_status_ax_value_fmt" = "%ld afetados, %ld desconhecidos, %ld fontes automáticas";
+ "service_status_ax_hint" = "Abre o status público dos serviços nas últimas seis horas.";
+ "service_status_title" = "Status dos serviços";
+ "service_status_last_six_hours" = "Últimas 6 horas";
+@@ -249,7 +249,7 @@
+ "service_status_expand" = "Mostrar detalhes dos incidentes";
+ "service_status_collapse" = "Ocultar detalhes dos incidentes";
+ "service_status_components_fmt" = "Componentes: %@";
+-"service_status_duration_fmt" = "%dh %dmin";
++"service_status_duration_fmt" = "%ldh %ldmin";
+ "service_status_open_incident" = "Abrir incidente";
+ "service_status_open_page" = "Abrir página oficial de status";
+ "service_status_timeline_ax_fmt" = "Linha do tempo de seis horas: %@";
+@@ -263,7 +263,7 @@
+ "reset_confirm_title" = "Usar um reset de limite?";
+ "reset_confirm_button" = "Confirmar reset";
+ "reset_cancel" = "Cancelar";
+-"reset_confirm_message" = "Conta: %@\nResets disponíveis: %d\nEsta ação consome um reset ganho. Repetir a tentativa usa a mesma chave e não consome um segundo crédito para ela.";
++"reset_confirm_message" = "Conta: %@\nResets disponíveis: %ld\nEsta ação consome um reset ganho. Repetir a tentativa usa a mesma chave e não consome um segundo crédito para ela.";
+ "reset_done" = "Reset confirmado. Atualizando uso…";
+ "reset_done_refresh_pending" = "Reset confirmado, mas ainda não foi possível atualizar o uso.";
+ "reset_nothing" = "A OpenAI informou que não há limite elegível para reset.";
+@@ -282,8 +282,8 @@
+ "credits_balance_fmt" = "Créditos: %@";
+ "credits_remaining_fmt" = "%@ de %@ restantes";
+ "credits_unlimited" = "Créditos ilimitados";
+-"credits_local_msgs_fmt" = "≈ %d–%d mensagens locais com créditos";
+-"credits_cloud_msgs_fmt" = "≈ %d–%d mensagens na nuvem com créditos";
++"credits_local_msgs_fmt" = "≈ %ld–%ld mensagens locais com créditos";
++"credits_cloud_msgs_fmt" = "≈ %ld–%ld mensagens na nuvem com créditos";
+ "credits_funding_now" = "Janela do plano esgotada — consumindo créditos";
+ "credits_recalibrate" = "Recalibrar barra de créditos";
+ "credits_exhausted" = "Créditos esgotados";
+@@ -342,11 +342,11 @@
+ "compare_prev_month_1" = "Mês anterior";
+ "compare_prev_month_2" = "Há 2 meses";
+ "compare_vs_prev_week_1" = "vs. semana anterior";
+-"compare_vs_prev_week_fmt" = "vs. %d semanas atrás";
++"compare_vs_prev_week_fmt" = "vs. %ld semanas atrás";
+ "compare_vs_prev_day_1" = "vs. ontem";
+-"compare_vs_prev_day_fmt" = "vs. %d dias atrás";
++"compare_vs_prev_day_fmt" = "vs. %ld dias atrás";
+ "compare_vs_prev_month_1" = "vs. mês anterior";
+-"compare_vs_prev_month_fmt" = "vs. %d meses atrás";
++"compare_vs_prev_month_fmt" = "vs. %ld meses atrás";
+ "analytics_delta_quota_help" = "Variação na média de utilização de quota em relação ao período anterior selecionado.";
+ "analytics_insufficient_history_short" = "Sem dados anteriores";
+ "analytics_insufficient_history_help" = "Ainda não há dados suficientes gravados no histórico para o período comparativo selecionado.";
+diff --git a/Tests/AiTaskbarAppTests/IntegerFormatSpecifierTests.swift b/Tests/AiTaskbarAppTests/IntegerFormatSpecifierTests.swift
+new file mode 100644
+index 0000000..7ac4c4a
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/IntegerFormatSpecifierTests.swift
+@@ -0,0 +1,64 @@
++import Foundation
++import Testing
++@testable import AiTaskbarApp
++
++/// BUG-MAE-015: every integer format key is fed a 64-bit Swift `Int`. A `%d`
++/// reads only 32 bits of it, so a value past `Int32.max` (for instance an
++/// unclamped `notify_at` threshold) rendered as a truncated number.
++@MainActor
++@Suite("Integer format specifiers are 64-bit", .serialized)
++struct IntegerFormatSpecifierTests {
++    /// Past `Int32.max`; its low 32 bits are 705032704.
++    private static let big = 5_000_000_000
++
++    /// Key -> number of `Int` arguments its call site passes.
++    private static let intKeys: [(key: String, arity: Int)] = [
++        ("notif_discreet_body_fmt", 1),
++        ("service_status_ax_value_fmt", 3),
++        ("service_status_duration_fmt", 2),
++        ("credits_local_msgs_fmt", 2),
++        ("credits_cloud_msgs_fmt", 2),
++        ("compare_vs_prev_week_fmt", 1),
++        ("compare_vs_prev_day_fmt", 1),
++        ("compare_vs_prev_month_fmt", 1),
++    ]
++
++    private static func render(_ key: String, _ args: [CVarArg], in language: String) -> String {
++        let previous = L10n.languageOverride
++        defer { L10n.languageOverride = previous }
++        L10n.languageOverride = language
++        return String(format: L10n.localizedString(key), arguments: args)
++    }
++
++    private static func occurrences(of needle: String, in haystack: String) -> Int {
++        haystack.components(separatedBy: needle).count - 1
++    }
++
++    @Test("the discreet notification body keeps a threshold past Int32.max",
++          arguments: ["en", "pt-BR", "es"])
++    func discreet_body_is_64_bit(language: String) {
++        let body = Self.render("notif_discreet_body_fmt", [Self.big], in: language)
++        #expect(body.contains("5000000000%"))
++    }
++
++    @Test("every Int-fed key renders each argument past Int32.max",
++          arguments: ["en", "pt-BR", "es"])
++    func int_keys_are_64_bit(language: String) {
++        for (key, arity) in Self.intKeys {
++            let args: [CVarArg] = Array(repeating: Self.big, count: arity)
++            let text = Self.render(key, args, in: language)
++            #expect(Self.occurrences(of: "5000000000", in: text) == arity,
++                    "\(language) \(key): \(text)")
++        }
++    }
++
++    @Test("the reset confirmation keeps a count past Int32.max",
++          arguments: ["en", "pt-BR", "es"])
++    func reset_confirm_is_64_bit(language: String) {
++        let previous = L10n.languageOverride
++        defer { L10n.languageOverride = previous }
++        L10n.languageOverride = language
++        let text = L10n.localizedString("reset_confirm_message", "acct", Self.big)
++        #expect(text.contains("5000000000"))
++    }
++}
+diff --git a/scripts/check-source-ratchets.sh b/scripts/check-source-ratchets.sh
+index 5690900..2bd6fad 100755
+--- a/scripts/check-source-ratchets.sh
++++ b/scripts/check-source-ratchets.sh
+@@ -9,6 +9,8 @@
+ # planted scratch tree instead of the repo:
+ #   TESTS_DIR       (default: Tests)
+ #   WIRE_TYPES_DIR  (default: Sources/AiTaskbarProviders)
++#   STRINGS_DIR     (default: Sources/AiTaskbarApp/Resources; holds
++#                    {en,pt-BR,es}.lproj/Localizable.strings)
+ #
+ # Exits non-zero, printing up to 5 offending locations, when either check
+ # fires. If you change a pattern here, run scripts/source-ratchet-selftest.sh:
+@@ -134,4 +136,81 @@ else
+     echo "  ✓ no trapping integer conversions in wire types"
+ fi
+ 
++# 3. Localizable.strings integer specifiers + language parity (BUG-MAE-015).
++# Every integer a call site formats is a Swift `Int`, which is 64-bit; `%d` /
++# `%i` read 32 bits of it, so `notif_discreet_body_fmt` fed an unclamped
++# 5_000_000_000 threshold printed 705032704. Integer conversions must carry a
++# 64-bit length modifier (`%ld`, `%1$ld`, `%lld`, `%qd`, `%zd`, `%jd`, `%td`);
++# a bare or `h`/`hh` `%d`/`%i` fails. If an argument is ever genuinely Int32,
++# widen it to Int at the call site rather than special-casing the gate.
++# The three languages must also carry identical key sets and, per key, the
++# identical specifier list (ordered by argument index, so a translation may
++# reorder positional `%1$@ … %2$ld` forms), since a missing or mismatched
++# specifier in one language reads the wrong vararg at runtime.
++# The space flag is deliberately not parsed: prose keys looked up without args
++# ("90% ahora", "(% Quota)") would otherwise read as `% a` / `% Q` specifiers,
++# and no format key here uses that flag.
++strings_dir="${STRINGS_DIR:-Sources/AiTaskbarApp/Resources}"
++strings_files=()
++for lang in en pt-BR es; do
++    strings_files+=("$strings_dir/$lang.lproj/Localizable.strings")
++done
++for f in "${strings_files[@]}"; do
++    if [ ! -f "$f" ]; then
++        echo "  ✗ strings check could not run (missing $f)"
++        exit 1
++    fi
++done
++if ! bad_fmt=$(perl -0777 -ne '
++        my $src = $_;
++        $src =~ s{/\*.*?\*/}{ (my $m = $&) =~ s/[^\n]//g; $m }gse;
++        my $line = 0;
++        for my $l (split /\n/, $src, -1) {
++            $line++;
++            $l =~ s{^\s*//.*}{};
++            next if $l =~ /^\s*$/;
++            if ($l !~ /^\s*"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;\s*(?:\/\/.*)?$/) {
++                print "$ARGV:$line: unparseable entry — cannot verify\n";
++                next;
++            }
++            my ($key, $val) = ($1, $2);
++            my ($next, @specs) = (1);
++            while ($val =~ /%(?:(\d+)\$)?[-+#0\x27]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(hh|h|ll|l|q|z|t|j|L)?([diouxXeEfFgGaAcCsSp@%])/g) {
++                my ($pos, $len, $conv) = ($1, $2 // "", $3);
++                next if $conv eq "%";
++                if (($conv eq "d" || $conv eq "i") && $len !~ /^(?:l|ll|q|z|t|j)$/) {
++                    print "$ARGV:$line: \"$key\" uses %$len$conv — use %l$conv for a Swift Int\n";
++                }
++                my $idx = defined $pos ? $pos : $next++;
++                push @specs, [$idx, "$len$conv"];
++            }
++            my $sig = join ",", map { "$_->[0]:$_->[1]" } sort { $a->[0] <=> $b->[0] } @specs;
++            $seen{$ARGV}{$key} = $sig;
++        }
++        END {
++            my @files = sort keys %seen;
++            my %all;
++            for my $f (@files) { $all{$_} = 1 for keys %{$seen{$f}} }
++            for my $k (sort keys %all) {
++                my %sigs;
++                for my $f (@files) {
++                    if (!exists $seen{$f}{$k}) { print "$f: missing key \"$k\"\n"; next }
++                    $sigs{$seen{$f}{$k}} = 1;
++                }
++                print "\"$k\": specifiers differ across languages (", join(" | ", sort keys %sigs), ")\n"
++                    if keys %sigs > 1;
++            }
++        }
++    ' "${strings_files[@]}"); then
++    echo "  ✗ strings check could not run (dir: $strings_dir)"
++    exit 1
++fi
++if [ -n "$bad_fmt" ]; then
++    echo "$bad_fmt" | head -5
++    echo "  ✗ Localizable.strings integer specifier / parity violation — use %ld and keep en, pt-BR, es in lockstep"
++    status=1
++else
++    echo "  ✓ Localizable.strings: 64-bit integer specifiers, identical keys and specifiers in en/pt-BR/es"
++fi
++
+ exit "$status"
+diff --git a/scripts/source-ratchet-selftest.sh b/scripts/source-ratchet-selftest.sh
+index 373cedc..64cf6ec 100755
+--- a/scripts/source-ratchet-selftest.sh
++++ b/scripts/source-ratchet-selftest.sh
+@@ -22,6 +22,18 @@ work=$(mktemp -d)
+ trap 'rm -rf "$work"' EXIT
+ mkdir -p "$work/empty"
+ failures=0
++
++# plant_strings <dir> <en> <pt-BR> <es> — one Localizable.strings per language.
++plant_strings() {
++    local dir=$1
++    mkdir -p "$dir/en.lproj" "$dir/pt-BR.lproj" "$dir/es.lproj"
++    printf '%s\n' "$2" > "$dir/en.lproj/Localizable.strings"
++    printf '%s\n' "$3" > "$dir/pt-BR.lproj/Localizable.strings"
++    printf '%s\n' "$4" > "$dir/es.lproj/Localizable.strings"
++}
++# A clean strings tree, so the tests/wire cases never depend on the repo's.
++plant_strings "$work/strings-ok" '"k" = "v";' '"k" = "v";' '"k" = "v";'
++export STRINGS_DIR="$work/strings-ok"
+ n=0
+ 
+ # expect_reject <kind> <label> <file-name> <content>
+@@ -50,7 +62,7 @@ expect_reject() {
+     fi
+ }
+ 
+-echo "[1/4] vacuous #expect / #require forms — each must fail the gate"
++echo "[1/6] vacuous #expect / #require forms — each must fail the gate"
+ expect_reject tests '== false + message'        T.swift '#expect(opt == false, "msg")'
+ expect_reject tests '== true + message w/ interp' T.swift '#expect(pin?.isEmpty == true, "pin for \(host)")'
+ expect_reject tests '!= true'                   T.swift '#expect(opt != true)'
+@@ -67,7 +79,7 @@ expect_reject tests 'multi-line assert'         T.swift $'#expect(\n    opt ==\n
+ expect_reject tests 'multi-line + message'      T.swift $'#expect(opt?.isEmpty\n    == false,\n    "x")'
+ expect_reject tests 'unbalanced call (fail closed)' T.swift '#expect(foo(bar'
+ 
+-echo "[2/4] allowed assert forms — the gate must pass"
++echo "[2/6] allowed assert forms — the gate must pass"
+ mkdir -p "$work/accept-tests"
+ cat > "$work/accept-tests/Ok.swift" <<'SWIFT'
+ // #expect(opt == false) in a line comment is prose, not an assert.
+@@ -118,7 +130,7 @@ else
+     failures=$((failures + 1))
+ fi
+ 
+-echo "[3/4] trapping integer conversions in *WireTypes.swift — each must fail the gate"
++echo "[3/6] trapping integer conversions in *WireTypes.swift — each must fail the gate"
+ expect_reject wire 'Int($0)'               FooWireTypes.swift 'let a = xs.map { Int($0) }'
+ expect_reject wire 'Int(x.rounded())'      FooWireTypes.swift 'let a = Int(x.rounded())'
+ expect_reject wire 'Int(value)'            FooWireTypes.swift 'let a = Int(value)'
+@@ -131,7 +143,61 @@ expect_reject wire 'Int(d) nested in a radix call' FooWireTypes.swift 'let a = I
+ expect_reject wire 'Int(Int(d), radix: 16)'        FooWireTypes.swift 'let a = Int(Int(d), radix: 16)'
+ expect_reject wire 'Int(d) as the radix argument'  FooWireTypes.swift 'let a = Int(s, radix: Int(d))'
+ 
+-echo "[4/4] a missing directory must fail closed, not read as clean"
++# expect_reject_strings <label> <en> <pt-BR> <es> — requires the strings
++# check's own ✗ line, so a crash is not mistaken for a detection.
++expect_reject_strings() {
++    local label=$1 dir out rc=0
++    n=$((n + 1))
++    dir="$work/reject-$n"
++    plant_strings "$dir" "$2" "$3" "$4"
++    out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" STRINGS_DIR="$dir" "$CHECK" 2>&1) || rc=$?
++    if [ "$rc" -ne 0 ] && grep -qF "Localizable.strings integer specifier / parity violation" <<<"$out"; then
++        echo "  ✓ rejects: $label"
++    else
++        echo "  ✗ GATE IS BLIND to: $label (exit $rc)"
++        sed 's/^/      /' <<<"$out"
++        failures=$((failures + 1))
++    fi
++}
++
++echo "[4/6] 32-bit integer specifiers and language drift in Localizable.strings — each must fail the gate"
++expect_reject_strings '%d'                      '"a_fmt" = "%d%%";'  '"a_fmt" = "%d%%";'  '"a_fmt" = "%d%%";'
++expect_reject_strings '%i'                      '"a_fmt" = "%i x";'  '"a_fmt" = "%i x";'  '"a_fmt" = "%i x";'
++expect_reject_strings 'positional %1$d'         '"a_fmt" = "%1$d";'  '"a_fmt" = "%1$d";'  '"a_fmt" = "%1$d";'
++expect_reject_strings '%hd'                     '"a_fmt" = "%hd";'   '"a_fmt" = "%hd";'   '"a_fmt" = "%hd";'
++expect_reject_strings '%d in one language only' '"a_fmt" = "%ld";'   '"a_fmt" = "%d";'    '"a_fmt" = "%ld";'
++expect_reject_strings 'key missing in es' \
++    $'"a" = "x";\n"b" = "y";' $'"a" = "x";\n"b" = "y";' '"a" = "x";'
++expect_reject_strings 'specifier mismatch'      '"a_fmt" = "%ld";'   '"a_fmt" = "%@";'    '"a_fmt" = "%ld";'
++expect_reject_strings 'missing argument'        '"a_fmt" = "%ld-%ld";' '"a_fmt" = "%ld";' '"a_fmt" = "%ld-%ld";'
++expect_reject_strings 'unparseable entry (fail closed)' '"a_fmt" = "%ld"' '"a_fmt" = "%ld";' '"a_fmt" = "%ld";'
++
++echo "[5/6] allowed strings forms — the gate must pass"
++plant_strings "$work/accept-strings" \
++    $'/* block comment with %d */\n// line comment %d\n"a_fmt" = "%@ at %ld%%";\n"b_fmt" = "%1$@ has %2$ld";\n"c_fmt" = "%lld %qd %zd";\n"d" = "above 90% now (% Quota)";\n"e_fmt" = "%.1f \\"q\\"";' \
++    $'"a_fmt" = "%@ em %ld%%";\n"b_fmt" = "%2$ld em %1$@";\n"c_fmt" = "%lld %qd %zd";\n"d" = "acima de 90% agora (% Quota)";\n"e_fmt" = "%.1f";' \
++    $'"a_fmt" = "%@ al %ld%%";\n"b_fmt" = "%1$@ tiene %2$ld";\n"c_fmt" = "%lld %qd %zd";\n"d" = "90% ahora (% Cuota)";\n"e_fmt" = "%.1f";'
++rc=0
++out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" STRINGS_DIR="$work/accept-strings" "$CHECK" 2>&1) || rc=$?
++if [ "$rc" -eq 0 ]; then
++    echo "  ✓ accepts %ld, reordered positional %2\$ld, %lld/%qd/%zd, %%, prose percent, escaped quotes, comments"
++else
++    echo "  ✗ gate rejects an allowed strings form (exit $rc):"
++    sed 's/^/      /' <<<"$out"
++    failures=$((failures + 1))
++fi
++
++echo "[6/6] a missing directory or strings file must fail closed, not read as clean"
++rc=0
++mkdir -p "$work/strings-partial/en.lproj"
++cp "$work/strings-ok/en.lproj/Localizable.strings" "$work/strings-partial/en.lproj/"
++TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" STRINGS_DIR="$work/strings-partial" "$CHECK" >/dev/null 2>&1 || rc=$?
++if [ "$rc" -ne 0 ]; then
++    echo "  ✓ missing pt-BR/es strings fails the gate"
++else
++    echo "  ✗ missing strings files reported clean"
++    failures=$((failures + 1))
++fi
+ rc=0
+ TESTS_DIR="$work/does-not-exist" WIRE_TYPES_DIR="$work/empty" "$CHECK" >/dev/null 2>&1 || rc=$?
+ if [ "$rc" -ne 0 ]; then
+diff --git a/scripts/validate.sh b/scripts/validate.sh
+index e9421bc..56fa615 100755
+--- a/scripts/validate.sh
++++ b/scripts/validate.sh
+@@ -103,8 +103,9 @@ if ! cmp -s CLAUDE.md AGENTS.md; then
+ fi
+ ok "CLAUDE.md ≡ AGENTS.md"
+ 
+-# Vacuous-#expect ratchet + trapping Double->Int ratchet for *WireTypes.swift.
+-# Both live in one script shared with ci.yml so the two cannot drift, and the
++# Vacuous-#expect ratchet + trapping Double->Int ratchet for *WireTypes.swift +
++# 64-bit %ld / en-pt-BR-es parity ratchet for Localizable.strings.
++# All live in one script shared with ci.yml so the two cannot drift, and the
+ # self-test runs first: it plants every form each check must reject or accept
+ # in a scratch tree, so a regex that silently stopped matching fails here
+ # instead of reporting a clean tree. See the scripts for the rationale.
+@@ -114,7 +115,7 @@ if ! selftest_out=$(scripts/source-ratchet-selftest.sh 2>&1); then
+ fi
+ ok "source-ratchet self-test (planted forms caught, allowed forms pass)"
+ scripts/check-source-ratchets.sh \
+-    || fail "source ratchet — use expectTrue/expectFalse / Int(saturating:) / Int(checkedTruncating:)"
++    || fail "source ratchet — use expectTrue/expectFalse / Int(saturating:) / Int(checkedTruncating:) / %ld"
+ 
+ # Warnings ratchet.
+ #

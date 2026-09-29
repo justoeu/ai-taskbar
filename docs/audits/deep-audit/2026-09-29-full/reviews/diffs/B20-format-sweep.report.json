@@ -1,0 +1,46 @@
+{
+ "batch": "B20-format-sweep",
+ "results": [
+  {
+   "id": "BUG-MAE-015",
+   "outcome": "fixed",
+   "tests": [
+    "IntegerFormatSpecifierTests#discreet_body_is_64_bit(en|pt-BR|es)",
+    "IntegerFormatSpecifierTests#int_keys_are_64_bit(en|pt-BR|es)",
+    "IntegerFormatSpecifierTests#reset_confirm_is_64_bit(en|pt-BR|es)",
+    "source-ratchet-selftest.sh [4/6],[5/6],[6/6]"
+   ],
+   "red": "Expectation failed: (body → \"A monitored window crossed 705032704%.\").contains(\"5000000000%\") (the same failure in pt-BR and es; 30 issues across the 3 tests). Gate mutation: with the %d rule set to `&& 0`, the self-test printed `GATE IS BLIND to: %d / %i / positional %1$d / %hd` and `4 case(s) wrong`. The ratchet run on the original strings files reported `\"notif_discreet_body_fmt\" uses %d`.",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-024",
+   "outcome": "wontfix",
+   "tests": [],
+   "red": "n/a",
+   "reversal": "n/a",
+   "reason": "A fix that actually removes the risk means changing NotificationThresholdTracker's mutating API (unmark/delivered/park), and NotificationThresholdTrackerTests calls that API directly, so the change is not covered by the existing tests unchanged. A wrapper inside NotificationService only would leave the tracker boundary taking four loose values, which is where a field could get dropped.",
+   "what": "send -> deliveryFinished -> tracker.{delivered,park,unmark} keep passing (vendor, label, threshold, token) as four separate values.",
+   "consequence": "No behaviour defect today. A future fifth field could be threaded through some call sites and missed at others. The token check (isCurrent) already rejects a mismatched late completion.",
+   "reopen_if": "A field is added to a pending crossing, or any change touches the tracker's unmark/delivered/park signatures",
+   "accept_type": "divida-cosmetica"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1192,
+  "coverage": "93.12%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/IntegerFormatSpecifierTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/check-source-ratchets.sh",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/source-ratchet-selftest.sh",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/validate.sh",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md"
+ ]
+}

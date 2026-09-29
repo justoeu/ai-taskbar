@@ -24,7 +24,7 @@
       "event": "init"
     }
   ],
-  "merged_at": "2026-09-29 19:45:30 UTC",
+  "merged_at": "2026-09-29 19:58:37 UTC",
   "agent_sources": [
     {
       "file": "agent-argus.json",
@@ -115,6 +115,10 @@
       "count": 2
     },
     {
+      "file": "agent-maestro-b20-followups.json",
+      "count": 3
+    },
+    {
       "file": "agent-maestro-remediation-followups.json",
       "count": 33
     },
@@ -139,6 +143,6 @@
       "count": 5
     }
   ],
-  "raw_findings": 182,
-  "unique_findings": 182
+  "raw_findings": 185,
+  "unique_findings": 185
 }

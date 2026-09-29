@@ -1,0 +1,56 @@
+[
+ [
+  "QUALITY",
+  "LOW/cosmetic: the header comment in scripts/check-source-ratchets.sh:15 says 'when either check fires', but the script now has three checks. It should say 'any check'."
+ ],
+ [
+  "QUALITY",
+  "Self-test [6/6] 'missing pt-BR/es strings' (source-ratchet-selftest.sh, new block) only checks that the exit code is non-zero, not the message '✗ strings check could not run (missing ...)'. That is weaker than the discipline expect_reject_strings follows, where a crash does not count as a detection. Suggested fix: grep for the message."
+ ],
+ [
+  "QUALITY",
+  "CQ-MAE-024 won't-fix: I agree. The reason given (it would mean changing the tracker's mutating API, which the existing tests call directly) is valid, and the isCurrent token check already limits the risk. The reopen_if condition is specific enough."
+ ],
+ [
+  "SCOPE",
+  {
+   "severity": "LOW",
+   "title": "Same %d-for-Swift-Int defect in inline String(format:) literals that the new strings-only ratchet cannot see",
+   "evidence": "Sources/AiTaskbarApp/Views/CostFooterView.swift:283 and :302 use String(format: \" (%d%%)\", todayPct/weekPct), where todayPct/weekPct are Int(saturating:) (lines 259-260). Sources/AiTaskbarProviders/XAIWireTypes.swift:360 uses String(format: \"%04d-%02d\", y, m) with Int? year/month (lines 141-142). All values are bounded in practice (0-100, calendar year/month), so there is no visible truncation today. The CLAUDE.md rule added by this diff says 'every integer a call site formats is a Swift Int', and the gate only scans Localizable.strings.",
+   "fix": "Switch these to %ld / %04ld-%02ld and consider extending check-source-ratchets.sh to String(format: \"...%d...\") literals in Sources/ (with a selftest plant)",
+   "lens": "classic_bugs"
+  }
+ ],
+ [
+  "SCOPE",
+  {
+   "severity": "INFO",
+   "title": "ci.yml step comment is stale: it lists only the #expect and WireTypes checks",
+   "evidence": ".github/workflows/ci.yml:43-44 comment ('vacuous #expect/#require + bare Int in *WireTypes.swift') does not mention the new Localizable.strings %ld/parity check that the same script now runs",
+   "fix": "Update the comment when ci.yml is next touched",
+   "lens": "docs"
+  }
+ ],
+ [
+  "CORRECTNESS",
+  {
+   "severity": "INFO",
+   "path": "scripts/check-source-ratchets.sh",
+   "line": 183,
+   "title": "Strings ratchet catches only %d/%i. %u/%o/%x/%X without a 64-bit length modifier are not caught.",
+   "evidence": "I planted '\"zz_probe_fmt\" = \"v %u x\";' in all three languages of a scratch copy and the ratchet passed (rc=0). A Swift Int formatted with %u or %x is read as 32 bits, the same truncation as %d. No current key uses these specifiers, so this is latent.",
+   "fix": "Widen the check to [diouxX] with the same length-modifier requirement, and add a %u case to selftest [4/6]."
+  }
+ ],
+ [
+  "CORRECTNESS",
+  {
+   "severity": "INFO",
+   "path": "Sources/AiTaskbarApp/Views/CostFooterView.swift",
+   "line": 283,
+   "title": "Inline Swift String(format:) calls with %d, which the strings ratchet cannot see",
+   "evidence": "CostFooterView.swift:283/302 formats todayPct/weekPct as ' (%d%%)'. These are Int(saturating:) percentages (line 259), and a share of a positive total is at most 100, so nothing truncates in practice. XAIWireTypes.swift:360 uses '%04d-%02d' for the billing-cycle year and month. Both are bounded, so no defect today.",
+   "fix": "Optional: switch to %ld for consistency, or cover Swift format literals in a later ratchet."
+  }
+ ]
+]

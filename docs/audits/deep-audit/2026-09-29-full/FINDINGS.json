@@ -2671,13 +2671,90 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B19",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-015",
+    "resolved_test": "IntegerFormatSpecifierTests#discreet_body_is_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#int_keys_are_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#reset_confirm_is_64_bit(en|pt-BR|es),source-ratchet-selftest.sh [4/6],[5/6],[6/6]",
+    "resolved_at": "2026-09-29 19:58:22 UTC",
+    "resolved_note": "batch B20-format-sweep",
+    "progress": [
+      "2026-09-29: resolvido · teste IntegerFormatSpecifierTests#discreet_body_is_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#int_keys_are_64_bit(en|pt-BR|es),IntegerFormatSpecifierTests#reset_confirm_is_64_bit(en|pt-BR|es),source-ratchet-selftest.sh [4/6],[5/6],[6/6] · revisão approved (3/3) · batch B20-format-sweep"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:58:22 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings",
+    "line": null,
+    "title": "Key \"done\" is defined twice in all three strings files, with two different pt-BR values (Concluir / Concluido)",
+    "evidence": "Duplicate key; which value shows is ambiguous (raised by Ferreiro, remediation B20)",
+    "fix": "Keep one definition per language (pick the correct pt-BR value) and add duplicate-key detection to the strings ratchet",
+    "impact": "pt-BR button label may show the wrong word",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B20",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-016",
+    "blocks_pr": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/Views/CostFooterView.swift",
+    "line": 283,
+    "title": "Inline String(format:) literals use %d for Swift Int (CostFooterView 283/302, XAIWireTypes 360) outside the strings ratchet",
+    "evidence": "Bounded values today (raised by Jano and Nemesis, remediation B20)",
+    "fix": "Use %ld / %04ld-%02ld and extend the ratchet to String(format:) literals in Sources with a self-test plant",
+    "impact": "Latent 32-bit truncation",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B20",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-017",
     "blocks_pr": false
   },
   {
@@ -8413,14 +8490,26 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B19",
     "domain": "quality",
-    "status": "open",
+    "status": "accepted",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-024",
-    "blocks_pr": false
+    "accept": {
+      "type": "divida-cosmetica",
+      "what": "send -> deliveryFinished -> tracker.{delivered,park,unmark} keep passing (vendor, label, threshold, token) as four separate values.",
+      "consequence": "No behaviour defect today. A future fifth field could be threaded through some call sites and missed at others. The token check (isCurrent) already rejects a mismatched late completion.",
+      "reopen_if": "A field is added to a pending crossing, or any change touches the tracker's unmark/delivered/park signatures",
+      "ratified_by": "user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    },
+    "accepted_at": "2026-09-29 19:58:22 UTC",
+    "progress": [
+      "2026-09-29: aceito (divida-cosmetica) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    ],
+    "blocks_pr": false,
+    "in_progress": false
   },
   {
     "lens": "deps",
@@ -9551,6 +9640,29 @@
       "test_reversal_checked": false
     },
     "in_progress": false
+  },
+  {
+    "lens": "tests",
+    "severity": "INFO",
+    "path": "scripts/check-source-ratchets.sh",
+    "line": 183,
+    "title": "Strings ratchet catches %d/%i only; %u/%o/%x/%X without a 64-bit modifier pass; header says either check; self-test [6/6] checks exit code only; ci.yml comment lists only the older checks",
+    "evidence": "Raised by Nemesis, Higia and Jano, remediation B20",
+    "fix": "Widen to [diouxX], fix the header and ci.yml comments, grep the missing-file message in [6/6]",
+    "impact": "Latent gaps in the gate",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B20",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-012",
+    "blocks_pr": false
   },
   {
     "title": "Two of AppLog seven Logger categories are declared but never logged to",
