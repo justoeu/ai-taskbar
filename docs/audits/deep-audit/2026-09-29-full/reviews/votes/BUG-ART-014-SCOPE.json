@@ -1,0 +1,15 @@
+{
+ "id": "BUG-ART-014",
+ "verdict": "APROVA",
+ "reasoning": "UpdateChecker.swift:171-199 changes the endpoint only for users with include_prereleases=true. The new host is still api.github.com. GitHubRelease.draft is optional (UpdateChecker.swift:434), so decoding /releases/latest still works. The new key updates_no_release is in all 3 Localizable.strings (en/es/pt-BR). README:84/442 and config.example.toml:26 are updated in lockstep. Config schema unchanged.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/UpdateChecker.swift:173",
+  "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:112",
+  "config.example.toml:26",
+  "README.md:84"
+ ],
+ "lens": "SCOPE",
+ "_task": "a38b6233feb4efb01",
+ "batch": "B8-updater"
+}

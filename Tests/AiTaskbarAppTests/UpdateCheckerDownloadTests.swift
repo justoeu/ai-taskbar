@@ -20,6 +20,29 @@ private final class FixedDMGProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+/// Always answers 404 with a body, so URLSession still hands back a
+/// downloaded temp file that `download(_:)` must delete. Immutable.
+private final class NotFoundDMGProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 404,
+                                       httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("Not Found".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+/// URLSession download temp files currently in this process's temp dir.
+/// URLSession names them `CFNetworkDownload_*.tmp`.
+private func urlSessionDownloadTemps() throws -> Set<String> {
+    let names = try FileManager.default.contentsOfDirectory(
+        atPath: FileManager.default.temporaryDirectory.path)
+    return Set(names.filter { $0.hasPrefix("CFNetworkDownload_") })
+}
+
 private struct StubVerifier: DMGVerifying {
     struct Rejected: Error {}
     let accept: Bool
@@ -59,25 +82,27 @@ final class UpdateCheckerDownloadTests {
         UserDefaults(suiteName: defaultsSuite)?.removePersistentDomain(forName: defaultsSuite)
     }
 
-    private func makeChecker(dir: URL, verifier: StubVerifier) -> UpdateChecker {
+    private func makeChecker(dir: URL, verifier: StubVerifier,
+                             serving proto: AnyClass = FixedDMGProtocol.self) -> UpdateChecker {
         let defaults = UserDefaults(suiteName: defaultsSuite)!
         return UpdateChecker(
             config: UpdatesConfig(enabled: true, ownerRepo: "o/r", includePrereleases: false),
             currentVersion: "1.0.0",
-            http: .stubbed(protocols: [FixedDMGProtocol.self]),
+            http: .stubbed(protocols: [proto]),
             userDefaults: defaults,
             downloadsDirectory: dir,
             revealInFinder: { _ in },
             dmgVerifier: verifier)
     }
 
-    private func release(sha: String?) -> UpdateChecker.Release {
+    private func release(sha: String?,
+                         size: Int64 = Int64(FixedDMGProtocol.body.count)) -> UpdateChecker.Release {
         UpdateChecker.Release(
             tag: "v9.9.9",
             htmlURL: URL(string: "https://github.com/o/r/releases/tag/v9.9.9")!,
             prerelease: false, publishedAt: nil,
             dmgURL: URL(string: "https://github.com/o/r/releases/download/v9.9.9/ai-taskbar-9.9.9.dmg")!,
-            dmgSize: Int64(FixedDMGProtocol.body.count),
+            dmgSize: size,
             dmgSHA256: sha)
     }
 
@@ -159,6 +184,49 @@ final class UpdateCheckerDownloadTests {
         expectTrue(isFailed(status))
         expectFalse(FileManager.default.fileExists(atPath: dest(in: dir).path))
     }
+    // LEAK-FAN-004: every failure after URLSession handed back its temp file
+    // must delete that file. Only NEW temp files count (the dir is shared).
+
+    @Test("non-2xx DMG response leaves no URLSession temp file")
+    func http_status_failure_removes_temp() async throws {
+        let before = try urlSessionDownloadTemps()
+        let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true),
+                                  serving: NotFoundDMGProtocol.self)
+        checker.download(release(sha: Self.bodySHA))
+        let status = await settle(checker)
+        expectTrue(isFailed(status))
+        #expect(try urlSessionDownloadTemps().subtracting(before) == [])
+    }
+
+    @Test("size mismatch leaves no URLSession temp file")
+    func size_mismatch_removes_temp() async throws {
+        let before = try urlSessionDownloadTemps()
+        let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true))
+        checker.download(release(sha: Self.bodySHA, size: 1))
+        let status = await settle(checker)
+        expectTrue(isFailed(status))
+        #expect(try urlSessionDownloadTemps().subtracting(before) == [])
+    }
+
+    @Test("checksum mismatch leaves no URLSession temp file")
+    func checksum_mismatch_removes_temp() async throws {
+        let before = try urlSessionDownloadTemps()
+        let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true))
+        checker.download(release(sha: String(repeating: "0", count: 64)))
+        let status = await settle(checker)
+        expectTrue(isFailed(status))
+        #expect(try urlSessionDownloadTemps().subtracting(before) == [])
+    }
+
+    @Test("signature rejection leaves no URLSession temp file")
+    func signature_rejection_removes_temp() async throws {
+        let before = try urlSessionDownloadTemps()
+        let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: false))
+        checker.download(release(sha: Self.bodySHA))
+        let status = await settle(checker)
+        expectTrue(isFailed(status))
+        #expect(try urlSessionDownloadTemps().subtracting(before) == [])
+    }
 }
 
 @Suite("TeamSignatureDMGVerifier")
@@ -219,5 +287,91 @@ struct TeamSignatureDMGVerifierTests {
         #expect(throws: TeamSignatureDMGVerifier.Failure.mountFailed) {
             try TeamSignatureDMGVerifier.mountPoint(fromAttachPlist: empty)
         }
+    }
+}
+
+/// Scripted `hdiutil`: the attach step is replaced by `attach`, every call is
+/// recorded, and detach always succeeds. Only touches the temp root the
+/// verifier itself created.
+private final class FakeHdiutil: @unchecked Sendable {
+    private let lock = NSLock()
+    private var log: [[String]] = []
+    private let attach: @Sendable (_ mountRoot: URL) throws -> Data
+
+    init(attach: @escaping @Sendable (_ mountRoot: URL) throws -> Data) {
+        self.attach = attach
+    }
+
+    var calls: [[String]] { lock.lock(); defer { lock.unlock() }; return log }
+    var detachTargets: [String] { calls.filter { $0.first == "detach" }.map { $0[1] } }
+
+    func run(_ args: [String], _ timeout: TimeInterval) throws -> Data {
+        lock.lock(); log.append(args); lock.unlock()
+        guard args.first == "attach",
+              let i = args.firstIndex(of: "-mountrandom") else { return Data() }
+        return try attach(URL(fileURLWithPath: args[i + 1], isDirectory: true))
+    }
+
+    static func plist(_ entities: [[String: String]]) -> Data {
+        // Fixed-shape test input: serialization of string dictionaries cannot fail.
+        (try? PropertyListSerialization.data(fromPropertyList: ["system-entities": entities],
+                                             format: .xml, options: 0)) ?? Data()
+    }
+}
+
+// BP-MAE-001: an attach that mounted something must always be detached.
+@Suite("TeamSignatureDMGVerifier detach on failure")
+struct TeamSignatureDMGVerifierDetachTests {
+    private let dmg = URL(fileURLWithPath: "/nonexistent/x.dmg")
+
+    @Test("attach plist without a mount point detaches the device it attached")
+    func no_mount_point_detaches_device() {
+        let fake = FakeHdiutil { _ in
+            FakeHdiutil.plist([["dev-entry": "/dev/disk9"], ["dev-entry": "/dev/disk9s1"]])
+        }
+        #expect(throws: TeamSignatureDMGVerifier.Failure.mountFailed) {
+            try TeamSignatureDMGVerifier.verifyBlocking(dmg: dmg, teamID: "5HHL78743R",
+                                                        timeout: 5, run: fake.run)
+        }
+        #expect(fake.detachTargets == ["/dev/disk9"])
+    }
+
+    @Test("attach killed after mounting detaches what it left under the mount root")
+    func timed_out_attach_detaches_leftover_mount() throws {
+        let fake = FakeHdiutil { root in
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent("dmg.AbC123"), withIntermediateDirectories: true)
+            throw TeamSignatureDMGVerifier.Failure.timedOut
+        }
+        #expect(throws: TeamSignatureDMGVerifier.Failure.timedOut) {
+            try TeamSignatureDMGVerifier.verifyBlocking(dmg: dmg, teamID: "5HHL78743R",
+                                                        timeout: 5, run: fake.run)
+        }
+        #expect(fake.detachTargets.map { URL(fileURLWithPath: $0).lastPathComponent } == ["dmg.AbC123"])
+    }
+
+    @Test("attach that failed before mounting anything runs no detach")
+    func failed_attach_without_mount_detaches_nothing() {
+        let fake = FakeHdiutil { _ in throw TeamSignatureDMGVerifier.Failure.hdiutilExited(1) }
+        #expect(throws: TeamSignatureDMGVerifier.Failure.hdiutilExited(1)) {
+            try TeamSignatureDMGVerifier.verifyBlocking(dmg: dmg, teamID: "5HHL78743R",
+                                                        timeout: 5, run: fake.run)
+        }
+        #expect(fake.detachTargets == [])
+    }
+
+    @Test("a mounted image is detached by its mount point after the check")
+    func mounted_image_detached_by_mount_point() throws {
+        let fake = FakeHdiutil { root in
+            let mount = root.appendingPathComponent("dmg.XyZ")
+            try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
+            return FakeHdiutil.plist([["dev-entry": "/dev/disk9"],
+                                      ["dev-entry": "/dev/disk9s1", "mount-point": mount.path]])
+        }
+        #expect(throws: TeamSignatureDMGVerifier.Failure.noSingleApp) {
+            try TeamSignatureDMGVerifier.verifyBlocking(dmg: dmg, teamID: "5HHL78743R",
+                                                        timeout: 5, run: fake.run)
+        }
+        #expect(fake.detachTargets.map { URL(fileURLWithPath: $0).lastPathComponent } == ["dmg.XyZ"])
     }
 }

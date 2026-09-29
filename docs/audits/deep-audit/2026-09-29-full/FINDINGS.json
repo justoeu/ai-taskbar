@@ -891,7 +891,7 @@
     "impact": "Any pin_hosts entry that covers the GitHub release/asset hosts is silently ignored for the update check and DMG download. The composition root security policy does not reach this consumer, and the comment claims it does. Mitigated by size/SHA256 checks when the release provides them.",
     "fix": "Pass http: env.http in AiTaskbarApp.init, or remove the default parameter so omission fails to compile.",
     "test_red_green": {
-      "name": "CompositionRootTests.update_checker_uses_environment_http",
+      "name": "UpdateBannerTests#composition_root_injects_environment_http",
       "assert_before": "Source scan: AiTaskbarApp.swift constructs UpdateChecker without http: FAIL",
       "assert_after": "UpdateChecker.init has no default http; call site passes env.http"
     },
@@ -899,10 +899,41 @@
     "cetico_evidence": "AiTaskbarApp.swift:21 calls UpdateChecker(config:) without http:, so it gets the default HTTPClient() (UpdateChecker.swift:65). env.http is pinned only when pin_hosts is set (AppEnvironment.swift:30-37). The comment at UpdateChecker.swift:243-244 claims the injected pinned client is used. Only matters if a user pins GitHub hosts.",
     "verification": "cetico",
     "domain": "architecture",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/AiTaskbarApp.swift",
     "id": "ARCH-ATL-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "UpdateBannerTests#composition_root_injects_environment_http",
+    "resolved_at": "2026-09-29 15:29:49 UTC",
+    "resolved_note": "batch B8-updater",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:29:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateBannerTests#composition_root_injects_environment_http · revisão approved (3/3) · batch B8-updater"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Atlas",
@@ -1171,14 +1202,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "backpressure",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "TeamSignatureDMGVerifierDetachTests#no_mount_point_detaches_device,#timed_out_attach_detaches_leftover_mount,#failed_attach_without_mount_detaches_nothing,#mounted_image_detached_by_mount_point",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BP-MAE-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "TeamSignatureDMGVerifierDetachTests#no_mount_point_detaches_device,#timed_out_attach_detaches_leftover_mount,#failed_attach_without_mount_detaches_nothing,#mounted_image_detached_by_mount_point",
+    "resolved_at": "2026-09-29 15:29:49 UTC",
+    "resolved_note": "batch B8-updater",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:29:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste TeamSignatureDMGVerifierDetachTests#no_mount_point_detaches_device,#timed_out_attach_detaches_leftover_mount,#failed_attach_without_mount_detaches_nothing,#mounted_image_detached_by_mount_point · revisão approved (3/3) · batch B8-updater"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Represa",
@@ -1245,7 +1307,7 @@
     "impact": "If api.github.com or a githubusercontent asset host is compromised, DNS-hijacked, or proxied maliciously, the JSON/text body has no upper bound before being fully buffered. Runs on a 24 h timer, low-frequency, but still the exact GitHub-releases-API-in-UpdateChecker antipattern with no defense despite sendBounded existing in the same client.",
     "fix": "Use http.sendBounded(req, maximumResponseBytes: 256*1024) for both fetchLatest and fetchChecksum.",
     "test_red_green": {
-      "name": "updateCheckerRejectsOversizedReleaseResponse",
+      "name": "UpdateCheckerFetchTests#oversized_release_json_fails,#oversized_checksums_dropped,#checksums_redirect_to_cdn_followed,#checksums_redirect_off_github_refused,HTTPClientTests#bounded_send_follows_allowed_redirect,#bounded_send_refuses_rejected_redirect",
       "assert_before": "StubURLProtocol returns a 200 MB body for releases/latest; fetchLatest() fully buffers it before decode fails.",
       "assert_after": "fetchLatest()/fetchChecksum() throw a bounded-size transport error once the response exceeds a small cap, without buffering the full body."
     },
@@ -1254,9 +1316,40 @@
     "cetico_evidence": "UpdateChecker.swift:159 and :294 use the unbounded send(). The same reasoning as BP-REP-001 applies: TLS to github.com, a 24 h cadence, defense-in-depth only.",
     "verification": "cetico",
     "domain": "backpressure",
-    "status": "open",
+    "status": "resolved",
     "id": "BP-REP-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "UpdateCheckerFetchTests#oversized_release_json_fails,#oversized_checksums_dropped,#checksums_redirect_to_cdn_followed,#checksums_redirect_off_github_refused,HTTPClientTests#bounded_send_follows_allowed_redirect,#bounded_send_refuses_rejected_redirect",
+    "resolved_at": "2026-09-29 15:29:48 UTC",
+    "resolved_note": "batch B8-updater",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:29:48 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerFetchTests#oversized_release_json_fails,#oversized_checksums_dropped,#checksums_redirect_to_cdn_followed,#checksums_redirect_off_github_refused,HTTPClientTests#bounded_send_follows_allowed_redirect,#bounded_send_refuses_rejected_redirect · revisão approved (3/3) · batch B8-updater"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -1585,7 +1678,7 @@
     "fix": "When the flag is set, query /releases?per_page=10, drop drafts, and pick the max by Semver.",
     "failure_scenario": "v0.24.0-beta1 is published with include_prereleases = true, and the checker still says up to date.",
     "test_red_green": {
-      "name": "prereleaseOptInQueriesReleasesList",
+      "name": "UpdateCheckerFetchTests#prerelease_opt_in_offers_newest_beta,#prerelease_opt_in_path,#prerelease_list_skips_drafts,#stable_beats_own_prerelease_in_list,#empty_release_list_fails,#stable_only_uses_latest",
       "assert_before": "path == /releases/latest",
       "assert_after": "path == /releases, beta offered"
     },
@@ -1593,10 +1686,41 @@
     "cetico_evidence": "UpdateChecker.swift:150 queries only /releases/latest, which GitHub defines as the latest non-draft, non-prerelease release. The includePrereleases branch at L167 therefore never sees raw.prerelease == true and is dead.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
     "id": "BUG-ART-014",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "UpdateCheckerFetchTests#prerelease_opt_in_offers_newest_beta,#prerelease_opt_in_path,#prerelease_list_skips_drafts,#stable_beats_own_prerelease_in_list,#empty_release_list_fails,#stable_only_uses_latest",
+    "resolved_at": "2026-09-29 15:29:48 UTC",
+    "resolved_note": "batch B8-updater",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:29:48 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerFetchTests#prerelease_opt_in_offers_newest_beta,#prerelease_opt_in_path,#prerelease_list_skips_drafts,#stable_beats_own_prerelease_in_list,#empty_release_list_fails,#stable_only_uses_latest · revisão approved (3/3) · batch B8-updater"
+    ],
+    "in_progress": false
   },
   {
     "title": "FileCredentialReader converts a JWT exp date to milliseconds with a trapping Int64(Double) conversion",
@@ -2281,14 +2405,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "duplication",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-MAE-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails",
+    "resolved_at": "2026-09-29 15:29:49 UTC",
+    "resolved_note": "batch B8-updater",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:29:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails · revisão approved (3/3) · batch B8-updater"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Fantasma",
@@ -2440,7 +2595,7 @@
     "impact": "Each failed update attempt leaves a DMG-sized file in the temp dir. User-triggered, so growth is per click.",
     "fix": "`defer { try? FileManager.default.removeItem(at: tmp) }` after download (a no-op once moved), plus cleanup in the HTTPClient.download throw paths.",
     "test_red_green": {
-      "name": "UpdateCheckerTests.checksumMismatchRemovesTempFile",
+      "name": "UpdateCheckerDownloadTests#http_status_failure_removes_temp,#size_mismatch_removes_temp,#checksum_mismatch_removes_temp,#signature_rejection_removes_temp,HTTPClientTests#download_non_http_response_removes_temp",
       "assert_before": "fileExists(tmp) == true after .failed",
       "assert_after": "fileExists(tmp) == false"
     },
@@ -2448,10 +2603,41 @@
     "cetico_evidence": "UpdateChecker.swift:248-263: the throws for non-2xx, size mismatch and checksum mismatch all leave the URLSession download tmp in place, and only the success path moves it (L265). HTTPClient.swift:73-75 drops tmp on its non-HTTP throw too. It is user-triggered and $TMPDIR is purged by the OS eventually, hence LOW.",
     "verification": "cetico",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/UpdateChecker.swift",
     "id": "LEAK-FAN-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "UpdateCheckerDownloadTests#http_status_failure_removes_temp,#size_mismatch_removes_temp,#checksum_mismatch_removes_temp,#signature_rejection_removes_temp,HTTPClientTests#download_non_http_response_removes_temp",
+    "resolved_at": "2026-09-29 15:29:48 UTC",
+    "resolved_note": "batch B8-updater",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:29:48 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste UpdateCheckerDownloadTests#http_status_failure_removes_temp,#size_mismatch_removes_temp,#checksum_mismatch_removes_temp,#signature_rejection_removes_temp,HTTPClientTests#download_non_http_response_removes_temp · revisão approved (3/3) · batch B8-updater"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Fantasma",
@@ -4078,7 +4264,7 @@
     "fix": "Split identifiers on dots and numeric runs, then compare the numeric parts as integers per SemVer section 11.",
     "failure_scenario": "isNewer(v0.24.0-beta10, than: 0.24.0-beta9) returns false.",
     "test_red_green": {
-      "name": "semverNumericPrereleaseOrdering",
+      "name": "SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases",
       "assert_before": "false",
       "assert_after": "true"
     },
@@ -4087,10 +4273,41 @@
     "cetico_evidence": "Semver.swift:24 compares suffixes as Strings, so isNewer(\"0.24.0-beta10\", than: \"0.24.0-beta9\") is false. In production today this is unreachable: fetchLatest uses /releases/latest (UpdateChecker.swift:150), which never returns a prerelease, and release.yml marks every '-' tag as prerelease, so two prerelease versions are never compared. No '-' tags exist. Downgraded to INFO; it becomes LOW as soon as BUG-ART-014 is fixed.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Util/Semver.swift",
     "id": "BUG-ART-012",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases",
+    "resolved_at": "2026-09-29 15:29:49 UTC",
+    "resolved_note": "batch B8-updater",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:29:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste SemverTests#numeric_run_beta10_beats_beta9,#numeric_run_beta9_not_newer,#dotted_numeric_rc10_beats_rc9,+4 precedence cases · revisão approved (3/3) · batch B8-updater"
+    ],
+    "in_progress": false
   },
   {
     "title": "ClaudeSessionScanner.estimate fuses dir-walk, memo, aggregation and note-priority logic in one untested orchestrator",
@@ -4248,14 +4465,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "deps",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DEP-MAE-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)",
+    "resolved_at": "2026-09-29 15:29:49 UTC",
+    "resolved_note": "batch B8-updater",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 15:29:49 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON) · revisão approved (3/3) · batch B8-updater"
+    ],
+    "in_progress": false
   },
   {
     "title": "safeSourceURL host/scheme validation duplicated between RSSStatusSource and StatuspageSource with different scheme-recovery behavior",

@@ -1,0 +1,19 @@
+{
+ "batch": "B8-updater-r2",
+ "results": [
+  {
+   "id": "BP-REP-003",
+   "outcome": "fixed",
+   "tests": [
+    "UpdateCheckerFetchTests#oversized_release_json_fails",
+    "#oversized_checksums_dropped",
+    "#checksums_redirect_to_cdn_followed",
+    "#checksums_redirect_off_github_refused",
+    "HTTPClientTests#bounded_send_follows_allowed_redirect",
+    "#bounded_send_refuses_rejected_redirect"
+   ],
+   "red": "Expectation failed: failed(status \u2192 .updateAvailable(... tag: \"v9.9.9\" ...))",
+   "reversal": "ok"
+  }
+ ]
+}

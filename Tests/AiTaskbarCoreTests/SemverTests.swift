@@ -52,4 +52,40 @@ struct SemverTests {
         // Equal at the numeric level — neither newer.
         #expect(!Semver.isNewer("v0.x.0", than: "v0.0.0"))
     }
+
+    // BUG-ART-012: SemVer 2.0 section 11 prerelease precedence.
+    @Test("numeric run in a prerelease compares as an integer (beta10 > beta9)")
+    func numeric_run_beta10_beats_beta9() {
+        #expect(Semver.isNewer("v0.24.0-beta10", than: "v0.24.0-beta9"))
+    }
+
+    @Test("beta9 is not newer than beta10")
+    func numeric_run_beta9_not_newer() {
+        #expect(!Semver.isNewer("v0.24.0-beta9", than: "v0.24.0-beta10"))
+    }
+
+    @Test("dot-separated numeric identifier compares as an integer (rc.10 > rc.9)")
+    func dotted_numeric_rc10_beats_rc9() {
+        #expect(Semver.isNewer("1.0.0-rc.10", than: "1.0.0-rc.9"))
+    }
+
+    @Test("a larger set of identifiers wins when all preceding ones are equal")
+    func longer_identifier_list_wins() {
+        #expect(Semver.isNewer("1.0.0-alpha.1", than: "1.0.0-alpha"))
+    }
+
+    @Test("numeric identifiers have lower precedence than alphanumeric ones")
+    func numeric_below_alphanumeric() {
+        #expect(Semver.isNewer("1.0.0-alpha", than: "1.0.0-1"))
+    }
+
+    @Test("alphanumeric identifiers compare in ASCII order")
+    func alphanumeric_ascii_order() {
+        #expect(Semver.isNewer("1.0.0-beta", than: "1.0.0-alpha.beta"))
+    }
+
+    @Test("equal multi-digit prerelease is not newer")
+    func equal_multi_digit_not_newer() {
+        #expect(!Semver.isNewer("v0.24.0-beta10", than: "v0.24.0-beta10"))
+    }
 }

@@ -50,6 +50,12 @@ public final class UpdateChecker: ObservableObject {
         "github-releases.githubusercontent.com",
     ]
 
+    /// Caps on the buffered GitHub responses (BP-REP-003). A release object
+    /// is a few KiB and a `per_page=20` list well under 1 MiB; the checksums
+    /// file is two lines. The DMG itself streams to disk via `download`.
+    nonisolated internal static let maxReleaseResponseBytes = 2 * 1024 * 1024
+    nonisolated internal static let maxChecksumsResponseBytes = 64 * 1024
+
     nonisolated public static let cadenceInterval: TimeInterval = 86_400 // 24 hours
     nonisolated public static let lastCheckKey: String = "ai_taskbar_last_update_check_at"
     nonisolated public static let dismissedTagKey: String = "ai_taskbar_dismissed_update_tag"
@@ -66,9 +72,11 @@ public final class UpdateChecker: ObservableObject {
     private let revealInFinder: @MainActor (URL) -> Void
     private let dmgVerifier: any DMGVerifying
 
+    /// `http` has no default on purpose: the composition root must pass
+    /// `env.http`, the pinned client when `pin_hosts` is set (ARCH-ATL-004).
     public init(config: UpdatesConfig,
                 currentVersion: String? = nil,
-                http: HTTPClient = .init(),
+                http: HTTPClient,
                 userDefaults: UserDefaults = .standard,
                 downloadsDirectory: URL? = nil,
                 revealInFinder: @escaping @MainActor (URL) -> Void = {
@@ -160,7 +168,10 @@ public final class UpdateChecker: ObservableObject {
     }
 
     private func fetchLatest() async throws -> Release {
-        let endpoint = "https://api.github.com/repos/\(config.ownerRepo)/releases/latest"
+        // /releases/latest never returns a prerelease, so the opt-in has to
+        // read the list and pick the newest non-draft itself (BUG-ART-014).
+        let path = config.includePrereleases ? "releases?per_page=20" : "releases/latest"
+        let endpoint = "https://api.github.com/repos/\(config.ownerRepo)/\(path)"
         guard let url = URL(string: endpoint) else {
             throw AppError.other(L10n.localizedString("updates_bad_repo"))
         }
@@ -169,13 +180,23 @@ public final class UpdateChecker: ObservableObject {
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("ai-taskbar/\(currentVersion)", forHTTPHeaderField: "User-Agent")
 
-        let (data, response) = try await http.send(req)
+        let (data, response) = try await http.sendBounded(
+            req, maximumResponseBytes: Self.maxReleaseResponseBytes)
         guard (200..<300).contains(response.statusCode) else {
             throw AppError.http(status: response.statusCode,
                                 body: String(data: data.prefix(512), encoding: .utf8) ?? "")
         }
         do {
-            let raw = try SharedCoders.decoder.decode(GitHubRelease.self, from: data)
+            let raw: GitHubRelease
+            if config.includePrereleases {
+                let list = try SharedCoders.decoder.decode([GitHubRelease].self, from: data)
+                guard let newest = Self.newestPublished(list) else {
+                    throw AppError.other(L10n.localizedString("updates_no_release"))
+                }
+                raw = newest
+            } else {
+                raw = try SharedCoders.decoder.decode(GitHubRelease.self, from: data)
+            }
             // Skip if it's a pre-release and config says to ignore them.
             if raw.prerelease && !config.includePrereleases {
                 throw AppError.other(L10n.localizedString("updates_no_stable"))
@@ -217,6 +238,15 @@ public final class UpdateChecker: ObservableObject {
             throw appErr
         } catch {
             throw AppError.schema("decode GitHub release: \(error)")
+        }
+    }
+
+    /// Newest non-draft release by SemVer precedence, so a stable 1.2.0
+    /// beats its own 1.2.0-beta10 regardless of the list's order.
+    private static func newestPublished(_ list: [GitHubRelease]) -> GitHubRelease? {
+        list.filter { $0.draft != true }.reduce(nil) { best, next in
+            guard let best else { return next }
+            return Semver.isNewer(next.tag_name, than: best.tag_name) ? next : best
         }
     }
 
@@ -352,7 +382,11 @@ public final class UpdateChecker: ObservableObject {
         var req = URLRequest(url: url)
         req.timeoutInterval = 15
         req.setValue("ai-taskbar/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await http.send(req)
+        // The asset URL redirects to GitHub's CDN: follow only allow-listed
+        // HTTPS hosts, never an arbitrary Location.
+        let (data, response) = try await http.sendBounded(
+            req, maximumResponseBytes: Self.maxChecksumsResponseBytes,
+            allowRedirect: { Self.isAllowedDownloadURL($0) })
         guard (200..<300).contains(response.statusCode),
               let text = String(data: data, encoding: .utf8) else { return nil }
         // Lines: "<sha256>  <filename>" or "<sha256> *filename"
@@ -396,6 +430,8 @@ private struct GitHubRelease: Decodable {
     let tag_name: String
     let html_url: String
     let prerelease: Bool
+    /// Only present in list responses; `/releases/latest` never has drafts.
+    let draft: Bool?
     let published_at: String?
     let assets: [Asset]
     struct Asset: Decodable {

@@ -23,7 +23,7 @@ notify_at = [90, 100]   # percent thresholds that trigger a notification
 # override owner_repo to your fork to receive your own releases.
 # enabled = true
 # owner_repo = "justoeu/ai-taskbar"
-# include_prereleases = false           # set true to consider beta/rc tags too
+# include_prereleases = false           # true: read the release list and offer the newest beta/rc too
 
 [security]
 # TLS pinning (SPKI hash, Trust-On-First-Use). Empty list = no pinning.

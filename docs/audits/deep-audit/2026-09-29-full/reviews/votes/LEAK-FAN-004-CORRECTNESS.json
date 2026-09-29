@@ -1,0 +1,13 @@
+{
+ "id": "LEAK-FAN-004",
+ "verdict": "APROVA",
+ "reasoning": "Both leak paths are closed. In HTTPClient.swift:82-93 the temp file is now deleted on every throw after session.download returns, including the non-HTTP-response case and cancellation. In UpdateChecker.swift the download() method tracks `pending`, which covers the non-2xx, size-mismatch, checksum-mismatch, signature-rejected, moveItem-failed and quarantine-failed (dest) paths. Reversal: I replaced both removeItem calls with no-ops and 5 tests went RED (non-2xx, size, checksum and signature at UpdateCheckerDownloadTests.swift:198/208/218/228, plus 'download rejecting a non-HTTP response deletes the temp file'). After restoring the originals, the working tree matched the saved diff byte for byte.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:82",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:350"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a23e227af52b8a296",
+ "batch": "B8-updater"
+}

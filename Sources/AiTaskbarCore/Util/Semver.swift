@@ -6,7 +6,13 @@ import Foundation
 ///
 /// Convention: stable release > prerelease of the same base
 ///   v0.2.0       > v0.2.0-beta1
-///   v0.2.0-beta2 > v0.2.0-beta1   (lexicographic on the suffix)
+///   v0.2.0-beta2 > v0.2.0-beta1
+///
+/// Prerelease suffixes follow SemVer 2.0 section 11 precedence: split on
+/// dots, compare numeric identifiers as integers, alphanumeric ones in ASCII
+/// order, numeric below alphanumeric, and a longer list wins a tie. A
+/// trailing digit run is also split off (`beta10` -> `beta`, `10`) so the
+/// dotless tags this repo uses order numerically: beta10 > beta9.
 public enum Semver {
     /// True when `a` represents a strictly newer version than `b`.
     public static func isNewer(_ a: String, than b: String) -> Bool {
@@ -21,8 +27,43 @@ public enum Semver {
         case (nil, nil):       return false
         case (nil, _):         return true
         case (_, nil):         return false
-        case let (sa?, sb?):   return sa > sb
+        case let (sa?, sb?):   return comparePrerelease(sa, sb) == .orderedDescending
         }
+    }
+
+    private enum Identifier {
+        case numeric(Int)
+        case alpha(String)
+    }
+
+    private static func identifiers(_ suffix: String) -> [Identifier] {
+        suffix.split(separator: ".", omittingEmptySubsequences: false).flatMap { part -> [Identifier] in
+            let s = String(part)
+            if let n = Int(s) { return [.numeric(n)] }
+            let digits = s.reversed().prefix(while: \.isASCII).prefix(while: \.isNumber).count
+            if digits > 0, digits < s.count, let n = Int(s.suffix(digits)) {
+                return [.alpha(String(s.dropLast(digits))), .numeric(n)]
+            }
+            return [.alpha(s)]
+        }
+    }
+
+    private static func comparePrerelease(_ a: String, _ b: String) -> ComparisonResult {
+        let ia = identifiers(a)
+        let ib = identifiers(b)
+        for (x, y) in zip(ia, ib) {
+            switch (x, y) {
+            case let (.numeric(m), .numeric(n)) where m != n:
+                return m < n ? .orderedAscending : .orderedDescending
+            case let (.alpha(m), .alpha(n)) where m != n:
+                return m < n ? .orderedAscending : .orderedDescending
+            case (.numeric, .alpha): return .orderedAscending
+            case (.alpha, .numeric): return .orderedDescending
+            default: continue
+            }
+        }
+        if ia.count == ib.count { return .orderedSame }
+        return ia.count < ib.count ? .orderedAscending : .orderedDescending
     }
 
     private struct Parsed {

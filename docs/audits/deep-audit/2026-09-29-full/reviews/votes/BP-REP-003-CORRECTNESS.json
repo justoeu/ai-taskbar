@@ -1,0 +1,21 @@
+{
+ "id": "BP-REP-003",
+ "verdict": "APROVA",
+ "reasoning": "Since round 1 the diff changed in three ways, and none of them changes behavior. (1) SameOriginRedirectDelegate is now BoundedRedirectDelegate, with the same body and one new doc line (HTTPClient.swift:222, used at :153). (2) The Makefile publish lines call $(GH), and GH ?= gh is at Makefile:352, so the default still runs gh. (3) DMGVerifier.wholeDiskDevices now binds a local `suffix`; the predicate is the same as before. The working-tree diff is byte-identical to B8-updater-r2.diff. The fix itself is unchanged: fetchLatest calls sendBounded with maxReleaseResponseBytes (UpdateChecker.swift:183-184), and fetchChecksum calls sendBounded with maxChecksumsResponseBytes plus the isAllowedDownloadURL predicate (UpdateChecker.swift:387-389). The delegate still requires https on both ends and rejects userinfo; the allow predicate takes the place of the same-origin check (HTTPClient.swift:250-255). I ran the filter HTTPClient|UpdateChecker|TeamSignatureDMGVerifier and got 58 tests in 7 suites, all passing. Reversal 1: I set the caps at the call sites to Int.max/2 and removed the redirect predicate. Three tests went RED: 'releases API body over the cap' (UpdateCheckerFetchTests.swift:142), 'checksums body over the cap' (:155) and 'checksums redirected to GitHub's asset CDN' (:168). Reversal 2: I replaced the delegate check `allow?(url) ?? sameOrigin(url)` with `true`. Three tests went RED: 'checksums redirected off GitHub are refused' (:180-181, where the hostile URL was actually requested), 'bounded send refuses a cross-origin redirect' (HTTPClientTests.swift:227) and 'refuses a redirect the caller's predicate rejects' (:259). I restored both files, confirmed the diff matches the saved one again, and the suite is green. The round-1 note still applies and is not a vote: isAllowedDownloadURL does not check the port.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:153",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:222",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:253",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:183",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:387",
+  "Makefile:352",
+  "Tests/AiTaskbarAppTests/UpdateCheckerFetchTests.swift:142",
+  "Tests/AiTaskbarAppTests/UpdateCheckerFetchTests.swift:180",
+  "Tests/AiTaskbarCoreTests/HTTPClientTests.swift:227"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "a77c8cdf639b7368f",
+ "batch": "B8-updater-r2"
+}

@@ -33,13 +33,10 @@ final class CodexResetProcess: CodexResetRPC {
     }
 
     static func trustedExecutable(_ url: URL) -> Bool {
-        var code: SecStaticCode?
-        var requirement: SecRequirement?
         let rule = "anchor apple generic and identifier codex and certificate leaf[subject.OU] = \"2DC432GLL2\""
-        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess,
-              SecRequirementCreateWithString(rule as CFString, [], &requirement) == errSecSuccess,
-              let code, let requirement else { return false }
-        return SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures), requirement) == errSecSuccess
+        return CodeSignatureInfo.checkRequirement(
+            of: url, requirement: rule,
+            flags: SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures)) == errSecSuccess
     }
 
     init(executable: URL? = CodexResetProcess.executable,

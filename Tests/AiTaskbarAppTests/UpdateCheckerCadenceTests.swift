@@ -3,6 +3,17 @@ import Testing
 import AiTaskbarCore
 @testable import AiTaskbarApp
 
+/// Fails every request at once, so a check started by these tests never
+/// reaches the real network. Immutable, safe without `.serialized`.
+private final class OfflineProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+    }
+    override func stopLoading() {}
+}
+
 @Suite("UpdateChecker Cadence and Banner Visibility Tests")
 struct UpdateCheckerCadenceTests {
     private func makeSuiteDefaults() -> UserDefaults {
@@ -22,7 +33,9 @@ struct UpdateCheckerCadenceTests {
     func check_if_needed_when_never_checked() {
         let defaults = makeSuiteDefaults()
         let config = UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false)
-        let checker = UpdateChecker(config: config, currentVersion: "1.0.0", userDefaults: defaults)
+        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
+                                    http: .stubbed(protocols: [OfflineProtocol.self]),
+                                    userDefaults: defaults)
 
         #expect(checker.lastCheckDate == nil)
         #expect(checker.status == .idle)
@@ -39,7 +52,9 @@ struct UpdateCheckerCadenceTests {
         defaults.set(now.timeIntervalSince1970, forKey: UpdateChecker.lastCheckKey)
 
         let config = UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false)
-        let checker = UpdateChecker(config: config, currentVersion: "1.0.0", userDefaults: defaults)
+        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
+                                    http: .stubbed(protocols: [OfflineProtocol.self]),
+                                    userDefaults: defaults)
 
         #expect(checker.lastCheckDate != nil)
         checker.checkIfNeeded(force: false)
@@ -54,7 +69,9 @@ struct UpdateCheckerCadenceTests {
         defaults.set(oldTime.timeIntervalSince1970, forKey: UpdateChecker.lastCheckKey)
 
         let config = UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false)
-        let checker = UpdateChecker(config: config, currentVersion: "1.0.0", userDefaults: defaults)
+        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
+                                    http: .stubbed(protocols: [OfflineProtocol.self]),
+                                    userDefaults: defaults)
 
         checker.checkIfNeeded(force: false)
         #expect(checker.status == .checking)
@@ -68,7 +85,9 @@ struct UpdateCheckerCadenceTests {
         defaults.set(now.timeIntervalSince1970, forKey: UpdateChecker.lastCheckKey)
 
         let config = UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false)
-        let checker = UpdateChecker(config: config, currentVersion: "1.0.0", userDefaults: defaults)
+        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
+                                    http: .stubbed(protocols: [OfflineProtocol.self]),
+                                    userDefaults: defaults)
 
         checker.checkIfNeeded(force: true)
         #expect(checker.status == .checking)
@@ -79,7 +98,9 @@ struct UpdateCheckerCadenceTests {
     func banner_visibility_and_dismiss() {
         let defaults = makeSuiteDefaults()
         let config = UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false)
-        let checker = UpdateChecker(config: config, currentVersion: "1.0.0", userDefaults: defaults)
+        let checker = UpdateChecker(config: config, currentVersion: "1.0.0",
+                                    http: .stubbed(protocols: [OfflineProtocol.self]),
+                                    userDefaults: defaults)
 
         #expect(!checker.isUpdateBannerVisible)
 

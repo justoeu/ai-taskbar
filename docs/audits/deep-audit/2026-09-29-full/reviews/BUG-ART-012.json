@@ -1,0 +1,57 @@
+{
+  "id": "BUG-ART-012",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 15:29:49 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Semver.swift:30 now calls comparePrerelease, which follows SemVer 2.0 section 11 rules: identifiers are split on dots, numeric ones compare as integers, numeric sorts below alphanumeric, and a longer list wins a tie. A trailing digit run is also split off, so beta10 > beta9. Reversal: restoring `sa > sb` made the beta10>beta9, beta9-not-newer and rc.10>rc.9 tests RED.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/Semver.swift:30"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Semver.swift:34-67 replaces `sa > sb` with a SemVer 2.0 §11 comparator plus the documented trailing-digit split for this repo's dotless tags. Both helpers are private. The loop is one level deep with a switch, and each function is under 20 lines. The header doc was updated, so it no longer says 'lexicographic'. A digit run that overflows Int falls back to an alphanumeric identifier instead of crashing.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/Semver.swift:34"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Util/Semver.swift:30-67 changes only the prerelease comparison. The public isNewer API is unchanged. The effect on consumers (UpdateChecker isNewer/newestPublished) is intended and documented in CLAUDE.md/AGENTS.md.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/Semver.swift:30"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

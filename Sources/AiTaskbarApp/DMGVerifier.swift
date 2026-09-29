@@ -39,6 +39,10 @@ public struct TeamSignatureDMGVerifier: DMGVerifying {
     public let timeout: TimeInterval
     private static let hdiutil = URL(fileURLWithPath: "/usr/bin/hdiutil")
 
+    /// Runs `hdiutil` with (arguments, timeout) and returns stdout. A seam so
+    /// tests can script attach/detach outcomes without mounting anything.
+    typealias HdiutilRunner = @Sendable ([String], TimeInterval) throws -> Data
+
     public init(teamID: String? = CodeSignatureInfo.currentTeamID(), timeout: TimeInterval = 60) {
         self.teamID = teamID
         self.timeout = timeout
@@ -62,24 +66,33 @@ public struct TeamSignatureDMGVerifier: DMGVerifying {
         s.count == 10 && s.unicodeScalars.allSatisfy { ("A"..."Z").contains($0) || ("0"..."9").contains($0) }
     }
 
-    private static func verifyBlocking(dmg: URL, teamID: String, timeout: TimeInterval) throws {
+    static func verifyBlocking(dmg: URL, teamID: String, timeout: TimeInterval,
+                               run: HdiutilRunner = runHdiutil) throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ai-taskbar-verify-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) } // best-effort: empty after detach
-        let plist = try runHdiutil(["attach", "-nobrowse", "-readonly", "-noautoopen",
-                                    "-mountrandom", root.path, "-plist", dmg.path],
-                                   timeout: timeout)
-        let mountPoint = try mountPoint(fromAttachPlist: plist)
-        defer {
-            do {
-                _ = try runHdiutil(["detach", mountPoint, "-force"], timeout: 30)
-            } catch let failure as Failure {
-                AppLog.updates.error("\(String(describing: Failure.detachFailed(failure)), privacy: .public)")
-            } catch {
-                AppLog.updates.error("hdiutil detach failed: \(String(describing: error), privacy: .public)")
-            }
+        // Every exit after an attach attempt detaches whatever it mounted
+        // (BP-MAE-001), not only the happy path with a parsed mount point.
+        let plist: Data
+        do {
+            plist = try run(["attach", "-nobrowse", "-readonly", "-noautoopen",
+                             "-mountrandom", root.path, "-plist", dmg.path],
+                            timeout)
+        } catch {
+            // A kill after mounting leaves the volume under the random root.
+            detach(leftoverMounts(under: root), run: run)
+            throw error
         }
+        let mountPoint: String
+        do {
+            mountPoint = try Self.mountPoint(fromAttachPlist: plist)
+        } catch {
+            let devices = wholeDiskDevices(fromAttachPlist: plist)
+            detach(devices.isEmpty ? leftoverMounts(under: root) : devices, run: run)
+            throw error
+        }
+        defer { detach([mountPoint], run: run) }
         let apps = try FileManager.default.contentsOfDirectory(atPath: mountPoint)
             .filter { $0.hasSuffix(".app") }
         guard apps.count == 1 else { throw Failure.noSingleApp }
@@ -88,17 +101,51 @@ public struct TeamSignatureDMGVerifier: DMGVerifying {
     }
 
     static func checkSignature(of app: URL, teamID: String) throws {
-        var code: SecStaticCode?
-        var status = SecStaticCodeCreateWithPath(app as CFURL, [], &code)
-        guard status == errSecSuccess, let code else { throw Failure.signatureRejected(status) }
-        var requirement: SecRequirement?
         let text = "anchor apple generic and certificate leaf[subject.OU] = \"\(teamID)\""
-        status = SecRequirementCreateWithString(text as CFString, [], &requirement)
-        guard status == errSecSuccess, let requirement else { throw Failure.signatureRejected(status) }
         let flags = SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures
                                | kSecCSCheckNestedCode)
-        status = SecStaticCodeCheckValidity(code, flags, requirement)
+        let status = CodeSignatureInfo.checkRequirement(of: app, requirement: text, flags: flags)
         guard status == errSecSuccess else { throw Failure.signatureRejected(status) }
+    }
+
+    /// Force-detaches each target (mount point or device node). Logged only:
+    /// by then the verdict is already decided.
+    private static func detach(_ targets: [String], run: HdiutilRunner) {
+        for target in targets {
+            do {
+                _ = try run(["detach", target, "-force"], 30)
+            } catch let failure as Failure {
+                AppLog.updates.error("\(String(describing: Failure.detachFailed(failure)), privacy: .public)")
+            } catch {
+                AppLog.updates.error("hdiutil detach failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// Volumes `-mountrandom` created under our private root.
+    private static func leftoverMounts(under root: URL) -> [String] {
+        do {
+            return try FileManager.default.contentsOfDirectory(atPath: root.path)
+                .map { root.appendingPathComponent($0).path }
+        } catch {
+            AppLog.updates.error("listing DMG mount root failed: \(String(describing: error), privacy: .public)")
+            return []
+        }
+    }
+
+    /// Whole-disk device nodes (`/dev/diskN`) the attach reported; detaching
+    /// one also detaches its partitions. Falls back to every reported node.
+    static func wholeDiskDevices(fromAttachPlist data: Data) -> [String] {
+        guard let root = try? PropertyListSerialization.propertyList(from: data, format: nil), // unparseable = none
+              let dict = root as? [String: Any],
+              let entities = dict["system-entities"] as? [[String: Any]]
+        else { return [] }
+        let devices = entities.compactMap { $0["dev-entry"] as? String }
+        let whole = devices.filter { dev in
+            let suffix = dev.dropFirst("/dev/disk".count)
+            return dev.hasPrefix("/dev/disk") && !suffix.isEmpty && suffix.allSatisfy(\.isNumber)
+        }
+        return whole.isEmpty ? devices : whole
     }
 
     static func mountPoint(fromAttachPlist data: Data) throws -> String {
@@ -110,7 +157,7 @@ public struct TeamSignatureDMGVerifier: DMGVerifying {
         return mount
     }
 
-    private static func runHdiutil(_ args: [String], timeout: TimeInterval) throws -> Data {
+    static func runHdiutil(_ args: [String], timeout: TimeInterval) throws -> Data {
         let outcome: BoundedProcess.Outcome
         do {
             outcome = try BoundedProcess.run(executable: hdiutil, arguments: args, timeout: timeout)

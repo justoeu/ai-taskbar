@@ -1,0 +1,61 @@
+{
+  "id": "ARCH-ATL-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 15:29:49 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "AiTaskbarApp.swift:21 now passes env.http. UpdateChecker.init no longer defaults `http`, so any new construction that forgets it fails to compile. That compile error is the structural guarantee; the source-grep test in UpdateBannerTests is only an extra check. It is the only UpdateChecker( call site in Sources.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/AiTaskbarApp.swift:21",
+        "Sources/AiTaskbarApp/UpdateChecker.swift:79"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "UpdateChecker.swift:77-79 removes the `= .init()` default from `http`, which turns the pinned-client rule into a compile error. The doc comment explains why there is no default. AiTaskbarApp.swift:21 passes env.http. This enforces the rule in the type system rather than in a comment.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/UpdateChecker.swift:77",
+        "Sources/AiTaskbarApp/AiTaskbarApp.swift:21"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "UpdateChecker.init loses the http default (UpdateChecker.swift:79). The only production caller, AiTaskbarApp.swift:21, now passes env.http, and the tests were updated. There is no hidden cost: HTTPClient.pinned (HTTPClient.swift:50-56) uses the same timeouts as sharedEphemeral (10s request / 30s resource), and hosts outside pin_hosts fall back to system trust, so the updater's DMG download keeps the same limits when pinning is active.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/UpdateChecker.swift:79",
+        "Sources/AiTaskbarApp/AiTaskbarApp.swift:21",
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:50"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

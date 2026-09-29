@@ -1,0 +1,14 @@
+{
+ "id": "ARCH-ATL-004",
+ "verdict": "APROVA",
+ "reasoning": "UpdateChecker.init loses the http default (UpdateChecker.swift:79). The only production caller, AiTaskbarApp.swift:21, now passes env.http, and the tests were updated. There is no hidden cost: HTTPClient.pinned (HTTPClient.swift:50-56) uses the same timeouts as sharedEphemeral (10s request / 30s resource), and hosts outside pin_hosts fall back to system trust, so the updater's DMG download keeps the same limits when pinning is active.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/UpdateChecker.swift:79",
+  "Sources/AiTaskbarApp/AiTaskbarApp.swift:21",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:50"
+ ],
+ "lens": "SCOPE",
+ "_task": "a38b6233feb4efb01",
+ "batch": "B8-updater"
+}

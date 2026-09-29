@@ -109,6 +109,7 @@
 "updates_disabled" = "Update checks are disabled in config (`[updates] enabled = false`).";
 "updates_bad_repo" = "Set `[updates] owner_repo = \"yourname/ai-taskbar\"` in config to enable.";
 "updates_no_stable" = "Only a pre-release is published; set `include_prereleases = true` to consider it.";
+"updates_no_release" = "No published release was found for this repository.";
 "updates_no_asset" = "Release exists but no .dmg asset attached.";
 "updates_no_checksum" = "Release has no checksum for this .dmg, so it cannot be verified. Download it from the release page instead.";
 "updates_signature_invalid" = "The downloaded app is not signed by the same developer as this one. The download was deleted.";

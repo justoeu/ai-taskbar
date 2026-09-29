@@ -1,0 +1,61 @@
+{
+  "id": "DUP-MAE-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 15:29:49 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "CodeSignatureInfo.checkRequirement (CodeSignatureInfo.swift:83-92) makes the same calls as before: SecStaticCodeCreateWithPath with [], SecRequirementCreateWithString with [], then SecStaticCodeCheckValidity. CodexResetProcess.swift:36-39 keeps the same rule text: anchor apple generic, identifier codex, and leaf OU 2DC432GLL2. It also keeps the same strict flags (kSecCSStrictValidate | kSecCSCheckAllArchitectures) and the same == errSecSuccess check, so its semantics are identical. The DMG check keeps kSecCSCheckNestedCode and still throws signatureRejected(status). This is a refactor, so no reversal applies. The filtered tests (CodeSignatureInfo, TeamSignatureDMGVerifier, CodexReset) are green.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/CodeSignatureInfo.swift:83",
+        "Sources/AiTaskbarApp/CodexResetProcess.swift:36"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "CodeSignatureInfo.checkRequirement (CodeSignatureInfo.swift:78-92) is now the only place that builds SecStaticCode and SecRequirement. grep finds no remaining SecStaticCodeCreateWithPath or SecRequirementCreateWithString outside it. Both former clones (CodexResetProcess.swift:35, DMGVerifier.swift:103) call it, and each keeps its own requirement string and flags. The helper returns the first failing OSStatus instead of a Bool, so DMGVerifier still reports the status in signatureRejected. It lives in Core, which has tests (CodeSignatureInfoTests), so the coverage gate is respected.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/CodeSignatureInfo.swift:78",
+        "Sources/AiTaskbarApp/CodexResetProcess.swift:35",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:103"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "New public CodeSignatureInfo.checkRequirement (CodeSignatureInfo.swift:83) with tests in CodeSignatureInfoTests. The two duplicated call sites (DMGVerifier.checkSignature:103 and CodexResetProcess.trustedExecutable:35) are migrated, so the CodexResetProcess.swift change links to this finding. The requirement strings and flags are kept exactly as they were.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Util/CodeSignatureInfo.swift:83",
+        "Sources/AiTaskbarApp/CodexResetProcess.swift:35"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

@@ -1,0 +1,13 @@
+{
+ "id": "DEP-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "publish runs `$(MAKE) release-assets-check` (Makefile:342) after the upload and before `--draft=false`. I ran the target read-only with GH pointed at a fake: all three assets gave exit 0 (the normal path); a missing checksums file gave exit 2 with the '✗ ... no checksums-9.9.9.txt' message; and GH=false gave exit 2 ('could not list assets'). grep -qxF matches whole lines, so a look-alike name does not pass. I did not run publish.",
+ "required_changes": [],
+ "cited_paths": [
+  "Makefile:342",
+  "Makefile:354"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a23e227af52b8a296",
+ "batch": "B8-updater"
+}

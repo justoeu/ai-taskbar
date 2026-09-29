@@ -108,6 +108,7 @@
 "updates_disabled" = "A verificação está desativada no config (`[updates] enabled = false`).";
 "updates_bad_repo" = "Defina `[updates] owner_repo = \"seuuser/ai-taskbar\"` no config para ativar.";
 "updates_no_stable" = "Só há um pre-release; defina `include_prereleases = true` para considerá-lo.";
+"updates_no_release" = "Nenhuma versão publicada foi encontrada para este repositório.";
 "updates_no_asset" = "A versão existe mas não tem nenhum .dmg anexado.";
 "updates_no_checksum" = "A versão não tem checksum para este .dmg, então ele não pode ser verificado. Baixe pela página da versão.";
 "updates_signature_invalid" = "O app baixado não é assinado pelo mesmo desenvolvedor deste. O download foi apagado.";

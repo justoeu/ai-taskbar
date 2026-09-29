@@ -228,4 +228,73 @@ struct HTTPClientTests {
         #expect(StubURLProtocol.captured[0].url?.host == "example.com")
         StubURLProtocol.reset()
     }
+
+    @Test("bounded send follows a cross-origin redirect the caller allows")
+    func bounded_send_follows_allowed_redirect() async throws {
+        let cdn = URL(string: "https://cdn.example/file")!
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "cdn.example" { return .init(data: Data("ok".utf8)) }
+            return .init(status: 302, data: Data(), redirectURL: cdn)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let (data, _) = try await http.sendBounded(
+            URLRequest(url: URL(string: "https://example.com/file")!),
+            maximumResponseBytes: 64,
+            allowRedirect: { $0.host == "cdn.example" })
+        #expect(data == Data("ok".utf8))
+        StubURLProtocol.reset()
+    }
+
+    @Test("bounded send refuses a redirect the caller's predicate rejects")
+    func bounded_send_refuses_rejected_redirect() async {
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "attacker.example" {
+                Issue.record("redirect target must never be requested")
+                return .init(data: Data("leaked".utf8))
+            }
+            return .init(status: 302, data: Data(),
+                         redirectURL: URL(string: "https://attacker.example/x")!)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        await #expect(throws: AppError.self) {
+            _ = try await http.sendBounded(
+                URLRequest(url: URL(string: "https://example.com/file")!),
+                maximumResponseBytes: 64,
+                allowRedirect: { $0.host == "cdn.example" })
+        }
+        StubURLProtocol.reset()
+    }
+
+    // LEAK-FAN-004: a download whose response is rejected after URLSession
+    // already wrote the body must not leave that temp file behind.
+    @Test("download rejecting a non-HTTP response deletes the temp file")
+    func download_non_http_response_removes_temp() async throws {
+        let before = try urlSessionDownloadTemps()
+        let http = HTTPClient.stubbed(protocols: [NonHTTPResponseProtocol.self])
+        await #expect(throws: AppError.transport("non-HTTP download response")) {
+            _ = try await http.download(URLRequest(url: URL(string: "https://example.com/a.dmg")!))
+        }
+        #expect(try urlSessionDownloadTemps().subtracting(before) == [])
+    }
+}
+
+/// Answers with a plain `URLResponse` (not HTTP) and a body. Immutable.
+private final class NonHTTPResponseProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = URLResponse(url: request.url!, mimeType: nil,
+                                   expectedContentLength: 4, textEncodingName: nil)
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("body".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+/// URLSession names its download temp files `CFNetworkDownload_*.tmp`.
+private func urlSessionDownloadTemps() throws -> Set<String> {
+    let names = try FileManager.default.contentsOfDirectory(
+        atPath: FileManager.default.temporaryDirectory.path)
+    return Set(names.filter { $0.hasPrefix("CFNetworkDownload_") })
 }

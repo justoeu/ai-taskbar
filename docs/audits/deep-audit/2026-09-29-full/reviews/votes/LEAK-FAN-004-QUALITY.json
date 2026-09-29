@@ -1,0 +1,12 @@
+{
+ "id": "LEAK-FAN-004",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Networking/HTTPClient.swift:70-93 splits download() into two blocks: first the transport-error mapping, then the post-download checks. Once the temp file exists, every rejection deletes it and rethrows the original error. `try? FileManager.default.removeItem(at: tmp) // best-effort cleanup` is temp cleanup that CLAUDE.md allows under 'Hard rules / try?'. No error is lost. Removing the `catch let appErr as AppError` arm is correct because the AppError now comes from the second block. Nesting did not grow (one do/catch per stage).",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:70"
+ ],
+ "lens": "QUALITY",
+ "_task": "af80827d47b4ab024",
+ "batch": "B8-updater"
+}

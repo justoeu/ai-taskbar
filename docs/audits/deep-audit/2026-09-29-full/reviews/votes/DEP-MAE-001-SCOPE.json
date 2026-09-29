@@ -1,0 +1,15 @@
+{
+ "id": "DEP-MAE-001",
+ "verdict": "APROVA",
+ "reasoning": "Makefile:342 runs release-assets-check between the upload and `gh release edit --draft=false`, so a failure leaves the release as a draft that users cannot see. `ship` calls publish, so it inherits the check. The target is in .PHONY. It checks the exact names that the UpdateChecker.pickDMGAsset contract depends on. README:642 and CLAUDE.md/AGENTS.md:264 are updated, and AGENTS.md == CLAUDE.md.",
+ "required_changes": [],
+ "cited_paths": [
+  "Makefile:342",
+  "Makefile:353",
+  "README.md:642",
+  "CLAUDE.md:264"
+ ],
+ "lens": "SCOPE",
+ "_task": "a38b6233feb4efb01",
+ "batch": "B8-updater"
+}

@@ -1,0 +1,127 @@
+{
+ "batch": "B8-updater",
+ "results": [
+  {
+   "id": "LEAK-FAN-004",
+   "outcome": "fixed",
+   "tests": [
+    "UpdateCheckerDownloadTests#http_status_failure_removes_temp",
+    "#size_mismatch_removes_temp",
+    "#checksum_mismatch_removes_temp",
+    "#signature_rejection_removes_temp",
+    "HTTPClientTests#download_non_http_response_removes_temp"
+   ],
+   "red": "Pre-fix download() (the 956d06d cleanup behaviour, rebuilt in SCRATCH/ferreiro-B8/UpdateChecker.preleak.swift): 4x 'Expectation failed: try urlSessionDownloadTemps().subtracting(before) == []'. On current HTTPClient: the same line at HTTPClientTests.swift:241 (non-HTTP response)",
+   "reversal": "ok"
+  },
+  {
+   "id": "BP-REP-003",
+   "outcome": "fixed",
+   "tests": [
+    "UpdateCheckerFetchTests#oversized_release_json_fails",
+    "#oversized_checksums_dropped",
+    "#checksums_redirect_to_cdn_followed",
+    "#checksums_redirect_off_github_refused",
+    "HTTPClientTests#bounded_send_follows_allowed_redirect",
+    "#bounded_send_refuses_rejected_redirect"
+   ],
+   "red": "Expectation failed: failed(status → .updateAvailable(... tag: \"v9.9.9\" ...))",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-014",
+   "outcome": "fixed",
+   "tests": [
+    "UpdateCheckerFetchTests#prerelease_opt_in_offers_newest_beta",
+    "#prerelease_opt_in_path",
+    "#prerelease_list_skips_drafts",
+    "#stable_beats_own_prerelease_in_list",
+    "#empty_release_list_fails",
+    "#stable_only_uses_latest"
+   ],
+   "red": "Expectation failed: (release?.tag → \"v1.1.0\") == \"v1.2.0-beta10\"",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-ART-012",
+   "outcome": "fixed",
+   "tests": [
+    "SemverTests#numeric_run_beta10_beats_beta9",
+    "#numeric_run_beta9_not_newer",
+    "#dotted_numeric_rc10_beats_rc9",
+    "+4 precedence cases"
+   ],
+   "red": "Expectation failed: Semver.isNewer(\"v0.24.0-beta10\", than: \"v0.24.0-beta9\")",
+   "reversal": "ok"
+  },
+  {
+   "id": "BP-MAE-001",
+   "outcome": "fixed",
+   "tests": [
+    "TeamSignatureDMGVerifierDetachTests#no_mount_point_detaches_device",
+    "#timed_out_attach_detaches_leftover_mount",
+    "#failed_attach_without_mount_detaches_nothing",
+    "#mounted_image_detached_by_mount_point"
+   ],
+   "red": "Expectation failed: (fake.detachTargets → []) == [\"/dev/disk9\"]",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-MAE-001",
+   "outcome": "fixed",
+   "tests": [
+    "CodeSignatureInfoTests#requirement_apple_anchor_passes",
+    "#requirement_wrong_team_fails",
+    "#requirement_nested_code_passes",
+    "#requirement_unparseable_fails",
+    "#requirement_missing_path_fails"
+   ],
+   "red": "mutation: helper passes a nil requirement → requirement_wrong_team_fails and TeamSignatureDMGVerifierTests#apple_app_wrong_team fail",
+   "reversal": "n/a"
+  },
+  {
+   "id": "DEP-MAE-001",
+   "outcome": "fixed",
+   "tests": [
+    "SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)"
+   ],
+   "red": "HEAD publish recipe has 0 asset checks. After: full=exit0; missing checksums, look-alike name, gh failure=exit2 '✗ release v9.9.9 has no checksums-9.9.9.txt asset'",
+   "reversal": "n/a"
+  },
+  {
+   "id": "ARCH-ATL-004",
+   "outcome": "fixed",
+   "tests": [
+    "UpdateBannerTests#composition_root_injects_environment_http"
+   ],
+   "red": "Expectation failed: value (UpdateBannerTests.swift:63); reverting the call site now fails to compile: 'missing argument for parameter 'http' in call'",
+   "reversal": "ok"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1028,
+  "coverage": "92.36%",
+  "warnings": 0
+ },
+ "files": [
+  "Sources/AiTaskbarApp/UpdateChecker.swift",
+  "Sources/AiTaskbarApp/DMGVerifier.swift",
+  "Sources/AiTaskbarApp/CodexResetProcess.swift",
+  "Sources/AiTaskbarApp/AiTaskbarApp.swift",
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift",
+  "Sources/AiTaskbarCore/Util/Semver.swift",
+  "Sources/AiTaskbarCore/Util/CodeSignatureInfo.swift",
+  "Sources/AiTaskbarApp/Resources/{en,es,pt-BR}.lproj/Localizable.strings",
+  "Makefile",
+  "README.md",
+  "CLAUDE.md",
+  "AGENTS.md",
+  "config.example.toml",
+  "Tests/AiTaskbarAppTests/UpdateCheckerFetchTests.swift (new)",
+  "Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift",
+  "Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift",
+  "Tests/AiTaskbarAppTests/UpdateBannerTests.swift",
+  "Tests/AiTaskbarCoreTests/{HTTPClient,Semver,CodeSignatureInfo}Tests.swift"
+ ]
+}

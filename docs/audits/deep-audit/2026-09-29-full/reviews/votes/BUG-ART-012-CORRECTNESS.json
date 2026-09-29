@@ -1,0 +1,12 @@
+{
+ "id": "BUG-ART-012",
+ "verdict": "APROVA",
+ "reasoning": "Semver.swift:30 now calls comparePrerelease, which follows SemVer 2.0 section 11 rules: identifiers are split on dots, numeric ones compare as integers, numeric sorts below alphanumeric, and a longer list wins a tie. A trailing digit run is also split off, so beta10 > beta9. Reversal: restoring `sa > sb` made the beta10>beta9, beta9-not-newer and rc.10>rc.9 tests RED.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/Semver.swift:30"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a23e227af52b8a296",
+ "batch": "B8-updater"
+}

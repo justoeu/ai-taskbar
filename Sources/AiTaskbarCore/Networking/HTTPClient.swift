@@ -67,15 +67,10 @@ public final class HTTPClient: @unchecked Sendable {
         if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
             req.timeoutInterval = max(defaultTimeout, 120)
         }
+        let tmp: URL
+        let response: URLResponse
         do {
-            let (tmp, response) = try await session.download(for: req)
-            try Task.checkCancellation()
-            guard let http = response as? HTTPURLResponse else {
-                throw AppError.transport("non-HTTP download response")
-            }
-            return (tmp, http)
-        } catch let appErr as AppError {
-            throw appErr
+            (tmp, response) = try await session.download(for: req)
         } catch is CancellationError {
             throw CancellationError()
         } catch let urlErr as URLError {
@@ -83,6 +78,18 @@ public final class HTTPClient: @unchecked Sendable {
             throw AppError.transport("URLError \(urlErr.code.rawValue): \(urlErr.localizedDescription)")
         } catch {
             throw AppError.transport(error.localizedDescription)
+        }
+        // From here the temp file is ours: URLSession does not delete it,
+        // so every rejection below must (LEAK-FAN-004).
+        do {
+            try Task.checkCancellation()
+            guard let http = response as? HTTPURLResponse else {
+                throw AppError.transport("non-HTTP download response")
+            }
+            return (tmp, http)
+        } catch {
+            try? FileManager.default.removeItem(at: tmp) // best-effort cleanup
+            throw error
         }
     }
 
@@ -127,11 +134,13 @@ public final class HTTPClient: @unchecked Sendable {
     }
 
     /// Streams a bounded response while allowing redirects only inside the
-    /// request's original HTTPS origin. The redirect decision happens before
+    /// request's original HTTPS origin, or, when `allowRedirect` is given,
+    /// only to HTTPS targets it accepts. The redirect decision happens before
     /// URLSession follows the Location header.
     public func sendBounded(
         _ request: URLRequest,
-        maximumResponseBytes: Int
+        maximumResponseBytes: Int,
+        allowRedirect: (@Sendable (URL) -> Bool)? = nil
     ) async throws -> (Data, HTTPURLResponse) {
         try Task.checkCancellation()
         guard maximumResponseBytes >= 0, let origin = request.url else {
@@ -141,7 +150,7 @@ public final class HTTPClient: @unchecked Sendable {
         if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
             req.timeoutInterval = defaultTimeout
         }
-        let redirectDelegate = SameOriginRedirectDelegate(origin: origin)
+        let redirectDelegate = BoundedRedirectDelegate(origin: origin, allow: allowRedirect)
         do {
             let (bytes, response) = try await session.bytes(
                 for: req,
@@ -209,17 +218,26 @@ public final class HTTPClient: @unchecked Sendable {
     }
 }
 
-private final class SameOriginRedirectDelegate:
+/// Redirect policy for bounded fetches: same-origin by default, the `allow` predicate when given, and always HTTPS without userinfo.
+private final class BoundedRedirectDelegate:
     NSObject, URLSessionTaskDelegate, @unchecked Sendable
 {
     private let scheme: String?
     private let host: String?
     private let port: Int?
+    private let allow: (@Sendable (URL) -> Bool)?
 
-    init(origin: URL) {
+    init(origin: URL, allow: (@Sendable (URL) -> Bool)?) {
         scheme = origin.scheme?.lowercased()
         host = origin.host?.lowercased()
         port = origin.port
+        self.allow = allow
+    }
+
+    private func sameOrigin(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == scheme
+            && url.host?.lowercased() == host
+            && url.port == port
     }
 
     func urlSession(
@@ -231,9 +249,8 @@ private final class SameOriginRedirectDelegate:
     ) {
         guard let url = request.url,
               scheme == "https",
-              url.scheme?.lowercased() == scheme,
-              url.host?.lowercased() == host,
-              url.port == port,
+              url.scheme?.lowercased() == "https",
+              allow?(url) ?? sameOrigin(url),
               url.user == nil,
               url.password == nil
         else {

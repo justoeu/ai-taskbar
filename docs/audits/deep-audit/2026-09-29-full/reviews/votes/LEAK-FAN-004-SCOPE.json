@@ -1,0 +1,13 @@
+{
+ "id": "LEAK-FAN-004",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Networking/HTTPClient.swift:67-93 splits download() so that any rejection after session.download removes the temp file. The public signature is unchanged. The only consumer is UpdateChecker.swift:306, and the callers' contract is the same as before.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Networking/HTTPClient.swift:82",
+  "Sources/AiTaskbarApp/UpdateChecker.swift:306"
+ ],
+ "lens": "SCOPE",
+ "_task": "a38b6233feb4efb01",
+ "batch": "B8-updater"
+}

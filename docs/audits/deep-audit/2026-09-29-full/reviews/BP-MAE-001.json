@@ -1,0 +1,61 @@
+{
+  "id": "BP-MAE-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 15:29:49 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "In DMGVerifier.swift:77-95 an attach that throws (for example a timeout kill) detaches whatever -mountrandom left under the private root. A plist with no mount point detaches the /dev/diskN whole disks (partitions excluded), or falls back to the leftover mounts. The detach defer runs before the root is removed. An attach that mounted nothing runs no detach. Reversal: replacing both detaches with no-ops made the tests at UpdateCheckerDownloadTests.swift:336 and :350 RED.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/DMGVerifier.swift:77",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:138"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "DMGVerifier.swift:69-95 extracts the detach loop into `detach(_:run:)`. The old defer body is moved, not duplicated, and it logs failures as before (the verdict is already decided, so a log is right). The HdiutilRunner seam has a default and exists only to make the attach-failure paths testable. runHdiutil had to become internal because Swift forbids a private default argument on an internal func. `leftoverMounts` logs its error instead of swallowing it. The `try?` in wholeDiskDevices (:139) is commented as best-effort on an already-failing path, and it reads the plist the same way mountPoint(fromAttachPlist:) already does. Minor: `dev.dropFirst(\"/dev/disk\".count)` is computed twice at :144-145. That is not worth a round.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/DMGVerifier.swift:69",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:113",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:139"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "DMGVerifier.swift:69-95 changes only internal behavior. The HdiutilRunner seam and runHdiutil moving from private to internal (DMGVerifier.swift:160) exist for the tests. The public DMGVerifying/TeamSignatureDMGVerifier surface is unchanged. The best-effort try? in wholeDiskDevices has a justifying comment. No new process: only /usr/bin/hdiutil detach, which was already used.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/DMGVerifier.swift:69",
+        "Sources/AiTaskbarApp/DMGVerifier.swift:160"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

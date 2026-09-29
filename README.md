@@ -81,7 +81,7 @@ The app runs on macOS 13+ (Ventura). Building the app requires Swift 6.2+; Comma
 
 ### Option 3 — Check for updates from inside the app
 
-Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly, compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
+Click the gauge icon → ⓘ About → **Procurar atualizações** / **Check for updates**. The button hits `github.com/justoeu/ai-taskbar/releases/latest` directly (or the release list when `include_prereleases = true`, picking the newest non-draft by SemVer precedence, so `beta10` beats `beta9`), compares semver against your installed version, and offers a one-click DMG download that opens in Finder for you to drag to /Applications.
 
 Before the DMG is shown, the app checks it against the release's `checksums-*.txt` (a release without one is refused), confirms the app inside is signed by the same Developer ID team as the installed app, and marks the file with `com.apple.quarantine` so Gatekeeper checks it when you open it. If any step fails, the download is deleted.
 
@@ -439,7 +439,7 @@ notify_at = [90, 100]                # percent thresholds that trigger a notific
 [updates]
 # enabled = true
 # owner_repo = "justoeu/ai-taskbar"  # GitHub <owner>/<repo>
-# include_prereleases = false
+# include_prereleases = false        # true: also offer the newest beta/rc
 
 [security]
 # pin_hosts = ["api.anthropic.com", "chatgpt.com", "openrouter.ai", "api.z.ai", "api.moonshot.ai", "api.deepseek.com", "management-api.x.ai"]
@@ -639,8 +639,9 @@ git checkout v0.16.1 && make publish && git checkout main
 
 It then builds, signs and notarizes **two DMGs** —
 `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon, smaller) and the universal
-`ai-taskbar-X.Y.Z.dmg` — uploads both plus a `checksums-X.Y.Z.txt`, and flips
-the release from draft to published. The in-app update checker picks the DMG
+`ai-taskbar-X.Y.Z.dmg` — uploads both plus a `checksums-X.Y.Z.txt`, checks that the release now lists
+all three (`make release-assets-check`), and only then flips the release from
+draft to published. The in-app update checker picks the DMG
 matching the user's architecture (drafts are invisible to it, so users never
 see an asset-less release).
 

@@ -1,0 +1,59 @@
+{
+  "id": "LEAK-FAN-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 15:29:48 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Both leak paths are closed. In HTTPClient.swift:82-93 the temp file is now deleted on every throw after session.download returns, including the non-HTTP-response case and cancellation. In UpdateChecker.swift the download() method tracks `pending`, which covers the non-2xx, size-mismatch, checksum-mismatch, signature-rejected, moveItem-failed and quarantine-failed (dest) paths. Reversal: I replaced both removeItem calls with no-ops and 5 tests went RED (non-2xx, size, checksum and signature at UpdateCheckerDownloadTests.swift:198/208/218/228, plus 'download rejecting a non-HTTP response deletes the temp file'). After restoring the originals, the working tree matched the saved diff byte for byte.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:82",
+        "Sources/AiTaskbarApp/UpdateChecker.swift:350"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Networking/HTTPClient.swift:70-93 splits download() into two blocks: first the transport-error mapping, then the post-download checks. Once the temp file exists, every rejection deletes it and rethrows the original error. `try? FileManager.default.removeItem(at: tmp) // best-effort cleanup` is temp cleanup that CLAUDE.md allows under 'Hard rules / try?'. No error is lost. Removing the `catch let appErr as AppError` arm is correct because the AppError now comes from the second block. Nesting did not grow (one do/catch per stage).",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:70"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Networking/HTTPClient.swift:67-93 splits download() so that any rejection after session.download removes the temp file. The public signature is unchanged. The only consumer is UpdateChecker.swift:306, and the callers' contract is the same as before.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Networking/HTTPClient.swift:82",
+        "Sources/AiTaskbarApp/UpdateChecker.swift:306"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

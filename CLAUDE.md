@@ -261,10 +261,19 @@ cleanly on `[skip release]` heads.
   `ai-taskbar-X.Y.Z-arm64.dmg` (Apple Silicon) and `ai-taskbar-X.Y.Z.dmg`
   (universal). Renaming either breaks in-app update downloads.
 - The in-app download **fails closed** without a matching line in the
-  release's `checksums-X.Y.Z.txt` (so `make publish` must keep uploading it),
+  release's `checksums-X.Y.Z.txt` (so `make publish` must keep uploading it;
+  `make release-assets-check` refuses to flip the draft unless the release
+  lists the checksums file and both DMGs),
   requires the DMG's `.app` to be signed by the running app's Developer ID
   team (skipped on ad-hoc builds), and sets `com.apple.quarantine` so
   Gatekeeper assesses it. See `UpdateChecker.download` + `DMGVerifier.swift`.
+  The release JSON (2 MiB) and checksums file (64 KiB) are read with
+  `HTTPClient.sendBounded`; the checksums redirect is followed only to
+  `UpdateChecker.isAllowedDownloadURL` hosts. `UpdateChecker` takes `env.http`
+  (no default client), so `pin_hosts` reaches it. `/releases/latest` never
+  returns a prerelease, so `include_prereleases = true` reads
+  `/releases?per_page=20` and picks the newest non-draft by `Semver` (SemVer
+  2.0 prerelease precedence; `beta10` > `beta9`).
 
 ### DMG release runbook (generating the signed DMG)
 
