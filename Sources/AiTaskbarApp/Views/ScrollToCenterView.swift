@@ -38,6 +38,10 @@ public final class CenterTrackingNSView: NSView {
     public func triggerCenterScroll() {
         isTargeted = true
         hasScrolled = false
+        if window == nil {
+            performCenterScroll()
+            return
+        }
         // Run with staged delays to ensure parent transitions and layout passes are settled.
         for delay in [0.05, 0.15, 0.30] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
@@ -83,6 +87,11 @@ public final class CenterTrackingNSView: NSView {
         }
 
         hasScrolled = true
+        if window == nil {
+            scrollView.contentView.scroll(to: targetOrigin)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            return
+        }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.25
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)

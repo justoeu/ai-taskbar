@@ -37,17 +37,15 @@ public struct MenuBarLabelView: View {
         case .iconAndPercent:
             iconForMaxPercent
             let percent = store.maxUtilization
-            if percent > 0 {
-                let isFull = percent >= store.thresholds.warning || percent >= 100
-                Text("\(Int(percent.rounded()))%")
-                    .font(.system(size: 15.0, weight: .bold, design: .monospaced))
-                    .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent,
-                                                                            thresholds: store.thresholds))
-                if isFull {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 13.0, weight: .bold))
-                        .foregroundStyle((percent >= store.thresholds.critical || percent >= 100) ? Color.red : Color.orange)
-                }
+            let isFull = percent >= store.thresholds.warning || percent >= 100
+            Text("\(Int(percent.rounded()))%")
+                .font(.system(size: 15.0, weight: .bold, design: .monospaced))
+                .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent,
+                                                                        thresholds: store.thresholds))
+            if isFull {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 13.0, weight: .bold))
+                    .foregroundStyle((percent >= store.thresholds.critical || percent >= 100) ? Color.red : Color.orange)
             }
         case .rotating:
             rotatingContent

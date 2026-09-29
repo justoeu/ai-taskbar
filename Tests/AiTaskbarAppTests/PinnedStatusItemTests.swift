@@ -221,4 +221,98 @@ struct PinnedStatusItemTests {
         #expect(manager.statusItem(for: .anthropic) === anthropicItem)
         #expect(manager.statusItem(for: .openai) != nil)
     }
+
+    @Test("each pinned item gets a stable per-vendor autosave name")
+    func pinned_items_carry_stable_autosave_names() {
+        let name = "ai-taskbar.pinned.autosave.test.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        defer { suite.removePersistentDomain(forName: name) }
+
+        let v1 = VendorViewModel(provider: MockUsageProvider(vendorId: .anthropic))
+        let v2 = VendorViewModel(provider: MockUsageProvider(vendorId: .openai))
+        let store = UsageStore(vendors: [v1, v2], primary: nil,
+                               preferredOrder: [.anthropic, .openai])
+        let manager = PinnedStatusItemManager()
+        defer { manager.removeAll() }
+        manager.configure(store: store)
+
+        store.togglePinned(.anthropic, defaults: suite)
+        store.togglePinned(.openai, defaults: suite)
+        manager.syncStatusItems()
+        // Unpin then re-pin: the path whose anonymous re-created item never
+        // reached the screen on macOS 26.
+        store.togglePinned(.anthropic, defaults: suite)
+        manager.syncStatusItems()
+        store.togglePinned(.anthropic, defaults: suite)
+        manager.syncStatusItems()
+
+        #expect(manager.statusItem(for: .anthropic)?.autosaveName == "ai-taskbar.pinned.anthropic")
+        #expect(manager.statusItem(for: .openai)?.autosaveName == "ai-taskbar.pinned.openai")
+        #expect(manager.currentOrderedPinned == [.openai, .anthropic])
+    }
+
+    @Test("autosave names are distinct for every vendor")
+    func autosave_names_are_unique() {
+        let names = VendorId.allCases.map(PinnedStatusItemManager.autosaveName(for:))
+        #expect(Set(names).count == VendorId.allCases.count)
+    }
+
+    @Test("status-item filter keeps only item-sized windows in the menu-bar strip")
+    func status_items_min_x_filters_non_items() {
+        let screen = CGRect(x: 0, y: 0, width: 1800, height: 1169)
+        let rects = [
+            CGRect(x: 0, y: 0, width: 1800, height: 39),      // the bar itself
+            CGRect(x: 1216, y: 0, width: 66, height: 39),     // an item
+            CGRect(x: 1152, y: 0, width: 56, height: 39),     // leftmost item
+            CGRect(x: 400, y: 300, width: 80, height: 30),    // a window mid-screen
+            CGRect(x: 2000, y: 0, width: 40, height: 39)      // another display
+        ]
+        #expect(PinnedStatusItemManager.statusItemsMinX(windowRects: rects, screenFrame: screen) == 1152)
+        expectTrue(PinnedStatusItemManager.statusItemsMinX(windowRects: [], screenFrame: screen) == nil)
+    }
+
+    @Test("an item the system already hid still counts as occupied space")
+    func leftmost_x_includes_hidden_own_items() {
+        // WindowServer draws nothing left of 1046, but this app has an item
+        // AppKit placed at 878 — under the notch. The bar is already full.
+        let own = [CGRect(x: 1163, y: 0, width: 53, height: 39),
+                   CGRect(x: 878, y: 0, width: 29, height: 39)]
+        #expect(PinnedStatusItemManager.menuBarLeftmostX(visibleMinX: 1046, ownFrames: own) == 878)
+    }
+
+    @Test("unplaced own items (x = 0) are ignored, not read as a full bar")
+    func leftmost_x_ignores_unplaced_frames() {
+        let own = [CGRect(x: 0, y: 0, width: 29, height: 39),
+                   CGRect(x: 1163, y: 0, width: 53, height: 39)]
+        #expect(PinnedStatusItemManager.menuBarLeftmostX(visibleMinX: 1216, ownFrames: own) == 1163)
+        expectTrue(PinnedStatusItemManager.menuBarLeftmostX(visibleMinX: nil, ownFrames: []) == nil)
+        #expect(PinnedStatusItemManager.menuBarLeftmostX(visibleMinX: 1216, ownFrames: []) == 1216)
+    }
+
+    @Test("worst-case badge width is measured, and wider than the old 50 pt guess")
+    func worst_case_badge_width_is_measured() {
+        let width = PinnedStatusItemManager.worstCaseBadgeWidth(thresholds: .init())
+        // A loaded badge measured 56 pt on a real bar; the widest layout adds
+        // the flame, so anything at or under the old estimate is wrong.
+        #expect(width > 56)
+        #expect(width < 150)
+    }
+
+    @Test("a slot that fits a narrow badge but not a full one is denied")
+    func narrow_guess_would_have_allowed_overflow() {
+        // Real geometry: notch right edge 1010, leftmost item at 1080.
+        // The old 50 pt guess projects 1030 (>= 1018) and allowed the pin;
+        // a real badge does not fit.
+        let width = PinnedStatusItemManager.worstCaseBadgeWidth(thresholds: .init())
+        let result = PinnedStatusItemManager.evaluateSpaceMath(
+            minX: 1080, estimatedItemWidth: width, notchRightEdge: 1010, safeNotchMargin: 8
+        )
+        expectFalse(result.allowed)
+    }
+
+    @Test("item length formula keeps the 42 pt floor")
+    func pinned_item_length_floor() {
+        #expect(PinnedStatusItemManager.pinnedItemLength(forContentWidth: 10) == 42)
+        #expect(PinnedStatusItemManager.pinnedItemLength(forContentWidth: 60) == 66)
+    }
 }

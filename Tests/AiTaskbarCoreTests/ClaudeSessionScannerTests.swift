@@ -245,4 +245,34 @@ struct ClaudeSessionScannerTests {
         #expect(estimate.unpricedModelsLast7Days == Set(["claude-future-9"]))
         expectTrue(estimate.note?.localizedCaseInsensitiveContains("price unavailable") ?? false)
     }
+
+    @Test("a fast-mode line fills the fast subsets; a standard line does not")
+    func fast_mode_lines_fill_fast_subsets() {
+        let startOfToday = Date(timeIntervalSince1970: 1_764_000_000)
+        let iso = ISO8601DateFormatter().string(from: startOfToday.addingTimeInterval(60))
+        func line(_ speed: String?) -> String {
+            let speedField = speed.map { #","speed":"\#($0)""# } ?? ""
+            return #"""
+            {"timestamp":"\#(iso)","message":{"role":"assistant","model":"claude-opus-5-5","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":30,"cache_creation":{"ephemeral_5m_input_tokens":10,"ephemeral_1h_input_tokens":20},"cache_read_input_tokens":40\#(speedField)}}}
+            """#
+        }
+        let data = Data(([line("fast"), line("standard"), line(nil)].joined(separator: "\n") + "\n").utf8)
+        var today: [String: ModelUsage] = [:]
+        var week: [String: ModelUsage] = [:]
+        var unparseable = 0
+        ClaudeSessionScanner.scan(data: data, startOfToday: startOfToday,
+                                  sevenDaysAgo: startOfToday.addingTimeInterval(-7 * 86_400),
+                                  totalsToday: &today, totalsLast7: &week,
+                                  unparseableTimestamps: &unparseable)
+        let u = today["claude-opus-5-5"]
+        // All three lines count toward the visible totals…
+        #expect(u?.inputTokens == 300)
+        #expect(u?.outputTokens == 150)
+        // …but only the fast line lands in the premium subsets.
+        #expect(u?.fastInputTokens == 100)
+        #expect(u?.fastOutputTokens == 50)
+        #expect(u?.fastCacheReadTokens == 40)
+        #expect(u?.fastCacheCreateTokens == 10)
+        #expect(u?.fastCacheCreate1hTokens == 20)
+    }
 }
