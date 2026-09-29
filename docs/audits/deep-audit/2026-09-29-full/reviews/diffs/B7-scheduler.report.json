@@ -1,0 +1,66 @@
+{
+ "batch": "B7-scheduler",
+ "results": [
+  {
+   "id": "TEST-ARG-007",
+   "outcome": "fixed",
+   "tests": [
+    "RefreshScheduler#scheduler_triggers_update_check"
+   ],
+   "red": "mutation: drop the initial updates?.checkIfNeeded() -> 'Time limit was exceeded: 60.000 seconds' + 'Expectation failed: (checker.status → .idle) == .checking'",
+   "reversal": "ok"
+  },
+  {
+   "id": "TEST-MAE-002",
+   "outcome": "fixed",
+   "tests": [
+    "scripts/coverage.sh (planted PlantedFailureTests in scratch clone)"
+   ],
+   "red": "old gate on 3 planted failures: exit 1, output only '✘ Test run with 996 tests in 124 suites failed ... with 6 issues' plus unrelated 'falls back to cache' lines, no test names; new gate adds 'Failing tests (swift test exit 1)' + '✘ Test plantedAlpha() recorded an issue at PlantedFailureTests.swift:6:33: Expectation failed: 1 == 2' (and Beta/Gamma) + 'swift test failed'",
+   "reversal": "n/a"
+  },
+  {
+   "id": "TEST-ARG-006",
+   "outcome": "fixed",
+   "tests": [
+    "RefreshScheduler#rateLimited_cycle_backs_off",
+    "RefreshScheduler#healthy_cycle_has_no_backoff"
+   ],
+   "red": "mutation 'if false, …hasRateLimitedVendor' -> '(sleeper.durations → [300.0, 300.0, 300.0]) == [300.0, 60.0, 300.0]'; mutation 'remove exitRateLimitBackoff()' -> '(sleeper.backoffFlags → [false, true, true]) == [false, true, false]'",
+   "reversal": "ok"
+  },
+  {
+   "id": "RACE-CRO-003",
+   "outcome": "fixed",
+   "tests": [
+    "RefreshScheduler#hung_vendor_does_not_starve_others"
+   ],
+   "red": "Expectation failed: (healthy.calls.count → 1) == 4",
+   "reversal": "ok"
+  },
+  {
+   "id": "LEAK-FAN-008",
+   "outcome": "fixed",
+   "tests": [
+    "RefreshScheduler#started_scheduler_is_released"
+   ],
+   "red": "RefreshSchedulerTests.swift:256:19: Expectation failed: value (expectTrue(released == nil))",
+   "reversal": "ok"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 993,
+  "coverage": "92.23%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AppEnvironment.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/coverage.sh",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md"
+ ]
+}

@@ -54,10 +54,13 @@ public final class AppEnvironment {
     /// 15 s) so that:
     ///   1. Popover opens between scheduled refreshes still serve from
     ///      cache without a network round-trip.
-    ///   2. The scheduled tick at T=interval ALWAYS finds an expired
-    ///      cache (`age ≈ interval > ttl`), going straight to the network
-    ///      without needing `forceRefresh: true`. The 5-second margin
-    ///      absorbs Task.sleep jitter.
+    ///   2. The next scheduled tick finds an expired cache and goes to the
+    ///      network without `forceRefresh: true`, as long as the previous
+    ///      fetch finished within ~5 s of its dispatch. Ticks are spaced
+    ///      from dispatch, not completion, so a slower fetch wrote its entry
+    ///      later and that tick may serve it (at most one interval old) from
+    ///      cache; the following tick refetches. See
+    ///      `RefreshScheduler.dispatchScheduledTick`.
     public func makeProviders() -> [any UsageProvider] {
         let ttl = max(15, config.ui.refreshIntervalSeconds - 5)
         var out: [any UsageProvider] = []

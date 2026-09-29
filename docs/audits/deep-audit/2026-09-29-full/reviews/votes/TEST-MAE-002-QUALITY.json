@@ -1,0 +1,12 @@
+{
+ "id": "TEST-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "scripts/coverage.sh:28-46: the script already runs under `set -euo pipefail`. The fix keeps it failing (fail \"swift test failed\" exits 1) and now prints the ✘/error: lines, capped at 100, falling back to `tail -40` when a crash leaves no markers. The temp log uses mktemp plus an EXIT trap, and the script sets no other trap it could clobber. The `grep | tail || true` only protects the display. No error is swallowed.",
+ "required_changes": [],
+ "cited_paths": [
+  "scripts/coverage.sh:28"
+ ],
+ "lens": "QUALITY",
+ "_task": "a8c69fbe25e472c44",
+ "batch": "B7-scheduler"
+}

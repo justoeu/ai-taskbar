@@ -1,0 +1,13 @@
+{
+ "id": "TEST-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "scripts/coverage.sh:31-46 keeps the full log and captures swift test's exit code with `|| TEST_STATUS=$?`, so pipefail cannot hide it. The summary grep is guarded with `|| true`. On a failure it prints the ✘/error: lines, or the last 40 log lines if there are none, and then fails. I tested this in a scratch copy (outside ROOT) with PlantedFailureTests (plantedAlpha 1==2, plantedBeta \"a\"==\"b\"), running `scripts/with-test-toolchain.sh scripts/coverage.sh 90`. It exited 1 and printed 'Failing tests (swift test exit 1)', the file:line of both planted tests, and 'swift test failed'. The trap removes the temp log. The green path is unchanged: TEST_STATUS=0 skips the block.",
+ "required_changes": [],
+ "cited_paths": [
+  "scripts/coverage.sh:31",
+  "scripts/coverage.sh:36"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "adf4cb63642d84fcb",
+ "batch": "B7-scheduler"
+}

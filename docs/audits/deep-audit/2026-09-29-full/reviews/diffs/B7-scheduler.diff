@@ -1,0 +1,571 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index d81902b..799ebc8 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -502,8 +502,12 @@ that came out of fixing that:
+   `refreshAll()` produces and to recompute the % when a card is toggled. The popover header runs a 1-Hz countdown
+   anchored on `UsageStore.lastScheduledTickAt`; localized strings are
+   memoized at type init. `DiskCache` TTL is set in `AppEnvironment` to
+-  `max(15, refresh_interval_seconds − 5)` so the scheduled tick reliably
+-  trips `freshPayload()` without needing `forceRefresh: true`.
++  `max(15, refresh_interval_seconds − 5)` so the scheduled tick trips
++  `freshPayload()` without needing `forceRefresh: true` — when the previous
++  fetch finished within ~5 s of dispatch (ticks are spaced from dispatch, so
++  a slower fetch can be served from cache once, then refetched). A scheduled
++  tick skips only vendors whose own fetch is still in flight; it never skips
++  the whole cycle, so one hung vendor cannot freeze the others.
+ - **`AiTaskbarValidate`** — runtime test runner, see "Validation policy".
+ - **`AiTaskbarTesting`** — fixtures + StubURLProtocol, shared by tests +
+   validate.
+diff --git a/CLAUDE.md b/CLAUDE.md
+index d81902b..799ebc8 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -502,8 +502,12 @@ that came out of fixing that:
+   `refreshAll()` produces and to recompute the % when a card is toggled. The popover header runs a 1-Hz countdown
+   anchored on `UsageStore.lastScheduledTickAt`; localized strings are
+   memoized at type init. `DiskCache` TTL is set in `AppEnvironment` to
+-  `max(15, refresh_interval_seconds − 5)` so the scheduled tick reliably
+-  trips `freshPayload()` without needing `forceRefresh: true`.
++  `max(15, refresh_interval_seconds − 5)` so the scheduled tick trips
++  `freshPayload()` without needing `forceRefresh: true` — when the previous
++  fetch finished within ~5 s of dispatch (ticks are spaced from dispatch, so
++  a slower fetch can be served from cache once, then refetched). A scheduled
++  tick skips only vendors whose own fetch is still in flight; it never skips
++  the whole cycle, so one hung vendor cannot freeze the others.
+ - **`AiTaskbarValidate`** — runtime test runner, see "Validation policy".
+ - **`AiTaskbarTesting`** — fixtures + StubURLProtocol, shared by tests +
+   validate.
+diff --git a/Sources/AiTaskbarApp/AppEnvironment.swift b/Sources/AiTaskbarApp/AppEnvironment.swift
+index c571b56..94ec706 100644
+--- a/Sources/AiTaskbarApp/AppEnvironment.swift
++++ b/Sources/AiTaskbarApp/AppEnvironment.swift
+@@ -54,10 +54,13 @@ public final class AppEnvironment {
+     /// 15 s) so that:
+     ///   1. Popover opens between scheduled refreshes still serve from
+     ///      cache without a network round-trip.
+-    ///   2. The scheduled tick at T=interval ALWAYS finds an expired
+-    ///      cache (`age ≈ interval > ttl`), going straight to the network
+-    ///      without needing `forceRefresh: true`. The 5-second margin
+-    ///      absorbs Task.sleep jitter.
++    ///   2. The next scheduled tick finds an expired cache and goes to the
++    ///      network without `forceRefresh: true`, as long as the previous
++    ///      fetch finished within ~5 s of its dispatch. Ticks are spaced
++    ///      from dispatch, not completion, so a slower fetch wrote its entry
++    ///      later and that tick may serve it (at most one interval old) from
++    ///      cache; the following tick refetches. See
++    ///      `RefreshScheduler.dispatchScheduledTick`.
+     public func makeProviders() -> [any UsageProvider] {
+         let ttl = max(15, config.ui.refreshIntervalSeconds - 5)
+         var out: [any UsageProvider] = []
+diff --git a/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift b/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
+index 5408d56..4c2b7f6 100644
+--- a/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
++++ b/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift
+@@ -18,6 +18,18 @@ public final class RefreshScheduler: ObservableObject {
+     private var statusRefreshLoop: Task<Void, Never>?
+     private var compactLoop: Task<Void, Never>?
+     private var updateCheckLoop: Task<Void, Never>?
++    /// Suspends the usage refresh loop between ticks. Production uses
++    /// `Task.sleep`; tests inject a scripted sleeper so the cadence and the
++    /// 429 back-off can be asserted without wall-clock waits. Returning early
++    /// on cancellation is fine: the loop re-checks `Task.isCancelled`.
++    typealias Sleeper = @MainActor (TimeInterval) async -> Void
++    private let sleeper: Sleeper
++
++    static func taskSleep(_ seconds: TimeInterval) async {
++        // Best-effort: a cancelled sleep simply returns and the loop's own
++        // `Task.isCancelled` check ends it.
++        try? await Task.sleep(for: .seconds(seconds))
++    }
+ 
+     public convenience init(store: UsageStore,
+                             statusStore: ServiceStatusStore? = nil,
+@@ -34,8 +46,10 @@ public final class RefreshScheduler: ObservableObject {
+          updates: UpdateChecker? = nil,
+          interval: TimeInterval,
+          minimumInterval: TimeInterval,
+-         minimumStatusInterval: TimeInterval) {
++         minimumStatusInterval: TimeInterval,
++         sleeper: @escaping Sleeper = RefreshScheduler.taskSleep) {
+         self.store = store
++        self.sleeper = sleeper
+         self.statusStore = statusStore
+         self.costEstimator = costEstimator
+         self.updates = updates
+@@ -59,28 +73,34 @@ public final class RefreshScheduler: ObservableObject {
+     /// long-lived timer; status and usage merely have independent loops.
+     private func startStatusRefreshLoop() {
+         guard statusRefreshLoop == nil, statusStore != nil else { return }
++        let seconds = statusInterval
++        // Every loop re-reads `self` weakly per step and never holds it
++        // across a sleep, so dropping the scheduler lets deinit cancel the
++        // loops (LEAK-FAN-008).
+         statusRefreshLoop = Task { @MainActor [weak self] in
+-            guard let self else { return }
+-            self.statusStore?.refreshAll(forceRefresh: false)
+-            await self.statusStore?.waitForCurrentRefresh()
++            await Self.refreshStatus(self?.statusStore)
+             while !Task.isCancelled {
+-                try? await Task.sleep(for: .seconds(self.statusInterval))
++                try? await Task.sleep(for: .seconds(seconds))
+                 if Task.isCancelled { break }
+-                self.statusStore?.refreshAll(forceRefresh: false)
+-                await self.statusStore?.waitForCurrentRefresh()
++                await Self.refreshStatus(self?.statusStore)
+             }
+         }
+     }
+ 
++    private static func refreshStatus(_ statusStore: ServiceStatusStore?) async {
++        guard let statusStore else { return }
++        statusStore.refreshAll(forceRefresh: false)
++        await statusStore.waitForCurrentRefresh()
++    }
++
+     private func startRefreshLoop() {
+         guard refreshLoop == nil else { return }
++        let sleeper = self.sleeper
++        let interval = self.interval
+         refreshLoop = Task { @MainActor [weak self] in
+-            guard let self else { return }
+             // Initial fetch keeps cache semantics — if a relaunch lands
+             // inside a fresh cache window, don't burn a network call.
+-            self.store?.markScheduledTick()
+-            self.store?.refreshAll(forceRefresh: false)
+-            self.costEstimator?.refresh()
++            self?.dispatchScheduledTick()
+             while !Task.isCancelled {
+                 // Sleep the configured interval first. While we sleep, the
+                 // previous cycle's async per-vendor Tasks complete and
+@@ -90,39 +110,45 @@ public final class RefreshScheduler: ObservableObject {
+                 // that `refreshAll` just set — wiping any `.failed(429)`
+                 // or stale-`.ok(429-lastError)` from the cycle we're
+                 // trying to back off from.
+-                try? await Task.sleep(for: .seconds(self.interval))
++                await sleeper(interval)
+                 if Task.isCancelled { break }
+-                if self.store?.hasRateLimitedVendor ?? false {
++                if self?.store?.hasRateLimitedVendor ?? false {
+                     // Surface the back-off to the UI so the countdown
+                     // label can render "Aguardando rate-limit…" instead
+                     // of freezing at 0:00 for 60 s. Cleared right before
+                     // the markScheduledTick that follows so the countdown
+                     // re-anchors cleanly.
+-                    self.store?.enterRateLimitBackoff()
+-                    try? await Task.sleep(for: .seconds(Self.rateLimitBackoff))
+-                    self.store?.exitRateLimitBackoff()
++                    self?.store?.enterRateLimitBackoff()
++                    await sleeper(Self.rateLimitBackoff)
++                    self?.store?.exitRateLimitBackoff()
+                     if Task.isCancelled { break }
+                 }
+-                // Scheduled ticks use `forceRefresh: false`. AppEnvironment
+-                // wires the DiskCache TTL to `max(15, interval - 5)`, so
+-                // at T=interval the cache age (≈ interval) is always
+-                // strictly greater than the TTL — `freshPayload()` returns
+-                // nil and CachedFetch goes to the network without needing
+-                // a force flag. The 5-second margin absorbs Task.sleep
+-                // jitter without ever letting the boundary equal the TTL.
+-                // Single-flight tick: if any vendor is still loading from the
+-                // previous cycle, skip stacking another fan-out (BP-HYD-005).
+-                // Cancel-on-supersede in VendorViewModel covers the rest.
+-                if self.store?.isAnyVendorLoading == true {
+-                    continue
+-                }
+-                self.store?.markScheduledTick()
+-                self.store?.refreshAll(forceRefresh: false)
+-                self.costEstimator?.refresh()
++                self?.dispatchScheduledTick()
+             }
+         }
+     }
+ 
++    /// One scheduled fan-out, with `forceRefresh: false`. AppEnvironment
++    /// wires the DiskCache TTL to `max(15, interval - 5)` and ticks are
++    /// dispatched `interval` apart (plus any 429 back-off), measured from
++    /// dispatch, not from completion. So a fetch that completed within ~5 s
++    /// of its dispatch left a cache entry that is already expired at the
++    /// next tick, and CachedFetch goes to the network. A slower fetch wrote
++    /// its entry later: the next tick may still land inside the TTL and
++    /// serve that payload (at most one interval old) from cache; the tick
++    /// after that refetches.
++    ///
++    /// Single-flight per vendor: a vendor whose previous fetch is still in
++    /// flight is skipped (BP-HYD-005) while every other vendor refreshes, so
++    /// one hung fetch cannot stall the whole cycle (RACE-CRO-003).
++    /// Cancel-on-supersede in VendorViewModel covers manual refreshes.
++    private func dispatchScheduledTick() {
++        guard let store else { return }
++        store.markScheduledTick()
++        store.refreshIdleVendors(forceRefresh: false)
++        costEstimator?.refresh()
++    }
++
+     private func startCompactLoop() {
+         guard compactLoop == nil else { return }
+         compactLoop = Task { @MainActor [weak self] in
+@@ -146,12 +172,11 @@ public final class RefreshScheduler: ObservableObject {
+     private func startUpdateCheckLoop() {
+         guard updateCheckLoop == nil, updates != nil else { return }
+         updateCheckLoop = Task { @MainActor [weak self] in
+-            guard let self else { return }
+-            self.updates?.checkIfNeeded()
++            self?.updates?.checkIfNeeded()
+             while !Task.isCancelled {
+                 try? await Task.sleep(for: .seconds(86_400))
+                 if Task.isCancelled { break }
+-                self.updates?.checkIfNeeded()
++                self?.updates?.checkIfNeeded()
+             }
+         }
+     }
+diff --git a/Sources/AiTaskbarApp/ViewModels/UsageStore.swift b/Sources/AiTaskbarApp/ViewModels/UsageStore.swift
+index e6d1cb5..a5e4c95 100644
+--- a/Sources/AiTaskbarApp/ViewModels/UsageStore.swift
++++ b/Sources/AiTaskbarApp/ViewModels/UsageStore.swift
+@@ -265,6 +265,17 @@ public final class UsageStore: ObservableObject {
+         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
+     }
+ 
++    /// Scheduled-tick fan-out: refreshes every vendor except those whose
++    /// previous fetch is still in flight. Skipping only the busy vendor keeps
++    /// single-flight per vendor without letting one hung fetch (e.g. a child
++    /// process that never exits) stall every other vendor (RACE-CRO-003).
++    public func refreshIdleVendors(forceRefresh: Bool = false) {
++        for v in vendors {
++            if case .loading = v.state { continue }
++            v.refresh(forceRefresh: forceRefresh)
++        }
++    }
++
+     /// Stamp the scheduler tick that's about to dispatch fetches. The view
+     /// reads `lastScheduledTickAt` to anchor the countdown.
+     public func markScheduledTick() {
+diff --git a/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift b/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
+index f707f5e..9f54678 100644
+--- a/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
++++ b/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift
+@@ -1,37 +1,268 @@
+ import Foundation
+ import Testing
+ import AiTaskbarCore
++import AiTaskbarProviders
+ @testable import AiTaskbarApp
+ 
+-@Suite("RefreshScheduler Updates Integration Tests")
+-struct RefreshSchedulerTests {
+-    @Test("RefreshScheduler accepts UpdateChecker and triggers check on start")
+-    @MainActor
++// MARK: - Test doubles
++
++/// Accepts every request and never answers it, so an update check stays in
++/// `.checking` for as long as the test needs and nothing reaches the network.
++/// Stateless; the suite is `.serialized` by the URLProtocol convention.
++private final class HangingGitHubProtocol: URLProtocol {
++    override class func canInit(with request: URLRequest) -> Bool { true }
++    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
++    override func startLoading() {}
++    override func stopLoading() {}
++}
++
++private final class CallCounter: @unchecked Sendable {
++    private let lock = NSLock()
++    private var n = 0
++    func increment() { lock.lock(); n += 1; lock.unlock() }
++    var count: Int { lock.lock(); defer { lock.unlock() }; return n }
++}
++
++private func okOutcome() -> FetchOutcome {
++    FetchOutcome(snapshot: .zai(ZAISnapshot(
++        session: UsageWindow(label: "Session", utilizationPercent: 10))))
++}
++
++/// Answers immediately and counts how often the scheduler asked.
++private struct CountingProvider: UsageProvider {
++    let vendorId: VendorId
++    let calls = CallCounter()
++    var displayName: String { vendorId.displayName }
++    var credentialFileURL: URL? { nil }
++    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
++        calls.increment()
++        return okOutcome()
++    }
++}
++
++/// Always fails with HTTP 429.
++private struct RateLimitedProvider: UsageProvider {
++    let vendorId: VendorId = .zai
++    var displayName: String { vendorId.displayName }
++    var credentialFileURL: URL? { nil }
++    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
++        throw AppError.http(status: 429, body: "")
++    }
++}
++
++/// A fetch that never completes on its own (the hung-Antigravity shape).
++/// `release()` lets the test clean up the parked task afterwards.
++private final class HangingProvider: UsageProvider, @unchecked Sendable {
++    let vendorId: VendorId = .anthropic
++    let calls = CallCounter()
++    private let stream: AsyncStream<Void>
++    private let continuation: AsyncStream<Void>.Continuation
++    init() { (stream, continuation) = AsyncStream<Void>.makeStream() }
++    var displayName: String { vendorId.displayName }
++    var credentialFileURL: URL? { nil }
++    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
++        calls.increment()
++        for await _ in stream {}
++        throw CancellationError()
++    }
++    func release() { continuation.finish() }
++}
++
++private struct NoHistory: Error {}
++
++/// Stands in for `Task.sleep` in the refresh loop. Before each sleep it waits
++/// for `ready` (the previous tick's fetches have settled), records the
++/// requested duration and whether the store was in 429 back-off, and then
++/// returns at once — except after `returningSleeps` sleeps, where it parks
++/// until `stop()`/deinit cancels the loop.
++@MainActor
++private final class ScriptedSleeper {
++    private(set) var durations: [TimeInterval] = []
++    private(set) var backoffFlags: [Bool] = []
++    weak var store: UsageStore?
++    private let returningSleeps: Int
++    private let ready: @MainActor () -> Bool
++    private var waiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
++
++    init(returningSleeps: Int, ready: @escaping @MainActor () -> Bool = { true }) {
++        self.returningSleeps = returningSleeps
++        self.ready = ready
++    }
++
++    var sleeper: RefreshScheduler.Sleeper { { [self] seconds in await self.sleep(seconds) } }
++
++    private func sleep(_ seconds: TimeInterval) async {
++        // Condition wait, not a timing window: bounded only so a broken
++        // precondition fails the test instead of hanging it.
++        var spins = 0
++        while !ready(), spins < 5_000 {
++            try? await Task.sleep(for: .milliseconds(1))
++            spins += 1
++        }
++        durations.append(seconds)
++        backoffFlags.append(store?.isInRateLimitBackoff ?? false)
++        let count = durations.count
++        waiters.removeAll { waiter in
++            guard count >= waiter.count else { return false }
++            waiter.continuation.resume()
++            return true
++        }
++        if count > returningSleeps {
++            try? await Task.sleep(for: .seconds(3_600)) // ends on cancellation
++        }
++    }
++
++    func waitForSleeps(_ count: Int) async {
++        if durations.count >= count { return }
++        await withCheckedContinuation { waiters.append((count, $0)) }
++    }
++}
++
++// MARK: - Suite
++
++@Suite("RefreshScheduler", .serialized, .timeLimit(.minutes(1)))
++@MainActor
++final class RefreshSchedulerTests {
++    private let suiteName = "test-refresh-scheduler-\(UUID().uuidString)"
++    private let defaults: UserDefaults
++
++    init() {
++        defaults = UserDefaults(suiteName: suiteName)!
++    }
++
++    deinit {
++        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
++    }
++
++    private func vendor(_ provider: any UsageProvider) -> VendorViewModel {
++        VendorViewModel(provider: provider, defaults: defaults,
++                        historyStoreFactory: { _ in throw NoHistory() })
++    }
++
++    private func store(_ vendors: [VendorViewModel]) -> UsageStore {
++        UsageStore(vendors: vendors, primary: nil, preferredOrder: [])
++    }
++
++    private func scheduler(_ store: UsageStore, sleeper: ScriptedSleeper,
++                           updates: UpdateChecker? = nil) -> RefreshScheduler {
++        sleeper.store = store
++        return RefreshScheduler(store: store, statusStore: nil, updates: updates,
++                                interval: 300, minimumInterval: 15,
++                                minimumStatusInterval: 300, sleeper: sleeper.sleeper)
++    }
++
++    private static func isLoading(_ vm: VendorViewModel) -> Bool {
++        if case .loading = vm.state { return true }
++        return false
++    }
++
++    @Test("start() triggers an update check through the injected, non-network client")
+     func scheduler_triggers_update_check() async {
+-        let name = "test-scheduler-updates-\(UUID().uuidString)"
+-        let defaults = UserDefaults(suiteName: name)!
+-        defaults.removePersistentDomain(forName: name)
+-
+-        let config = UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false)
+-        let checker = UpdateChecker(config: config, currentVersion: "1.0.0", userDefaults: defaults)
+-
+-        let store = UsageStore(vendors: [], primary: .anthropic, refreshIntervalSeconds: 300)
+-        let scheduler = RefreshScheduler(
+-            store: store,
+-            statusStore: nil,
+-            costEstimator: nil,
+-            updates: checker,
+-            interval: 300
+-        )
++        let checker = UpdateChecker(
++            config: UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false),
++            currentVersion: "1.0.0",
++            http: .stubbed(protocols: [HangingGitHubProtocol.self]),
++            userDefaults: defaults)
++        let sleeper = ScriptedSleeper(returningSleeps: 0)
++        let usage = store([])
++        let scheduler = scheduler(usage, sleeper: sleeper, updates: checker)
+ 
+         #expect(checker.status == .idle)
+         scheduler.start()
++        // Await the transition itself instead of sleeping a fixed window. The
++        // stub never answers, so `.checking` is the steady state afterwards.
++        for await status in checker.$status.values where status == .checking { break }
++        #expect(checker.status == .checking)
++        scheduler.stop()
++    }
++
++    @Test("a 429 adds rateLimitBackoff to the interval, entering and leaving back-off around it")
++    func rateLimited_cycle_backs_off() async {
++        let usage = store([vendor(RateLimitedProvider())])
++        let sleeper = ScriptedSleeper(returningSleeps: 2, ready: { [weak usage] in
++            usage?.hasRateLimitedVendor ?? false
++        })
++        let scheduler = scheduler(usage, sleeper: sleeper)
++        scheduler.start()
++        await sleeper.waitForSleeps(3)
++        scheduler.stop()
+ 
+-        // Give the task a tiny tick on MainActor
+-        try? await Task.sleep(nanoseconds: 50_000_000)
++        #expect(sleeper.durations == [300, RefreshScheduler.rateLimitBackoff, 300])
++        #expect(RefreshScheduler.rateLimitBackoff == 60)
++        #expect(sleeper.backoffFlags == [false, true, false])
++        #expect(!usage.isInRateLimitBackoff)
++    }
+ 
+-        #expect(checker.status == .checking)
++    @Test("a healthy cycle sleeps only the interval")
++    func healthy_cycle_has_no_backoff() async {
++        let provider = CountingProvider(vendorId: .zai)
++        let vm = vendor(provider)
++        let sleeper = ScriptedSleeper(returningSleeps: 2, ready: { [weak vm] in
++            vm.map { !Self.isLoading($0) } ?? true
++        })
++        let usage = store([vm])   // the scheduler holds its store weakly
++        let scheduler = scheduler(usage, sleeper: sleeper)
++        scheduler.start()
++        await sleeper.waitForSleeps(3)
++        scheduler.stop()
+ 
++        #expect(sleeper.durations == [300, 300, 300])
++        #expect(provider.calls.count == 3)
++    }
++
++    @Test("a vendor whose fetch never finishes does not stop the others from refreshing (RACE-CRO-003)")
++    func hung_vendor_does_not_starve_others() async {
++        let hung = HangingProvider()
++        let healthy = CountingProvider(vendorId: .zai)
++        let healthyVM = vendor(healthy)
++        let usage = store([vendor(hung), healthyVM])   // held: the scheduler's ref is weak
++        // Ready once the healthy fetch settled AND the throttled aggregate has
++        // caught up with the hung vendor (in production ticks are 300 s apart,
++        // far beyond the 50 ms throttle).
++        let sleeper = ScriptedSleeper(returningSleeps: 3, ready: { [weak healthyVM, weak usage] in
++            guard let healthyVM, let usage else { return true }
++            return !Self.isLoading(healthyVM) && usage.isAnyVendorLoading
++        })
++        let scheduler = scheduler(usage, sleeper: sleeper)
++        scheduler.start()
++        // Initial tick + one tick after each of the three returning sleeps;
++        // the 4th sleep waits for the 3rd tick's fetch to settle.
++        await sleeper.waitForSleeps(4)
+         scheduler.stop()
++        hung.release()
++
++        #expect(healthy.calls.count == 4)
++        // Single-flight per vendor: the hung fetch is never stacked/superseded.
++        #expect(hung.calls.count == 1)
++    }
++
++    @Test("dropping the last reference releases a started scheduler (LEAK-FAN-008)")
++    func started_scheduler_is_released() async {
++        let checker = UpdateChecker(
++            config: UpdatesConfig(enabled: true, ownerRepo: "test/repo", includePrereleases: false),
++            currentVersion: "1.0.0",
++            http: .stubbed(protocols: [HangingGitHubProtocol.self]),
++            userDefaults: defaults)
++        let usage = store([])
++        let status = ServiceStatusStore(vendorIds: [], providers: [])
++        let sleeper = ScriptedSleeper(returningSleeps: 0)
++        sleeper.store = usage
++        var scheduler: RefreshScheduler? = RefreshScheduler(
++            store: usage, statusStore: status, updates: checker,
++            interval: 300, minimumInterval: 15, minimumStatusInterval: 300,
++            sleeper: sleeper.sleeper)
++        weak let released = scheduler
++        scheduler?.start()
++        // All three self-capturing loops reach their first sleep.
++        await sleeper.waitForSleeps(1)
++        for await state in checker.$status.values where state == .checking { break }
++        // No status rows → no fetch task: that loop goes straight from its
++        // first (synchronous) round to its sleep once it has run at all.
++        await status.waitForCurrentRefresh()
++        await Task.yield()
++        scheduler = nil
++
++        expectTrue(released == nil)
++        released?.stop()                          // cleanup when the assertion fails
+     }
+ }
+diff --git a/scripts/coverage.sh b/scripts/coverage.sh
+index 987a55d..70b4f85 100755
+--- a/scripts/coverage.sh
++++ b/scripts/coverage.sh
+@@ -25,8 +25,25 @@ warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
+ fail() { printf "  \033[31m✗\033[0m %s\n" "$1"; exit 1; }
+ 
+ bold "Running swift test --enable-code-coverage"
+-swift test --no-parallel --enable-code-coverage 2>&1 \
+-    | grep -E "Test run|fail" | tail -5
++# Keep the full log: on failure the summary alone ("failed with 2 issues")
++# does not say WHICH test failed, which left a transient failure
++# undiagnosable (TEST-MAE-002).
++TEST_LOG=$(mktemp -t ai-taskbar-swift-test)
++trap 'rm -f "$TEST_LOG"' EXIT
++TEST_STATUS=0
++swift test --no-parallel --enable-code-coverage >"$TEST_LOG" 2>&1 || TEST_STATUS=$?
++grep -E "Test run|fail" "$TEST_LOG" | tail -5 || true
++if [ "$TEST_STATUS" -ne 0 ]; then
++    bold "Failing tests (swift test exit $TEST_STATUS)"
++    # Swift Testing marks every failed test/issue with ✘; XCTest-style and
++    # compiler failures use "error:". Fall back to the log tail (e.g. crash).
++    if grep -qE "✘|error:" "$TEST_LOG"; then
++        grep -E "✘|error:" "$TEST_LOG" | head -100
++    else
++        tail -40 "$TEST_LOG"
++    fi
++    fail "swift test failed"
++fi
+ 
+ PROFDATA=$(find .build -name "default.profdata" -path "*codecov*" 2>/dev/null | head -1)
+ BINARY=$(find .build -name "ai-taskbarPackageTests.xctest" -type d 2>/dev/null \

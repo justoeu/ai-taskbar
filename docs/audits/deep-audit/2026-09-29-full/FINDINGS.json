@@ -2625,7 +2625,7 @@
     "fix": "Make the gate per-vendor: skip only vendors whose own refresh is in flight (VendorViewModel already cancels on supersede), or limit the skip by a maximum in-flight age. In AntigravityExecutor, escalate from terminate to SIGKILL after a grace period, close the read ends on timeout, drain stdout and stderr concurrently, and use withTaskCancellationHandler to terminate the child and resume the continuation on cancel.",
     "failure_scenario": "At the t=0 tick, agy spawns a helper that inherits stdout and stays alive. readDataToEndOfFile never returns and the vendor's state stays .loading. At t=300, 600, ... isAnyVendorLoading is true, so the loop hits continue. Anthropic, OpenAI and the rest never refresh again until relaunch.",
     "test_red_green": {
-      "name": "scheduler_hungVendor_doesNotStarveOthers",
+      "name": "RefreshScheduler#hung_vendor_does_not_starve_others",
       "assert_before": "UsageStore with two stub providers: A's fetchUsage awaits a continuation that is never resumed, B counts its calls. RefreshScheduler(minimumInterval: 0.05). After 0.3 s expect B.calls >= 3. FAILS today (1).",
       "assert_after": "B keeps being refreshed every interval; A is skipped or timed out on its own."
     },
@@ -2634,9 +2634,40 @@
     "cetico_evidence": "The gate is real: RefreshScheduler.swift:116-118 skips every vendor if any one is .loading. But no unbounded fetch is shown. HTTP is capped by timeoutIntervalForResource=30 s (HTTPClient.swift:17). The security tool has a 5 s budget plus SIGKILL (SecurityToolCredentialReader.swift:163-168). agy is capped at 35 s by SIGTERM (AntigravityExecutor.swift:83-89). All of these finish well under the 300 s interval. I ran the real ~/.local/bin/agy the same way the app does: 1781 B stdout, 0 B stderr, exited normally, and the --bg-updater child it spawned exited within a few seconds (it never inherited the pipe). A permanent hang needs agy to ignore SIGTERM or a descendant to hold the pipe; neither was observed.",
     "verification": "cetico",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "id": "RACE-CRO-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "RefreshScheduler#hung_vendor_does_not_starve_others",
+    "resolved_at": "2026-09-29 14:58:02 UTC",
+    "resolved_note": "batch B7-scheduler",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:58:02 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#hung_vendor_does_not_starve_others · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",
@@ -3182,7 +3213,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "backoff_adds_60s_after_429",
+      "name": "RefreshScheduler#rateLimited_cycle_backs_off,RefreshScheduler#healthy_cycle_has_no_backoff",
       "assert_before": "no seam",
       "assert_after": "RED if branch removed"
     },
@@ -3191,10 +3222,41 @@
     "cetico_evidence": "RefreshScheduler.swift:93-104: the back-off branch has no test (0 refs to rateLimitBackoff/enterRateLimitBackoff in Tests), and the loop has no clock seam. Downgraded: the input flag hasRateLimitedVendor is well pinned (AggregatesComputationTests.swift:65-94), and the App target is outside the coverage gate by policy.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift",
     "id": "TEST-ARG-006",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "RefreshScheduler#rateLimited_cycle_backs_off,RefreshScheduler#healthy_cycle_has_no_backoff",
+    "resolved_at": "2026-09-29 14:58:02 UTC",
+    "resolved_note": "batch B7-scheduler",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:58:02 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#rateLimited_cycle_backs_off,RefreshScheduler#healthy_cycle_has_no_backoff · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "in_progress": false
   },
   {
     "title": "RefreshSchedulerTests makes a real api.github.com request and depends on a 50 ms wall-clock window",
@@ -3208,7 +3270,7 @@
     "confidence": "medium",
     "agent": "Argus",
     "test_red_green": {
-      "name": "scheduler_triggers_update_check",
+      "name": "RefreshScheduler#scheduler_triggers_update_check",
       "assert_before": "intermittent RED offline",
       "assert_after": "deterministic"
     },
@@ -3217,10 +3279,41 @@
     "cetico_evidence": "RefreshSchedulerTests.swift:16 builds UpdateChecker without http:, so it gets the default HTTPClient() (UpdateChecker.swift:65) and makes a real request to api.github.com/repos/test/repo (UpdateChecker.swift:150). It then sleeps 50 ms (:31) and expects .checking (:33). Offline, the request fails fast, status leaves .checking and the test goes red. LOW: it only affects test determinism.",
     "verification": "cetico",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "path": "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift",
     "id": "TEST-ARG-007",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "RefreshScheduler#scheduler_triggers_update_check",
+    "resolved_at": "2026-09-29 14:58:01 UTC",
+    "resolved_note": "batch B7-scheduler",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:58:01 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#scheduler_triggers_update_check · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "in_progress": false
   },
   {
     "title": "The safe-by-default manageOAuthRefresh=false on provider inits is not pinned by any test",
@@ -3483,14 +3576,45 @@
     "agent": "Maestro",
     "origin": "new_findings from the 3-lens code review panel",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "scripts/coverage.sh (planted PlantedFailureTests in scratch clone)",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "scripts/coverage.sh (planted PlantedFailureTests in scratch clone)",
+    "resolved_at": "2026-09-29 14:58:02 UTC",
+    "resolved_note": "batch B7-scheduler",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:58:01 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste scripts/coverage.sh (planted PlantedFailureTests in scratch clone) · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "in_progress": false
   },
   {
     "title": "GrokLocalCache.readSubscriptionTierDisplay is never called in production",
@@ -4202,7 +4326,7 @@
     "impact": "No growth today: a single scheduler is created in App.init (AiTaskbarApp.swift:67). It would leak, with duplicate refresh fan-out, if a scheduler is ever rebuilt without calling stop().",
     "fix": "Re-bind weakly per iteration, as compactLoop does.",
     "test_red_green": {
-      "name": "RefreshSchedulerTests.deinitCancelsLoops",
+      "name": "RefreshScheduler#started_scheduler_is_released",
       "assert_before": "weak ref still non-nil after the last strong ref is dropped",
       "assert_after": "weak ref is nil and the refreshAll counter stops"
     },
@@ -4210,10 +4334,41 @@
     "cetico_evidence": "RefreshScheduler.swift:62/77 turn the weak self into a strong reference for the whole loop. There is a single scheduler for the app's lifetime and stop() exists, so there is no growth.",
     "verification": "cetico",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift",
     "id": "LEAK-FAN-008",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "RefreshScheduler#started_scheduler_is_released",
+    "resolved_at": "2026-09-29 14:58:02 UTC",
+    "resolved_note": "batch B7-scheduler",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 14:58:02 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshScheduler#started_scheduler_is_released · revisão approved (3/3) · batch B7-scheduler"
+    ],
+    "in_progress": false
   },
   {
     "title": "SessionCounters re-fetches resourceValues per file after contentsOfDirectory prefetch",

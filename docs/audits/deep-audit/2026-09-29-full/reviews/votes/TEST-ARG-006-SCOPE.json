@@ -1,0 +1,12 @@
+{
+ "id": "TEST-ARG-006",
+ "verdict": "APROVA",
+ "reasoning": "The injected Sleeper (RefreshScheduler.swift:25-32, 50) is only on the internal init and defaults to Task.sleep, so production behavior is the same. The 429 back-off contract in CLAUDE.md Architecture (the scheduler reads hasRateLimitedVendor and adds rateLimitBackoff of 60 s) still matches lines 115-125.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:115"
+ ],
+ "lens": "SCOPE",
+ "_task": "a99067d3aa8c5ab8e",
+ "batch": "B7-scheduler"
+}

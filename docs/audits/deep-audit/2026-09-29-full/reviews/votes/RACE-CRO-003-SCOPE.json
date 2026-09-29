@@ -1,0 +1,15 @@
+{
+ "id": "RACE-CRO-003",
+ "verdict": "APROVA",
+ "reasoning": "Adds a new public UsageStore.refreshIdleVendors (UsageStore.swift:268), used only by dispatchScheduledTick (RefreshScheduler.swift:148). Manual refreshAll callers (PopoverContentView:239, StatusPanelView:58/224, AnalyticsStore:205) are untouched. CLAUDE.md and AGENTS.md are byte-identical (cmp passes). Their Architecture text about expiry at scheduled ticks and per-vendor skipping now matches the code and the AppEnvironment.swift:57-63 doc comment. isAnyVendorLoading is still published for the countdown (PopoverContentView:477), so the documented aggregate contract holds. The working-tree diff is byte-identical to the saved B7-scheduler.diff.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift:268",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md:504",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md:504",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AppEnvironment.swift:57"
+ ],
+ "lens": "SCOPE",
+ "_task": "a99067d3aa8c5ab8e",
+ "batch": "B7-scheduler"
+}

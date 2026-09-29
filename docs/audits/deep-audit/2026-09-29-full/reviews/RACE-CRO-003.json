@@ -1,0 +1,66 @@
+{
+  "id": "RACE-CRO-003",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 14:58:02 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The defect is gone. The global gate `if isAnyVendorLoading { continue }` was removed. Every tick now goes through dispatchScheduledTick (RefreshScheduler.swift:145-149): it always runs markScheduledTick, so lastScheduledTickAt still anchors the countdown, and then refreshIdleVendors (UsageStore.swift:272-277) skips only vendors whose own state is .loading. That keeps single-flight per vendor, and no other vendor waits on a hung one. There are no paths left that stall everything: the initial tick and the post-back-off tick both use the same function. VendorViewModel.state starts as .idle (VendorViewModel.swift:56), so the first tick is not skipped. The only thing that leaves a vendor stuck in .loading is supersession, which puts it back into .loading with a new task, so nothing gets stuck. No refresh storm: the cadence is still sleeper(interval) followed by an optional 60 s back-off, with one fan-out per tick. I ran the filtered tests: 26/26 green. Reversal 1: I restored the global gate plus refreshAll inside dispatchScheduledTick and got RED 'healthy.calls.count → 1 == 4'. Reversal 2: I removed the per-vendor `.loading` skip and got RED 'hung.calls.count → 4 == 1', so the test proves both halves: other vendors keep refreshing, and single-flight still holds.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:145",
+        "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:272",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:247",
+        "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:234"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "UsageStore.swift:272-277 adds refreshIdleVendors, 5 lines with nesting 2. It skips only vendors in `.loading` and reuses the same `case .loading` pattern that computeAggregates uses. RefreshScheduler.dispatchScheduledTick (:143-150) pulls the tick body, which the initial fetch and the loop had duplicated, into one function. That removes a clone instead of adding one. The whole-cycle `isAnyVendorLoading` skip is gone. The comments in AppEnvironment.swift:57-63 and CLAUDE.md/AGENTS.md now say the TTL guarantee depends on how long the previous fetch took, where the old text wrongly said 'ALWAYS'. The docs were updated in the same change, as the repo requires.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:272",
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:143",
+        "Sources/AiTaskbarApp/AppEnvironment.swift:57",
+        "CLAUDE.md:505"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Adds a new public UsageStore.refreshIdleVendors (UsageStore.swift:268), used only by dispatchScheduledTick (RefreshScheduler.swift:148). Manual refreshAll callers (PopoverContentView:239, StatusPanelView:58/224, AnalyticsStore:205) are untouched. CLAUDE.md and AGENTS.md are byte-identical (cmp passes). Their Architecture text about expiry at scheduled ticks and per-vendor skipping now matches the code and the AppEnvironment.swift:57-63 doc comment. isAnyVendorLoading is still published for the countdown (PopoverContentView:477), so the documented aggregate contract holds. The working-tree diff is byte-identical to the saved B7-scheduler.diff.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift:268",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md:504",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md:504",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AppEnvironment.swift:57"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

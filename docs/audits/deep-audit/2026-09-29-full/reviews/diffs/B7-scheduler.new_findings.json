@@ -1,0 +1,18 @@
+[
+ [
+  "QUALITY",
+  "Out of scope: the per-vendor idle check (`if case .loading = v.state`) now appears three times: UsageStore.refreshIdleVendors, computeAggregates, and the test helper isLoading. A `VendorViewModel.isLoading` computed property would remove the duplication in a later round."
+ ],
+ [
+  "SCOPE",
+  "Minor stale comment: the comment at RefreshScheduler.swift:110 still says `refreshAll` just set the state, but scheduled ticks now call refreshIdleVendors. Only wording changes; behavior is the same."
+ ],
+ [
+  "CORRECTNESS",
+  "Residual (not a blocker): a vendor whose fetch really hangs (the AntigravityExecutor case in RACE-CRO-003's evidence) now stays in .loading and is left out of every later scheduled tick. Only a manual refresh supersedes it. The executor fix (SIGKILL after a grace period, closing the pipes, withTaskCancellationHandler) is still open, as is a maximum in-flight age before the per-vendor skip stops applying."
+ ],
+ [
+  "CORRECTNESS",
+  "The requested filter 'RefreshScheduler|UsageStore|AggregatesComputation' matched only 2 suites (26 tests). No suite matched 'UsageStore', so refreshIdleVendors is covered only indirectly, through RefreshSchedulerTests."
+ ]
+]

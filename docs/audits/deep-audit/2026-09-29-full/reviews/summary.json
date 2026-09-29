@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-29 14:35:01 UTC",
+  "generated_at": "2026-09-29 14:58:02 UTC",
   "panel_source": "vote-files",
   "lenses": [
     "CORRECTNESS",
@@ -11,6 +11,6 @@
   "changes_requested": 0,
   "rejected": 0,
   "by_id": {
-    "TEST-MAE-003": "approved"
+    "LEAK-FAN-008": "approved"
   }
 }

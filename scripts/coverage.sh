@@ -25,8 +25,25 @@ warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
 fail() { printf "  \033[31m✗\033[0m %s\n" "$1"; exit 1; }
 
 bold "Running swift test --enable-code-coverage"
-swift test --no-parallel --enable-code-coverage 2>&1 \
-    | grep -E "Test run|fail" | tail -5
+# Keep the full log: on failure the summary alone ("failed with 2 issues")
+# does not say WHICH test failed, which left a transient failure
+# undiagnosable (TEST-MAE-002).
+TEST_LOG=$(mktemp -t ai-taskbar-swift-test)
+trap 'rm -f "$TEST_LOG"' EXIT
+TEST_STATUS=0
+swift test --no-parallel --enable-code-coverage >"$TEST_LOG" 2>&1 || TEST_STATUS=$?
+grep -E "Test run|fail" "$TEST_LOG" | tail -5 || true
+if [ "$TEST_STATUS" -ne 0 ]; then
+    bold "Failing tests (swift test exit $TEST_STATUS)"
+    # Swift Testing marks every failed test/issue with ✘; XCTest-style and
+    # compiler failures use "error:". Fall back to the log tail (e.g. crash).
+    if grep -qE "✘|error:" "$TEST_LOG"; then
+        grep -E "✘|error:" "$TEST_LOG" | head -100
+    else
+        tail -40 "$TEST_LOG"
+    fi
+    fail "swift test failed"
+fi
 
 PROFDATA=$(find .build -name "default.profdata" -path "*codecov*" 2>/dev/null | head -1)
 BINARY=$(find .build -name "ai-taskbarPackageTests.xctest" -type d 2>/dev/null \

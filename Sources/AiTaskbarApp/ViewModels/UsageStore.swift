@@ -265,6 +265,17 @@ public final class UsageStore: ObservableObject {
         for v in vendors { v.refresh(forceRefresh: forceRefresh) }
     }
 
+    /// Scheduled-tick fan-out: refreshes every vendor except those whose
+    /// previous fetch is still in flight. Skipping only the busy vendor keeps
+    /// single-flight per vendor without letting one hung fetch (e.g. a child
+    /// process that never exits) stall every other vendor (RACE-CRO-003).
+    public func refreshIdleVendors(forceRefresh: Bool = false) {
+        for v in vendors {
+            if case .loading = v.state { continue }
+            v.refresh(forceRefresh: forceRefresh)
+        }
+    }
+
     /// Stamp the scheduler tick that's about to dispatch fetches. The view
     /// reads `lastScheduledTickAt` to anchor the countdown.
     public func markScheduledTick() {

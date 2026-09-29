@@ -502,8 +502,12 @@ that came out of fixing that:
   `refreshAll()` produces and to recompute the % when a card is toggled. The popover header runs a 1-Hz countdown
   anchored on `UsageStore.lastScheduledTickAt`; localized strings are
   memoized at type init. `DiskCache` TTL is set in `AppEnvironment` to
-  `max(15, refresh_interval_seconds − 5)` so the scheduled tick reliably
-  trips `freshPayload()` without needing `forceRefresh: true`.
+  `max(15, refresh_interval_seconds − 5)` so the scheduled tick trips
+  `freshPayload()` without needing `forceRefresh: true` — when the previous
+  fetch finished within ~5 s of dispatch (ticks are spaced from dispatch, so
+  a slower fetch can be served from cache once, then refetched). A scheduled
+  tick skips only vendors whose own fetch is still in flight; it never skips
+  the whole cycle, so one hung vendor cannot freeze the others.
 - **`AiTaskbarValidate`** — runtime test runner, see "Validation policy".
 - **`AiTaskbarTesting`** — fixtures + StubURLProtocol, shared by tests +
   validate.

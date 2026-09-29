@@ -1,0 +1,13 @@
+{
+ "id": "LEAK-FAN-008",
+ "verdict": "APROVA",
+ "reasoning": "RefreshScheduler.swift:76-89,97-129,172-181: the long-lived loops no longer upgrade to a strong self. interval, statusInterval and sleeper are captured by value, and self is read through `self?` at each step. The static refreshStatus helper holds only statusStore across its await, not self. The pattern now matches compactLoop. The regression test uses `expectTrue(released == nil)`, the optional-safe helper that CLAUDE.md requires. No new warnings: the report says a clean validate exited 0.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:76",
+  "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift"
+ ],
+ "lens": "QUALITY",
+ "_task": "a8c69fbe25e472c44",
+ "batch": "B7-scheduler"
+}

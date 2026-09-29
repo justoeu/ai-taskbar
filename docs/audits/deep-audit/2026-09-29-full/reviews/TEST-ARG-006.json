@@ -1,0 +1,59 @@
+{
+  "id": "TEST-ARG-006",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 14:58:02 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The injected Sleeper (RefreshScheduler.swift:25-32) defaults to Task.sleep, so production behavior is unchanged. The back-off branch (RefreshScheduler.swift:115-124) still adds rateLimitBackoff (60 s) after the interval, and only when hasRateLimitedVendor is set. Reversal: with the branch disabled (`if false, …`), rateLimited_cycle_backs_off goes RED on both durations [300,300,300] != [300,60,300] and backoffFlags [false,false,false] != [false,true,false]. healthy_cycle_has_no_backoff pins the 300 s cadence and 3 fetches. Neither assertion is vacuous. They compare arrays, not optional Bools.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:115",
+        "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:190"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "RefreshScheduler.swift:21-32 adds a Sleeper seam as an internal typealias with a production default (`taskSleep`), which is the smallest seam that works. Its `try?` covers a cancellable Task.sleep that is best-effort, carries a comment, and mirrors the `try?` Task.sleep already in the other loops. Tests assert durations [300,60,300] and backoff flags [false,true,false] with atomic #expects. The polling in ScriptedSleeper is a bounded condition wait (5,000 x 1 ms) that fails rather than hangs, which is acceptable in a test double.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:21",
+        "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The injected Sleeper (RefreshScheduler.swift:25-32, 50) is only on the internal init and defaults to Task.sleep, so production behavior is the same. The 429 back-off contract in CLAUDE.md Architecture (the scheduler reads hasRateLimitedVendor and adds rateLimitBackoff of 60 s) still matches lines 115-125.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:115"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}
