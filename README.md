@@ -28,7 +28,9 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
 - **Reset countdown** ("resets 4 hrs, 12 min"; once the reset passes it shows "reset due — awaiting auto-refresh…" instead of counting back up)
 - **24-hour sparkline** with dashed threshold lines, current value, and peak marker (one sample per live network reading; cached or stale replays are not re-plotted)
 - **Daily + 7-day cost estimates** computed locally from your CLI logs (7 days = today plus the six previous local days, the same window for every source)
-- **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245")
+- **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245"), priced from the official per-model rates — including prompt-cache reads/writes and the **fast-mode premium** on Opus 5.5, Opus 5 and Opus 4.8 (see [Cost estimates](#cost-estimates--claude-pricing))
+- **Pin LLMs to the menu bar** — each pinned provider gets its own icon + % next to the main gauge, with reset countdowns in its tooltip; click it to jump to that card (see [Pinned LLMs](#pinned-llms-in-the-menu-bar))
+- **Update banner** — a background check once per calendar day (at launch if not yet today, and at each new day) shows "New version available" in the popover, with one-click download
 - **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
 - **Consumption & Analytics view** — usage share and cost share across LLMs for Today / Week / Month. Cost covers only what the local scanners keep (today and the last 7 days), so **Month shows usage but no cost** rather than relabelling the 7-day figure, and never calls a vendor idle ("no recent usage") for lack of a cost it cannot see. Today and Week, including sessions and the "vs previous period" delta, use the same local calendar days as the cost (today since midnight; today plus the six previous days). OpenRouter's 30-day activity and xAI's billing-cycle spend stay on their own cards, which name those windows, and are never counted as 7-day cost. Vendors without a session counter show the number of models used, not "sessions"
 - **Service health & status monitor** — Live popover panel monitoring upstream operational status, active incidents, and scheduled maintenance across providers (Claude, OpenAI, Gemini, Grok, DeepSeek, Kimi, OpenRouter) with direct links to official status pages
@@ -43,6 +45,8 @@ The app runs entirely on-device — **no telemetry, no remote logging, no auto-u
 - [Install](#install)
 - [Setup per provider](#setup-per-provider)
 - [Service status & health pages](#service-status--health-pages)
+- [Pinned LLMs in the menu bar](#pinned-llms-in-the-menu-bar)
+- [Cost estimates & Claude pricing](#cost-estimates--claude-pricing)
 - [What's in this version](#whats-in-this-version)
 - [How it works](#how-it-works)
 - [Configuration](#configuration)
@@ -344,7 +348,54 @@ Clicking any row in the status window opens the provider's official status page 
 
 ---
 
+## Pinned LLMs in the menu bar
+
+Expand a provider's card and turn on **Pin to menu bar**. The provider gets its own item — its icon plus the current %, or weekly and session % stacked for providers that report both — rendered in the same system menu-bar font as the main gauge.
+
+- **Order:** the first pin sits immediately left of the main gauge; each later pin goes one slot further left. Unpinning and re-pinning puts the provider back at the end of that sequence.
+- **Click** a pinned item to open the popover focused on that provider's card; click it again to close.
+- **Tooltip:** hover for the provider's windows and their daily / weekly reset countdowns.
+- **Space limit:** macOS hides menu-bar items that don't fit, so pinning is refused — with an explanation — when the next item would collide with the camera notch (or cover the app menus on displays without one), and after 5 pins. The check measures the real bar and the widest a badge can grow, so on a 14" MacBook with many system icons you may only have room for two.
+- The check runs when you pin. If another app later adds icons, macOS may still hide the leftmost ones; unpin one to make room.
+
+## Cost estimates & Claude pricing
+
+Daily and 7-day costs are computed **locally** from the CLI transcripts (`~/.claude/projects`, `~/.codex/sessions`, opencode's database) and the per-model price table in `PricingTable.swift`, checked against the vendors' published rates (Claude: [platform.claude.com pricing](https://platform.claude.com/docs/en/about-claude/pricing), last verified 2026-09-28).
+
+| Claude model | Input | Output | Cache write 5m / 1h | Cache read | Fast mode (in / out) |
+|---|---|---|---|---|---|
+| Opus 5.5 | $4 | $20 | $5 / $8 | $0.20 | $8 / $40 |
+| Opus 5 · Opus 4.8 | $5 | $25 | $6.25 / $10 | $0.50 | $10 / $50 |
+| Sonnet 5.5 · Sonnet 5 | $2 | $10 | $2.50 / $4 | $0.20 | — |
+
+Prices per million tokens. **Fast mode** keeps the same model id, so it is detected per request from the transcript's `usage.speed` and billed at 2x on every token category, cache included. Models without fast mode (Opus 4.7 rejects it, Opus 4.6 runs it at standard price) are billed at standard rates. A model missing from the table still appears in the breakdown, marked as not yet priced, rather than disappearing.
+
+---
+
 ## What's in this version
+
+### v0.23.7 — Deep audit: truthful Claude cost, safer updates
+
+- **Claude cost ~1.9x too high, fixed:** Claude Code writes each API response to its transcript several times; the scanner now counts each response once (`message.id` + `requestId`).
+- **Analytics:** opencode dollars are no longer added to vendor totals; Month shows a truthful cost; Day and Week use calendar days.
+- **Safer in-app updates:** the release checksum is required, the DMG is quarantined, and Developer-ID builds verify the app inside is signed by the same team.
+- **Update checks** run once per calendar day — at launch if not yet today, and at the start of each new day.
+- Localized Gemini/Grok notices, notification titles and tooltips; tighter file permissions, response size caps and single-flight OAuth refresh. Full list: `docs/audits/deep-audit/2026-09-29-full/REPORT.md`.
+
+### v0.23.6 — Pinned LLMs fixed on macOS 26, Claude 5.5 pricing, fast mode
+
+- **Pinned LLMs appear, in order:** a re-pinned provider could be created but never drawn, and a pin could land on the wrong side of the main gauge. Both came from macOS 26 status-item behavior, now measured and handled (stable item identity; pins are created only after the main gauge is on the bar).
+- **Real space limit:** the notch check no longer gives up when it can't find the main gauge, and it measures the badge instead of guessing it — no more pins sliding under the notch or overlapping.
+- **Consistent look:** pinned percentages use the same system font as the main gauge (no larger, no bold).
+- **Claude pricing:** Opus 5.5 corrected to $4 / $20 (it had been billed at the Opus 5 rate — 25% too high, cache reads 2.5x); Sonnet 5.5 added; fast mode priced as a 2x premium on Opus 5.5, Opus 5 and Opus 4.8.
+
+### v0.21.0 – v0.23.5 — Analytics dashboard, pinned LLMs, update banner
+
+- **v0.21.0:** consumption & analytics dashboard, pin LLMs to the menu bar, active-session counters, latency optimizations.
+- **v0.22.0:** daily background update check with an in-popover update banner.
+- **v0.23.0:** daily and weekly reset countdowns in pinned-LLM tooltips.
+- **v0.23.1:** OpenRouter balance/quota semantics fixed; analytics comparison delta explained in context.
+- **v0.23.2 – v0.23.5:** successive pinned-item fixes (ordering, flicker, notch limit), superseded by v0.23.6.
 
 ### v0.20.0 — Gemini Antigravity, Grok CLI SuperGrok quotas, service health and settings indicators
 

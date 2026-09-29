@@ -5,11 +5,32 @@ The format follows the release notes pattern from [GitHub Releases](https://gith
 
 ---
 
+## [v0.23.7](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.7) - 2026-09-29
+
+### 🐛 Fixes
+
+-  deep-audit 2026-09-29 — Claude cost dedup, updater trust, analytics windows, i18n, hardening (#32)
+   - Claude cost was ~1.9x too high: Claude Code writes each API response to its transcript several times; usage is now deduplicated by `message.id` + `requestId`.
+   - Analytics no longer adds opencode dollars to vendor totals.
+   - In-app updates require the release checksum, quarantine the DMG and, on Developer-ID builds, check the app inside is signed by the same team.
+   - Update checks run once per calendar day; Month analytics shows a truthful cost; 7 calendar days everywhere; Codex no longer re-bills repeated events.
+   - Localized Gemini/Grok notices, notification titles and tooltips; hardened file permissions, response caps and OAuth refresh.
+
+---
+
+**Full diff:** [`v0.23.6...v0.23.7`](https://github.com/justoeu/ai-taskbar/compare/v0.23.6...v0.23.7)
+
+---
+
 ## [v0.23.6](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.6) - 2026-09-29
 
 ### 🐛 Fixes
 
 -  pinned LLMs next to the main icon, real space limit, Claude 5.5 prices + fast mode (#30)
+   - Re-pinned status items were never drawn on macOS 26 and pins could land right of the main icon; fixed with stable per-vendor item names and creation gated on the main item.
+   - Space check no longer fails open and measures the real badge width.
+   - Pinned percentages use the system menu-bar font, matching the main icon.
+   - Opus 5.5 repriced to $4/$20 (was billed at the Opus 5 tier); Sonnet 5.5 added; fast mode billed at 2x on Opus 5.5, Opus 5 and Opus 4.8.
 
 ---
 
@@ -41,7 +62,7 @@ The format follows the release notes pattern from [GitHub Releases](https://gith
 
 ---
 
-## [v0.23.3](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.3) - 2026-09-28
+## [v0.23.3](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.3) - tagged, never published
 
 ### 🐛 Fixes
 
@@ -53,7 +74,7 @@ The format follows the release notes pattern from [GitHub Releases](https://gith
 
 ---
 
-## [v0.23.2](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.2) - 2026-09-28
+## [v0.23.2](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.2) - tagged, never published
 
 ### 🐛 Fixes
 

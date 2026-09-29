@@ -361,6 +361,15 @@ git checkout v0.16.1 && make publish && git checkout main
 | Release notes missing the actual feature | the changelog spans previous-tag..this-tag; a tag that never produced a release swallows everything before it | regenerate with `gh release edit <tag> --notes-file` over the right range |
 | A merged CI-action bump cuts a release | a Dependabot `github-actions` PR changes no shipped code, but without the marker its merge is an ordinary push to `main` | `.github/dependabot.yml` sets that ecosystem's commit prefix to `ci(deps) [skip release]`; keep the marker if you edit the prefix |
 
+**Squash merges inherit every commit's `[skip release]`.** GitHub's default
+squash message concatenates all commit messages of the PR, and `auto-tag.yml`
+skips any push whose message *contains* the marker. A PR that mixes product
+fixes with `[skip release]` commits (e.g. an audit pack) therefore lands on
+`main` with no version bump — this is how the #32 deep-audit fixes merged
+without a release. When squash-merging such a PR, set the message explicitly
+(`gh pr merge --squash --subject … --body …`) without the marker, or keep
+`[skip release]` out of commits on PR branches that ship product code.
+
 **Doc-only commits pushed to `main` MUST carry `[skip release]`** — otherwise
 they trigger a redundant version bump (this is how an accidental extra
 `v0.10.1` got cut alongside `v0.10.0`).
