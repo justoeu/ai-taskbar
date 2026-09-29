@@ -600,8 +600,14 @@ that came out of fixing that:
   `Int` at the call site instead of carving out a `%d`. The same ratchet in
   `scripts/check-source-ratchets.sh` requires en, pt-BR and es to carry the
   identical key set and, per key, the identical specifier list (by argument
-  index, so a translation may reorder positional forms); the self-test
-  plants `%d`, `%i`, `%1$d`, `%hd`, a missing key and a mismatched specifier.
+  index, so a translation may reorder positional forms), and each key defined
+  once per file (`"done"` once carried two different pt-BR words, BUG-MAE-016).
+  The unsigned `%u` / `%o` / `%x` / `%X` need the 64-bit modifier too. Inline
+  `String(format: "...")` literals in `Sources/` are checked for `%d` / `%i`
+  the same way (`%04ld-%02ld`, not `%04d-%02d`); unsigned hex there stays
+  32-bit because it formats explicit `UInt8` / `UInt32` values. The self-test
+  plants each rejected form, a duplicate key, a missing key and a mismatched
+  specifier.
 - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
   cleanup, marker writes). If a credential write fails, the user must see it.
 - **Keychain reads AND writes** must run inside

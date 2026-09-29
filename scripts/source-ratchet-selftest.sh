@@ -34,6 +34,8 @@ plant_strings() {
 # A clean strings tree, so the tests/wire cases never depend on the repo's.
 plant_strings "$work/strings-ok" '"k" = "v";' '"k" = "v";' '"k" = "v";'
 export STRINGS_DIR="$work/strings-ok"
+# Likewise the inline String(format:) check scans an empty tree by default.
+export SWIFT_FORMAT_DIR="$work/empty"
 n=0
 
 # expect_reject <kind> <label> <file-name> <content>
@@ -62,7 +64,7 @@ expect_reject() {
     fi
 }
 
-echo "[1/6] vacuous #expect / #require forms — each must fail the gate"
+echo "[1/8] vacuous #expect / #require forms — each must fail the gate"
 expect_reject tests '== false + message'        T.swift '#expect(opt == false, "msg")'
 expect_reject tests '== true + message w/ interp' T.swift '#expect(pin?.isEmpty == true, "pin for \(host)")'
 expect_reject tests '!= true'                   T.swift '#expect(opt != true)'
@@ -79,7 +81,7 @@ expect_reject tests 'multi-line assert'         T.swift $'#expect(\n    opt ==\n
 expect_reject tests 'multi-line + message'      T.swift $'#expect(opt?.isEmpty\n    == false,\n    "x")'
 expect_reject tests 'unbalanced call (fail closed)' T.swift '#expect(foo(bar'
 
-echo "[2/6] allowed assert forms — the gate must pass"
+echo "[2/8] allowed assert forms — the gate must pass"
 mkdir -p "$work/accept-tests"
 cat > "$work/accept-tests/Ok.swift" <<'SWIFT'
 // #expect(opt == false) in a line comment is prose, not an assert.
@@ -130,7 +132,7 @@ else
     failures=$((failures + 1))
 fi
 
-echo "[3/6] trapping integer conversions in *WireTypes.swift — each must fail the gate"
+echo "[3/8] trapping integer conversions in *WireTypes.swift — each must fail the gate"
 expect_reject wire 'Int($0)'               FooWireTypes.swift 'let a = xs.map { Int($0) }'
 expect_reject wire 'Int(x.rounded())'      FooWireTypes.swift 'let a = Int(x.rounded())'
 expect_reject wire 'Int(value)'            FooWireTypes.swift 'let a = Int(value)'
@@ -143,15 +145,18 @@ expect_reject wire 'Int(d) nested in a radix call' FooWireTypes.swift 'let a = I
 expect_reject wire 'Int(Int(d), radix: 16)'        FooWireTypes.swift 'let a = Int(Int(d), radix: 16)'
 expect_reject wire 'Int(d) as the radix argument'  FooWireTypes.swift 'let a = Int(s, radix: Int(d))'
 
-# expect_reject_strings <label> <en> <pt-BR> <es> — requires the strings
-# check's own ✗ line, so a crash is not mistaken for a detection.
+# expect_reject_strings <label> <en> <pt-BR> <es> [reason] — requires the
+# strings check's own ✗ line, so a crash is not mistaken for a detection, and,
+# when given, the specific <reason> text, so the plant is proven to trip the
+# rule it targets rather than some other one.
 expect_reject_strings() {
-    local label=$1 dir out rc=0
+    local label=$1 reason=${5:-} dir out rc=0
     n=$((n + 1))
     dir="$work/reject-$n"
     plant_strings "$dir" "$2" "$3" "$4"
     out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" STRINGS_DIR="$dir" "$CHECK" 2>&1) || rc=$?
-    if [ "$rc" -ne 0 ] && grep -qF "Localizable.strings integer specifier / parity violation" <<<"$out"; then
+    if [ "$rc" -ne 0 ] && grep -qF "Localizable.strings integer specifier / duplicate key / parity violation" <<<"$out" \
+        && { [ -z "$reason" ] || grep -qF "$reason" <<<"$out"; }; then
         echo "  ✓ rejects: $label"
     else
         echo "  ✗ GATE IS BLIND to: $label (exit $rc)"
@@ -160,7 +165,7 @@ expect_reject_strings() {
     fi
 }
 
-echo "[4/6] 32-bit integer specifiers and language drift in Localizable.strings — each must fail the gate"
+echo "[4/8] 32-bit integer specifiers and language drift in Localizable.strings — each must fail the gate"
 expect_reject_strings '%d'                      '"a_fmt" = "%d%%";'  '"a_fmt" = "%d%%";'  '"a_fmt" = "%d%%";'
 expect_reject_strings '%i'                      '"a_fmt" = "%i x";'  '"a_fmt" = "%i x";'  '"a_fmt" = "%i x";'
 expect_reject_strings 'positional %1$d'         '"a_fmt" = "%1$d";'  '"a_fmt" = "%1$d";'  '"a_fmt" = "%1$d";'
@@ -171,31 +176,43 @@ expect_reject_strings 'key missing in es' \
 expect_reject_strings 'specifier mismatch'      '"a_fmt" = "%ld";'   '"a_fmt" = "%@";'    '"a_fmt" = "%ld";'
 expect_reject_strings 'missing argument'        '"a_fmt" = "%ld-%ld";' '"a_fmt" = "%ld";' '"a_fmt" = "%ld-%ld";'
 expect_reject_strings 'unparseable entry (fail closed)' '"a_fmt" = "%ld"' '"a_fmt" = "%ld";' '"a_fmt" = "%ld";'
+expect_reject_strings '%u'                      '"a_fmt" = "%u";'    '"a_fmt" = "%u";'    '"a_fmt" = "%u";' 'uses %u'
+expect_reject_strings '%o'                      '"a_fmt" = "%o";'    '"a_fmt" = "%o";'    '"a_fmt" = "%o";' 'uses %o'
+expect_reject_strings '%x'                      '"a_fmt" = "%02x";'  '"a_fmt" = "%02x";'  '"a_fmt" = "%02x";' 'uses %x'
+expect_reject_strings '%X'                      '"a_fmt" = "%X";'    '"a_fmt" = "%X";'    '"a_fmt" = "%X";' 'uses %X'
+expect_reject_strings '%hhx'                    '"a_fmt" = "%hhx";'  '"a_fmt" = "%hhx";'  '"a_fmt" = "%hhx";' 'uses %hhx'
+expect_reject_strings 'duplicate key, same value' \
+    $'"done" = "Done";\n"done" = "Done";' '"done" = "Done";' '"done" = "Done";' \
+    'duplicate key "done" (first defined on line 1)'
+expect_reject_strings 'duplicate key, different values (pt-BR)' \
+    $'"done" = "Done";\n"x" = "y";' $'"done" = "Concluir";\n"x" = "y";\n"done" = "Conclu\u00eddo";' $'"done" = "Done";\n"x" = "y";' \
+    'pt-BR.lproj/Localizable.strings:3: duplicate key "done"'
 
-echo "[5/6] allowed strings forms — the gate must pass"
+echo "[5/8] allowed strings forms — the gate must pass"
 plant_strings "$work/accept-strings" \
-    $'/* block comment with %d */\n// line comment %d\n"a_fmt" = "%@ at %ld%%";\n"b_fmt" = "%1$@ has %2$ld";\n"c_fmt" = "%lld %qd %zd";\n"d" = "above 90% now (% Quota)";\n"e_fmt" = "%.1f \\"q\\"";' \
-    $'"a_fmt" = "%@ em %ld%%";\n"b_fmt" = "%2$ld em %1$@";\n"c_fmt" = "%lld %qd %zd";\n"d" = "acima de 90% agora (% Quota)";\n"e_fmt" = "%.1f";' \
-    $'"a_fmt" = "%@ al %ld%%";\n"b_fmt" = "%1$@ tiene %2$ld";\n"c_fmt" = "%lld %qd %zd";\n"d" = "90% ahora (% Cuota)";\n"e_fmt" = "%.1f";'
+    $'/* block comment with %d */\n// line comment %d\n"a_fmt" = "%@ at %ld%%";\n"b_fmt" = "%1$@ has %2$ld";\n"c_fmt" = "%lld %qd %zd";\n"d" = "above 90% now (% Quota)";\n"e_fmt" = "%.1f \\"q\\"";\n"f_fmt" = "%lu %lo %02lx %llX";' \
+    $'"a_fmt" = "%@ em %ld%%";\n"b_fmt" = "%2$ld em %1$@";\n"c_fmt" = "%lld %qd %zd";\n"d" = "acima de 90% agora (% Quota)";\n"e_fmt" = "%.1f";\n"f_fmt" = "%lu %lo %02lx %llX";' \
+    $'"a_fmt" = "%@ al %ld%%";\n"b_fmt" = "%1$@ tiene %2$ld";\n"c_fmt" = "%lld %qd %zd";\n"d" = "90% ahora (% Cuota)";\n"e_fmt" = "%.1f";\n"f_fmt" = "%lu %lo %02lx %llX";'
 rc=0
 out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" STRINGS_DIR="$work/accept-strings" "$CHECK" 2>&1) || rc=$?
 if [ "$rc" -eq 0 ]; then
-    echo "  ✓ accepts %ld, reordered positional %2\$ld, %lld/%qd/%zd, %%, prose percent, escaped quotes, comments"
+    echo "  ✓ accepts %ld, reordered positional %2\$ld, %lld/%qd/%zd, %lu/%lo/%lx/%llX, %%, prose percent, escaped quotes, comments"
 else
     echo "  ✗ gate rejects an allowed strings form (exit $rc):"
     sed 's/^/      /' <<<"$out"
     failures=$((failures + 1))
 fi
 
-echo "[6/6] a missing directory or strings file must fail closed, not read as clean"
+echo "[6/8] a missing directory or strings file must fail closed, not read as clean"
 rc=0
 mkdir -p "$work/strings-partial/en.lproj"
 cp "$work/strings-ok/en.lproj/Localizable.strings" "$work/strings-partial/en.lproj/"
-TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" STRINGS_DIR="$work/strings-partial" "$CHECK" >/dev/null 2>&1 || rc=$?
-if [ "$rc" -ne 0 ]; then
-    echo "  ✓ missing pt-BR/es strings fails the gate"
+out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" STRINGS_DIR="$work/strings-partial" "$CHECK" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && grep -qF "strings check could not run (missing $work/strings-partial/pt-BR.lproj/Localizable.strings)" <<<"$out"; then
+    echo "  ✓ missing pt-BR/es strings fails the gate with the missing-file message"
 else
-    echo "  ✗ missing strings files reported clean"
+    echo "  ✗ missing strings files reported clean, or failed for another reason (exit $rc)"
+    sed 's/^/      /' <<<"$out"
     failures=$((failures + 1))
 fi
 rc=0
@@ -204,6 +221,65 @@ if [ "$rc" -ne 0 ]; then
     echo "  ✓ missing tests dir fails the gate"
 else
     echo "  ✗ missing tests dir reported clean"
+    failures=$((failures + 1))
+fi
+rc=0
+out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" SWIFT_FORMAT_DIR="$work/does-not-exist" "$CHECK" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && grep -qF "inline String(format:) check could not run" <<<"$out"; then
+    echo "  ✓ missing Swift sources dir fails the gate"
+else
+    echo "  ✗ missing Swift sources dir reported clean (exit $rc)"
+    failures=$((failures + 1))
+fi
+
+# expect_reject_format <label> <swift source> — plants one Swift file and
+# requires the inline String(format:) check's own ✗ line naming it.
+expect_reject_format() {
+    local label=$1 dir out rc=0
+    n=$((n + 1))
+    dir="$work/reject-$n"
+    mkdir -p "$dir/Sub"
+    printf '%s\n' "$2" > "$dir/Sub/F.swift"
+    out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" SWIFT_FORMAT_DIR="$dir" "$CHECK" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ] && grep -qF "inline String(format:) literal with a 32-bit signed specifier" <<<"$out" \
+        && grep -qF "$dir/Sub/F.swift" <<<"$out"; then
+        echo "  ✓ rejects: $label"
+    else
+        echo "  ✗ GATE IS BLIND to: $label (exit $rc)"
+        sed 's/^/      /' <<<"$out"
+        failures=$((failures + 1))
+    fi
+}
+
+echo "[7/8] 32-bit signed specifiers in inline String(format:) literals — each must fail the gate"
+expect_reject_format '%d%%'                'Text(String(format: " (%d%%)", pct))'
+expect_reject_format '%04d-%02d'           'let s = String(format: "%04d-%02d", y, m)'
+expect_reject_format '%i'                  'let s = String(format: "%i", n)'
+expect_reject_format 'positional %1$d'     'let s = String(format: "%1$d", n)'
+expect_reject_format '%hd'                 'let s = String(format: "%hd", n)'
+expect_reject_format 'argument on next line' $'let s = String(\n    format: "%d items", n)'
+expect_reject_format '%d after an escaped quote' 'let s = String(format: "\"%d\"", n)'
+
+echo "[8/8] allowed inline String(format:) forms — the gate must pass"
+mkdir -p "$work/accept-format"
+cat > "$work/accept-format/Ok.swift" <<'SWIFT'
+// String(format: "%d", n) in a line comment is prose.
+let a = String(format: " (%ld%%)", pct)
+let b = String(format: "%04ld-%02ld", y, m)
+let c = String(format: "%lld %qd %zd %jd %td", n, n, n, n, n)
+let d = data.map { String(format: "%02x", $0) }.joined()
+let e = String(format: "\\u%04X", c.value)
+let f = String(format: "%.0f%% used", util)
+let g = String(format: L10n.localizedString("x_fmt"), n)
+let h = String(format: "%@ and %%d", s)
+SWIFT
+rc=0
+out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" SWIFT_FORMAT_DIR="$work/accept-format" "$CHECK" 2>&1) || rc=$?
+if [ "$rc" -eq 0 ]; then
+    echo "  ✓ accepts %ld/%04ld/%lld, unsigned hex on fixed-width values, floats, %%d, non-literal formats, comments"
+else
+    echo "  ✗ gate rejects an allowed inline format (exit $rc):"
+    sed 's/^/      /' <<<"$out"
     failures=$((failures + 1))
 fi
 

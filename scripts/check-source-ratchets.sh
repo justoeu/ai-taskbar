@@ -11,9 +11,11 @@
 #   WIRE_TYPES_DIR  (default: Sources/AiTaskbarProviders)
 #   STRINGS_DIR     (default: Sources/AiTaskbarApp/Resources; holds
 #                    {en,pt-BR,es}.lproj/Localizable.strings)
+#   SWIFT_FORMAT_DIR (default: Sources; every *.swift below it is scanned for
+#                    inline String(format: "...") literals)
 #
-# Exits non-zero, printing up to 5 offending locations, when either check
-# fires. If you change a pattern here, run scripts/source-ratchet-selftest.sh:
+# Exits non-zero, printing up to 5 offending locations, when any of the four
+# checks fires. If you change a pattern here, run scripts/source-ratchet-selftest.sh:
 # it plants every form each check must reject and every form it must accept.
 
 set -euo pipefail
@@ -141,8 +143,12 @@ fi
 # `%i` read 32 bits of it, so `notif_discreet_body_fmt` fed an unclamped
 # 5_000_000_000 threshold printed 705032704. Integer conversions must carry a
 # 64-bit length modifier (`%ld`, `%1$ld`, `%lld`, `%qd`, `%zd`, `%jd`, `%td`);
-# a bare or `h`/`hh` `%d`/`%i` fails. If an argument is ever genuinely Int32,
+# a bare or `h`/`hh` `%d`/`%i`/`%u`/`%o`/`%x`/`%X` fails (TEST-MAE-012: the
+# unsigned conversions read 32 bits of the vararg just the same). If an argument is ever genuinely Int32,
 # widen it to Int at the call site rather than special-casing the gate.
+# A key may be defined only once per file (BUG-MAE-016: "done" was defined
+# twice with two different pt-BR words, and which one showed depended on the
+# parser keeping the last duplicate).
 # The three languages must also carry identical key sets and, per key, the
 # identical specifier list (ordered by argument index, so a translation may
 # reorder positional `%1$@ … %2$ld` forms), since a missing or mismatched
@@ -178,13 +184,16 @@ if ! bad_fmt=$(perl -0777 -ne '
             while ($val =~ /%(?:(\d+)\$)?[-+#0\x27]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(hh|h|ll|l|q|z|t|j|L)?([diouxXeEfFgGaAcCsSp@%])/g) {
                 my ($pos, $len, $conv) = ($1, $2 // "", $3);
                 next if $conv eq "%";
-                if (($conv eq "d" || $conv eq "i") && $len !~ /^(?:l|ll|q|z|t|j)$/) {
+                if ($conv =~ /^[diouxX]$/ && $len !~ /^(?:l|ll|q|z|t|j)$/) {
                     print "$ARGV:$line: \"$key\" uses %$len$conv — use %l$conv for a Swift Int\n";
                 }
                 my $idx = defined $pos ? $pos : $next++;
                 push @specs, [$idx, "$len$conv"];
             }
             my $sig = join ",", map { "$_->[0]:$_->[1]" } sort { $a->[0] <=> $b->[0] } @specs;
+            print "$ARGV:$line: duplicate key \"$key\" (first defined on line $first{$ARGV}{$key})\n"
+                if exists $first{$ARGV}{$key};
+            $first{$ARGV}{$key} //= $line;
             $seen{$ARGV}{$key} = $sig;
         }
         END {
@@ -207,10 +216,47 @@ if ! bad_fmt=$(perl -0777 -ne '
 fi
 if [ -n "$bad_fmt" ]; then
     echo "$bad_fmt" | head -5
-    echo "  ✗ Localizable.strings integer specifier / parity violation — use %ld and keep en, pt-BR, es in lockstep"
+    echo "  ✗ Localizable.strings integer specifier / duplicate key / parity violation — use %ld, define each key once, keep en, pt-BR, es in lockstep"
     status=1
 else
-    echo "  ✓ Localizable.strings: 64-bit integer specifiers, identical keys and specifiers in en/pt-BR/es"
+    echo "  ✓ Localizable.strings: 64-bit integer specifiers, unique keys, identical keys and specifiers in en/pt-BR/es"
+fi
+
+# 4. Inline String(format: "...") literals in Swift sources (BUG-MAE-017).
+# Same 32-bit read as check 3, one layer down: `String(format: " (%d%%)",
+# pct)` and xAI's `"%04d-%02d"` cycle label fed a Swift `Int` to `%d`, so a
+# year above Int32.max printed its low word. Signed conversions (`%d`, `%i`)
+# in a literal must carry a 64-bit length modifier (`%ld`, `%02ld`, `%04ld`).
+# Unsigned conversions (`%x`, `%X`, `%o`, `%u`) are not checked here: in Swift
+# source they format explicitly fixed-width UInt8/UInt32 values (hex digests,
+# `\\u%04X` scalars, the quarantine timestamp), where 32 bits is the correct
+# width. Only the literal argument is inspected; formats looked up through
+# L10n are covered by check 3. Line comments are ignored.
+swift_dir="${SWIFT_FORMAT_DIR:-Sources}"
+if ! bad_inline=$(find "$swift_dir" -name '*.swift' -type f -print0 | sort -z \
+    | xargs -0 perl -0777 -ne '
+        my $src = $_;
+        $src =~ s{^([ \t]*)//[^\n]*}{$1}mg;
+        while ($src =~ /\bString\s*\(\s*format\s*:\s*"((?:[^"\\\n]|\\.)*)"/g) {
+            my ($fmt, $at) = ($1, $-[0]);
+            my $line = 1 + (substr($src, 0, $at) =~ tr/\n//);
+            while ($fmt =~ /%(?:\d+\$)?[-+#0\x27]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(hh|h|ll|l|q|z|t|j|L)?([diouxXeEfFgGaAcCsSp@%])/g) {
+                my ($spec, $len, $conv) = ($&, $1 // "", $2);
+                if ($conv =~ /^[di]$/ && $len !~ /^(?:l|ll|q|z|t|j)$/) {
+                    print "$ARGV:$line: String(format: \"$fmt\") uses $spec — use an l-modified form (%l$conv) for a Swift Int\n";
+                }
+            }
+        }
+    '); then
+    echo "  ✗ inline String(format:) check could not run (dir: $swift_dir)"
+    exit 1
+fi
+if [ -n "$bad_inline" ]; then
+    echo "$bad_inline" | head -5
+    echo "  ✗ inline String(format:) literal with a 32-bit signed specifier — use %ld / %02ld for a Swift Int"
+    status=1
+else
+    echo "  ✓ inline String(format:) literals: 64-bit signed integer specifiers"
 fi
 
 exit "$status"

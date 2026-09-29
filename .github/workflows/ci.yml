@@ -40,8 +40,11 @@ jobs:
         # happens to run validate next.
         run: |
           cmp -s CLAUDE.md AGENTS.md || { echo "CLAUDE.md and AGENTS.md diverged — run: cp CLAUDE.md AGENTS.md"; exit 1; }
-          # Same script validate.sh runs (vacuous #expect/#require + bare Int
-          # in *WireTypes.swift), preceded by its planted-input self-test.
+          # Same script validate.sh runs (vacuous #expect/#require, bare Int
+          # in *WireTypes.swift, Localizable.strings 64-bit specifiers +
+          # duplicate keys + en/pt-BR/es parity, and 64-bit signed specifiers
+          # in inline String(format:) literals), preceded by its planted-input
+          # self-test.
           scripts/source-ratchet-selftest.sh
           scripts/check-source-ratchets.sh
 

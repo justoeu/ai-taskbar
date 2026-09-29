@@ -104,7 +104,8 @@ fi
 ok "CLAUDE.md ≡ AGENTS.md"
 
 # Vacuous-#expect ratchet + trapping Double->Int ratchet for *WireTypes.swift +
-# 64-bit %ld / en-pt-BR-es parity ratchet for Localizable.strings.
+# 64-bit %ld / unique-key / en-pt-BR-es parity ratchet for Localizable.strings +
+# 64-bit %ld ratchet for inline String(format: "...") literals in Sources/.
 # All live in one script shared with ci.yml so the two cannot drift, and the
 # self-test runs first: it plants every form each check must reject or accept
 # in a scratch tree, so a regex that silently stopped matching fails here

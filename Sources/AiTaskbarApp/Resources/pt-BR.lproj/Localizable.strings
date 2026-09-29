@@ -85,7 +85,6 @@
 "about_built_with" = "Construído com SwiftUI · Licença MIT";
 // %@ = nome extraído do certificado Developer ID que assinou o binário.
 "about_developer_fmt" = "Desenvolvido por %@";
-"done" = "Concluir";
 
 // History / sparkline
 "building_history" = "Construindo histórico…";

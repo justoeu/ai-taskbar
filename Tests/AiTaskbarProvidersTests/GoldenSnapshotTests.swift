@@ -232,6 +232,19 @@ struct GoldenSnapshotTests {
 
     // MARK: - xAI
 
+    /// BUG-MAE-017: the cycle label was built with `%04d-%02d`, which reads
+    /// only 32 bits of the Swift `Int` year, so a year above `Int32.max`
+    /// printed its low word. `%04ld` must render the full value.
+    @Test("xAI cycle label renders a 64-bit year without truncation")
+    func xai_cycle_label_is_64bit() throws {
+        let json = Fixtures.xaiInvoicePreview200.replacingOccurrences(
+            of: "\"year\": 2026", with: "\"year\": 4294969322")
+        let preview = try JSONDecoder().decode(
+            XAIInvoicePreviewResponse.self, from: Fixtures.data(json))
+        let snap = XAICachedPayload(prepaid: nil, preview: preview).toSnapshot()
+        #expect(snap.billingCycleLabel == "4294969322-07")
+    }
+
     @Test("xAI golden — prepaid + monthly spend vs limit")
     func xai_golden() throws {
         let prepaid = try JSONDecoder().decode(

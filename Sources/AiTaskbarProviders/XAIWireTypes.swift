@@ -357,7 +357,7 @@ extension XAICachedPayload {
 
         var cycleLabel: String?
         if let y = preview?.billingCycle?.year, let m = preview?.billingCycle?.month {
-            cycleLabel = String(format: "%04d-%02d", y, m)
+            cycleLabel = String(format: "%04ld-%02ld", y, m)
         }
 
         let balanceWindow: UsageWindow? = {

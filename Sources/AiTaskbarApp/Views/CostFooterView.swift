@@ -280,7 +280,7 @@ public struct CostFooterView: View {
                 Text(String(format: "$%.2f", row.usdToday))
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.primary)
-                Text(String(format: " (%d%%)", todayPct))
+                Text(String(format: " (%ld%%)", todayPct))
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(.secondary)
             } else {
@@ -299,7 +299,7 @@ public struct CostFooterView: View {
                 Text(String(format: "$%.2f", row.usd7d))
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.primary)
-                Text(String(format: " (%d%%)", weekPct))
+                Text(String(format: " (%ld%%)", weekPct))
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(.secondary)
             } else {
