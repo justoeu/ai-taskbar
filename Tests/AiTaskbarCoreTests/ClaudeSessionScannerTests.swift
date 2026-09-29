@@ -295,4 +295,137 @@ struct ClaudeSessionScannerTests {
         #expect(today["claude-opus-5-5"]?.cacheReadTokens == 0)
         #expect(today["claude-opus-5-5"]?.fastInputTokens == 0)
     }
+
+    // MARK: - Duplicate API responses (BUG-ART-001)
+    //
+    // Claude Code writes the same API response to the transcript more than
+    // once (streaming / tool-use splits), with the same `message.id` and
+    // `requestId`. Summing every line inflated tokens and $ by ~1.9x on real
+    // data. Each (message.id, requestId) must count once per scan, across
+    // files, keeping the line with the largest output.
+
+    private static func keyedLine(timestamp: String, messageId: String?, requestId: String?,
+                                  model: String = "claude-opus-4-7",
+                                  input: Int = 0, output: Int = 0, cacheRead: Int = 0) -> String {
+        let req = requestId.map { #""requestId":"\#($0)","# } ?? ""
+        let mid = messageId.map { #""id":"\#($0)","# } ?? ""
+        return #"""
+        {\#(req)"timestamp":"\#(timestamp)","message":{\#(mid)"role":"assistant","model":"\#(model)","usage":{"input_tokens":\#(input),"output_tokens":\#(output),"cache_read_input_tokens":\#(cacheRead)}}}
+        """#
+    }
+
+    private static func makeProjects(_ files: [String: [String]]) throws -> URL {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-claude-dedup-\(UUID().uuidString)")
+        let proj = root.appendingPathComponent("proj")
+        try FileManager.default.createDirectory(at: proj, withIntermediateDirectories: true)
+        for (name, lines) in files {
+            try Data((lines.joined(separator: "\n") + "\n").utf8)
+                .write(to: proj.appendingPathComponent(name))
+        }
+        return root
+    }
+
+    @Test("the same message.id + requestId written twice in one file counts once")
+    func duplicate_key_in_one_file_counts_once() throws {
+        let now = Date()
+        let ts = ISO8601DateFormatter().string(from: now)
+        let line = Self.keyedLine(timestamp: ts, messageId: "msg_A", requestId: "req_A",
+                                  input: 100, output: 50, cacheRead: 1_000)
+        let root = try Self.makeProjects(["s.jsonl": [line, line]])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 50)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.cacheReadTokens == 1_000)
+    }
+
+    @Test("duplicates with differing usage keep the line with the larger output")
+    func duplicate_key_keeps_larger_output() throws {
+        let now = Date()
+        let ts = ISO8601DateFormatter().string(from: now)
+        let small = Self.keyedLine(timestamp: ts, messageId: "msg_B", requestId: "req_B",
+                                   input: 100, output: 10, cacheRead: 1_000)
+        let large = Self.keyedLine(timestamp: ts, messageId: "msg_B", requestId: "req_B",
+                                   input: 100, output: 80, cacheRead: 1_000)
+        // Larger-first and larger-last must both settle on the larger output.
+        let root = try Self.makeProjects(["a.jsonl": [small, large],
+                                          "b.jsonl": [
+                                              Self.keyedLine(timestamp: ts, messageId: "msg_C", requestId: "req_C",
+                                                             model: "claude-haiku-4-5", input: 7, output: 90),
+                                              Self.keyedLine(timestamp: ts, messageId: "msg_C", requestId: "req_C",
+                                                             model: "claude-haiku-4-5", input: 7, output: 5),
+                                          ]])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 80)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
+        #expect(est.totalsByModel["claude-haiku-4-5"]?.outputTokens == 90)
+        #expect(est.totalsByModel["claude-haiku-4-5"]?.inputTokens == 7)
+    }
+
+    @Test("the same key in two different files counts once")
+    func duplicate_key_across_files_counts_once() throws {
+        let now = Date()
+        let ts = ISO8601DateFormatter().string(from: now)
+        let line = Self.keyedLine(timestamp: ts, messageId: "msg_D", requestId: "req_D",
+                                  input: 100, output: 50)
+        let root = try Self.makeProjects(["orig.jsonl": [line], "resumed.jsonl": [line]])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 50)
+    }
+
+    @Test("cross-file dedup holds when one file replays from the memo")
+    func duplicate_key_across_files_with_memo_replay() throws {
+        let now = Date()
+        let ts = ISO8601DateFormatter().string(from: now)
+        let line = Self.keyedLine(timestamp: ts, messageId: "msg_E", requestId: "req_E",
+                                  input: 100, output: 50)
+        let root = try Self.makeProjects(["orig.jsonl": [line], "resumed.jsonl": [line]])
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
+        // Grow one file so it re-scans while the other replays from the memo.
+        let resumed = root.appendingPathComponent("proj/resumed.jsonl")
+        let handle = try FileHandle(forWritingTo: resumed)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data((#"{"role":"user","content":"hi"}"# + "\n").utf8))
+        try handle.close()
+        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 100)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 50)
+    }
+
+    @Test("lines missing message.id or requestId are still counted, each one")
+    func lines_without_ids_are_counted() throws {
+        let now = Date()
+        let ts = ISO8601DateFormatter().string(from: now)
+        let noIds = Self.keyedLine(timestamp: ts, messageId: nil, requestId: nil, input: 100, output: 50)
+        let onlyMsg = Self.keyedLine(timestamp: ts, messageId: "msg_F", requestId: nil, input: 10, output: 5)
+        let onlyReq = Self.keyedLine(timestamp: ts, messageId: nil, requestId: "req_F", input: 1, output: 1)
+        let root = try Self.makeProjects(["s.jsonl": [noIds, noIds, onlyMsg, onlyMsg, onlyReq]])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 221)
+        #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 111)
+    }
+
+    @Test("scan() dedups a repeated key within the data it is given")
+    func scan_dedups_within_data() {
+        let startOfToday = Date(timeIntervalSince1970: 1_764_000_000)
+        let iso = ISO8601DateFormatter().string(from: startOfToday.addingTimeInterval(60))
+        let line = Self.keyedLine(timestamp: iso, messageId: "msg_G", requestId: "req_G",
+                                  input: 100, output: 50)
+        var today: [String: ModelUsage] = [:]
+        var week: [String: ModelUsage] = [:]
+        var unparseable = 0
+        ClaudeSessionScanner.scan(data: Data(([line, line].joined(separator: "\n") + "\n").utf8),
+                                  startOfToday: startOfToday,
+                                  sevenDaysAgo: startOfToday.addingTimeInterval(-7 * 86_400),
+                                  totalsToday: &today, totalsLast7: &week,
+                                  unparseableTimestamps: &unparseable)
+        #expect(today["claude-opus-4-7"]?.inputTokens == 100)
+        #expect(week["claude-opus-4-7"]?.outputTokens == 50)
+    }
 }

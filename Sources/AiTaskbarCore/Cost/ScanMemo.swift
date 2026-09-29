@@ -25,6 +25,23 @@ import Foundation
 /// cache file that outlives an app version whose parsing rules may have
 /// changed, to save a cold start that happens once per launch.
 public final class ScanMemo: @unchecked Sendable {
+    /// One API response identified by a request key (Claude: message.id +
+    /// requestId). Kept un-aggregated because the same response can be
+    /// written to several files, and dedup has to happen across all of them.
+    public struct KeyedUsage: Sendable, Equatable {
+        public let model: String
+        public let usage: ModelUsage
+        public let inToday: Bool
+        public let inWeek: Bool
+
+        public init(model: String, usage: ModelUsage, inToday: Bool, inWeek: Bool) {
+            self.model = model
+            self.usage = usage
+            self.inToday = inToday
+            self.inWeek = inWeek
+        }
+    }
+
     /// What one file contributed, in the window it was scanned for.
     public struct Entry: Sendable {
         public let size: Int
@@ -34,14 +51,19 @@ public final class ScanMemo: @unchecked Sendable {
         public let computedForDay: Date
         public let today: [String: ModelUsage]
         public let week: [String: ModelUsage]
+        /// Keyed records, NOT folded into `today`/`week`, so the caller can
+        /// dedup them against other files before aggregating.
+        public let keyed: [String: KeyedUsage]
 
         public init(size: Int, mtime: Date, computedForDay: Date,
-                    today: [String: ModelUsage], week: [String: ModelUsage]) {
+                    today: [String: ModelUsage], week: [String: ModelUsage],
+                    keyed: [String: KeyedUsage] = [:]) {
             self.size = size
             self.mtime = mtime
             self.computedForDay = computedForDay
             self.today = today
             self.week = week
+            self.keyed = keyed
         }
     }
 

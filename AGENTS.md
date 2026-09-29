@@ -359,6 +359,13 @@ traffic rides a subscription (zero marginal cost, so tokens are shown and
 dollars are not), and xAI's card already reports account-wide cycle spend from
 the Management API, so adding opencode's dollars there would double-count.
 
+`ClaudeSessionScanner` counts each API response once: Claude Code writes the
+same response to transcripts several times (same `message.id` + `requestId`,
+also across resumed/forked files), so lines are deduped by that pair across
+the whole window — memo replays included — keeping the largest
+`output_tokens`. Lines missing either id are counted individually. Summing
+every line measured ~1.9x too high.
+
 ### Claude fast mode is a per-request premium, not a separate model
 
 Fast mode (`usage.speed == "fast"` in `~/.claude/projects` transcripts) keeps
