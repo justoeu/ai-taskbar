@@ -1,0 +1,29 @@
+# Keeps the SHA-pinned actions current (DEP-MAE-002). Every `uses:` in
+# .github/workflows is pinned to a full commit SHA with the tag in a comment;
+# Dependabot bumps both. The composite action in .github/actions/select-swift
+# has no `uses:` of its own.
+#
+# A merged CI-only bump must not cut a release, so the commit subject carries
+# `[skip release]` (auto-tag.yml reads the head commit message).
+#
+# SwiftPM is watched too: TOMLKit is the single runtime dependency, pinned in
+# Package.resolved and documented as an accepted residual risk in CLAUDE.md.
+# A PR here is a prompt to re-evaluate, not an instruction to merge; a
+# dependency bump changes shipped code, so it releases normally.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps) [skip release]"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "deps"
+    open-pull-requests-limit: 2

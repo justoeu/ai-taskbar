@@ -67,6 +67,20 @@ struct DiskCacheTests {
         #expect(cache.anyPayload() == Data("p".utf8))
     }
 
+    @Test("hasFreshPayload agrees with freshPayload at the ttl boundary (PERF-MAE-003)")
+    func has_fresh_payload_matches_ttl_boundary() throws {
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let clock = TestClock()
+        let cache = DiskCache(vendor: .anthropic, baseDir: tmp, ttl: 60,
+                              maxStale: 600, now: { clock.date })
+        #expect(!cache.hasFreshPayload())
+        let mtime = try writeAndReadMtime(cache)
+        clock.date = mtime.addingTimeInterval(60)
+        #expect(cache.hasFreshPayload())
+        clock.date = mtime.addingTimeInterval(60.001)
+        #expect(!cache.hasFreshPayload())
+    }
+
     @Test("maxStale boundary: equal is served, just past is dropped (TEST-ARG-012)")
     func max_stale_boundary() throws {
         defer { try? FileManager.default.removeItem(at: tmp) }

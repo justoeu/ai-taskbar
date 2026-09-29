@@ -100,6 +100,8 @@ let c = Int(exactly: d)
 let e = Int(clamping: n)
 let f = UInt8(truncatingIfNeeded: n)
 let g = Int(s, radix: 16)
+let k = Int(String(x), radix: 16)
+let m = UInt8(s, radix: 2) ?? 0
 let h = xs.map(Int.init(saturating:))
 let i = Int.init(checkedTruncating: d)
 let j = Int64(saturating: d)
@@ -122,6 +124,7 @@ expect_reject wire 'Int64(d)'              FooWireTypes.swift 'let a = Int64(d)'
 expect_reject wire 'UInt8(x * 2)'          FooWireTypes.swift 'let a = UInt8(x * 2)'
 expect_reject wire 'point-free .map(Int.init)' FooWireTypes.swift 'let a = xs.map(Int.init)'
 expect_reject wire 'Int.init(d)'           FooWireTypes.swift 'let a = Int.init(d)'
+expect_reject wire 'radix parse + Int(d) on one line' FooWireTypes.swift 'let a = Int(s, radix: 16) ?? Int(d)'
 
 echo "[4/4] a missing directory must fail closed, not read as clean"
 rc=0

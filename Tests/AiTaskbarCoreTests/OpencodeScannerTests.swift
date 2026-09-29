@@ -310,6 +310,46 @@ struct OpencodeScannerTests {
         expectTrue(scan == nil)
     }
 
+    /// CQ-MAE-003: nil used to stand for four different causes, and the app
+    /// re-probed `fileExists` to tell "not installed" from "read failed".
+    /// The outcome carries the reason itself.
+    @Test("scanOutcome tells a missing database from an unreadable one")
+    func scan_outcome_distinguishes_causes() throws {
+        let missing = OpencodeScanner.scanOutcome(
+            now: now, providerGroups: ["openai": ["openai"]],
+            dbPath: "/nonexistent/\(UUID().uuidString)/opencode.db")
+        #expect(missing == .notInstalled)
+
+        let garbage = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("opencode-garbage-\(UUID().uuidString).db")
+        try Data("not a sqlite database, just bytes".utf8).write(to: garbage)
+        defer { try? FileManager.default.removeItem(at: garbage) } // test cleanup
+        let unreadable = OpencodeScanner.scanOutcome(
+            now: now, providerGroups: ["openai": ["openai"]], dbPath: garbage.path)
+        #expect(unreadable == .unavailable)
+
+        let conflicting = OpencodeScanner.scanOutcome(
+            now: now, providerGroups: ["a": ["openai"], "b": ["openai"]],
+            dbPath: garbage.path)
+        #expect(conflicting == .unavailable)
+    }
+
+    @Test("scanOutcome wraps a successful scan")
+    func scan_outcome_scanned() {
+        let db = FixtureDB(rows: [
+            (model: "gpt-5.5", provider: "openai", role: "assistant",
+             createdMs: msAgo(60), input: 7, output: 1, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+        ])
+        let outcome = OpencodeScanner.scanOutcome(
+            now: now, providerGroups: ["openai": ["openai"]], dbPath: db.path)
+        guard case .scanned(let scans) = outcome else {
+            Issue.record("expected .scanned, got \(outcome)")
+            return
+        }
+        #expect(scans["openai"]?.last7DaysByModel["gpt-5.5"]?.inputTokens == 7)
+    }
+
     /// Opt-in read of the real database. Off by default — it is 19 GB, belongs
     /// to another application, and its contents differ per machine.
     ///   OPENCODE_REAL_DB=1 swift test --filter real_database

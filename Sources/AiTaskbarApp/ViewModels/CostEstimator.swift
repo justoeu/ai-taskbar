@@ -70,12 +70,21 @@ public final class CostEstimator: ObservableObject {
     public init() {
         self.claudeEstimate = { ClaudeSessionScanner.estimate() }
         self.codexEstimate = { CodexCost.estimate() }
-        // A missing database means opencode is not installed: genuinely no
-        // rows. Any other nil is a read failure and stays nil.
         self.opencodeScan = { groups in
-            guard FileManager.default.fileExists(atPath: OpencodeScanner.defaultDatabasePath())
-            else { return [:] }
-            return OpencodeScanner.scan(providerGroups: groups)
+            Self.opencodeRows(from: OpencodeScanner.scanOutcome(providerGroups: groups))
+        }
+    }
+
+    /// A missing database means opencode is not installed: genuinely no rows.
+    /// An unavailable scan is a read failure and stays nil, so the previously
+    /// published rows are kept (BUG-ART-013). Decided by the scanner's own
+    /// probe, not a second `fileExists` that could disagree with it.
+    nonisolated static func opencodeRows(from outcome: OpencodeScanner.Outcome)
+        -> [String: OpencodeScan]? {
+        switch outcome {
+        case .notInstalled: return [:]
+        case .unavailable: return nil
+        case .scanned(let scans): return scans
         }
     }
 

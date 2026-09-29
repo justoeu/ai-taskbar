@@ -121,6 +121,33 @@ struct BoundedProcessTests {
         #expect(String(decoding: outcome.stdout, as: UTF8.self) == "yes")
     }
 
+    /// LEAK-MAE-002: a grandchild that inherits stdout keeps the pipe's write
+    /// end open after the direct child exits, so the drain thread blocked in
+    /// read(2) until the grandchild finished — past `run`'s return, holding a
+    /// GCD thread and the pipe. After `run` returns the read end must be
+    /// closed within the bounded tail, which the grandchild observes as EPIPE
+    /// on its next write (SIGPIPE ignored so the write error is visible).
+    @Test("a grandchild holding stdout does not keep the drain alive past run's return")
+    func grandchild_holding_pipe_is_abandoned() throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-bp-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) } // test cleanup
+        let stillOpen = dir.appendingPathComponent("still-open").path
+        let closed = dir.appendingPathComponent("closed").path
+        let script = "( trap '' PIPE; /bin/sleep 1; if echo late; then : > '\(stillOpen)'; "
+            + "else : > '\(closed)'; fi ) &"
+        let outcome = try BoundedProcess.run(executable: URL(fileURLWithPath: "/bin/sh"),
+                                             arguments: ["-c", script], timeout: 0.3)
+        #expect(!outcome.drained)
+        let fm = FileManager.default
+        for _ in 0..<60 where !fm.fileExists(atPath: stillOpen) && !fm.fileExists(atPath: closed) {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        #expect(fm.fileExists(atPath: closed))
+        #expect(!fm.fileExists(atPath: stillOpen))
+    }
+
     @Test("a missing executable throws instead of crashing")
     func launch_failure() {
         #expect(throws: (any Error).self) {

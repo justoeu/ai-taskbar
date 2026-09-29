@@ -296,6 +296,34 @@ struct OAuthKeychainConcurrencyTests {
         #expect(snap.planLabel == "Claude Max 20x")
     }
 
+    /// PERF-MAE-003: the label priming read ran on every non-forced fetch,
+    /// even when there was no fresh cache to serve, so a cold fetch read the
+    /// Keychain twice (priming, then the fetch path's own read).
+    @Test("Anthropic: a cold non-forced fetch reads the Keychain once")
+    func anthropic_cold_fetch_reads_keychain_once() async throws {
+        let dir = try Self.tmpDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let reader = ProbingKeychainReader(AnthropicCredentials(
+            accessToken: "a", refreshToken: "r",
+            expiresAtMs: Int64(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000),
+            subscriptionType: "max", rateLimitTier: "default_claude_max_20x"))
+        StubURLProtocol.reset()
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.anthropicUsage200)) }
+        defer { StubURLProtocol.reset() }
+        let provider = AnthropicProvider(credentialReader: reader,
+                                         cache: DiskCache(vendor: .anthropic, baseDir: dir),
+                                         http: .stubbed(protocols: [StubURLProtocol.self]))
+
+        let outcome = try await provider.fetchUsage(forceRefresh: false)
+
+        #expect(reader.totalReads == 1)
+        guard case let .anthropic(snap) = outcome.snapshot else {
+            Issue.record("expected anthropic snapshot")
+            return
+        }
+        #expect(snap.planLabel == "Claude Max 20x")
+    }
+
     // MARK: BEST-ATE-001
 
     @Test("Authorize runs off the cooperative pool and does not starve readOffPool")

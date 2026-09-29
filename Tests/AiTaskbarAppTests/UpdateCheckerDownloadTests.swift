@@ -35,6 +35,37 @@ private final class NotFoundDMGProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+/// Answers every non-evil request with a 302 to an off-platform host, and
+/// that host with the genuine DMG bytes (so SHA256 and size still match).
+/// Records the hosts it was asked for; the suite is `.serialized`.
+private final class OffPlatformRedirectDMGProtocol: URLProtocol {
+    static let evil = URL(string: "https://evil.example/payload.dmg")!
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var hostsStorage: [String] = []
+    static var requestedHosts: [String] { lock.withLock { hostsStorage } }
+    static func reset() { lock.withLock { hostsStorage = [] } }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let url = request.url!
+        Self.lock.withLock { Self.hostsStorage.append(url.host ?? "") }
+        if url.host == Self.evil.host {
+            let response = HTTPURLResponse(url: url, statusCode: 200,
+                                           httpVersion: "HTTP/1.1", headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: FixedDMGProtocol.body)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+        let redirect = HTTPURLResponse(url: url, statusCode: 302, httpVersion: "HTTP/1.1",
+                                       headerFields: ["Location": Self.evil.absoluteString])!
+        client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: Self.evil),
+                            redirectResponse: redirect)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
 /// URLSession download temp files currently in this process's temp dir.
 /// URLSession names them `CFNetworkDownload_*.tmp`.
 private func urlSessionDownloadTemps() throws -> Set<String> {
@@ -226,6 +257,21 @@ final class UpdateCheckerDownloadTests {
         let status = await settle(checker)
         expectTrue(isFailed(status))
         #expect(try urlSessionDownloadTemps().subtracting(before) == [])
+    }
+
+    /// SEC-MAE-001: the asset URL was checked against the GitHub allow-list,
+    /// but URLSession then followed ANY redirect. SHA256 + team signature
+    /// still guard the bytes; the redirect itself must not leave GitHub.
+    @Test("a DMG redirect off the GitHub allow-list is refused before the target is requested")
+    func off_platform_redirect_is_refused() async throws {
+        OffPlatformRedirectDMGProtocol.reset()
+        let checker = makeChecker(dir: dir, verifier: StubVerifier(accept: true),
+                                  serving: OffPlatformRedirectDMGProtocol.self)
+        checker.download(release(sha: Self.bodySHA))
+        let status = await settle(checker)
+        expectTrue(isFailed(status))
+        expectFalse(FileManager.default.fileExists(atPath: dest(in: dir).path))
+        #expect(!OffPlatformRedirectDMGProtocol.requestedHosts.contains("evil.example"))
     }
 }
 

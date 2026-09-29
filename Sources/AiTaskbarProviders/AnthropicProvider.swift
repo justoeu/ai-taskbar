@@ -50,8 +50,14 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         // A cache hit decodes synchronously, so the plan label must already
         // be memoized: reading the Keychain from decode would block a
         // cooperative-pool thread (RACE-CRO-004). The fetch path primes it
-        // from its own read.
-        if !forceRefresh { await primeLabelCacheOffPoolIfNeeded() }
+        // from its own read. Priming only when a fresh entry will actually be
+        // served keeps a cold fetch to ONE Keychain read, and bounds a failing
+        // priming read to the fresh hits of one TTL instead of every tick: once
+        // the entry ages out, the fetch path reads and surfaces the error
+        // (PERF-MAE-003).
+        if !forceRefresh, fetcher.cache.hasFreshPayload() {
+            await primeLabelCacheOffPoolIfNeeded()
+        }
         return try await fetcher.run(
             forceRefresh: forceRefresh,
             decode: decodeSnapshot,
@@ -92,6 +98,7 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         if manageOAuthRefresh, credentialReader.canPersistCredentials,
            credentials.isExpired(buffer: AnthropicOAuth.refreshBuffer) {
             credentials = try await refreshAndWriteBack(credentials)
+            try Task.checkCancellation()
         }
         return credentials
     }
@@ -114,7 +121,9 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
             }
             let resp = try await AnthropicOAuth.refresh(
                 refreshToken: current.refreshToken, http: http)
-            try Task.checkCancellation()
+            // No cancellation check here: the flight is never cancelled (see
+            // SingleFlight), and once the server rotated the token the new
+            // one must be written back. `loadCredentials` checks afterwards.
             let updated = current.rotated(
                 accessToken: resp.access_token,
                 refreshToken: resp.refresh_token,

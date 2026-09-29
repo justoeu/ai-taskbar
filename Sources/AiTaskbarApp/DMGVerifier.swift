@@ -57,9 +57,11 @@ public struct TeamSignatureDMGVerifier: DMGVerifying {
         // the 10-char uppercase-alphanumeric shape Apple issues.
         guard Self.isWellFormedTeamID(teamID) else { throw Failure.invalidTeamID }
         let timeout = self.timeout
-        try await Task.detached(priority: .userInitiated) {
+        // hdiutil can block for up to `timeout`: a GCD thread, not one of the
+        // cooperative pool's few (Task.detached still runs there).
+        try await OffPool.run {
             try Self.verifyBlocking(dmg: url, teamID: teamID, timeout: timeout)
-        }.value
+        }
     }
 
     static func isWellFormedTeamID(_ s: String) -> Bool {

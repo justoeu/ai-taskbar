@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public final class HTTPClient: @unchecked Sendable {
     private let session: URLSession
@@ -67,20 +68,40 @@ public final class HTTPClient: @unchecked Sendable {
 
     /// Download a remote resource to a temp file via this client's session
     /// (so pinning / ephemeral policy apply). Caller moves/copies the file.
-    public func download(_ request: URLRequest) async throws -> (URL, HTTPURLResponse) {
+    /// With `allowRedirect`, a redirect is followed only to an HTTPS target
+    /// the predicate accepts (same policy as `sendBounded`). A refused
+    /// redirect cancels the task before the target is requested and throws
+    /// `AppError.transport`; nothing is written. nil keeps URLSession's
+    /// default redirect handling.
+    public func download(
+        _ request: URLRequest,
+        allowRedirect: (@Sendable (URL) -> Bool)? = nil
+    ) async throws -> (URL, HTTPURLResponse) {
         try Task.checkCancellation()
         var req = request
         if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
             req.timeoutInterval = max(defaultTimeout, 120)
         }
+        let redirectDelegate = allowRedirect.flatMap { allow in
+            request.url.map {
+                BoundedRedirectDelegate(origin: $0, allow: allow, cancelOnRefusal: true)
+            }
+        }
         let tmp: URL
         let response: URLResponse
         do {
-            (tmp, response) = try await session.download(for: req)
+            (tmp, response) = try await session.download(for: req, delegate: redirectDelegate)
         } catch is CancellationError {
             throw CancellationError()
         } catch let urlErr as URLError {
-            if urlErr.code == .cancelled { throw CancellationError() }
+            if urlErr.code == .cancelled {
+                // Our own refusal cancels the task too; only a caller's
+                // cancellation is a CancellationError.
+                if redirectDelegate?.didRefuse == true {
+                    throw AppError.transport("download redirect refused")
+                }
+                throw CancellationError()
+            }
             throw AppError.transport("URLError \(urlErr.code.rawValue): \(urlErr.localizedDescription)")
         } catch {
             throw AppError.transport(error.localizedDescription)
@@ -119,9 +140,6 @@ public final class HTTPClient: @unchecked Sendable {
         maximumResponseBytes: Int = HTTPClient.defaultMaximumResponseBytes
     ) async throws -> (Data, HTTPURLResponse) {
         try Task.checkCancellation()
-        guard maximumResponseBytes >= 0 else {
-            throw AppError.transport("invalid bounded HTTP request")
-        }
         return try await readBounded(request, maximumResponseBytes: maximumResponseBytes,
                                      delegate: nil)
     }
@@ -136,7 +154,7 @@ public final class HTTPClient: @unchecked Sendable {
         allowRedirect: (@Sendable (URL) -> Bool)? = nil
     ) async throws -> (Data, HTTPURLResponse) {
         try Task.checkCancellation()
-        guard maximumResponseBytes >= 0, let origin = request.url else {
+        guard let origin = request.url else {
             throw AppError.transport("invalid bounded HTTP request")
         }
         let redirectDelegate = BoundedRedirectDelegate(origin: origin, allow: allowRedirect)
@@ -144,13 +162,21 @@ public final class HTTPClient: @unchecked Sendable {
                                      delegate: redirectDelegate)
     }
 
+    /// Bytes buffered between cancellation checks and appends in
+    /// `readBounded` (PERF-MAE-002).
+    static let readChunkBytes = 64 * 1024
+
     /// Shared capped streaming read. A nil `delegate` leaves redirects to the
     /// session's own policy, exactly as `session.data(for:)` did for `send`.
+    /// The one place the cap itself is validated.
     private func readBounded(
         _ request: URLRequest,
         maximumResponseBytes: Int,
         delegate: (any URLSessionTaskDelegate)?
     ) async throws -> (Data, HTTPURLResponse) {
+        guard maximumResponseBytes >= 0 else {
+            throw AppError.transport("invalid bounded HTTP request")
+        }
         var req = request
         if req.timeoutInterval <= 0 || req.timeoutInterval > 3600 {
             req.timeoutInterval = defaultTimeout
@@ -173,15 +199,27 @@ public final class HTTPClient: @unchecked Sendable {
                     Int(http.expectedContentLength)
                 ))
             }
+            // Per byte only an integer compare and an array append; the
+            // cancellation check and the copy into `data` run once per chunk.
+            // Doing both per byte made every vendor fetch ~100x slower to read.
+            let chunkBytes = Self.readChunkBytes
+            var chunk: [UInt8] = []
+            chunk.reserveCapacity(chunkBytes)
             for try await byte in bytes {
-                try Task.checkCancellation()
-                guard data.count < maximumResponseBytes else {
+                guard data.count + chunk.count < maximumResponseBytes else {
                     throw AppError.transport(
                         "HTTP response exceeds \(maximumResponseBytes) bytes"
                     )
                 }
-                data.append(byte)
+                chunk.append(byte)
+                if chunk.count == chunkBytes {
+                    try Task.checkCancellation()
+                    data.append(contentsOf: chunk)
+                    chunk.removeAll(keepingCapacity: true)
+                }
             }
+            try Task.checkCancellation()
+            data.append(contentsOf: chunk)
             return (data, http)
         } catch let appErr as AppError {
             throw appErr
@@ -227,12 +265,20 @@ private final class BoundedRedirectDelegate:
     private let host: String?
     private let port: Int?
     private let allow: (@Sendable (URL) -> Bool)?
+    /// Downloads cancel on refusal: a refused redirect otherwise leaves the
+    /// download without a final response, which the async download API does
+    /// not survive (it traps under URLProtocol stubs).
+    private let cancelOnRefusal: Bool
+    private let refused = OSAllocatedUnfairLock(initialState: false)
 
-    init(origin: URL, allow: (@Sendable (URL) -> Bool)?) {
+    var didRefuse: Bool { refused.withLock { $0 } }
+
+    init(origin: URL, allow: (@Sendable (URL) -> Bool)?, cancelOnRefusal: Bool = false) {
         scheme = origin.scheme?.lowercased()
         host = origin.host?.lowercased()
         port = origin.port
         self.allow = allow
+        self.cancelOnRefusal = cancelOnRefusal
     }
 
     private func sameOrigin(_ url: URL) -> Bool {
@@ -255,6 +301,10 @@ private final class BoundedRedirectDelegate:
               url.user == nil,
               url.password == nil
         else {
+            if cancelOnRefusal {
+                refused.withLock { $0 = true }
+                task.cancel()
+            }
             completionHandler(nil)
             return
         }

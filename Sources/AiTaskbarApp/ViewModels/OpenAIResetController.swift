@@ -54,7 +54,8 @@ final class OpenAIResetController: ObservableObject {
     func restorePending() async {
         guard !isBusy, pendingAttempt == nil else { return }
         do {
-            let restored = try await Task.detached { try OpenAIResetJournal().read() }.value
+            // Blocking file I/O: a GCD thread, not the cooperative pool.
+            let restored = try await OffPool.run { try OpenAIResetJournal().read() }
             guard !isBusy, pendingAttempt == nil else { return }
             pendingAttempt = restored
         } catch { message = Self.errorMessage(error) }

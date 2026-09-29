@@ -15,6 +15,12 @@ import os
 /// - A single deadline covers both the child's exit and the drains. A child
 ///   still running at the deadline, cancelled, or over its stdout cap gets
 ///   SIGTERM, then SIGKILL one second later.
+/// - Only the direct child is signalled: Foundation's `Process` has no
+///   process-group control. A grandchild that inherited a pipe can keep its
+///   write end open after the child is gone, so the drains poll instead of
+///   blocking in read(2), and `run` abandons them before returning: each
+///   reader stops within one poll slice and closes its read end, and the
+///   grandchild gets EPIPE on its next write (LEAK-MAE-002).
 ///
 /// The call is synchronous and can block for up to `timeout` + ~3 s. Callers
 /// run it off the main actor and off the cooperative pool.
@@ -115,6 +121,9 @@ public enum BoundedProcess {
                 kill(process.processIdentifier, SIGKILL)
                 _ = exited.wait(timeout: .now() + 1)
             }
+            // No stop predicate (nil) or one that did not fire means the
+            // deadline killed the child; a fired stop is cancellation or a
+            // stdout overflow, reported through their own flags instead.
             timedOut = stop?() != true
             let tail = DispatchTime.now() + 1
             drainedInTime = out.done.wait(timeout: tail) == .success
@@ -122,6 +131,7 @@ public enum BoundedProcess {
         } else {
             drainedInTime = wait(out.done, until: deadline, stop: stop) == .signalled
                 && (err.map { wait($0.done, until: deadline, stop: stop) } ?? .signalled) == .signalled
+            // Same reading of `stop` as above.
             timedOut = !drainedInTime && stop?() != true
         }
 
@@ -135,40 +145,69 @@ public enum BoundedProcess {
         outcome.stderr = err?.data.withLock { $0 } ?? Data()
         outcome.stdoutExceeded = overflow
         outcome.cancelled = options.cancellation?.isCancelled == true
+        // Everything the outcome needs has been read. A drain still running
+        // here is held open by a grandchild; stop it rather than leak it.
+        out.abandon()
+        err?.abandon()
         return outcome
     }
 
     private struct Drain: Sendable {
         let data: OSAllocatedUnfairLock<Data>
         let done: DispatchSemaphore
+        let abandoned: OSAllocatedUnfairLock<Bool>
+
+        func abandon() { abandoned.withLock { $0 = true } }
+        var isAbandoned: Bool { abandoned.withLock { $0 } }
     }
+
+    /// How long one poll(2) waits before the reader re-checks `abandoned`.
+    private static let pollSliceMilliseconds: Int32 = 50
 
     /// Reads `handle` to EOF on a background thread. With `keep == nil` the
     /// whole stream is kept (original behavior). Otherwise only `keep` bytes
     /// are kept: with `onOverflow` the read stops and reports the overflow,
     /// without it the excess is read and dropped so the child never blocks.
+    /// The read polls in `pollSliceMilliseconds` slices so `abandon()` ends
+    /// it even while a grandchild holds the write end open; the read end is
+    /// closed on every exit.
     private static func drain(_ handle: FileHandle, keep: Int?,
                               onOverflow: (@Sendable () -> Void)?) -> Drain {
-        let result = Drain(data: OSAllocatedUnfairLock(initialState: Data()), done: DispatchSemaphore(value: 0))
+        let result = Drain(data: OSAllocatedUnfairLock(initialState: Data()),
+                           done: DispatchSemaphore(value: 0),
+                           abandoned: OSAllocatedUnfairLock(initialState: false))
         DispatchQueue.global(qos: .userInitiated).async {
-            defer { result.done.signal() }
-            guard let keep else {
-                let data = handle.readDataToEndOfFile()
-                result.data.withLock { $0 = data }
-                return
+            defer {
+                // Best-effort: the fd is ours alone and nothing reads it after
+                // this point; closing is what releases a grandchild-held pipe.
+                try? handle.close()
+                result.done.signal()
             }
+            let fd = handle.fileDescriptor
+            var buffer = [UInt8](repeating: 0, count: 64 * 1024)
             var kept = Data()
-            while true {
-                let chunk = handle.availableData
-                if chunk.isEmpty { break }
-                if kept.count + chunk.count > keep {
+            while !result.isAbandoned {
+                var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                let ready = poll(&pfd, 1, pollSliceMilliseconds)
+                if ready == 0 { continue }
+                if ready < 0 {
+                    if errno == EINTR { continue }
+                    break
+                }
+                let n = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+                if n < 0 {
+                    if errno == EINTR || errno == EAGAIN { continue }
+                    break
+                }
+                if n == 0 { break } // EOF: every writer closed its end.
+                if let keep, kept.count + n > keep {
                     if let onOverflow {
                         onOverflow()
                         return
                     }
-                    kept.append(chunk.prefix(keep - kept.count))
+                    kept.append(contentsOf: buffer[0..<(keep - kept.count)])
                 } else {
-                    kept.append(chunk)
+                    kept.append(contentsOf: buffer[0..<n])
                 }
             }
             let final = kept

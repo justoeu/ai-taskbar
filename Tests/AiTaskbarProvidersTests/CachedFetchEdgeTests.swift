@@ -232,6 +232,71 @@ struct CachedFetchEdgeTests {
         #expect(outcome.isStale)
         #expect(abs(outcome.fetchedAt.timeIntervalSince(cachedAt)) < 2)
     }
+
+    /// CQ-MAE-010: when the network fails AND the only cached payload is one
+    /// the current decoder rejects, the caller must see why the fetch failed
+    /// (here a 503), not the decode error of a payload nobody asked for.
+    @Test("network failure over an undecodable cache surfaces the network cause")
+    func network_failure_over_undecodable_cache_keeps_network_cause() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfcause-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cache = DiskCache(vendor: .kimi, baseDir: tmp, ttl: 600)
+        try cache.writePayload(Data("old-schema".utf8))
+        struct SchemaError: Error {}
+        var thrown: Error?
+        do {
+            let _: CachedOutcome<String> = try await CachedFetch(cache: cache).run(
+                forceRefresh: false,
+                decode: { data in
+                    guard data == Data("new-schema".utf8) else { throw SchemaError() }
+                    return "new-schema"
+                },
+                fetch: { throw AppError.http(status: 503, body: "down") }
+            )
+        } catch {
+            thrown = error
+        }
+        expectTrue((thrown as? AppError) == AppError.http(status: 503, body: "down"))
+    }
+
+    /// CQ-MAE-015: `.last_error` persists status + body only, so guidance is
+    /// lost across a relaunch. That is safe only while the one UI path that
+    /// renders guidance (the stale tooltip, `isStale == true`) always carries
+    /// the in-memory error of the failure that made it stale, and a cache hit
+    /// that reads the persisted error is never stale. Both halves are pinned.
+    @Test("guidance reaches the stale outcome in memory; persisted errors never mark stale")
+    func guidance_stays_in_memory_on_the_stale_path() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfguid-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cache = DiskCache(vendor: .gemini, baseDir: tmp, ttl: 600)
+        try cache.writePayload(Data("good".utf8))
+        // An older, guidance-less failure is already on disk.
+        cache.markFailed(FetchError(status: 500, body: "older failure"))
+
+        let stale: CachedOutcome<String> = try await CachedFetch(cache: cache).run(
+            forceRefresh: true,
+            decode: { String(decoding: $0, as: UTF8.self) },
+            fetch: { throw AppError.guidance(.antigravityNotAuthenticated) }
+        )
+        #expect(stale.isStale)
+        expectTrue(stale.lastError?.guidance == .antigravityNotAuthenticated)
+        #expect(stale.lastError?.status == 401)
+
+        // "Relaunch": a new cache instance over the same directory serves the
+        // fresh payload with the persisted (guidance-less) error, not stale.
+        let relaunched: CachedOutcome<String> = try await CachedFetch(
+            cache: DiskCache(vendor: .gemini, baseDir: tmp, ttl: 600)).run(
+            forceRefresh: false,
+            decode: { String(decoding: $0, as: UTF8.self) },
+            fetch: { Issue.record("fresh cache must not fetch"); return Data() }
+        )
+        #expect(!relaunched.isStale)
+        expectTrue(relaunched.lastError?.guidance == nil)
+    }
 }
 
 /// One-shot latch for a blocking StubURLProtocol handler: callers wait until

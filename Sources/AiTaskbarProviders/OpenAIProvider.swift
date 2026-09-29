@@ -76,6 +76,7 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
                    let exp = JWT.expiry(auth.tokens.idToken),
                    exp < Date.now.addingTimeInterval(OpenAIOAuth.refreshBuffer) {
                     auth = try await refreshAndWriteBack(auth)
+                    try Task.checkCancellation()
                     didRefresh = true
                 }
                 // Reactive: if the usage endpoint rejects the token with 401,
@@ -91,6 +92,7 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
                 } catch AppError.http(401, _) where manageOAuthRefresh && !didRefresh {
                     try Task.checkCancellation()
                     auth = try await refreshAndWriteBack(auth)
+                    try Task.checkCancellation()
                     return try await fetchUsageBytes(auth: auth)
                 }
             }
@@ -113,7 +115,9 @@ public final class OpenAIProvider: UsageProvider, @unchecked Sendable {
             }
             let resp = try await OpenAIOAuth.refresh(
                 refreshToken: current.tokens.refreshToken, http: http)
-            try Task.checkCancellation()
+            // No cancellation check here: the flight is never cancelled (see
+            // SingleFlight), and once the server rotated the token the new
+            // one must be written back. Callers check afterwards.
             var updated = current
             updated.tokens = CodexTokens(
                 accessToken: resp.access_token,

@@ -366,6 +366,23 @@ struct CodexSessionScannerTests {
         #expect(result.today["gpt-5.5"]?.inputTokens == 1000)
     }
 
+    /// BUG-MAE-004: `total_token_usage` is only a dedup signal, never billed,
+    /// yet it was decoded with the same strict `Int` fields as the billed
+    /// `last_token_usage`. A fractional or string running total turned the
+    /// whole token_count line into a decode failure and its turn vanished.
+    @Test("a malformed running total does not drop the billed turn")
+    func malformed_total_keeps_billed_turn() {
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let ts = iso.string(from: now)
+        let ctx = #"{"timestamp":"\#(ts)","type":"turn_context","payload":{"model":"gpt-5.5"}}"#
+        let tc = #"{"timestamp":"\#(ts)","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000.5,"total_tokens":"n/a"},"last_token_usage":{"input_tokens":500,"cached_input_tokens":0,"output_tokens":50}}}}"#
+        let result = scan([ctx, tc].joined(separator: "\n") + "\n", now: now)
+        #expect(result.loss.decodeFailures == 0)
+        #expect(result.today["gpt-5.5"]?.inputTokens == 500)
+    }
+
     /// Regression: a line that clears the byte prefilter but fails to decode
     /// used to `continue` with no counter — the exact silent-drift failure
     /// mode that killed the sqlite scanner this file replaces.

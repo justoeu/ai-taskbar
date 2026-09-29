@@ -95,6 +95,16 @@ public struct DiskCache: Sendable {
         }
     }
 
+    /// Stat-only freshness probe: true when `freshPayloadWithAge()` would
+    /// currently serve an entry, without reading the payload.
+    public func hasFreshPayload() -> Bool {
+        withIOLock {
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
+                  let mtime = attrs[.modificationDate] as? Date else { return false }
+            return now().timeIntervalSince(mtime) <= ttl
+        }
+    }
+
     public func freshPayload() -> Data? {
         freshPayloadWithAge()?.0
     }

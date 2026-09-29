@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 @testable import AiTaskbarCore
-import AiTaskbarTesting
 
 private final class Counter: @unchecked Sendable {
     private let lock = NSLock()
@@ -10,7 +9,7 @@ private final class Counter: @unchecked Sendable {
     var count: Int { lock.withLock { value } }
 }
 
-@Suite("SingleFlight and OffPool")
+@Suite("SingleFlight")
 struct SingleFlightTests {
     @Test("concurrent callers share one operation and its result")
     func concurrent_callers_share_one_run() async throws {
@@ -52,18 +51,41 @@ struct SingleFlightTests {
         #expect(after == 7)
     }
 
-    @Test("OffPool.run executes on a GCD thread, not the cooperative pool")
-    func offpool_leaves_cooperative_pool() async throws {
-        let onPool = try await OffPool.run { CooperativePoolProbe.isOnCooperativePool }
-        let detachedOnPool = await Task.detached { CooperativePoolProbe.isOnCooperativePool }.value
-        #expect(!onPool)
-        #expect(detachedOnPool)
-    }
-
-    @Test("OffPool.run rethrows the body's error")
-    func offpool_rethrows() async {
-        await #expect(throws: AppError.self) {
-            try await OffPool.run { () throws -> Int in throw AppError.credentials("x") }
+    /// RACE-MAE-002, decided behaviour: a flight is shared, so one caller's
+    /// cancellation must not cancel it. Cancelling mid-exchange would strand a
+    /// refresh token the server already rotated (the new one never written
+    /// back) and fail every other waiter. The cancelled caller still receives
+    /// the result; the provider checks cancellation after `run` returns.
+    @Test("cancelling one caller neither cancels the shared flight nor fails other waiters")
+    func caller_cancellation_does_not_cancel_flight() async throws {
+        let flight = SingleFlight<Bool>()
+        let started = Flag()
+        let release = Flag()
+        let operation: @Sendable () async throws -> Bool = {
+            started.set()
+            while !release.isSet {
+                try? await Task.sleep(nanoseconds: 5_000_000) // polling; cancellation is what is observed below
+            }
+            return Task.isCancelled
         }
+        let cancelled = Task { try await flight.run(operation) }
+        for _ in 0..<400 where !started.isSet {
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        let joined = Task { try await flight.run(operation) }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        cancelled.cancel()
+        release.set()
+        let cancelledSawCancellation = try await cancelled.value
+        let joinedSawCancellation = try await joined.value
+        #expect(!cancelledSawCancellation)
+        #expect(!joinedSawCancellation)
     }
+}
+
+private final class Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func set() { lock.withLock { value = true } }
+    var isSet: Bool { lock.withLock { value } }
 }

@@ -257,7 +257,9 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     public func refresh(forceRefresh: Bool, now: Date = .now) {
         // A manual refresh bypasses the disk cache, but must not bypass a
         // server-imposed cooldown: repeated clicks otherwise amplify a 429.
-        if let retryAt = rateLimitRetryAt, Date.now < retryAt { return }
+        // Same clock as `loadingSince`, so a caller-supplied `now` drives the
+        // cooldown too (CQ-MAE-014).
+        if let retryAt = rateLimitRetryAt, now < retryAt { return }
         epoch += 1
         let myEpoch = epoch
         let previous = state.outcome
@@ -271,7 +273,7 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 if Task.isCancelled { return }
                 guard myEpoch == self.epoch else { return }   // newer refresh wins
                 self.state = .ok(outcome)
-                self.observeRateLimit(status: outcome.lastError?.status)
+                self.observeRateLimit(status: outcome.lastError?.status, at: now)
                 if Self.isNetworkOutcome(outcome) {
                     self.lastNetworkFetch = .now
                 }
@@ -294,22 +296,24 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 let fallback = previous ?? self.state.outcome
                 self.state = .failed(error: appErr, fallback: fallback)
                 if case .http(let status, _) = appErr {
-                    self.observeRateLimit(status: status)
+                    self.observeRateLimit(status: status, at: now)
                 } else {
-                    self.observeRateLimit(status: nil)
+                    self.observeRateLimit(status: nil, at: now)
                 }
             }
         }
     }
 
-    private func observeRateLimit(status: Int?) {
+    /// `now` is the dispatching refresh's clock, so the cooldown is stamped
+    /// and checked on the same clock (measured from dispatch, not arrival).
+    private func observeRateLimit(status: Int?, at now: Date) {
         guard status == 429 else {
             consecutiveRateLimits = 0
             rateLimitRetryAt = nil
             return
         }
         consecutiveRateLimits += 1
-        rateLimitRetryAt = Date.now.addingTimeInterval(
+        rateLimitRetryAt = now.addingTimeInterval(
             Self.rateLimitCooldown(forAttempt: consecutiveRateLimits))
     }
 

@@ -273,8 +273,11 @@ cleanly on `[skip release]` heads.
   team (skipped on ad-hoc builds), and sets `com.apple.quarantine` so
   Gatekeeper assesses it. See `UpdateChecker.download` + `DMGVerifier.swift`.
   The release JSON (2 MiB) and checksums file (64 KiB) are read with
-  `HTTPClient.sendBounded`; the checksums redirect is followed only to
-  `UpdateChecker.isAllowedDownloadURL` hosts. `UpdateChecker` takes `env.http`
+  `HTTPClient.sendBounded`; the checksums redirect and the DMG download's
+  redirect (`HTTPClient.download(_:allowRedirect:)`) are followed only to
+  `UpdateChecker.isAllowedDownloadURL` hosts on the default HTTPS port; a
+  refused redirect cancels the download before the target is requested.
+  `UpdateChecker` takes `env.http`
   (no default client), so `pin_hosts` reaches it. `/releases/latest` never
   returns a prerelease, so `include_prereleases = true` reads
   `/releases?per_page=20` and picks the newest non-draft by `Semver` (SemVer
@@ -642,7 +645,10 @@ user edits. See `config.example.toml` for the full schema. A **symlinked**
 `config.toml` (e.g. managed from a dotfiles repo) is read normally but never
 written: `AtomicFileWrite` refuses symlinked destinations, so the launch
 top-up is skipped and logged as an error (`AppEnvironment.topUpConfigSections`,
-never `try?`), and saving from Settings reports the failure.
+never `try?`), and saving from Settings reports the failure. An existing
+`config.toml` that cannot be read (permissions, encoding) makes the top-up
+throw instead of rewriting the file from defaults; only a missing file is
+skipped.
 
 ## Known limitations / future work
 

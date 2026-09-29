@@ -286,6 +286,62 @@ struct HTTPClientTests {
         StubURLProtocol.reset()
     }
 
+    /// SEC-MAE-001: `download(_:allowRedirect:)` applies the caller's
+    /// redirect predicate before URLSession requests the Location.
+    @Test("download refuses a redirect its predicate rejects, before requesting the target")
+    func download_refuses_rejected_redirect() async {
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "attacker.example" {
+                Issue.record("redirect target must never be requested")
+                return .init(data: Data("leaked".utf8))
+            }
+            return .init(status: 302, data: Data(),
+                         redirectURL: URL(string: "https://attacker.example/x.dmg")!)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        await #expect(throws: AppError.transport("download redirect refused")) {
+            _ = try await http.download(
+                URLRequest(url: URL(string: "https://example.com/a.dmg")!),
+                allowRedirect: { $0.host == "cdn.example" })
+        }
+        #expect(StubURLProtocol.captured.count == 1)
+        StubURLProtocol.reset()
+    }
+
+    @Test("download follows a redirect its predicate accepts")
+    func download_follows_allowed_redirect() async throws {
+        StubURLProtocol.handler = { request in
+            if request.url?.host == "cdn.example" { return .init(data: Data("dmg".utf8)) }
+            return .init(status: 302, data: Data(),
+                         redirectURL: URL(string: "https://cdn.example/a.dmg")!)
+        }
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let (tmp, response) = try await http.download(
+            URLRequest(url: URL(string: "https://example.com/a.dmg")!),
+            allowRedirect: { $0.host == "cdn.example" })
+        defer { try? FileManager.default.removeItem(at: tmp) } // test cleanup
+        #expect(response.statusCode == 200)
+        #expect(try Data(contentsOf: tmp) == Data("dmg".utf8))
+        StubURLProtocol.reset()
+    }
+
+    /// PERF-MAE-002: the body is read in chunks, and the cap must stay exact
+    /// across a chunk boundary — `cap` bytes pass, `cap + 1` do not.
+    @Test("the response cap is exact across a read-chunk boundary")
+    func cap_is_exact_across_chunks() async throws {
+        let cap = 70_000
+        let http = HTTPClient.stubbed(protocols: [StubURLProtocol.self])
+        let request = URLRequest(url: URL(string: "https://example.com/big")!)
+        StubURLProtocol.handler = { _ in .init(data: Data(repeating: 0x61, count: cap)) }
+        let (exact, _) = try await http.sendBounded(request, maximumResponseBytes: cap)
+        #expect(exact.count == cap)
+        StubURLProtocol.handler = { _ in .init(data: Data(repeating: 0x61, count: cap + 1)) }
+        await #expect(throws: AppError.transport("HTTP response exceeds \(cap) bytes")) {
+            _ = try await http.sendBounded(request, maximumResponseBytes: cap)
+        }
+        StubURLProtocol.reset()
+    }
+
     @Test("sendDecoding inherits the default response cap")
     func sendDecoding_rejects_oversized_body() async {
         struct Out: Decodable { let n: Int }

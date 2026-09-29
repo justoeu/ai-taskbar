@@ -100,9 +100,13 @@ fi
 if ! bare_int=$(find "$wire_dir" -maxdepth 1 -name '*WireTypes.swift' -type f -print0 | sort -z \
     | xargs -0 perl -ne '
         next if /^\s*\/\//;
-        next if /radix:/;
-        my $hit = /\bU?Int(?:8|16|32|64)?\((?:\s*[^a-zA-Z_ )]|\s*[a-zA-Z_][a-zA-Z0-9_.]*[^a-zA-Z0-9_.:])/
-            || /\bU?Int(?:8|16|32|64)?\.init\b(?!\s*\(\s*(?:saturating|checkedTruncating|exactly|clamping|truncatingIfNeeded)\s*:)/;
+        # Blank out only the radix string parses themselves (balanced
+        # parentheses, so Int(String(x), radix: 16) is one call); skipping the
+        # whole line let `Int(s, radix: 16) ?? Int(d)` through (TEST-MAE-007).
+        (my $l = $_) =~ s{\bU?Int(?:8|16|32|64)?(\((?:[^()]++|(?1))*\))}{
+            my $m = $&; $1 =~ /\bradix\s*:/ ? "RADIX_PARSE" : $m }ge;
+        my $hit = $l =~ /\bU?Int(?:8|16|32|64)?\((?:\s*[^a-zA-Z_ )]|\s*[a-zA-Z_][a-zA-Z0-9_.]*[^a-zA-Z0-9_.:])/
+            || $l =~ /\bU?Int(?:8|16|32|64)?\.init\b(?!\s*\(\s*(?:saturating|checkedTruncating|exactly|clamping|truncatingIfNeeded)\s*:)/;
         print "$ARGV:$.: $_" if $hit;
     } continue { close ARGV if eof;
     '); then

@@ -262,8 +262,23 @@ public enum CodexSessionScanner {
             struct Info: Decodable {
                 let last_token_usage: Usage?
                 /// Session running total. Only compared with the previous
-                /// event's, never billed.
+                /// event's, never billed. Decoded leniently: a malformed total
+                /// (a fractional or string field) only removes the dedup
+                /// signal, so the event is kept like one without a total. It
+                /// must not turn the billed line into a decode failure
+                /// (BUG-MAE-004). `last_token_usage` stays strict.
                 let total_token_usage: Usage?
+
+                private enum CodingKeys: String, CodingKey {
+                    case last_token_usage, total_token_usage
+                }
+
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    last_token_usage = try c.decodeIfPresent(Usage.self, forKey: .last_token_usage)
+                    // Best-effort by design (see above): nil = no dedup signal.
+                    total_token_usage = try? c.decodeIfPresent(Usage.self, forKey: .total_token_usage)
+                }
 
                 struct Usage: Decodable, Equatable {
                     let input_tokens: Int?

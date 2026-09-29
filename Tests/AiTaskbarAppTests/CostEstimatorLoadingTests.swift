@@ -32,6 +32,18 @@ struct CostEstimatorLoadingTests {
         expectTrue(CostEstimator.opencodeProviders[.gemini] == ["gemini", "google"])
     }
 
+    /// CQ-MAE-003: "not installed" publishes empty rows; a failed read
+    /// publishes nothing so the previous rows stay (BUG-ART-013).
+    @Test("opencode outcomes map to empty rows, kept rows, or the scan")
+    func opencode_outcome_mapping() {
+        let notInstalled = CostEstimator.opencodeRows(from: .notInstalled)
+        let unavailable = CostEstimator.opencodeRows(from: .unavailable)
+        let scanned = CostEstimator.opencodeRows(from: .scanned(["openai": OpencodeScan()]))
+        expectTrue(notInstalled == [:])
+        expectTrue(unavailable == nil)
+        expectTrue(scanned == ["openai": OpencodeScan()])
+    }
+
     @MainActor
     private func settle(_ e: CostEstimator, timeout: TimeInterval = 60) async throws {
         let deadline = Date().addingTimeInterval(timeout)

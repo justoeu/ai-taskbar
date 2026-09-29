@@ -303,7 +303,11 @@ public final class UpdateChecker: ObservableObject {
                 var req = URLRequest(url: dmgURL)
                 req.setValue("ai-taskbar/\(self.currentVersion)",
                              forHTTPHeaderField: "User-Agent")
-                let (tmp, http) = try await self.http.download(req)
+                // The asset URL redirects to GitHub's CDN: follow only
+                // allow-listed hosts, never an arbitrary Location
+                // (SEC-MAE-001). SHA256 + team signature still gate the bytes.
+                let (tmp, http) = try await self.http.download(
+                    req, allowRedirect: { Self.isAllowedDownloadURL($0) })
                 pending = tmp
                 guard (200..<300).contains(http.statusCode) else {
                     throw AppError.http(status: http.statusCode, body: "DMG download")
@@ -373,6 +377,8 @@ public final class UpdateChecker: ObservableObject {
     nonisolated internal static func isAllowedDownloadURL(_ url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased(), scheme == "https",
               let host = url.host?.lowercased() else { return false }
+        // GitHub serves releases on the default HTTPS port only.
+        if let port = url.port, port != 443 { return false }
         if allowedDownloadHosts.contains(host) { return true }
         // Allow nested githubusercontent hosts.
         return host.hasSuffix(".githubusercontent.com")

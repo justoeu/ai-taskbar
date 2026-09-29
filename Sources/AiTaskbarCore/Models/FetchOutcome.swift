@@ -6,7 +6,11 @@ public struct FetchError: Sendable, Equatable, Codable {
     public let body: String
     /// Set when the failure was an `AppError.guidance`, so the UI can render
     /// the localized guidance instead of `body`'s "guidance: …" diagnostic.
-    /// In memory only: `DiskCache.lastError()` does not persist it.
+    /// In memory only: `DiskCache.lastError()` does not persist it. That is
+    /// safe because guidance is rendered only by the stale tooltip, and a
+    /// stale outcome always carries the in-memory error of the failure that
+    /// made it stale; a cache hit that reads the persisted error is never
+    /// stale. `CachedFetchEdgeTests` pins both halves (CQ-MAE-015).
     public let guidance: VendorGuidance?
     public init(status: Int, body: String, guidance: VendorGuidance? = nil) {
         self.status = status

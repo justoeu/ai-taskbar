@@ -54,14 +54,29 @@ public struct OpencodeScan: Sendable, Equatable {
 ///    shorter path silently matches nothing and yields a scan that looks
 ///    successful and reports zero cache.
 public enum OpencodeScanner {
+    /// Why a scan did or did not produce rows. The `scan` overloads collapse
+    /// both non-`scanned` cases to nil; callers that must tell "opencode is
+    /// not installed" (genuinely no rows) from "the read failed" (keep what
+    /// was shown) use `scanOutcome` instead of re-probing the path, which
+    /// could race with the scan's own check (CQ-MAE-003).
+    public enum Outcome: Sendable, Equatable {
+        /// No database file at the path.
+        case notInstalled
+        /// Cancelled, an alias mapped to two groups, no provider aliases, or
+        /// an SQLite open / prepare / step failure. Any partial aggregate is
+        /// discarded.
+        case unavailable
+        case scanned([String: OpencodeScan])
+    }
+
     public static func defaultDatabasePath() -> String {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".local/share/opencode/opencode.db").path
     }
 
     /// Scans usage for `providerID` (opencode's own vendor key: `openai`,
-    /// `xai`, `anthropic`, …). Returns nil when there is no database to read,
-    /// which callers should treat as "opencode isn't installed", not as zero.
+    /// `xai`, `anthropic`, …). Returns nil for every non-`scanned` `Outcome`
+    /// (not installed, or unavailable); use `scanOutcome` to tell them apart.
     public static func scan(now: Date = .init(),
                             provider: String,
                             dbPath: String? = nil) -> OpencodeScan? {
@@ -82,24 +97,36 @@ public enum OpencodeScanner {
 
     /// Scans every requested vendor group in one SQLite pass. The dictionary
     /// key is caller-owned (the app uses `VendorId.rawValue`); each value lists
-    /// the opencode provider aliases billed to that vendor.
+    /// the opencode provider aliases billed to that vendor. nil for every
+    /// non-`scanned` `Outcome`.
     public static func scan(now: Date = .init(),
                             providerGroups: [String: [String]],
                             dbPath: String? = nil) -> [String: OpencodeScan]? {
-        guard !Task.isCancelled else { return nil }
+        if case .scanned(let scans) = scanOutcome(now: now, providerGroups: providerGroups,
+                                                  dbPath: dbPath) {
+            return scans
+        }
+        return nil
+    }
+
+    /// `scan(providerGroups:)` with the reason for a missing result kept.
+    public static func scanOutcome(now: Date = .init(),
+                                   providerGroups: [String: [String]],
+                                   dbPath: String? = nil) -> Outcome {
+        guard !Task.isCancelled else { return .unavailable }
         var groupByProvider: [String: String] = [:]
         for group in providerGroups.keys.sorted() {
             for provider in Set(providerGroups[group, default: []]).sorted()
             where !provider.isEmpty {
                 // An alias cannot be attributed to two billing vendors.
-                guard groupByProvider[provider] == nil else { return nil }
+                guard groupByProvider[provider] == nil else { return .unavailable }
                 groupByProvider[provider] = group
             }
         }
         let providerIDs = groupByProvider.keys.sorted()
-        guard !providerIDs.isEmpty else { return nil }
+        guard !providerIDs.isEmpty else { return .unavailable }
         let path = dbPath ?? defaultDatabasePath()
-        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        guard FileManager.default.fileExists(atPath: path) else { return .notInstalled }
 
         var db: OpaquePointer?
         // Read-only, and never create: this database belongs to another
@@ -108,7 +135,7 @@ public enum OpencodeScanner {
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(path, &db, flags, nil) == SQLITE_OK else {
             sqlite3_close(db)
-            return nil
+            return .unavailable
         }
         // Abort `sqlite3_step` itself when a refresh is superseded. Polling
         // only after rows arrive cannot interrupt the full-table scan that
@@ -152,7 +179,7 @@ public enum OpencodeScanner {
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            return nil
+            return .unavailable
         }
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_int64(stmt, 1, startOfTodayMs)
@@ -166,7 +193,7 @@ public enum OpencodeScanner {
         var stepResult = sqlite3_step(stmt)
         while stepResult == SQLITE_ROW {
             defer { stepResult = sqlite3_step(stmt) }
-            guard !Task.isCancelled else { return nil }
+            guard !Task.isCancelled else { return .unavailable }
             guard let providerC = sqlite3_column_text(stmt, 0) else { continue }
             let provider = String(cString: providerC)
             guard let group = groupByProvider[provider] else { continue }
@@ -209,8 +236,8 @@ public enum OpencodeScanner {
         }
         // SQLITE_INTERRUPT is the expected cancellation path. Any other SQL
         // failure must also discard the partial aggregates.
-        guard stepResult == SQLITE_DONE, !Task.isCancelled else { return nil }
-        return scans
+        guard stepResult == SQLITE_DONE, !Task.isCancelled else { return .unavailable }
+        return .scanned(scans)
     }
 }
 

@@ -10,6 +10,16 @@ import os
 /// section, so no caller can start a second one between the check and the
 /// install. A finished flight clears the slot only if the slot still holds
 /// that same flight.
+///
+/// **Caller cancellation does not cancel the flight — by design**
+/// (RACE-MAE-002). The flight is an unstructured Task shared by every
+/// waiter, so a cancelled caller keeps waiting for, and receives, its
+/// result. Cancelling it would be wrong twice over: the other waiters would
+/// fail with an error none of them asked for, and an exchange already sent
+/// would be abandoned between the server rotating the refresh token and
+/// `writeBack` persisting the new one, stranding a token the server already
+/// consumed. `Task.isCancelled` is therefore always false inside the
+/// operation; callers check cancellation after `run` returns.
 public final class SingleFlight<Value: Sendable>: Sendable {
     private struct Flight: Sendable {
         let id: UInt64

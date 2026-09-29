@@ -418,9 +418,10 @@ public struct VendorSectionView: View {
         keychainAuthError = nil
         let vm = self.vm
         let provider = vm.provider
-        Task.detached(priority: .userInitiated) {
-            // The native dialog blocks until the user answers, so the call
-            // hops to a GCD thread instead of parking a cooperative one.
+        Task {
+            // The native dialog blocks until the user answers;
+            // `authorizeCredentialsOffPool` already runs it on a GCD thread,
+            // so no detached task is needed to keep it off this actor.
             let result: Result<Bool, Error>
             do { result = .success(try await provider.authorizeCredentialsOffPool()) }
             catch { result = .failure(error) }

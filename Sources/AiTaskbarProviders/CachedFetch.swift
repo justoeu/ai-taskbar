@@ -26,10 +26,16 @@ public struct CachedFetch: Sendable {
         // A fresh entry the current decoder rejects (schema change across an
         // upgrade) falls through to the network instead of failing every tick
         // until the TTL expires; the fetch below overwrites it on success.
-        if !forceRefresh, let hit = cache.freshPayloadWithAge(),
-           let snapshot = try? decode(hit.0) {
-            return makeOutcome(snapshot: snapshot, isStale: false,
-                               cacheAge: hit.1, lastError: nil)
+        if !forceRefresh, let hit = cache.freshPayloadWithAge() {
+            do {
+                return makeOutcome(snapshot: try decode(hit.0), isStale: false,
+                                   cacheAge: hit.1, lastError: nil)
+            } catch {
+                // Not swallowed: the fetch below usually replaces the entry,
+                // but a decoder that rejects its own cache is schema drift.
+                AppLog.lifecycle.warning(
+                    "\(self.cache.vendor.rawValue, privacy: .public): fresh cache rejected by decoder, refetching: \(String(describing: error), privacy: .public)")
+            }
         }
         do {
             let data = try await fetch()
@@ -112,9 +118,17 @@ public struct CachedFetch: Sendable {
         lastError: FetchError
     ) throws -> CachedOutcome<Snapshot> {
         if let hit = cache.anyPayloadWithAge() {
-            return try makeOutcome(from: hit.0, decode: decode,
-                                    isStale: true, cacheAge: hit.1,
-                                    lastError: lastError)
+            do {
+                return try makeOutcome(from: hit.0, decode: decode,
+                                       isStale: true, cacheAge: hit.1,
+                                       lastError: lastError)
+            } catch {
+                // The stale payload is unusable too. Report why the live
+                // fetch failed, not the decode error of a fallback nobody
+                // asked for (CQ-MAE-010).
+                AppLog.lifecycle.warning(
+                    "\(self.cache.vendor.rawValue, privacy: .public): stale cache rejected by decoder: \(String(describing: error), privacy: .public)")
+            }
         }
         throw AppError.wrapping(error)
     }
