@@ -1,0 +1,14 @@
+{
+ "id": "BUG-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "AnalyticsModels.swift:547-555. showsNoRecentUsage now requires isCostAvailable, which AnalyticsAggregator.swift:165 sets to timeframe != .monthly. On Month, a vendor that spends money but has no quota window is no longer called idle. The view (VendorAnalyticsCardView.swift:276) reads only this property, so nothing else can still produce the defect. I removed only `isCostAvailable &&` and the tests went RED: AnalyticsModelsTests.swift:100, showsNoRecentUsage returned true. Trade-off, not a bug: a vendor that really is idle on Month no longer shows the empty state.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Models/AnalyticsModels.swift:547",
+  "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:165",
+  "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:276"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a4d99a10f2d5cae42",
+ "batch": "B14-app-followups"
+}

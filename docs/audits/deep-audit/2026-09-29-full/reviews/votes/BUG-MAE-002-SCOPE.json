@@ -1,0 +1,14 @@
+{
+ "id": "BUG-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "The idle rule moves from the view into Sources/AiTaskbarCore/Models/AnalyticsModels.swift:71 (showsNoRecentUsage) and Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:276 now calls it. It adds one public computed property to a Sendable struct, with no stored field and no change to the serialized shape. It reuses the existing string, so no new localization key is needed. README.md:33 was updated to match.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Models/AnalyticsModels.swift:71",
+  "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:276",
+  "README.md:33"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae24c0546e7a0fb92",
+ "batch": "B14-app-followups"
+}

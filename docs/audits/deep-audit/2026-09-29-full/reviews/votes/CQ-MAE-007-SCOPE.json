@@ -1,0 +1,14 @@
+{
+ "id": "CQ-MAE-007",
+ "verdict": "APROVA",
+ "reasoning": "In Sources/AiTaskbarApp/AppEnvironment.swift:144, the silent try? becomes topUpConfigSections, which reports failures through onFailure and logs them. Launch still continues. Documentation was updated in every place this behaviour appears: CLAUDE.md:641, AGENTS.md:641, README.md:531 and config.example.toml:4. No write path or permissions changed: AtomicFileWrite still refuses a symlinked destination.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/AppEnvironment.swift:144",
+  "config.example.toml:4",
+  "README.md:531"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae24c0546e7a0fb92",
+ "batch": "B14-app-followups"
+}

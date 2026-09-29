@@ -1,0 +1,14 @@
+{
+ "id": "CQ-MAE-005",
+ "verdict": "APROVA",
+ "reasoning": "CachedFetch.swift:591-596 now puts the guidance into FetchError, and VendorNoticeText.swift:94-100 localizes it. I checked the second route: the stale tooltip appears only when the outcome is stale, and the only stale path is fallback() with the in-memory error (CachedFetch.swift:113). The persisted DiskCache.lastError() is used only on a fresh hit, which never shows the stale tooltip. So no remaining route shows the raw 'guidance: …' text. FetchError's Codable stays compatible because guidance is optional. The test goes through the real CachedFetch.run. I removed the guidance branch and got RED at StaleDetailLocalizationTests.swift:39 and :46.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/CachedFetch.swift:591",
+  "Sources/AiTaskbarApp/Localization/VendorNoticeText.swift:94",
+  "Sources/AiTaskbarCore/Models/FetchOutcome.swift:573"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a4d99a10f2d5cae42",
+ "batch": "B14-app-followups"
+}

@@ -1,0 +1,60 @@
+{
+ "findings": [
+  {
+   "lens": "classic_bugs",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarCore/Config/ConfigLoader.swift",
+   "line": 0,
+   "title": "ensureAllVendorSections reads config.toml with try? ?? empty string; an unreadable config would be rewritten with only default sections",
+   "evidence": "(try? String(contentsOf:)) ?? \"\" then appends defaults and saves (raised by Ferreiro, remediation B14)",
+   "fix": "Distinguish file-not-found from a read failure; on any other read error throw instead of rewriting",
+   "impact": "A transient read failure (permissions, encoding) could replace user edits with defaults",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B14"
+  },
+  {
+   "lens": "quality",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+   "line": 498,
+   "title": "VendorViewModel.refresh(now:) uses the injected now only for loadingSince; the rate-limit cooldown still reads Date.now",
+   "evidence": "Two clocks in one function (raised by Higia, remediation B14)",
+   "fix": "Use the injected now for the cooldown check as well",
+   "impact": "Tests cannot drive the cooldown; the parameter name overstates its use",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B14"
+  },
+  {
+   "lens": "quality",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarCore/Cache/DiskCache.swift",
+   "line": 128,
+   "title": "FetchError.guidance is not persisted in .last_error; a relaunch rebuilds the error without guidance",
+   "evidence": "DiskCache.lastError() rebuilds FetchError(status:body:) only (raised by Jano, remediation B14; Nemesis notes the stale tooltip currently only reads the in-memory error)",
+   "fix": "Persist guidance as an optional third line and read the old two-line format; or confirm no persisted path reaches the UI and pin that with a test",
+   "impact": "Possible English guidance text on a cold-start stale card in pt-BR/es",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B14"
+  },
+  {
+   "lens": "tests",
+   "severity": "LOW",
+   "path": "Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift",
+   "line": 66,
+   "title": "AnalyticsEstimatesMergeTests.weeklySummaries waits a fixed 100 ms before awaiting historyReloadTask",
+   "evidence": "Fixed Task.sleep (raised by Higia, remediation B14); sibling of TEST-MAE-005",
+   "fix": "Await the store completion signal instead of sleeping",
+   "impact": "Possible CI flake under load",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B14"
+  }
+ ]
+}

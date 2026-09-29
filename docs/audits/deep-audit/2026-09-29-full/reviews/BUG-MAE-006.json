@@ -1,0 +1,63 @@
+{
+  "id": "BUG-MAE-006",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 17:36:51 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "DurationParts.swift:71 and :77 use Int(saturating:) with a max(0, …) floor. The three conversion sites named in the evidence all go through it now: StatusPanelView.swift:342 and :401, and PopoverContentView.swift:484. When I put back a bare Int(), the test process crashed with 'Double value cannot be converted to Int because it is either infinite or NaN', which matches the reported RED.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/DurationParts.swift:71",
+        "Sources/AiTaskbarApp/Views/StatusPanelView.swift:342",
+        "Sources/AiTaskbarApp/Views/PopoverContentView.swift:484"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "All three duration splits now go through one helper, DurationParts (DurationParts.swift:14-25), which uses the existing Int(saturating:) from Core/Util/SafeNumeric. The helper was extracted, not copied. The three call sites were PopoverContentView.swift:484, StatusPanelView.swift:342 and 401. grep finds no other Int(x/60)-style split left in App or Core. The new file has its own test file.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/DurationParts.swift:14",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/StatusPanelView.swift:342"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "New file Sources/AiTaskbarApp/DurationParts.swift, with tests in Tests/AiTaskbarAppTests/DurationPartsTests.swift. All three sites named in the finding now use it: StatusPanelView.swift:342 and :401, and PopoverContentView.swift:484. I grepped AiTaskbarApp and AiTaskbarCore for a sibling bare Int(TimeInterval): none are left in these views. UpdateChecker.swift:363 converts `now`, which is not external data.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/DurationParts.swift:183",
+        "Sources/AiTaskbarApp/Views/StatusPanelView.swift:342",
+        "Sources/AiTaskbarApp/Views/StatusPanelView.swift:401",
+        "Sources/AiTaskbarApp/Views/PopoverContentView.swift:484"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

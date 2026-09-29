@@ -1,0 +1,60 @@
+{
+  "id": "BUG-MAE-007",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 17:36:51 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "NotificationService.swift:141-150. A key is dropped only after 12 consecutive snapshots of its vendor fail to report it. Reappearing (line 141) or falling below the thresholds (line 128) resets the counter. I set the threshold back to 1 (the old immediate prune) and got two RED tests: NotificationThresholdTrackerTests.swift:68 (the notification fired again) and :57. Caveat, not a block: if crossings() is also called with empty windows on a failed fetch, 12 failures in a row would prune the key and allow one repeat notification. That is the intended behavior for a rolled label.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:141",
+        "Sources/AiTaskbarApp/NotificationService.swift:128"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "A one-line filter became a miss counter with a named constant, pruneAfterMissedSnapshots = 12, whose comment gives the reason and the real duration (about 1 h at 300 s). Nesting peaks at 3 (for / if / else) in a function under 40 lines. Removing entries while looping over highestNotified.keys is safe because Swift iterates a copy. missedSnapshots is cleared in both places where a key is re-armed or removed (NotificationService.swift:161, 287-295), so it cannot leak.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:139",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:287"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The change stays inside the tracker. Sources/AiTaskbarApp/NotificationService.swift:139-184 adds a private missedSnapshots map and pruneAfterMissedSnapshots = 12. It is in memory only: no persistence, no public API and no config key. The map is bounded because keys get removed when a window is seen again, when it falls below the minimum threshold, and when it is pruned.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:139",
+        "Sources/AiTaskbarApp/NotificationService.swift:172"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

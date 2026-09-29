@@ -1,0 +1,13 @@
+{
+ "id": "BUG-MAE-005",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:578 adds a `calendar:` parameter with a default of .current, so existing callers (the app, and validate's main.swift) still compile unchanged. Day and Week now use CostWindow. Month stays a rolling 30 days on purpose. The compare upper bound changes from <= to < (line 644) for all timeframes, Month included. That stops a sample at the boundary being counted in both periods, which is in scope. README.md:33 documents the new windows.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:578",
+  "Sources/AiTaskbarCore/Cost/AnalyticsAggregator.swift:644"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae24c0546e7a0fb92",
+ "batch": "B14-app-followups"
+}

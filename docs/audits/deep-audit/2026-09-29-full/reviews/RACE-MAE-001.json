@@ -1,0 +1,64 @@
+{
+  "id": "RACE-MAE-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 17:36:51 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "UsageStore.swift:306-315 skips a vendor only while loadingSince is less than maxInFlightAge (600 s) old. After that it calls refresh(), which cancels the old task (VendorViewModel.swift:266). The epoch check (line 272) stops the old task from overwriting the new state, and the refresh keeps the previous outcome. loadingSince is set only at line 264, right before the .loading state. If it were nil, the vendor would simply refresh instead of staying stuck. The scheduler passes its injected clock (RefreshScheduler.swift:280). I put back the unconditional skip and got RED at RefreshSchedulerTests.swift:290 (calls returned 1, expected 2) and :313. Caveat: a fetch that ignores cancellation (a child process) can overlap with its replacement for up to one budget; the agy path already kills its child after 5 s.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:306",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:264",
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:280"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The in-flight age cap is one named public constant, UsageStore.maxInFlightAge = 600 (UsageStore.swift:442), and its reason is documented. The clock is an injected typealias with a default of .now, matching the Sleeper pattern already used beside it (RefreshScheduler.swift:31). State.isLoading replaces the inline pattern match, and the skip condition has 3 clauses at depth 1. CLAUDE.md and AGENTS.md were updated in the same change, as the repo's docs-lockstep rule requires. One minor smell is left for later (see new_findings): VendorViewModel.refresh takes a 'now' parameter but still checks the rate-limit cooldown against Date.now (VendorViewModel.swift:501).",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift:452",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:385",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:498"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The public API grows, but callers keep compiling. VendorViewModel.refresh(forceRefresh:now:) and UsageStore.refreshIdleVendors(forceRefresh:now:) default `now` to .now. UsageStore.maxInFlightAge (600 s) is a new public static. loadingSince is read-only from outside and not @Published, so it causes no extra publisher traffic. RefreshScheduler takes an injected Clock with default { .now }. Manual refreshAll still uses the default. CLAUDE.md:524 and AGENTS.md:524 were updated identically. No new config key was added, so config.example is not affected.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:271",
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:63",
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:27",
+        "CLAUDE.md:524"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

@@ -1,0 +1,58 @@
+[
+ [
+  "QUALITY",
+  "VendorViewModel.refresh(forceRefresh:now:) (Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:498-505): the injected 'now' only sets loadingSince. The rate-limit cooldown check two lines above still reads Date.now, so one function uses two clocks and the parameter name suggests more than it does. Low priority: next round, either use 'now' for the cooldown too or rename the parameter to something like 'dispatchedAt'."
+ ],
+ [
+  "QUALITY",
+  "AnalyticsEstimatesMergeTests.weeklySummaries (Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift, around line 66): waits a fixed Task.sleep(100 ms) before awaiting historyReloadTask, which can make the test flaky on a loaded CI runner. Waiting on the store's own completion signal would be deterministic. Low priority."
+ ],
+ [
+  "QUALITY",
+  "BUG-MAE-003 won't-fix: I agree. Deriving a 7-day cost from /api/v1/activity without a per-item date seen in a real (verbatim) capture would break the CLAUDE.md 'no guessing without a verbatim fixture' discipline. Showing no number is the honest choice. No objection."
+ ],
+ [
+  "SCOPE",
+  {
+   "severity": "LOW",
+   "lens": "i18n",
+   "path": "Sources/AiTaskbarCore/Cache/DiskCache.swift",
+   "line": 128,
+   "title": "The stale-tooltip guidance is lost across relaunch: DiskCache.lastError() rebuilds FetchError without `guidance`, so CachedFetch.makeOutcome (CachedFetch.swift:103) shows the English 'guidance: ...' text again on a cold-start stale card",
+   "fix": "Persist the guidance raw value as an optional third line in .last_error, keep reading the old two-line format, and add a test for the old format. Or derive guidance from the body prefix when reading the file back.",
+   "impact": "After a relaunch, until the next live fetch, the pt-BR/es tooltip goes back to English for Antigravity guidance failures"
+  }
+ ],
+ [
+  "SCOPE",
+  {
+   "severity": "INFO",
+   "lens": "scope",
+   "path": "docs/audits/deep-audit/2026-09-29-full/FINDINGS.json",
+   "line": 1,
+   "title": "The working tree also carries orchestrator bookkeeping outside this batch's report file list: FINDINGS.json and run-meta.json merge agent-maestro-b13-followups.json (DEP-MAE-002, TEST-MAE-007, CQ-MAE-013, TEST-MAE-008)",
+   "fix": "Commit the pack merge separately from the B14 source fix, or name it in the batch commit, so the fix diff is only what the tests prove",
+   "impact": "Only commit hygiene. It is not a code change"
+  }
+ ],
+ [
+  "SCOPE",
+  {
+   "severity": "INFO",
+   "lens": "scope",
+   "path": "Sources/AiTaskbarProviders/OpenRouterWireTypes.swift",
+   "line": 65,
+   "title": "I agree with the BUG-MAE-003 won't-fix. A 7-day cost with no per-item date in a verbatim fixture would be made up, and the README already says OpenRouter's 30-day activity stays on its card",
+   "fix": "none",
+   "impact": "none"
+  }
+ ],
+ [
+  "CORRECTNESS",
+  "Reversal method: restoring each file to its HEAD version would not compile, because the tests call new APIs (showsNoRecentUsage, DurationParts, staleDetail, topUpConfigSections, loadingSince). So for each fix I reverted only the fixing lines in the working tree, with a backup of Sources/ in scratchpad/review-B14-app-followups. The filtered suites passed with the fix (8 suites, 63 tests). With the fix reverted: 11 issues in 7 suites, plus the Int(Double) crash for BUG-MAE-006. After copying the backup back, `diff -r` against the backup was clean, the git diff was byte-identical to the one I captured before starting, and it matches reviews/diffs/B14-app-followups.diff except for the audit-pack files FINDINGS.json and run-meta.json."
+ ],
+ [
+  "CORRECTNESS",
+  "BUG-MAE-003 won't-fix: I agree. With no per-item date on the wire, any Day or Week value for OpenRouter would be made up. Leaving it out is correct under the rule that a snapshot never contributes money to Analytics (AnalyticsStore.swift:167)."
+ ]
+]

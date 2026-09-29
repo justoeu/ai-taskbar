@@ -1,0 +1,13 @@
+{
+ "id": "TEST-MAE-006",
+ "verdict": "APROVA",
+ "reasoning": "State.isLoading (VendorViewModel.swift:327) now serves both refreshIdleVendors (UsageStore.swift:282) and the test helper (RefreshSchedulerTests.swift:179). compute() in UsageStore.swift:383 keeps its full switch because it needs every case, which is legitimate. The stale comment at RefreshScheduler.swift:117 is fixed. UpdateCheckerCadenceTests already uses http: .stubbed (line 36). This is a refactor, so a reversal does not apply. Tests are green.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:327",
+  "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:282"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a4d99a10f2d5cae42",
+ "batch": "B14-app-followups"
+}

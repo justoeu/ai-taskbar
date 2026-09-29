@@ -2041,14 +2041,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B1",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-002",
-    "blocks_pr": false
+    "resolved_test": "AnalyticsModelsTests#month_without_cost_source_is_not_idle,AnalyticsModelsTests#idle_with_cost_source_shows_no_recent_usage,AnalyticsModelsTests#cost_in_timeframe_is_not_idle",
+    "resolved_at": "2026-09-29 17:36:50 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsModelsTests#month_without_cost_source_is_not_idle,AnalyticsModelsTests#idle_with_cost_source_shows_no_recent_usage,AnalyticsModelsTests#cost_in_timeframe_is_not_idle · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "classic_bugs",
@@ -2064,14 +2095,26 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B1",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "accepted",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-003",
-    "blocks_pr": false
+    "accept": {
+      "type": "sem-correcao-disponivel",
+      "what": "OpenRouter shows no Day/Week cost in Analytics. Its 30-day activity and lifetime usage stay on its card, which names the right window",
+      "consequence": "OpenRouter's Analytics cost is a missing number, not a wrong one",
+      "reopen_if": "a verbatim /api/v1/activity capture shows a per-item date field",
+      "ratified_by": "user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    },
+    "accepted_at": "2026-09-29 17:36:50 UTC",
+    "progress": [
+      "2026-09-29: aceito (sem-correcao-disponivel) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    ],
+    "blocks_pr": false,
+    "in_progress": false
   },
   {
     "lens": "classic_bugs",
@@ -2110,14 +2153,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B2",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-005",
-    "blocks_pr": false
+    "resolved_test": "AnalyticsAggregatorTests#weekly_period_starts_at_cost_window_boundary,AnalyticsAggregatorTests#weekly_period_includes_cost_window_start,AnalyticsAggregatorTests#daily_period_starts_at_midnight",
+    "resolved_at": "2026-09-29 17:36:50 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsAggregatorTests#weekly_period_starts_at_cost_window_boundary,AnalyticsAggregatorTests#weekly_period_includes_cost_window_start,AnalyticsAggregatorTests#daily_period_starts_at_midnight · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:50 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "classic_bugs",
@@ -2133,14 +2207,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B3",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-006",
-    "blocks_pr": false
+    "resolved_test": "DurationPartsTests#hours_minutes_infinite,DurationPartsTests#hours_minutes_huge,DurationPartsTests#minutes_seconds_huge",
+    "resolved_at": "2026-09-29 17:36:51 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste DurationPartsTests#hours_minutes_infinite,DurationPartsTests#hours_minutes_huge,DurationPartsTests#minutes_seconds_huge · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "classic_bugs",
@@ -2156,13 +2261,67 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B11",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-007",
+    "resolved_test": "NotificationThresholdTrackerTests#transient_absence_does_not_refire,NotificationThresholdTrackerTests#rolled_cycle_key_kept_before_threshold,NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned",
+    "resolved_at": "2026-09-29 17:36:51 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste NotificationThresholdTrackerTests#transient_absence_does_not_refire,NotificationThresholdTrackerTests#rolled_cycle_key_kept_before_threshold,NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Config/ConfigLoader.swift",
+    "line": null,
+    "title": "ensureAllVendorSections reads config.toml with try? ?? empty string; an unreadable config would be rewritten with only default sections",
+    "evidence": "(try? String(contentsOf:)) ?? \"\" then appends defaults and saves (raised by Ferreiro, remediation B14)",
+    "fix": "Distinguish file-not-found from a read failure; on any other read error throw instead of rewriting",
+    "impact": "A transient read failure (permissions, encoding) could replace user edits with defaults",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B14",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-008",
     "blocks_pr": false
   },
   {
@@ -2561,14 +2720,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B4",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-005",
-    "blocks_pr": false
+    "resolved_test": "StaleDetailLocalizationTests#guidance_tooltip_is_localized,StaleDetailLocalizationTests#guidance_tooltip_is_localized_en,StaleDetailLocalizationTests#guidance_keeps_status",
+    "resolved_at": "2026-09-29 17:36:51 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste StaleDetailLocalizationTests#guidance_tooltip_is_localized,StaleDetailLocalizationTests#guidance_tooltip_is_localized_en,StaleDetailLocalizationTests#guidance_keeps_status · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -2584,14 +2774,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B5",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-006",
-    "blocks_pr": false
+    "resolved_test": "AnalyticsEstimatesMergeTests#history_store_failure_is_reported,AnalyticsEstimatesMergeTests#history_store_success_reports_nothing",
+    "resolved_at": "2026-09-29 17:36:51 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsEstimatesMergeTests#history_store_failure_is_reported,AnalyticsEstimatesMergeTests#history_store_success_reports_nothing · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -2607,14 +2828,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B6",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-007",
-    "blocks_pr": false
+    "resolved_test": "ConfigTopUpTests#symlinked_config_failure_is_reported,ConfigTopUpTests#regular_config_is_topped_up",
+    "resolved_at": "2026-09-29 17:36:52 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste ConfigTopUpTests#symlinked_config_failure_is_reported,ConfigTopUpTests#regular_config_is_topped_up · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:52 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "quality",
@@ -2686,6 +2938,75 @@
     "blocks_pr": false
   },
   {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+    "line": 498,
+    "title": "VendorViewModel.refresh(now:) uses the injected now only for loadingSince; the rate-limit cooldown still reads Date.now",
+    "evidence": "Two clocks in one function (raised by Higia, remediation B14)",
+    "fix": "Use the injected now for the cooldown check as well",
+    "impact": "Tests cannot drive the cooldown; the parameter name overstates its use",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B14",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-014",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarCore/Cache/DiskCache.swift",
+    "line": 128,
+    "title": "FetchError.guidance is not persisted in .last_error; a relaunch rebuilds the error without guidance",
+    "evidence": "DiskCache.lastError() rebuilds FetchError(status:body:) only (raised by Jano, remediation B14; Nemesis notes the stale tooltip currently only reads the in-memory error)",
+    "fix": "Persist guidance as an optional third line and read the old two-line format; or confirm no persisted path reaches the UI and pin that with a test",
+    "impact": "Possible English guidance text on a cold-start stale card in pt-BR/es",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B14",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-015",
+    "blocks_pr": false
+  },
+  {
+    "lens": "deps",
+    "severity": "LOW",
+    "path": ".github/workflows/ci.yml",
+    "line": 23,
+    "title": "SHA-pinned actions have no updater: no .github/dependabot.yml for github-actions",
+    "evidence": "actions/checkout and softprops/action-gh-release are SHA-pinned; nothing bumps the pins (raised by Jano, remediation B13)",
+    "fix": "Add .github/dependabot.yml with package-ecosystem github-actions, weekly",
+    "impact": "A security release of a pinned action is never picked up",
+    "category": "review-followup-r2",
+    "confidence": "high",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B13",
+    "domain": "deps",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "DEP-MAE-002",
+    "blocks_pr": false
+  },
+  {
     "title": "GitHub Actions checked out via floating major tag, not commit SHA",
     "lens": "deps",
     "severity": "LOW",
@@ -2701,7 +3022,7 @@
     "bump": "none (pin form change only)",
     "confidence": "high",
     "test_red_green": {
-      "name": "n/a",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
@@ -2713,10 +3034,13 @@
     "status": "resolved",
     "path": ".github/workflows/auto-tag.yml",
     "id": "DEP-PRI-001",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 17:07:14 UTC",
     "resolved_note": "batch B13-gates-ci",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 17:07:14 UTC",
@@ -2741,9 +3065,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B13-gates-ci"
-    ],
     "in_progress": false
   },
   {
@@ -2762,7 +3083,7 @@
     "bump": "none",
     "confidence": "high",
     "test_red_green": {
-      "name": "n/a",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
@@ -2774,10 +3095,13 @@
     "status": "resolved",
     "path": ".github/workflows/ci.yml",
     "id": "DEP-PRI-002",
-    "blocks_pr": false,
     "resolved_test": "n/a",
     "resolved_at": "2026-09-29 17:07:15 UTC",
     "resolved_note": "batch B13-gates-ci",
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 17:07:14 UTC",
@@ -2802,9 +3126,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B13-gates-ci"
-    ],
     "in_progress": false
   },
   {
@@ -2836,7 +3157,6 @@
     "status": "accepted",
     "path": ".github/actions/select-swift/action.yml",
     "id": "DEP-PRI-003",
-    "blocks_pr": false,
     "accept": {
       "type": "trade-off",
       "what": "select-swift keeps a floor (>= 6.2) and no ceiling. It uses the newest Xcode on macos-15 and logs which one it chose.",
@@ -2848,6 +3168,7 @@
     "progress": [
       "2026-09-29: aceito (trade-off) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
     ],
+    "blocks_pr": false,
     "in_progress": false
   },
   {
@@ -4009,14 +4330,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B7",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "RACE-MAE-001",
-    "blocks_pr": false
+    "resolved_test": "RefreshSchedulerTests#hung_vendor_is_restarted_after_max_age,RefreshSchedulerTests#old_in_flight_fetch_is_restarted,RefreshSchedulerTests#young_in_flight_fetch_is_skipped",
+    "resolved_at": "2026-09-29 17:36:51 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshSchedulerTests#hung_vendor_is_restarted_after_max_age,RefreshSchedulerTests#old_in_flight_fetch_is_restarted,RefreshSchedulerTests#young_in_flight_fetch_is_skipped · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "race",
@@ -4332,7 +4684,7 @@
     "confidence": "medium",
     "agent": "Argus",
     "test_red_green": {
-      "name": "scripts/source-ratchet-selftest.sh#[1/4]+[2/4],PinStoreTests#all_vendor_hosts_pinned",
+      "name": "vacuous-grep selftest",
       "assert_before": "planted `#expect(x == false, \"m\")` -> gate exits 0 (RED)",
       "assert_after": "exits 1"
     },
@@ -4344,10 +4696,13 @@
     "status": "resolved",
     "path": "scripts/validate.sh",
     "id": "TEST-ARG-003",
-    "blocks_pr": false,
     "resolved_test": "scripts/source-ratchet-selftest.sh#[1/4]+[2/4],PinStoreTests#all_vendor_hosts_pinned",
     "resolved_at": "2026-09-29 17:07:13 UTC",
     "resolved_note": "batch B13-gates-ci",
+    "progress": [
+      "2026-09-29: resolvido · teste scripts/source-ratchet-selftest.sh#[1/4]+[2/4],PinStoreTests#all_vendor_hosts_pinned · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 17:07:13 UTC",
@@ -4372,9 +4727,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste scripts/source-ratchet-selftest.sh#[1/4]+[2/4],PinStoreTests#all_vendor_hosts_pinned · revisão approved (3/3) · batch B13-gates-ci"
-    ],
     "in_progress": false
   },
   {
@@ -4389,7 +4741,7 @@
     "confidence": "high",
     "agent": "Argus",
     "test_red_green": {
-      "name": "scripts/coverage.sh 99.5 (manual)",
+      "name": "floor parsing",
       "assert_before": "FLOOR=99.5 -> exit 0 (RED)",
       "assert_after": "exit 1"
     },
@@ -4401,10 +4753,13 @@
     "status": "resolved",
     "path": "scripts/coverage.sh",
     "id": "TEST-ARG-004",
-    "blocks_pr": false,
     "resolved_test": "scripts/coverage.sh 99.5 (manual)",
     "resolved_at": "2026-09-29 17:07:14 UTC",
     "resolved_note": "batch B13-gates-ci",
+    "progress": [
+      "2026-09-29: resolvido · teste scripts/coverage.sh 99.5 (manual) · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 17:07:14 UTC",
@@ -4429,9 +4784,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste scripts/coverage.sh 99.5 (manual) · revisão approved (3/3) · batch B13-gates-ci"
-    ],
     "in_progress": false
   },
   {
@@ -4673,7 +5025,7 @@
     "confidence": "low",
     "agent": "Argus",
     "test_red_green": {
-      "name": "scratch demo009",
+      "name": "coverage path",
       "assert_before": "stale profdata read",
       "assert_after": "active only"
     },
@@ -4684,10 +5036,13 @@
     "status": "resolved",
     "path": "scripts/coverage.sh",
     "id": "TEST-ARG-009",
-    "blocks_pr": false,
     "resolved_test": "scratch demo009",
     "resolved_at": "2026-09-29 17:07:14 UTC",
     "resolved_note": "batch B13-gates-ci",
+    "progress": [
+      "2026-09-29: resolvido · teste scratch demo009 · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 17:07:14 UTC",
@@ -4712,9 +5067,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste scratch demo009 · revisão approved (3/3) · batch B13-gates-ci"
-    ],
     "in_progress": false
   },
   {
@@ -4953,15 +5305,18 @@
     "domain": "tests",
     "status": "resolved",
     "test_red_green": {
-      "name": "scripts/source-ratchet-selftest.sh#[3/4]",
+      "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-004",
-    "blocks_pr": false,
     "resolved_test": "scripts/source-ratchet-selftest.sh#[3/4]",
     "resolved_at": "2026-09-29 17:07:13 UTC",
     "resolved_note": "batch B13-gates-ci",
+    "progress": [
+      "2026-09-29: resolvido · teste scripts/source-ratchet-selftest.sh#[3/4] · revisão approved (3/3) · batch B13-gates-ci"
+    ],
+    "blocks_pr": false,
     "review": {
       "verdict": "approved",
       "reviewed_at": "2026-09-29 17:07:13 UTC",
@@ -4986,9 +5341,6 @@
       ],
       "test_reversal_checked": false
     },
-    "progress": [
-      "2026-09-29: resolvido · teste scripts/source-ratchet-selftest.sh#[3/4] · revisão approved (3/3) · batch B13-gates-ci"
-    ],
     "in_progress": false
   },
   {
@@ -5005,13 +5357,90 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B7",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-006",
+    "resolved_test": "RefreshSchedulerTests#hung_vendor_does_not_starve_others,RefreshSchedulerTests#healthy_cycle_has_no_backoff",
+    "resolved_at": "2026-09-29 17:36:51 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste RefreshSchedulerTests#hung_vendor_does_not_starve_others,RefreshSchedulerTests#healthy_cycle_has_no_backoff · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
+  },
+  {
+    "lens": "tests",
+    "severity": "LOW",
+    "path": "scripts/check-source-ratchets.sh",
+    "line": 103,
+    "title": "Bare-Int ratchet exempts a whole line containing radix:, so Int(s, radix: 16) + Int(d) on one line passes",
+    "evidence": "next if /radix:/ skips the entire line (raised by Higia, remediation B13)",
+    "fix": "Strip the labeled radix call before matching instead of skipping the line; plant the mixed form in the self-test",
+    "impact": "A trapping Int(Double) conversion can slip into a WireTypes file on a line that also parses a radix",
+    "category": "review-followup-r2",
+    "confidence": "high",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B13",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-007",
+    "blocks_pr": false
+  },
+  {
+    "lens": "tests",
+    "severity": "LOW",
+    "path": "Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift",
+    "line": 66,
+    "title": "AnalyticsEstimatesMergeTests.weeklySummaries waits a fixed 100 ms before awaiting historyReloadTask",
+    "evidence": "Fixed Task.sleep (raised by Higia, remediation B14); sibling of TEST-MAE-005",
+    "fix": "Await the store completion signal instead of sleeping",
+    "impact": "Possible CI flake under load",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B14",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-009",
     "blocks_pr": false
   },
   {
@@ -5421,14 +5850,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B1",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "VERB-MAE-001",
-    "blocks_pr": false
+    "resolved_test": "AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring",
+    "resolved_at": "2026-09-29 17:36:51 UTC",
+    "resolved_note": "batch B14-app-followups",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring · revisão approved (3/3) · batch B14-app-followups"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 17:36:51 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "agent": "Atlas",
@@ -6171,6 +6631,29 @@
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-012",
+    "blocks_pr": false
+  },
+  {
+    "lens": "quality",
+    "severity": "INFO",
+    "path": "scripts/validate.sh",
+    "line": 106,
+    "title": "validate.sh mixes the ratchet script plain check lines with its own coloured ok/fail output",
+    "evidence": "Cosmetic output format mix (raised by Higia, remediation B13)",
+    "fix": "Cosmetic only",
+    "impact": "None",
+    "category": "review-followup-r2",
+    "confidence": "high",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B13",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-013",
     "blocks_pr": false
   },
   {
@@ -6945,6 +7428,29 @@
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-005",
+    "blocks_pr": false
+  },
+  {
+    "lens": "tests",
+    "severity": "INFO",
+    "path": "scripts/coverage.sh",
+    "line": 28,
+    "title": "Empty COVERAGE_FLOOR argument falls back to 0 (report-only) via default expansion",
+    "evidence": "Makefile defaults COVERAGE_FLOOR ?= 90 and CI passes 90 explicitly; only an explicit empty value disables the floor (raised by Nemesis, remediation B13)",
+    "fix": "None required; documented behavior for local experiments",
+    "impact": "None on the gate",
+    "category": "review-followup-r2",
+    "confidence": "high",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B13",
+    "domain": "tests",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "TEST-MAE-008",
     "blocks_pr": false
   },
   {

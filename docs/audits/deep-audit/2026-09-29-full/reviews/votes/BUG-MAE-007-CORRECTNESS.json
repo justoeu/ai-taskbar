@@ -1,0 +1,13 @@
+{
+ "id": "BUG-MAE-007",
+ "verdict": "APROVA",
+ "reasoning": "NotificationService.swift:141-150. A key is dropped only after 12 consecutive snapshots of its vendor fail to report it. Reappearing (line 141) or falling below the thresholds (line 128) resets the counter. I set the threshold back to 1 (the old immediate prune) and got two RED tests: NotificationThresholdTrackerTests.swift:68 (the notification fired again) and :57. Caveat, not a block: if crossings() is also called with empty windows on a failed fetch, 12 failures in a row would prune the key and allow one repeat notification. That is the intended behavior for a rolled label.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:141",
+  "Sources/AiTaskbarApp/NotificationService.swift:128"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a4d99a10f2d5cae42",
+ "batch": "B14-app-followups"
+}

@@ -1,0 +1,15 @@
+{
+ "id": "TEST-MAE-006",
+ "verdict": "APROVA",
+ "reasoning": "VendorViewModel.State.isLoading (VendorViewModel.swift:31) now backs refreshIdleVendors and the test helper at RefreshSchedulerTests.swift:179. The stale comment at RefreshScheduler.swift:117 was fixed. The third item in the finding (UpdateCheckerCadenceTests making real network calls) was already fixed by a69b8ba, which stubs `http:` with OfflineProtocol. computeAggregates (UsageStore.swift:383) keeps its switch because it needs every case, so that is not duplication.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:31",
+  "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:117",
+  "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:179",
+  "Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift:36"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae24c0546e7a0fb92",
+ "batch": "B14-app-followups"
+}

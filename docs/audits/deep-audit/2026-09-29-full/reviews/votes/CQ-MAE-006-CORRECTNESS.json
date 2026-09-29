@@ -1,0 +1,12 @@
+{
+ "id": "CQ-MAE-006",
+ "verdict": "APROVA",
+ "reasoning": "AnalyticsStore.swift:194-205 replaces the try? with do/catch and calls onFailure. The production path (line 188) passes logHistoryUnavailable. I removed the onFailure call and got RED at AnalyticsEstimatesMergeTests.swift:130 (failures returned [], expected [.kimi]).",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:194"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a4d99a10f2d5cae42",
+ "batch": "B14-app-followups"
+}

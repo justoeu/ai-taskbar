@@ -1,0 +1,61 @@
+{
+  "id": "TEST-MAE-006",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 17:36:51 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "State.isLoading (VendorViewModel.swift:327) now serves both refreshIdleVendors (UsageStore.swift:282) and the test helper (RefreshSchedulerTests.swift:179). compute() in UsageStore.swift:383 keeps its full switch because it needs every case, which is legitimate. The stale comment at RefreshScheduler.swift:117 is fixed. UpdateCheckerCadenceTests already uses http: .stubbed (line 36). This is a refactor, so a reversal does not apply. Tests are green.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:327",
+        "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:282"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "This fix only adds tests, in RefreshSchedulerTests. They drive the scripted sleeper and the injected clock instead of the wall clock. Each #expect checks one count comparison, and I found no vacuous Bool-on-optional assertion in the diff.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "VendorViewModel.State.isLoading (VendorViewModel.swift:31) now backs refreshIdleVendors and the test helper at RefreshSchedulerTests.swift:179. The stale comment at RefreshScheduler.swift:117 was fixed. The third item in the finding (UpdateCheckerCadenceTests making real network calls) was already fixed by a69b8ba, which stubs `http:` with OfflineProtocol. computeAggregates (UsageStore.swift:383) keeps its switch because it needs every case, so that is not duplication.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:31",
+        "Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:117",
+        "Tests/AiTaskbarAppTests/RefreshSchedulerTests.swift:179",
+        "Tests/AiTaskbarAppTests/UpdateCheckerCadenceTests.swift:36"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}
