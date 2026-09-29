@@ -79,4 +79,26 @@ struct NotificationThresholdTrackerTests {
                         sortedThresholds: thresholds)
         #expect(t.highestNotified.count == 2)
     }
+
+    /// CQ-MAE-012: a failed delivery un-marks only its own threshold.
+    @Test("unmark leaves a higher threshold marked since then")
+    func unmark_keeps_higher_mark() {
+        var t = NotificationThresholdTracker()
+        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 75)],
+                        sortedThresholds: thresholds)
+        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
+                        sortedThresholds: thresholds)
+        t.unmark(vendor: .xai, label: "W", threshold: 70)
+        expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 90)
+    }
+
+    @Test("unmark of the current mark re-fires on the next snapshot")
+    func unmark_current_mark_refires() {
+        var t = NotificationThresholdTracker()
+        let w = [UsageWindow(label: "W", utilizationPercent: 95)]
+        _ = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
+        t.unmark(vendor: .xai, label: "W", threshold: 90)
+        #expect(t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
+            .map(\.threshold) == [90])
+    }
 }

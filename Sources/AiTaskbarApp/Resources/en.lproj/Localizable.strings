@@ -7,7 +7,6 @@
 "refresh_all_help" = "Refresh all providers";
 // The relative formatter already produces "X ago" / "in X" — we only add
 // the verb tense prefix here, not the temporal direction.
-"updated_ago_fmt" = "updated %@";
 // Countdown until the next scheduled refresh. %@ becomes "4:59" (MM:SS).
 "next_refresh_in_fmt" = "Next in %@";
 "refreshing_now" = "Refreshing…";
@@ -65,7 +64,6 @@
 "today_cost_unavailable" = "Today: price unavailable";
 "weekly_cost_unavailable" = "7d: price unavailable";
 "price_unavailable_short" = "price unavailable";
-"extra_usage_fmt" = "Extra usage: $%.2f";
 "balance_fmt" = "Balance: $%.2f";
 "voucher_fmt" = "Voucher: $%.2f";
 "cash_fmt" = "Cash: $%.2f";
@@ -77,6 +75,7 @@
 "notif_resets_fmt" = "%@ Resets %@.";
 "notif_discreet_title" = "AI Taskbar";
 "notif_discreet_body_fmt" = "A monitored window crossed %d%%.";
+"notif_title_fmt" = "%@ — %@ at %d%%";
 
 // About panel
 "about_description" = "Tracks LLM usage across Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), and Kimi (Moonshot) — all from your menu bar.";
@@ -148,7 +147,6 @@
 "settings_updates_enabled" = "Check for updates";
 "settings_updates_prereleases" = "Include pre-releases";
 "settings_pin_hosts" = "Pinned hosts (one per line)";
-"settings_pin_hosts_hint" = "TLS SPKI pinning, Trust-On-First-Use. Baseline pins for known vendor hosts ship in-binary.";
 "settings_pin_audit_only" = "Audit only (log mismatches, don't block)";
 "settings_pin_audit_help" = "When ON, a TLS pin mismatch is logged but the connection is still allowed. Useful for diagnosing pin rotation. Leave OFF for normal use.";
 "settings_keychain_account" = "Keychain account";
@@ -195,7 +193,6 @@
 "settings_api_key_env_help" = "Name of the environment variable that holds the API key (e.g. ZAI_API_KEY). Export it before launching the app, or fall back to the inline key above.";
 "settings_plan_tier_help" = "Z.AI subscription tier. Drives the usage limit used to compute the percentage. Pick the one matching your account.";
 "settings_base_url_help" = "Vendor API endpoint. Use the .cn variant for Moonshot China region; leave default otherwise.";
-"settings_primary_vendor_help" = "Vendor whose percentage is shown directly in the menu-bar icon (icon+percent mode).";
 "settings_menu_bar_mode_help" = "How the menu-bar item looks: bare icon, icon with the primary vendor's percentage, or rotating through all enabled vendors.";
 "settings_refresh_interval_help" = "How often the app polls each enabled vendor. Default 300s (5m). Floor is 15s — shorter intervals increase API quota consumption.";
 "settings_language_help" = "Force the UI language regardless of the macOS system locale. Default follows the system.";
@@ -315,9 +312,7 @@
 "analytics_toolbar_button" = "Consumption Overview & Charts";
 "analytics_title" = "Consumption & Analytics";
 "analytics_subtitle" = "Consolidated overview across all LLMs";
-"analytics_distribution_title" = "Usage & Cost Distribution";
 "analytics_usage" = "Usage";
-"analytics_usage_share" = "Usage Share";
 "analytics_by_llm_title" = "Breakdown by LLM";
 "analytics_empty_data" = "No consumption recorded in this timeframe.";
 "analytics_busiest_day" = "Busiest day";
@@ -338,7 +333,6 @@
 "back" = "Back";
 "analytics_usage_distribution_title" = "Usage Share (% Quota)";
 "analytics_cost_distribution_title" = "Cost Consumption (USD)";
-"compare_target_label" = "Compare with:";
 "compare_prev_week_1" = "Previous week";
 "compare_prev_week_2" = "2 weeks ago";
 "compare_prev_week_3" = "3 weeks ago";
@@ -356,7 +350,6 @@
 "analytics_delta_quota_help" = "Change in average quota utilization compared to the selected previous period.";
 "analytics_insufficient_history_short" = "No prior data";
 "analytics_insufficient_history_help" = "Not enough historical data recorded yet for the selected comparison period.";
-"vs_previous_period_fmt" = "%@ vs. previous";
 "pin_to_menu_bar_help" = "Pin to menu bar";
 "more_details" = "+ details";
 "more_details_help" = "View detailed charts and consumption metrics for this LLM";

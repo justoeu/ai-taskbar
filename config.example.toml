@@ -90,7 +90,9 @@ api_key_env = "MOONSHOT_API_KEY"
 
 [gemini]
 enabled = true
-api_key_env = "GEMINI_API_KEY"
+prefer_antigravity = true    # default true: query the local Antigravity CLI (`agy`) for quota windows
+# agy_path = "/path/to/agy"  # optional: explicit binary if not in a standard install path
+api_key_env = "GEMINI_API_KEY"   # heartbeat fallback when `agy` is missing or unauthenticated
 # api_key = "AIza..."        # inline fallback if env not set
 # base_url = "https://generativelanguage.googleapis.com/v1beta"
 # Note: Google AI doesn't expose a public usage/billing REST endpoint —
@@ -106,6 +108,10 @@ api_key_env = "DEEPSEEK_API_KEY"
 
 [xai]
 enabled = true
+prefer_grok_cli = true       # default true: read the Grok CLI login (~/.grok/auth.json) for plan quota
+# grok_auth_path = "~/.grok/auth.json"
+# grok_base_url = "https://cli-chat-proxy.grok.com"  # https only; hosts cli-chat-proxy.grok.com or management-api.x.ai (shared xAI allow-list), anything else falls back to the default
+# Management API fallback (used when prefer_grok_cli = false):
 api_key_env = "XAI_MANAGEMENT_KEY"
 # api_key = "xai-..."         # management key from console.x.ai → Settings → Management Keys
 #                             # (NOT the inference API key used with api.x.ai)

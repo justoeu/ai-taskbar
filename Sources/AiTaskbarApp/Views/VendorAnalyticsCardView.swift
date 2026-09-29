@@ -180,18 +180,9 @@ public struct VendorAnalyticsCardView: View {
                     HStack(spacing: 12) {
                         // Real sessions where a session counter exists; otherwise
                         // the number of models, labelled as such.
-                        if summary.sessionCount > 0 {
-                            let sessionLabel = summary.sessionCount == 1
-                                ? "1 \(L10n.localizedString("analytics_session_single"))"
-                                : "\(summary.sessionCount) \(L10n.localizedString("analytics_sessions"))"
-                            Label(sessionLabel, systemImage: "macwindow")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        } else if summary.modelCount > 0 {
-                            let modelLabel = summary.modelCount == 1
-                                ? "1 \(L10n.localizedString("analytics_model_single"))"
-                                : "\(summary.modelCount) \(L10n.localizedString("analytics_models"))"
-                            Label(modelLabel, systemImage: "macwindow")
+                        if let countLabel = Self.countLabel(sessions: summary.sessionCount,
+                                                            models: summary.modelCount) {
+                            Label(countLabel, systemImage: "macwindow")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -297,5 +288,23 @@ public struct VendorAnalyticsCardView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
         )
+    }
+}
+
+extension VendorAnalyticsCardView {
+    /// "N sessions" where a session counter exists, else "N models", else
+    /// nil. One formatter for both counts (DUP-MAE-002).
+    static func countLabel(sessions: Int, models: Int) -> String? {
+        if sessions > 0 {
+            return count(sessions, single: "analytics_session_single", plural: "analytics_sessions")
+        }
+        if models > 0 {
+            return count(models, single: "analytics_model_single", plural: "analytics_models")
+        }
+        return nil
+    }
+
+    private static func count(_ n: Int, single: String, plural: String) -> String {
+        "\(n) \(L10n.localizedString(n == 1 ? single : plural))"
     }
 }

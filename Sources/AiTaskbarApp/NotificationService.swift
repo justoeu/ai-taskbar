@@ -2,6 +2,36 @@ import Foundation
 import UserNotifications
 import AiTaskbarCore
 
+/// The two `UNUserNotificationCenter` calls the service makes, behind a seam
+/// so tests never reach the real center (which needs a bundled app and, on
+/// macOS 26, crashes the SDK-mismatched XPC handshake).
+@MainActor
+protocol NotificationPosting {
+    func requestAuthorizationIfNeeded()
+    func add(_ request: UNNotificationRequest,
+             completion: @escaping @Sendable (Error?) -> Void)
+}
+
+struct SystemNotificationCenter: NotificationPosting {
+    func requestAuthorizationIfNeeded() {
+        // Re-fetch `current()` inside the callback instead of capturing it.
+        // `UNUserNotificationCenter` is not `Sendable`, and the settings
+        // callback is `@Sendable`, so capturing the outer reference was a
+        // concurrency hole rather than a style nit. `current()` returns the
+        // same process-wide singleton, so this is free.
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
+    }
+
+    func add(_ request: UNNotificationRequest,
+             completion: @escaping @Sendable (Error?) -> Void) {
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: completion)
+    }
+}
+
 /// Emits macOS notifications when a usage window crosses one of the configured
 /// thresholds for the first time within that window. Dedupes per
 /// vendor:windowLabel so re-fetches don't re-notify.
@@ -20,8 +50,20 @@ public final class NotificationService {
     /// connection at all.
     private var authorizationRequested = false
 
-    public init(config: NotificationsConfig) {
+    private let center: NotificationPosting
+    private let runtimeIncompatible: Bool
+
+    public convenience init(config: NotificationsConfig) {
+        self.init(config: config, center: SystemNotificationCenter(),
+                  runtimeIncompatible: Self.isRuntimeKnownIncompatible)
+    }
+
+    /// Test seam: a fake center and an explicit runtime gate, so the send
+    /// path is exercisable on macOS 26 without the real center.
+    init(config: NotificationsConfig, center: NotificationPosting, runtimeIncompatible: Bool) {
         self.config = config
+        self.center = center
+        self.runtimeIncompatible = runtimeIncompatible
     }
 
     /// Returns `true` when the running macOS is known to crash this binary
@@ -46,16 +88,7 @@ public final class NotificationService {
     private func ensureAuthorizedBeforeSend() {
         guard config.enabled, !authorizationRequested else { return }
         authorizationRequested = true
-        // Re-fetch `current()` inside the callback instead of capturing it.
-        // `UNUserNotificationCenter` is not `Sendable`, and the settings
-        // callback is `@Sendable`, so capturing the outer reference was a
-        // concurrency hole rather than a style nit. `current()` returns the
-        // same process-wide singleton, so this is free.
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            guard settings.authorizationStatus == .notDetermined else { return }
-            UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound]) { _, _ in }
-        }
+        center.requestAuthorizationIfNeeded()
     }
 
     public func observe(vendor: VendorId, snapshot: VendorSnapshot) {
@@ -63,7 +96,7 @@ public final class NotificationService {
         // is known to crash this binary (Tahoe / macOS 26 until the release
         // pipeline rebuilds against the matching SDK). Surfacing the guard
         // here keeps `observe()` cheap in the common path.
-        guard config.enabled, !Self.isRuntimeKnownIncompatible else { return }
+        guard config.enabled, !runtimeIncompatible else { return }
         let sortedThresholds = config.notifyAt.sorted()
         for crossing in tracker.crossings(vendor: vendor, windows: snapshot.windows,
                                           sortedThresholds: sortedThresholds) {
@@ -76,13 +109,13 @@ public final class NotificationService {
         // Defense in depth: never reach `UNUserNotificationCenter` on a
         // runtime known to crash the XPC handshake. `observe()` already
         // filters this, but `send()` is private and could be reused later.
-        if Self.isRuntimeKnownIncompatible { return }
+        if runtimeIncompatible { return }
         let content = UNMutableNotificationContent()
         if config.discreet {
             content.title = L10n.localizedString("notif_discreet_title")
             content.body  = L10n.localizedString("notif_discreet_body_fmt", Int(saturating: threshold))
         } else {
-            content.title = "\(vendor.displayName) — \(window.label) at \(Int(saturating: window.utilizationPercent))%"
+            content.title = Self.title(vendor: vendor, window: window)
             content.body  = thresholdMessage(threshold: threshold, window: window)
         }
         content.sound = .default
@@ -91,10 +124,27 @@ public final class NotificationService {
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(req) { error in
+        let label = window.label
+        center.add(req) { [weak self] error in
             guard let error else { return }
             AppLog.lifecycle.error("notification delivery failed: \(String(describing: error), privacy: .public)")
+            // The crossing was marked before `add()`. Un-mark it so the next
+            // refresh re-sends: on the first crossing authorization is still
+            // pending and `add()` fails with `notificationsNotAllowed`
+            // (CQ-MAE-012). While authorization stays denied this costs one
+            // failed `add()` per refresh tick.
+            Task { @MainActor in
+                self?.tracker.unmark(vendor: vendor, label: label, threshold: threshold)
+            }
         }
+    }
+
+    /// Non-discreet title, e.g. "Claude — 5h at 92%". Localized: it was a
+    /// hard-coded English sentence while the body beside it was not
+    /// (CQ-MAE-012). The window label is shown as the card shows it.
+    static func title(vendor: VendorId, window: UsageWindow) -> String {
+        L10n.localizedString("notif_title_fmt", vendor.displayName, window.label,
+                             Int(saturating: window.utilizationPercent))
     }
 
     /// Built once. The locale is captured at first use, which is after
@@ -146,6 +196,15 @@ struct NotificationThresholdTracker {
     /// (xAI "Monthly (YYYY-MM)") never returns, so it is still pruned:
     /// about an hour later at the default 300 s cadence.
     static let pruneAfterMissedSnapshots = 12
+
+    /// Forgets a crossing whose delivery failed, so the next snapshot re-fires
+    /// it. Only when it is still the recorded mark: a higher threshold marked
+    /// in the meantime, or a reset, must not be undone.
+    mutating func unmark(vendor: VendorId, label: String, threshold: Double) {
+        let key = Key(vendor: vendor, label: label)
+        guard highestNotified[key] == threshold else { return }
+        highestNotified.removeValue(forKey: key)
+    }
 
     /// Folds one snapshot's windows in and returns the crossings to notify.
     mutating func crossings(vendor: VendorId, windows: [UsageWindow],

@@ -37,8 +37,9 @@ private final class LoadRecorder: Sendable {
 @Suite("AnalyticsStore history loading", .serialized)
 struct AnalyticsStoreHistoryLoadTests {
     private func settle(_ store: AnalyticsStore) async {
-        // Let queued `receive(on: .main)` deliveries run, then await the load.
-        try? await Task.sleep(nanoseconds: 100_000_000)
+        // Let queued `receive(on: .main)` deliveries run, then await the
+        // store's own completion signal: the history load they started.
+        await drainMainQueue()
         await store.historyReloadTask?.value
     }
 

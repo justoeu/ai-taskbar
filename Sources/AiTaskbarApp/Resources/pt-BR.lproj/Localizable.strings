@@ -6,7 +6,6 @@
 "about_help" = "Sobre o AI Taskbar";
 "refresh_all_help" = "Atualizar todos os provedores";
 // O RelativeDateTimeFormatter já produz "há X" / "em X" — aqui só prefixamos o verbo.
-"updated_ago_fmt" = "atualizado %@";
 // Contador regressivo até o próximo refresh agendado. %@ vira "4:59" (MM:SS).
 "next_refresh_in_fmt" = "Próx. em %@";
 "refreshing_now" = "Atualizando…";
@@ -64,7 +63,6 @@
 "today_cost_unavailable" = "Hoje: preço indisponível";
 "weekly_cost_unavailable" = "7d: preço indisponível";
 "price_unavailable_short" = "preço indisponível";
-"extra_usage_fmt" = "Uso extra: $%.2f";
 "balance_fmt" = "Saldo: $%.2f";
 "voucher_fmt" = "Voucher: $%.2f";
 "cash_fmt" = "Dinheiro: $%.2f";
@@ -76,6 +74,7 @@
 "notif_resets_fmt" = "%@ Reseta %@.";
 "notif_discreet_title" = "AI Taskbar";
 "notif_discreet_body_fmt" = "Uma janela monitorada ultrapassou %d%%.";
+"notif_title_fmt" = "%@ — %@ em %d%%";
 
 // About panel
 "about_description" = "Acompanha o uso de LLMs do Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM) e Kimi (Moonshot) — direto da barra de menu.";
@@ -147,7 +146,6 @@
 "settings_updates_enabled" = "Verificar atualizações";
 "settings_updates_prereleases" = "Incluir pré-lançamentos";
 "settings_pin_hosts" = "Hosts com pin (um por linha)";
-"settings_pin_hosts_hint" = "TLS SPKI pinning, Trust-On-First-Use. Os pins para os hosts conhecidos já vêm no binário.";
 "settings_pin_audit_only" = "Apenas auditar (registrar divergências, não bloquear)";
 "settings_pin_audit_help" = "Quando LIGADO, divergências de pin TLS são registradas mas a conexão é permitida. Útil para diagnosticar rotação de pin. Deixe DESLIGADO em uso normal.";
 "settings_keychain_account" = "Conta do Keychain";
@@ -194,7 +192,6 @@
 "settings_api_key_env_help" = "Nome da variável de ambiente que contém a chave de API (ex.: ZAI_API_KEY). Exporte antes de abrir o app, ou use a chave inline acima como fallback.";
 "settings_plan_tier_help" = "Tier da assinatura Z.AI. Define o limite de uso usado para calcular o percentual. Escolha o que corresponde à sua conta.";
 "settings_base_url_help" = "Endpoint da API do provedor. Use a variante .cn para Moonshot região China; caso contrário deixe o padrão.";
-"settings_primary_vendor_help" = "Provedor cujo percentual aparece direto no ícone da barra (modo ícone+percentual).";
 "settings_menu_bar_mode_help" = "Como o item da barra aparece: só ícone, ícone com percentual do provedor primário, ou rotativo entre todos os provedores habilitados.";
 "settings_refresh_interval_help" = "Com que frequência o app consulta cada provedor habilitado. Padrão 300s (5m). Mínimo 15s — intervalos menores aumentam o consumo de quota da API.";
 "settings_language_help" = "Força o idioma da UI independente do idioma do sistema. Padrão segue o sistema.";
@@ -314,9 +311,7 @@
 "analytics_toolbar_button" = "Visão Geral de Consumo e Gráficos";
 "analytics_title" = "Consumo & Métricas";
 "analytics_subtitle" = "Visão consolidada entre todos os LLMs";
-"analytics_distribution_title" = "Distribuição de Consumo e Custos";
 "analytics_usage" = "Uso";
-"analytics_usage_share" = "Fatia de Uso";
 "analytics_by_llm_title" = "Consumo por LLM";
 "analytics_empty_data" = "Nenhum consumo registrado no período.";
 "analytics_busiest_day" = "Dia mais movimentado";
@@ -337,7 +332,6 @@
 "back" = "Voltar";
 "analytics_usage_distribution_title" = "Fatia de Uso (% Quota)";
 "analytics_cost_distribution_title" = "Consumo em Dólares (USD)";
-"compare_target_label" = "Comparar com:";
 "compare_prev_week_1" = "Semana anterior";
 "compare_prev_week_2" = "Há 2 semanas";
 "compare_prev_week_3" = "Há 3 semanas";
@@ -355,7 +349,6 @@
 "analytics_delta_quota_help" = "Variação na média de utilização de quota em relação ao período anterior selecionado.";
 "analytics_insufficient_history_short" = "Sem dados anteriores";
 "analytics_insufficient_history_help" = "Ainda não há dados suficientes gravados no histórico para o período comparativo selecionado.";
-"vs_previous_period_fmt" = "%@ vs. anterior";
 "pin_to_menu_bar_help" = "Fixar na barra de menus";
 "more_details" = "+ detalhes";
 "more_details_help" = "Ver gráficos e métricas de consumo deste LLM";

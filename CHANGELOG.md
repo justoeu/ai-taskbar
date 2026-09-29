@@ -5,6 +5,114 @@ The format follows the release notes pattern from [GitHub Releases](https://gith
 
 ---
 
+## [v0.23.6](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.6) - 2026-09-29
+
+### 🐛 Fixes
+
+-  pinned LLMs next to the main icon, real space limit, Claude 5.5 prices + fast mode (#30)
+
+---
+
+**Full diff:** [`v0.23.5...v0.23.6`](https://github.com/justoeu/ai-taskbar/compare/v0.23.5...v0.23.6)
+
+---
+
+## [v0.23.5](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.5) - 2026-09-28
+
+### 🐛 Fixes
+
+-  fix pin ordering, eliminate icon flicker and enforce accurate notch collision limit (#29)
+
+---
+
+**Full diff:** [`v0.23.4...v0.23.5`](https://github.com/justoeu/ai-taskbar/compare/v0.23.4...v0.23.5)
+
+---
+
+## [v0.23.4](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.4) - 2026-09-28
+
+### 🐛 Fixes
+
+-  remove false notch space collision check in favor of reliable 5-item cap (#28)
+
+---
+
+**Full diff:** [`v0.23.3...v0.23.4`](https://github.com/justoeu/ai-taskbar/compare/v0.23.3...v0.23.4)
+
+---
+
+## [v0.23.3](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.3) - 2026-09-28
+
+### 🐛 Fixes
+
+-  eliminate pin/unpin flicker by updating status items in place (#27)
+
+---
+
+**Full diff:** [`v0.23.2...v0.23.3`](https://github.com/justoeu/ai-taskbar/compare/v0.23.2...v0.23.3)
+
+---
+
+## [v0.23.2](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.2) - 2026-09-28
+
+### 🐛 Fixes
+
+-  enforce space limits and deterministic ordering for pinned items (#26)
+
+---
+
+**Full diff:** [`v0.23.1...v0.23.2`](https://github.com/justoeu/ai-taskbar/compare/v0.23.1...v0.23.2)
+
+---
+
+## [v0.23.1](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.1) - 2026-09-27
+
+### 🐛 Fixes
+
+-  fix openrouter balance quota semantics and contextualize comparison delta (#25)
+
+---
+
+**Full diff:** [`v0.23.0...v0.23.1`](https://github.com/justoeu/ai-taskbar/compare/v0.23.0...v0.23.1)
+
+---
+
+## [v0.23.0](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.0) - 2026-09-25
+
+### ✨ Features
+
+-  show daily and weekly reset countdowns in pinned LLM tooltips (#24)
+
+---
+
+**Full diff:** [`v0.22.0...v0.23.0`](https://github.com/justoeu/ai-taskbar/compare/v0.22.0...v0.23.0)
+
+---
+
+## [v0.22.0](https://github.com/justoeu/ai-taskbar/releases/tag/v0.22.0) - 2026-09-25
+
+### ✨ Features
+
+-  add daily background update check and popover update banner (#23)
+
+---
+
+**Full diff:** [`v0.21.0...v0.22.0`](https://github.com/justoeu/ai-taskbar/compare/v0.21.0...v0.22.0)
+
+---
+
+## [v0.21.0](https://github.com/justoeu/ai-taskbar/releases/tag/v0.21.0) - 2026-09-24
+
+### ✨ Features
+
+-  consumption dashboard, menubar pinned LLMs, session counters, and latency optimizations (#22)
+
+---
+
+**Full diff:** [`v0.20.0...v0.21.0`](https://github.com/justoeu/ai-taskbar/compare/v0.20.0...v0.21.0)
+
+---
+
 ## [v0.20.0](https://github.com/justoeu/ai-taskbar/releases/tag/v0.20.0) - 2026-09-20
 
 ### ✨ Features

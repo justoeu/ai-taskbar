@@ -83,25 +83,35 @@ public struct DiskCache: Sendable {
 
     // MARK: - Reads
 
-    /// Single stat+read for the hot cache-hit path (N1-NEX-004).
-    public func freshPayloadWithAge() -> (Data, TimeInterval)? {
+    /// Age of the payload file from its mtime, or nil when it is missing.
+    /// The one place freshness is measured, so the TTL probe and the reads
+    /// cannot drift apart (DUP-MAE-004). Call inside `withIOLock`.
+    private func payloadAge() -> TimeInterval? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
+              let mtime = attrs[.modificationDate] as? Date else { return nil }
+        return now().timeIntervalSince(mtime)
+    }
+
+    /// Payload and its age when the age is within `limit`. Single stat+read
+    /// for the hot cache-hit path (N1-NEX-004).
+    private func payloadWithAge(within limit: TimeInterval) -> (Data, TimeInterval)? {
         withIOLock {
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
-                  let mtime = attrs[.modificationDate] as? Date else { return nil }
-            let age = now().timeIntervalSince(mtime)
-            guard age <= ttl,
+            guard let age = payloadAge(), age <= limit,
                   let data = try? Data(contentsOf: payloadURL) else { return nil }
             return (data, age)
         }
+    }
+
+    public func freshPayloadWithAge() -> (Data, TimeInterval)? {
+        payloadWithAge(within: ttl)
     }
 
     /// Stat-only freshness probe: true when `freshPayloadWithAge()` would
     /// currently serve an entry, without reading the payload.
     public func hasFreshPayload() -> Bool {
         withIOLock {
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
-                  let mtime = attrs[.modificationDate] as? Date else { return false }
-            return now().timeIntervalSince(mtime) <= ttl
+            guard let age = payloadAge() else { return false }
+            return age <= ttl
         }
     }
 
@@ -110,14 +120,7 @@ public struct DiskCache: Sendable {
     }
 
     public func anyPayloadWithAge() -> (Data, TimeInterval)? {
-        withIOLock {
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
-                  let mtime = attrs[.modificationDate] as? Date else { return nil }
-            let age = now().timeIntervalSince(mtime)
-            guard age <= maxStale,
-                  let data = try? Data(contentsOf: payloadURL) else { return nil }
-            return (data, age)
-        }
+        payloadWithAge(within: maxStale)
     }
 
     public func anyPayload() -> Data? {

@@ -109,11 +109,8 @@ public final class GeminiProvider: UsageProvider {
                 throw AppError.schema("agy usage decode: \(error)")
             }
             if agy.status == "ERROR" {
-                let err = agy.error ?? agy.response ?? "agy reported an error"
-                if err == "context canceled" {
-                    throw AppError.guidance(.antigravityCanceled)
-                }
-                throw AppError.io("agy: \(err)")
+                throw AntigravityReportedError.appError(
+                    for: AntigravityReportedError.message(error: agy.error, response: agy.response))
             }
             return .gemini(agy.toSnapshot())
         }

@@ -18,6 +18,34 @@ private final class RateLimitedProvider: UsageProvider, @unchecked Sendable {
     }
 }
 
+/// Answers HTTP 429 only after the test releases it, so the test can move
+/// the injected clock while the request is in flight.
+private final class GatedRateLimitedProvider: UsageProvider, @unchecked Sendable {
+    let vendorId: VendorId = .openrouter
+    var displayName: String { vendorId.displayName }
+    var credentialFileURL: URL? { nil }
+    private let gate = OSAllocatedUnfairLock<CheckedContinuation<Void, Never>?>(initialState: nil)
+    var isWaiting: Bool { gate.withLock { $0 != nil } }
+    func release() {
+        let c = gate.withLock { c -> CheckedContinuation<Void, Never>? in
+            defer { c = nil }
+            return c
+        }
+        c?.resume()
+    }
+    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
+        await withCheckedContinuation { c in gate.withLock { $0 = c } }
+        throw AppError.http(status: 429, body: "slow down")
+    }
+}
+
+/// Test-controlled clock for `VendorViewModel(clock:)`.
+@MainActor
+private final class ManualClock {
+    var now: Date
+    init(_ now: Date) { self.now = now }
+}
+
 /// CQ-MAE-014: `refresh(forceRefresh:now:)` took an injected clock but only
 /// used it for `loadingSince`; the 429 cooldown gate read `Date.now`, so a
 /// caller-supplied time past the cooldown was still refused.
@@ -74,5 +102,31 @@ struct VendorViewModelRateLimitTests {
         vm.refresh(forceRefresh: true, now: retryAt.addingTimeInterval(1))
         await waitUntil { provider.callCount == 2 }
         #expect(provider.callCount == 2)
+    }
+
+    /// BUG-MAE-009: the cooldown was stamped from the dispatch time, so a
+    /// 429 that took 100 s to arrive got a cooldown 100 s shorter than
+    /// `rateLimitCooldown(forAttempt:)`. It must be measured from arrival.
+    @Test("a slow 429 is cooled down from its arrival, not its dispatch")
+    func cooldown_starts_at_response_arrival() async throws {
+        defer { cleanup() }
+        let provider = GatedRateLimitedProvider()
+        let dir = tmp
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let clock = ManualClock(start)
+        let vm = VendorViewModel(
+            provider: provider, defaults: defaults,
+            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) },
+            clock: { clock.now })
+
+        vm.refresh(forceRefresh: true, now: start)
+        await waitUntil { provider.isWaiting }
+        clock.now = start.addingTimeInterval(100)   // the request is slow
+        provider.release()
+        await waitUntil { isFailed(vm) }
+
+        let retryAt = try #require(vm.rateLimitRetryAt)
+        let expected = start.addingTimeInterval(100 + VendorViewModel.rateLimitCooldown(forAttempt: 1))
+        #expect(retryAt == expected)
     }
 }

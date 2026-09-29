@@ -32,6 +32,23 @@ struct CostEstimatorLoadingTests {
         expectTrue(CostEstimator.opencodeProviders[.gemini] == ["gemini", "google"])
     }
 
+    /// CQ-MAE-016: `OpencodeScanner.scanOutcome` answers `.unavailable` — the
+    /// same case as a read failure, which keeps the previous rows — when an
+    /// alias is in two groups or no alias is given. The alias table is the
+    /// only caller, so it must never hit that misuse path.
+    @Test("each opencode alias belongs to exactly one vendor")
+    func opencode_aliases_are_disjoint() {
+        let aliases = CostEstimator.opencodeProviders.values.flatMap { $0 }
+        #expect(!aliases.isEmpty)
+        #expect(Set(aliases).count == aliases.count)
+    }
+
+    @Test("no opencode alias is empty")
+    func opencode_aliases_are_non_empty() {
+        let aliases = CostEstimator.opencodeProviders.values.flatMap { $0 }
+        #expect(!aliases.contains(""))
+    }
+
     /// CQ-MAE-003: "not installed" publishes empty rows; a failed read
     /// publishes nothing so the previous rows stay (BUG-ART-013).
     @Test("opencode outcomes map to empty rows, kept rows, or the scan")

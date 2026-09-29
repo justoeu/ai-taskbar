@@ -297,7 +297,7 @@ AI Taskbar supports two modes for xAI:
 AI Taskbar supports two monitoring paths for Google Gemini:
 
 1. **Antigravity CLI mode (default & recommended):**
-   - **How it works:** AI Taskbar executes the local Antigravity CLI in the background (`agy --output-format json --print "/usage"`) with a safe 15-second budget and closed standard input.
+   - **How it works:** AI Taskbar executes the local Antigravity CLI in the background (`agy --output-format json --print "/usage"`) with a 35-second budget, closed standard input, stdout capped at 4 MiB (a larger answer is rejected, not parsed) and stderr truncated to 64 KiB.
    - **Binary auto-detection:** Automatically discovers `agy` in standard install paths:
      - `~/.local/bin/agy`
      - `/opt/homebrew/bin/agy`
@@ -412,6 +412,8 @@ The **`RefreshScheduler`** fires every `refresh_interval_seconds` (default 300s 
 
 If any vendor's last refresh ended in HTTP 429, the scheduler adds **`RefreshScheduler.rateLimitBackoff` = 60 s** to the next sleep. The back-off is read via `UsageStore.hasRateLimitedVendor` between cycles and stays applied for as long as at least one vendor keeps returning 429 — once they clear, the cadence drops back to the configured interval automatically. During the back-off the popover countdown shows "Aguardando rate-limit…" (anchored on `UsageStore.isInRateLimitBackoff`) so the header never silently freezes at 0:00. Independently, each `VendorViewModel` tracks consecutive 429s and refuses new network work until its own 5/10/20/40/60-minute cooldown expires; this keeps a throttled provider from blocking normal refreshes for the others.
 
+Every usage window's percentage is sanitized when it is built and again when it is read back from the cache: NaN becomes 0 and the value is clamped to 0–1000%, so a vendor reporting overuse still shows above 100% but a corrupt or hostile number cannot reach the bars or the menu-bar gauge.
+
 The per-vendor `DiskCache` TTL is wired to `max(15, refresh_interval_seconds − 5)` in `AppEnvironment`. The 5 s margin means a scheduled tick at T=interval always sees an expired cache (`age ≈ interval > ttl`), so the scheduler doesn't need `forceRefresh: true` to defeat the cache. Popover opens between scheduled refreshes still serve from cache.
 
 ## Configuration
@@ -489,6 +491,7 @@ api_key_env = "DEEPSEEK_API_KEY"
 enabled = true
 prefer_grok_cli = true          # default true: reads ~/.grok/auth.json for SuperGrok Heavy quota
 # grok_auth_path = "/Users/you/.grok/auth.json"
+# grok_base_url = "https://cli-chat-proxy.grok.com"   # host-allowlisted; anything else falls back
 # Management API fallback (if prefer_grok_cli = false):
 # api_key_env = "XAI_MANAGEMENT_KEY"
 # api_key = "xai-..."

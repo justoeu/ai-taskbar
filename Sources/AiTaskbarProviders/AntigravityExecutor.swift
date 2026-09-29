@@ -128,10 +128,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
             } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
                 throw AppError.guidance(.antigravityUnavailable)
             } else if let structured = structuredError {
-                if structured == "context canceled" {
-                    throw AppError.guidance(.antigravityCanceled)
-                }
-                throw AppError.io("agy: \(structured)")
+                throw AntigravityReportedError.appError(for: structured)
             }
             let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -154,13 +151,15 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
             let response: String?
         }
 
+        func reported(_ env: AgyEnvelope) -> String? {
+            guard env.status == "ERROR" || !(env.error ?? "").isEmpty else { return nil }
+            return AntigravityReportedError.message(error: env.error, response: env.response)
+        }
+
         func inspect(_ data: Data) -> String? {
-            if let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: data) {
-                if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
-                    if let err = env.error, !err.isEmpty { return err }
-                    if let resp = env.response, !resp.isEmpty { return resp }
-                    return "agy reported an error"
-                }
+            if let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: data),
+               let message = reported(env) {
+                return message
             }
             let str = String(data: data, encoding: .utf8) ?? ""
             if let start = str.firstIndex(of: "{"),
@@ -168,16 +167,33 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
                 let sub = String(str[start...end])
                 if let subData = sub.data(using: .utf8),
                    let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: subData) {
-                    if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
-                        if let err = env.error, !err.isEmpty { return err }
-                        if let resp = env.response, !resp.isEmpty { return resp }
-                        return "agy reported an error"
-                    }
+                    return reported(env)
                 }
             }
             return nil
         }
 
         return inspect(outData) ?? inspect(errData)
+    }
+}
+
+/// The one mapping for an error `agy` reports in its JSON envelope, shared by
+/// the live run (`ProcessAntigravityExecutor`) and the cached-payload decode
+/// (`GeminiProvider`) so the two cannot drift (DUP-MAE-003).
+enum AntigravityReportedError {
+    /// `error` when non-empty, else `response` when non-empty, else a
+    /// generic message.
+    static func message(error: String?, response: String?) -> String {
+        if let error, !error.isEmpty { return error }
+        if let response, !response.isEmpty { return response }
+        return "agy reported an error"
+    }
+
+    /// `context canceled` is guidance (the run was interrupted, retry);
+    /// anything else is an I/O error carrying agy's own words.
+    static func appError(for message: String) -> AppError {
+        message == "context canceled"
+            ? .guidance(.antigravityCanceled)
+            : .io("agy: \(message)")
     }
 }

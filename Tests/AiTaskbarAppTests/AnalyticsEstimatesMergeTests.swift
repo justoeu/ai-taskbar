@@ -64,7 +64,7 @@ struct AnalyticsEstimatesMergeTests {
                                    historyProvider: { _ in [] })
         store.timeframe = .weekly
         store.refresh(force: true)
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await drainMainQueue()
         await store.historyReloadTask?.value
         let summaries = store.snapshot?.vendorSummaries ?? []
         return Dictionary(uniqueKeysWithValues: summaries.map { ($0.vendor, $0) })

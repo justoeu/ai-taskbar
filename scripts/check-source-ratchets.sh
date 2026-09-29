@@ -100,11 +100,24 @@ fi
 if ! bare_int=$(find "$wire_dir" -maxdepth 1 -name '*WireTypes.swift' -type f -print0 | sort -z \
     | xargs -0 perl -ne '
         next if /^\s*\/\//;
-        # Blank out only the radix string parses themselves (balanced
+        # Neutralise only the radix string parses themselves (balanced
         # parentheses, so Int(String(x), radix: 16) is one call); skipping the
         # whole line let `Int(s, radix: 16) ?? Int(d)` through (TEST-MAE-007).
-        (my $l = $_) =~ s{\bU?Int(?:8|16|32|64)?(\((?:[^()]++|(?1))*\))}{
-            my $m = $&; $1 =~ /\bradix\s*:/ ? "RADIX_PARSE" : $m }ge;
+        # Only the `Int` name is renamed: the arguments are scrubbed
+        # recursively and kept, so a trapping conversion nested inside, as in
+        # `Int(String(Int(d)), radix: 16)`, is still seen (TEST-MAE-010).
+        # `radix:` must be a TOP-LEVEL argument of the call itself.
+        sub scrub {
+            my ($s) = @_;
+            $s =~ s{\b(U?Int(?:8|16|32|64)?)(\((?:[^()]++|(?2))*\))}{
+                my ($name, $call) = ($1, $2);
+                my $inner = scrub(substr($call, 1, -1));
+                (my $top = $inner) =~ s/(\((?:[^()]++|(?1))*\))/()/g;
+                ($top =~ /\bradix\s*:/ ? "RADIX_PARSE" : $name) . "(" . $inner . ")"
+            }ge;
+            return $s;
+        }
+        my $l = scrub($_);
         my $hit = $l =~ /\bU?Int(?:8|16|32|64)?\((?:\s*[^a-zA-Z_ )]|\s*[a-zA-Z_][a-zA-Z0-9_.]*[^a-zA-Z0-9_.:])/
             || $l =~ /\bU?Int(?:8|16|32|64)?\.init\b(?!\s*\(\s*(?:saturating|checkedTruncating|exactly|clamping|truncatingIfNeeded)\s*:)/;
         print "$ARGV:$.: $_" if $hit;

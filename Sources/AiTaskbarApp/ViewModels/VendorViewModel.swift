@@ -169,12 +169,18 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     /// Backs `isExpanded`. Injected so tests never touch `.standard`.
     private let defaults: UserDefaults
 
+    /// Wall clock read when a response arrives, to stamp the 429 cooldown.
+    /// Injected so tests can model a slow request (BUG-MAE-009).
+    private let clock: @MainActor () -> Date
+
     public init(provider: any UsageProvider,
                 notifications: NotificationService? = nil,
                 defaults: UserDefaults = .standard,
                 historyStoreFactory: (VendorId) throws -> UsageHistoryStore = UsageHistoryStore.defaultFor,
-                historyLoader: @escaping HistoryLoader = VendorViewModel.detachedHistoryLoad) {
+                historyLoader: @escaping HistoryLoader = VendorViewModel.detachedHistoryLoad,
+                clock: @escaping @MainActor () -> Date = { Date.now }) {
         self.vendorId = provider.vendorId
+        self.clock = clock
         self.provider = provider
         self.notifications = notifications
         self.defaults = defaults
@@ -265,15 +271,20 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         let previous = state.outcome
         loadingSince = now
         state = .loading(previous: previous)
+        // The cooldown is stamped at ARRIVAL on the caller's timeline: the
+        // dispatch `now` plus however long the request took on `clock`, so a
+        // slow 429 still gets the full cooldown (BUG-MAE-009).
+        let dispatchedAt = clock()
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             guard let self else { return }
+            let arrival = { now.addingTimeInterval(self.clock().timeIntervalSince(dispatchedAt)) }
             do {
                 let outcome = try await self.provider.fetchUsage(forceRefresh: forceRefresh)
                 if Task.isCancelled { return }
                 guard myEpoch == self.epoch else { return }   // newer refresh wins
                 self.state = .ok(outcome)
-                self.observeRateLimit(status: outcome.lastError?.status, at: now)
+                self.observeRateLimit(status: outcome.lastError?.status, at: arrival())
                 if Self.isNetworkOutcome(outcome) {
                     self.lastNetworkFetch = .now
                 }
@@ -296,16 +307,16 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 let fallback = previous ?? self.state.outcome
                 self.state = .failed(error: appErr, fallback: fallback)
                 if case .http(let status, _) = appErr {
-                    self.observeRateLimit(status: status, at: now)
+                    self.observeRateLimit(status: status, at: arrival())
                 } else {
-                    self.observeRateLimit(status: nil, at: now)
+                    self.observeRateLimit(status: nil, at: arrival())
                 }
             }
         }
     }
 
-    /// `now` is the dispatching refresh's clock, so the cooldown is stamped
-    /// and checked on the same clock (measured from dispatch, not arrival).
+    /// `now` is the response-arrival time on the dispatching refresh's
+    /// clock, so the cooldown is stamped and checked on the same clock.
     private func observeRateLimit(status: Int?, at now: Date) {
         guard status == 429 else {
             consecutiveRateLimits = 0

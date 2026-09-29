@@ -108,6 +108,16 @@ struct GeminiXAILocaleNeutralTests {
         #expect(message == AppError.guidance(.antigravityCanceled).description)
     }
 
+    /// DUP-MAE-003: the cached-payload path read `error ?? response`, so an
+    /// empty `error` hid agy's real message behind "agy: ", while the live
+    /// executor already skipped empty fields. Both now share one mapping.
+    @Test("an empty agy error falls back to the response text, as the executor does")
+    func agy_empty_error_uses_response() async throws {
+        let body = #"{"conversation_id":"","status":"ERROR","response":"quota backend down","error":""}"#
+        let message = try await Self.fetchError(agyPayload: Data(body.utf8))
+        #expect(message == AppError.io("agy: quota backend down").description)
+    }
+
     @Test("non-JSON payload is a schema error")
     func non_json_payload_is_schema_error() async throws {
         let message = try await Self.fetchError(agyPayload: Data("not json".utf8))

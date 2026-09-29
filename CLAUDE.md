@@ -348,15 +348,28 @@ git checkout v0.16.1 && make publish && git checkout main
 | Release job fails on a tag that CI passed | `ci.yml` and `release.yml` selected Swift independently and drifted (6.2.4 vs 6.0) | both call `.github/actions/select-swift`, which requires >= 6.2 |
 | Universal DMG that is arm64-only | `make dmg` writes a host-arch app to `$(DMG)`, the universal name `UpdateChecker.pickDMGAsset` serves to Intel Macs | `universal-check` asserts x86_64 + arm64 and gates `release-universal` |
 | Release notes missing the actual feature | the changelog spans previous-tag..this-tag; a tag that never produced a release swallows everything before it | regenerate with `gh release edit <tag> --notes-file` over the right range |
+| A merged CI-action bump cuts a release | a Dependabot `github-actions` PR changes no shipped code, but without the marker its merge is an ordinary push to `main` | `.github/dependabot.yml` sets that ecosystem's commit prefix to `ci(deps) [skip release]`; keep the marker if you edit the prefix |
 
 **Doc-only commits pushed to `main` MUST carry `[skip release]`** — otherwise
 they trigger a redundant version bump (this is how an accidental extra
 `v0.10.1` got cut alongside `v0.10.0`).
 
+**Dependabot** (`.github/dependabot.yml`) watches two ecosystems weekly.
+`github-actions` bumps the SHA-pinned `uses:` lines and commits with the prefix
+`ci(deps) [skip release]`, so merging one never releases; removing that marker
+from the prefix would make every action bump cut a version. `swift` watches
+the SwiftPM graph (TOMLKit) with the plain prefix `deps`: a dependency bump
+changes shipped code, so it releases normally.
+
 ## Architecture (don't break these)
 
 - **`AiTaskbarCore`** — vendor-agnostic. Models, HTTP, Cache, Credentials,
   Config, Cost helpers, History, Util (JSONValue, SharedCoders).
+  `HTTPClient.send` / `sendDecoding` refuse a body larger than
+  `HTTPClient.defaultMaximumResponseBytes` (8 MiB) before buffering it or
+  writing it to `DiskCache`. The Gemini provider's `ProcessAntigravityExecutor`
+  runs `agy` with a 35 s budget, closed stdin, stdout capped at 4 MiB (a larger
+  answer is rejected, not parsed) and only the first 64 KiB of stderr kept.
 
 ### Cost scanners — token semantics differ per source, do not generalize
 
@@ -370,7 +383,19 @@ produces numbers that are wrong by multiples while looking plausible:
 | `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
 
 Both were established against real data, not documentation, and both are pinned
-by tests that fail if the other reading is applied. `OpencodeScanner` reads
+by tests that fail if the other reading is applied. `CodexSessionScanner` also
+skips a `token_count` event whose `total_token_usage` equals the previous
+event's: Codex re-emits the last turn's `last_token_usage` with an unchanged
+running total, and billing it again over-reported a real week by ~6%
+(BUG-ART-005). An event with no total carries no such signal and is kept.
+
+Every scanner (Claude, Codex rollouts and logs, opencode) and
+`AnalyticsAggregator` (Day and Week) take their windows from the one `CostWindow`: "today"
+starts at local midnight, and "last 7 days" is today plus the six previous
+local calendar days, built with `Calendar.date(byAdding:)` so DST does not
+shift it. Their figures are summed, so a scanner with its own cutoff (a
+rolling `now - 7 * 86_400`, or `startOfToday - 7 days`) disagrees with the
+others; do not reintroduce one. `OpencodeScanner` reads
 per-MESSAGE, never `session.model` — that column holds the last model a session
 used, so session-level attribution files every pre-switch token under the wrong
 model (measured: ~20M tokens on this machine).
@@ -673,7 +698,8 @@ skipped.
   surface, and the pin is reproducible. Migration risk only — if it stops
   building on a future Swift, vendor the ~2k lines we use or hand-roll the
   small TOML subset `AppConfig` needs. Re-evaluate on Swift major; don't
-  swap preemptively.
+  swap preemptively. Dependabot's `swift` ecosystem watches it weekly; a PR
+  there is a prompt to re-evaluate, not an instruction to merge.
 - **`codex-auto-review` is priced by estimate.** Codex writes that model alias
   to its rollout logs for the automatic review pass, and OpenAI publishes no
   rate for it, so `PricingTable.openai` carries it at the Codex flagship tier

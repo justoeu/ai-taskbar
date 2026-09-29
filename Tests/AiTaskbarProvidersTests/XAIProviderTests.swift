@@ -268,7 +268,7 @@ struct XAIProviderTests {
 
         do {
             _ = try await provider.fetchUsage(forceRefresh: true)
-            Issue.record("expected credentials error")
+            Issue.record("expected grokCLIRequired guidance")
         } catch let error as AppError {
             expectTrue(error == .guidance(.grokCLIRequired))
         } catch {
