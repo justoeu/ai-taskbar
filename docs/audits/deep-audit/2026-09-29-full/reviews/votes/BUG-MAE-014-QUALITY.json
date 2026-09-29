@@ -1,0 +1,15 @@
+{
+ "id": "BUG-MAE-014",
+ "verdict": "APROVA",
+ "reasoning": "The format string changes from %d to %ld in lockstep in en/pt-BR/es (Localizable.strings:78/77/77), which follows the always-update-docs/L10n lockstep convention. The test is parameterised over the three languages, restores languageOverride in a defer, and has one fact per case. The adjacent notif_discreet_body_fmt (NotificationService.swift:158, en Localizable.strings:77) also passes an Int into %d. That argument is a config threshold, so it is not the finding's call site, and the %d-with-Int pattern shows up in about 10 other keys. It is systemic and out of scope, so it is recorded as a new finding rather than as a half-fixed clone.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:78",
+  "Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:77",
+  "Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings:77",
+  "Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift:46"
+ ],
+ "lens": "QUALITY",
+ "_task": "afefd4a7dae9bf995",
+ "batch": "B19-tail"
+}

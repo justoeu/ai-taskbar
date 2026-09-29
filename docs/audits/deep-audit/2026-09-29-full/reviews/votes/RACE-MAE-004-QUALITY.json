@@ -1,0 +1,16 @@
+{
+ "id": "RACE-MAE-004",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/NotificationService.swift:262-269 adds one token (`Pending.token` plus a monotonic `nextToken &+= 1`, :376) instead of a parallel generation map. All four mutators (unmark :292, delivered :307, park :315, and rearmParked through unmark) are gated by one private predicate, `isCurrent` (:339), so the stale-completion rule lives in one place and is not repeated. The new `unmark` guard joins only two conditions, and nesting stays at the pre-diff depth. No `try?` or catch was added and no error is swallowed; the failure path still logs through AppLog.lifecycle.error. The doc comments on Pending, nextToken and isCurrent explain why the token exists (RACE-MAE-004) rather than restating the code. The tests use expectTrue for the optional comparison (NotificationThresholdTrackerTests.swift:129), which follows the CLAUDE.md Boolean-guard rule. The report says the clean-build warning gate is at 0.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:262",
+  "Sources/AiTaskbarApp/NotificationService.swift:292",
+  "Sources/AiTaskbarApp/NotificationService.swift:339",
+  "Sources/AiTaskbarApp/NotificationService.swift:376",
+  "Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift:120"
+ ],
+ "lens": "QUALITY",
+ "_task": "afefd4a7dae9bf995",
+ "batch": "B19-tail"
+}

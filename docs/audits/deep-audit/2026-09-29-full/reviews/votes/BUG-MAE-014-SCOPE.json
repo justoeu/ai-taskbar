@@ -1,0 +1,15 @@
+{
+ "id": "BUG-MAE-014",
+ "verdict": "APROVA",
+ "reasoning": "The i18n lockstep holds. notif_title_fmt changes from %d%% to %ld%% in all three locales that exist (en.lproj:78, pt-BR.lproj:77, es.lproj:77), and there are no other .lproj directories. The only prod caller, NotificationService.title at NotificationService.swift:211, passes Int (PercentText.whole), which matches %ld. The argument order and the other placeholders (%@ %@) are the same in every locale. NotificationTitleLocalizationTests.swift covers all three locales. The finding is scoped to notif_title_fmt only, so the sibling key goes in new_findings.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:78",
+  "Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:77",
+  "Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings:77",
+  "Sources/AiTaskbarApp/NotificationService.swift:211"
+ ],
+ "lens": "SCOPE",
+ "_task": "a14abaa3fc1519ded",
+ "batch": "B19-tail"
+}

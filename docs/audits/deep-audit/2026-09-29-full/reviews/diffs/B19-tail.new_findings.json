@@ -1,0 +1,34 @@
+[
+ [
+  "QUALITY",
+  "classic_bugs/INFO: Localizable.strings (en:77,214,253,267,286,287,346,348,350 and matching pt-BR/es keys) still use %d for Swift Int (64-bit) arguments, e.g. notif_discreet_body_fmt fed Int(saturating: threshold) at NotificationService.swift:158. This is the same class as BUG-MAE-014. Values are small today, but the fix is a sweep to %ld across the three languages, optionally with a validate.sh lint for %d in the strings files."
+ ],
+ [
+  "QUALITY",
+  "quality/INFO: NotificationService now threads the four values (vendor, label, threshold, token) through send -> deliveryFinished -> tracker.delivered/park/unmark (NotificationService.swift:124,150,184). Passing a single Crossing/PendingRef value would shrink these signatures and stop a future field from being dropped on one path. This is not introduced debt worth blocking this minimal fix."
+ ],
+ [
+  "SCOPE",
+  {
+   "title": "notif_discreet_body_fmt still uses %d for a 64-bit Int argument (sibling of BUG-MAE-014)",
+   "path": "Sources/AiTaskbarApp/NotificationService.swift:158",
+   "evidence": "content.body = L10n.localizedString(\"notif_discreet_body_fmt\", Int(saturating: threshold)) against \"crossed %d%%\" in en.lproj:77 (and the same in pt-BR/es). threshold comes from the user-controlled notifications.notify_at [Double] (AppConfig.swift:167), which has no upper clamp, so a value above Int32 prints truncated, the same way BUG-MAE-014 did.",
+   "fix": "Use %ld in all three Localizable.strings and extend NotificationTitleLocalizationTests to cover this key",
+   "severity": "INFO"
+  }
+ ],
+ [
+  "SCOPE",
+  {
+   "title": "Other %d format keys may receive Swift Int arguments",
+   "path": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+   "evidence": "The keys service_status_ax_value_fmt, service_status_duration_fmt, reset_confirm_message, credits_local_msgs_fmt, credits_cloud_msgs_fmt and compare_vs_prev_*_fmt use %d. Check whether their callers pass Int (64-bit). If they do, switch to %ld in all three locales.",
+   "fix": "Audit the callers and use %ld where the argument is Int",
+   "severity": "INFO"
+  }
+ ],
+ [
+  "CORRECTNESS",
+  "Same class as BUG-MAE-014, outside this batch: notif_discreet_body_fmt still uses %d for Int(saturating: threshold) in en/pt-BR/es (Localizable.strings:77/76/76; call site NotificationService.swift:158). It is harmless while thresholds stay within 32-bit range, and the correct specifier is %ld."
+ ]
+]

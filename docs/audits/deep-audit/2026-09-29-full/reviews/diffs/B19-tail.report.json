@@ -1,0 +1,64 @@
+{
+ "batch": "B19-tail",
+ "results": [
+  {
+   "id": "RACE-MAE-004",
+   "outcome": "fixed",
+   "tests": [
+    "NotificationDeliveryRollbackTests#stale_failure_after_reset_is_ignored",
+    "NotificationDeliveryRollbackTests#stale_success_after_reset_is_ignored",
+    "NotificationThresholdTrackerTests#unmark_stale_token_is_ignored"
+   ],
+   "red": "Expectation failed: (center.identifiers.count → 3) == 2 | Expectation failed: (center.identifiers.count → 2) == 3",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-023",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsViewTests#average_usage_rounds",
+    "AnalyticsViewTests#average_usage_missing_summary_is_zero",
+    "AnalyticsViewTests#average_usage_empty"
+   ],
+   "red": "Expectation failed: (AnalyticsFormatters.averageUsageText(vendors: [.anthropic, .openai], summaries: summaries) → \"92%\") == \"93%\"",
+   "reversal": "ok"
+  },
+  {
+   "id": "BUG-MAE-014",
+   "outcome": "fixed",
+   "tests": [
+    "NotificationTitleLocalizationTests#title_format_is_64_bit(en|pt-BR|es)"
+   ],
+   "red": "Expectation failed: (title → \"V — W at 705032704%\").hasSuffix(\" 5000000000%\") (same in pt-BR 'em' and es 'al')",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-MAE-007",
+   "outcome": "fixed",
+   "tests": [
+    "NotificationThresholdTrackerTests (whole suite)",
+    "NotificationDeliveryRollbackTests (whole suite)"
+   ],
+   "red": "n/a: non-behavioral extract/rename. Characterized by the existing tracker and rollback suites, which pass before and after",
+   "reversal": "n/a"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1189,
+  "coverage": "93.18%",
+  "warnings": 0
+ },
+ "files": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsView.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsViewTests.swift",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift"
+ ]
+}

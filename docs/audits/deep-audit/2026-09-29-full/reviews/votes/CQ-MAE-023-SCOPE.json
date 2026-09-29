@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-023",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:58-67 adds an internal static averageUsageText that uses the shared PercentText.format. The public AnalyticsFormatters surface is unchanged because the new function is not public. Sources/AiTaskbarApp/Views/AnalyticsView.swift:191,215 is the only caller, and the old Int(saturating:) truncation has no other copy (grep). No localized string was added, since the label uses a literal '%' as before. Tests/AiTaskbarAppTests/AnalyticsViewTests.swift maps to this finding.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:61",
+  "Sources/AiTaskbarApp/Views/AnalyticsView.swift:191"
+ ],
+ "lens": "SCOPE",
+ "_task": "a14abaa3fc1519ded",
+ "batch": "B19-tail"
+}

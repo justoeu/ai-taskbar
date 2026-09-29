@@ -1,0 +1,69 @@
+{
+  "id": "RACE-MAE-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 19:45:12 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The defect is fixed. Each Pending entry now stores a token. crossings() hands out tokens from `nextToken &+= 1` (NotificationService.swift:376-378), and every route that ends a delivery goes through isCurrent: delivered, park, and both the direct unmark and the authorizationStatus unmark (NotificationService.swift:187/193/200/203, tracker isCurrent at :340-342). After a reset, forget(key) drops the old entry. When the threshold is crossed again, it gets a fresh entry with a new token. So when the first add() completes late, its success, failure or park does nothing to the new crossing. rearmParked passes each entry's own token, so it still re-arms. No delivered mark is undone: unmark has an effect only if the token still matches the pending entry, and a confirmed or reset entry has already left pending. RACE-MAE-003 still works: a lower failure re-chains the higher entry's previous, and the token is left alone. The counter starts at 1 and is a UInt64 per tracker, all on the main actor. It would take 2^64 crossings to wrap, so tokens cannot collide or overflow in practice. Tests I ran: 41 passed on the fixed tree. I then reverted only isCurrent to `return true`, which matches HEAD semantics. That made 3 tests fail: stale_failure (3 vs 2), stale_success (2 vs 3), and unmark_stale_token. After restoring, the working-tree diff is byte-identical to reviews/diffs/B19-tail.diff.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:187",
+        "Sources/AiTaskbarApp/NotificationService.swift:203",
+        "Sources/AiTaskbarApp/NotificationService.swift:340",
+        "Sources/AiTaskbarApp/NotificationService.swift:376",
+        "Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift:246",
+        "Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift:129"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/NotificationService.swift:262-269 adds one token (`Pending.token` plus a monotonic `nextToken &+= 1`, :376) instead of a parallel generation map. All four mutators (unmark :292, delivered :307, park :315, and rearmParked through unmark) are gated by one private predicate, `isCurrent` (:339), so the stale-completion rule lives in one place and is not repeated. The new `unmark` guard joins only two conditions, and nesting stays at the pre-diff depth. No `try?` or catch was added and no error is swallowed; the failure path still logs through AppLog.lifecycle.error. The doc comments on Pending, nextToken and isCurrent explain why the token exists (RACE-MAE-004) rather than restating the code. The tests use expectTrue for the optional comparison (NotificationThresholdTrackerTests.swift:129), which follows the CLAUDE.md Boolean-guard rule. The report says the clean-build warning gate is at 0.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:262",
+        "Sources/AiTaskbarApp/NotificationService.swift:292",
+        "Sources/AiTaskbarApp/NotificationService.swift:339",
+        "Sources/AiTaskbarApp/NotificationService.swift:376",
+        "Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift:120"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/NotificationService.swift:257-270,289-335,373-378: adds a per-crossing token (Pending.token, nextToken, isCurrent) and threads it through send, deliveryFinished, delivered, park and unmark. Everything it touches is internal: the NotificationThresholdTracker struct and private methods of NotificationService. No public or Sendable contract changes, nothing serialized, no new dependency, host or permission. The tracker is only consumed in NotificationService.swift and NotificationThresholdTrackerTests.swift, and both are updated. Test files NotificationDeliveryRollbackTests.swift and NotificationThresholdTrackerTests.swift map to this finding. It adds one UInt64 per pending entry, a negligible cost.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:257",
+        "Sources/AiTaskbarApp/NotificationService.swift:338",
+        "Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift",
+        "Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

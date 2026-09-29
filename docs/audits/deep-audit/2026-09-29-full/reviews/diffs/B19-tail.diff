@@ -1,0 +1,458 @@
+diff --git a/Sources/AiTaskbarApp/NotificationService.swift b/Sources/AiTaskbarApp/NotificationService.swift
+index d8975d6..0387dec 100644
+--- a/Sources/AiTaskbarApp/NotificationService.swift
++++ b/Sources/AiTaskbarApp/NotificationService.swift
+@@ -121,7 +121,8 @@ public final class NotificationService {
+         for crossing in tracker.crossings(vendor: vendor, windows: snapshot.windows,
+                                           sortedThresholds: sortedThresholds) {
+             ensureAuthorizedBeforeSend()
+-            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold)
++            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold,
++                 token: crossing.token)
+         }
+     }
+ 
+@@ -137,16 +138,16 @@ public final class NotificationService {
+             guard let self else { return }
+             self.authorizationRecheckInFlight = false
+             guard status != .denied else { return }
+-            self.clearKnownDenial()
++            self.clearKnownDenialAndRearm()
+         }
+     }
+ 
+-    private func clearKnownDenial() {
++    private func clearKnownDenialAndRearm() {
+         authorizationKnownDenied = false
+         tracker.rearmParked()
+     }
+ 
+-    private func send(vendor: VendorId, window: UsageWindow, threshold: Double) {
++    private func send(vendor: VendorId, window: UsageWindow, threshold: Double, token: UInt64) {
+         // Defense in depth: never reach `UNUserNotificationCenter` on a
+         // runtime known to crash the XPC handshake. `observe()` already
+         // filters this, but `send()` is private and could be reused later.
+@@ -170,7 +171,7 @@ public final class NotificationService {
+             let failure = error.map { String(describing: $0) }
+             Task { @MainActor in
+                 self?.deliveryFinished(failure: failure, vendor: vendor, label: label,
+-                                       threshold: threshold)
++                                       threshold: threshold, token: token)
+             }
+         }
+     }
+@@ -181,25 +182,25 @@ public final class NotificationService {
+     /// (CQ-MAE-012). Not when the permission is denied: no retry can succeed
+     /// then (PERF-MAE-004), so it is parked until permission comes back.
+     private func deliveryFinished(failure: String?, vendor: VendorId, label: String,
+-                                  threshold: Double) {
++                                  threshold: Double, token: UInt64) {
+         guard let failure else {
+-            tracker.delivered(vendor: vendor, label: label, threshold: threshold)
+-            if authorizationKnownDenied { clearKnownDenial() }
++            tracker.delivered(vendor: vendor, label: label, threshold: threshold, token: token)
++            if authorizationKnownDenied { clearKnownDenialAndRearm() }
+             return
+         }
+         AppLog.lifecycle.error("notification delivery failed: \(failure, privacy: .public)")
+         guard !authorizationKnownDenied else {
+-            tracker.park(vendor: vendor, label: label, threshold: threshold)
++            tracker.park(vendor: vendor, label: label, threshold: threshold, token: token)
+             return
+         }
+         center.authorizationStatus { [weak self] status in
+             guard let self else { return }
+             if status == .denied {
+                 self.authorizationKnownDenied = true
+-                self.tracker.park(vendor: vendor, label: label, threshold: threshold)
++                self.tracker.park(vendor: vendor, label: label, threshold: threshold, token: token)
+                 return
+             }
+-            self.tracker.unmark(vendor: vendor, label: label, threshold: threshold)
++            self.tracker.unmark(vendor: vendor, label: label, threshold: threshold, token: token)
+         }
+     }
+ 
+@@ -253,13 +254,20 @@ struct NotificationThresholdTracker {
+     /// Consecutive snapshots of the key's vendor that did not report it.
+     private var missedSnapshots: [Key: Int] = [:]
+ 
+-    /// A crossing whose delivery has not been confirmed: the mark it replaced
+-    /// and whether a denial parked it.
++    /// A crossing whose delivery has not been confirmed: the mark it replaced,
++    /// the token its `add()` completion carries back, and whether a denial
++    /// parked it.
+     private struct Pending {
+         var previous: Double?
++        let token: UInt64
+         var parked = false
+     }
+ 
++    /// Source of `Pending.token`. A reset and re-cross of the same threshold
++    /// replaces the entry under a new token, so the first `add()`'s late
++    /// completion no longer acts on the new crossing (RACE-MAE-004).
++    private var nextToken: UInt64 = 0
++
+     /// Unconfirmed crossings per key, by threshold. They chain through
+     /// `previous`, so a failure can restore the nearest mark that was not
+     /// itself a failure (RACE-MAE-003). Dropped with the key on reset/prune.
+@@ -281,9 +289,10 @@ struct NotificationThresholdTracker {
+     /// would restore this one restores what this one replaced instead, so a
+     /// mark that was never delivered is never put back (RACE-MAE-003). A
+     /// reset since the crossing (no pending entry) must not be undone.
+-    mutating func unmark(vendor: VendorId, label: String, threshold: Double) {
++    mutating func unmark(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
+         let key = Key(vendor: vendor, label: label)
+-        guard let failed = pending[key]?.removeValue(forKey: threshold) else { return }
++        guard isCurrent(key, threshold, token),
++              let failed = pending[key]?.removeValue(forKey: threshold) else { return }
+         if highestNotified[key] == threshold {
+             highestNotified[key] = failed.previous
+         } else {
+@@ -291,20 +300,23 @@ struct NotificationThresholdTracker {
+                 pending[key]?[higher]?.previous = failed.previous
+             }
+         }
+-        if pending[key]?.isEmpty ?? false { pending.removeValue(forKey: key) }
++        dropEmptyPending(key)
+     }
+ 
+     /// The crossing's delivery was confirmed: its mark is final.
+-    mutating func delivered(vendor: VendorId, label: String, threshold: Double) {
++    mutating func delivered(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
+         let key = Key(vendor: vendor, label: label)
++        guard isCurrent(key, threshold, token) else { return }
+         pending[key]?.removeValue(forKey: threshold)
+-        if pending[key]?.isEmpty ?? false { pending.removeValue(forKey: key) }
++        dropEmptyPending(key)
+     }
+ 
+     /// Keeps a crossing that failed while permission is denied marked, to be
+     /// re-armed by `rearmParked()` once permission is granted (BUG-MAE-013).
+-    mutating func park(vendor: VendorId, label: String, threshold: Double) {
+-        pending[Key(vendor: vendor, label: label)]?[threshold]?.parked = true
++    mutating func park(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
++        let key = Key(vendor: vendor, label: label)
++        guard isCurrent(key, threshold, token) else { return }
++        pending[key]?[threshold]?.parked = true
+     }
+ 
+     func hasParked(vendor: VendorId) -> Bool {
+@@ -316,14 +328,31 @@ struct NotificationThresholdTracker {
+     /// Un-marks every parked crossing so the next snapshot re-sends it.
+     mutating func rearmParked() {
+         let parked = pending.flatMap { key, byThreshold in
+-            byThreshold.filter { $0.value.parked }.map { (key, $0.key) }
++            byThreshold.filter { $0.value.parked }.map { (key, $0.key, $0.value.token) }
+         }
+-        for (key, threshold) in parked {
+-            unmark(vendor: key.vendor, label: key.label, threshold: threshold)
++        for (key, threshold, token) in parked {
++            unmark(vendor: key.vendor, label: key.label, threshold: threshold, token: token)
+         }
+     }
+ 
+-    typealias Crossing = (window: UsageWindow, threshold: Double)
++    /// Whether `token` still names the pending crossing: false once a reset,
++    /// prune or newer crossing of the same threshold replaced it.
++    private func isCurrent(_ key: Key, _ threshold: Double, _ token: UInt64) -> Bool {
++        pending[key]?[threshold]?.token == token
++    }
++
++    private mutating func dropEmptyPending(_ key: Key) {
++        if pending[key]?.isEmpty ?? false { pending.removeValue(forKey: key) }
++    }
++
++    /// Drops every per-key map entry, so a reset and a prune cannot diverge.
++    private mutating func forget(_ key: Key) {
++        highestNotified.removeValue(forKey: key)
++        missedSnapshots.removeValue(forKey: key)
++        pending.removeValue(forKey: key)
++    }
++
++    typealias Crossing = (window: UsageWindow, threshold: Double, token: UInt64)
+ 
+     /// Folds one snapshot's windows in and returns the crossings to notify.
+     /// Each stays pending until `delivered` or `unmark`.
+@@ -336,9 +365,7 @@ struct NotificationThresholdTracker {
+             let percent = window.utilizationPercent
+             // Window dropped below all thresholds → reset so a new cycle re-arms.
+             if percent < minThreshold {
+-                highestNotified.removeValue(forKey: key)
+-                missedSnapshots.removeValue(forKey: key)
+-                pending.removeValue(forKey: key)
++                forget(key)
+                 continue
+             }
+             // Find the highest threshold this reading has reached.
+@@ -346,8 +373,9 @@ struct NotificationThresholdTracker {
+             let previous = highestNotified[key]
+             if reached > previous ?? -1 {
+                 highestNotified[key] = reached
+-                pending[key, default: [:]][reached] = Pending(previous: previous)
+-                fired.append((window, reached))
++                nextToken &+= 1
++                pending[key, default: [:]][reached] = Pending(previous: previous, token: nextToken)
++                fired.append((window, reached, nextToken))
+             }
+         }
+         // Prune this vendor's keys for windows no longer reported (xAI's
+@@ -358,9 +386,7 @@ struct NotificationThresholdTracker {
+         for key in highestNotified.keys where key.vendor == vendor && !current.contains(key) {
+             let misses = missedSnapshots[key, default: 0] + 1
+             if misses >= Self.pruneAfterMissedSnapshots {
+-                highestNotified.removeValue(forKey: key)
+-                missedSnapshots.removeValue(forKey: key)
+-                pending.removeValue(forKey: key)
++                forget(key)
+             } else {
+                 missedSnapshots[key] = misses
+             }
+diff --git a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+index 89c3ef2..bd672f7 100644
+--- a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+@@ -75,7 +75,7 @@
+ "notif_resets_fmt" = "%@ Resets %@.";
+ "notif_discreet_title" = "AI Taskbar";
+ "notif_discreet_body_fmt" = "A monitored window crossed %d%%.";
+-"notif_title_fmt" = "%@ — %@ at %d%%";
++"notif_title_fmt" = "%@ — %@ at %ld%%";
+ 
+ // About panel
+ "about_description" = "Tracks LLM usage across Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), and Kimi (Moonshot) — all from your menu bar.";
+diff --git a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+index 81b3dbf..4a25274 100644
+--- a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+@@ -74,7 +74,7 @@
+ "notif_resets_fmt" = "%@ Se reinicia %@.";
+ "notif_discreet_title" = "AI Taskbar";
+ "notif_discreet_body_fmt" = "Una ventana monitoreada cruzó %d%%.";
+-"notif_title_fmt" = "%@ — %@ al %d%%";
++"notif_title_fmt" = "%@ — %@ al %ld%%";
+ 
+ // About panel
+ "about_description" = "Monitorea el uso de LLM de Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM) y Kimi (Moonshot) — desde la barra de menú.";
+diff --git a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+index 60a6416..7461bb8 100644
+--- a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+@@ -74,7 +74,7 @@
+ "notif_resets_fmt" = "%@ Reseta %@.";
+ "notif_discreet_title" = "AI Taskbar";
+ "notif_discreet_body_fmt" = "Uma janela monitorada ultrapassou %d%%.";
+-"notif_title_fmt" = "%@ — %@ em %d%%";
++"notif_title_fmt" = "%@ — %@ em %ld%%";
+ 
+ // About panel
+ "about_description" = "Acompanha o uso de LLMs do Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM) e Kimi (Moonshot) — direto da barra de menu.";
+diff --git a/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift b/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
+index 9b4f232..fe211b6 100644
+--- a/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
++++ b/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
+@@ -55,6 +55,17 @@ public enum AnalyticsFormatters {
+         L10n.localizedString("analytics_quota_percent_fmt", PercentText.whole(percent))
+     }
+ 
++    /// The Usage donut's centre label: the mean `totalUsagePercent` of
++    /// `vendors` (a vendor without a summary counts as 0), rounded like every
++    /// other percent label (CQ-MAE-023).
++    static func averageUsageText(vendors: [VendorId], summaries: [VendorAnalyticsSummary]) -> String {
++        guard !vendors.isEmpty else { return "0%" }
++        let total = vendors.map { vendor in
++            summaries.first(where: { $0.vendor == vendor })?.totalUsagePercent ?? 0
++        }.reduce(0, +)
++        return PercentText.format(total / Double(vendors.count))
++    }
++
+     public static func vendorColor(for vendor: VendorId) -> Color {
+         switch vendor {
+         case .anthropic:  return .orange
+diff --git a/Sources/AiTaskbarApp/Views/AnalyticsView.swift b/Sources/AiTaskbarApp/Views/AnalyticsView.swift
+index 8248276..f7cf2e3 100644
+--- a/Sources/AiTaskbarApp/Views/AnalyticsView.swift
++++ b/Sources/AiTaskbarApp/Views/AnalyticsView.swift
+@@ -188,9 +188,8 @@ public struct AnalyticsView: View {
+             )
+         }
+ 
+-        let avgUsage = shares.isEmpty ? 0 : Int(saturating: shares.map { share in
+-            snapshot?.vendorSummaries.first(where: { $0.vendor == share.vendor })?.totalUsagePercent ?? 0
+-        }.reduce(0, +) / Double(shares.count))
++        let avgUsage = AnalyticsFormatters.averageUsageText(
++            vendors: shares.map(\.vendor), summaries: snapshot?.vendorSummaries ?? [])
+ 
+         let hoveredSlice = usageSlices.first(where: { $0.id == hoveredUsageVendor })
+ 
+@@ -213,7 +212,7 @@ public struct AnalyticsView: View {
+                             Text(L10n.localizedString("analytics_usage"))
+                                 .font(.caption)
+                                 .foregroundStyle(.secondary)
+-                            Text("\(avgUsage)%")
++                            Text(avgUsage)
+                                 .font(.headline.weight(.bold).monospacedDigit())
+                         }
+                     }
+diff --git a/Tests/AiTaskbarAppTests/AnalyticsViewTests.swift b/Tests/AiTaskbarAppTests/AnalyticsViewTests.swift
+index f37825e..d5fabab 100644
+--- a/Tests/AiTaskbarAppTests/AnalyticsViewTests.swift
++++ b/Tests/AiTaskbarAppTests/AnalyticsViewTests.swift
+@@ -25,6 +25,30 @@ struct AnalyticsViewTests {
+         #expect(text.contains("84%"))
+     }
+ 
++    /// CQ-MAE-023: the donut's average truncated 92.9 to 92% while every
++    /// other percent label rounds it to 93%.
++    @Test("average usage label rounds like every other percent label")
++    func average_usage_rounds() {
++        let summaries = [
++            VendorAnalyticsSummary(vendor: .anthropic, totalCostUSD: 0, totalUsagePercent: 90.8),
++            VendorAnalyticsSummary(vendor: .openai, totalCostUSD: 0, totalUsagePercent: 95.0),
++        ]
++        #expect(AnalyticsFormatters.averageUsageText(vendors: [.anthropic, .openai],
++                                                     summaries: summaries) == "93%")
++    }
++
++    @Test("average usage counts a vendor without a summary as zero")
++    func average_usage_missing_summary_is_zero() {
++        let summaries = [VendorAnalyticsSummary(vendor: .anthropic, totalCostUSD: 0, totalUsagePercent: 81)]
++        #expect(AnalyticsFormatters.averageUsageText(vendors: [.anthropic, .xai],
++                                                     summaries: summaries) == "41%")
++    }
++
++    @Test("average usage of no vendors is 0%")
++    func average_usage_empty() {
++        #expect(AnalyticsFormatters.averageUsageText(vendors: [], summaries: []) == "0%")
++    }
++
+     @Test("VendorAnalyticsCardView initializes with reorder affordances")
+     func card_view_initialization() {
+         let summary = VendorAnalyticsSummary(
+diff --git a/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift b/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift
+index 10867d3..5aebe13 100644
+--- a/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift
++++ b/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift
+@@ -226,4 +226,42 @@ struct NotificationDeliveryRollbackTests {
+         service.observe(vendor: .anthropic, snapshot: Self.snapshot)
+         #expect(center.identifiers.last == "ai-taskbar.anthropic.5h.90")
+     }
++
++    /// RACE-MAE-004: pending crossings were keyed by threshold only. After a
++    /// reset and a re-cross of the same threshold, the first add()'s late
++    /// failure un-marked the new crossing, so it was sent a third time.
++    @Test("a stale failure from before a reset does not re-arm the re-crossed threshold")
++    func stale_failure_after_reset_is_ignored() async {
++        let center = FakeNotificationCenter()
++        center.status = .authorized
++        let service = Self.service(center)
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        service.observe(vendor: .anthropic, snapshot: Self.anthropic(50))
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        await center.complete(0, with: NSError(domain: "test", code: 1))
++        await drainMainQueue()
++        await center.complete(1, with: nil)
++        await drainMainQueue()
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        #expect(center.identifiers.count == 2)
++    }
++
++    /// RACE-MAE-004, other order: the first add()'s late success confirmed
++    /// the new crossing, so the new crossing's failure found nothing pending
++    /// and the notification was lost for the window.
++    @Test("a stale success from before a reset does not confirm the re-crossed threshold")
++    func stale_success_after_reset_is_ignored() async {
++        let center = FakeNotificationCenter()
++        center.status = .authorized
++        let service = Self.service(center)
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        service.observe(vendor: .anthropic, snapshot: Self.anthropic(50))
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        await center.complete(0, with: nil)
++        await drainMainQueue()
++        await center.complete(1, with: NSError(domain: "test", code: 1))
++        await drainMainQueue()
++        service.observe(vendor: .anthropic, snapshot: Self.snapshot)
++        #expect(center.identifiers.count == 3)
++    }
+ }
+diff --git a/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift b/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift
+index f328214..305be0e 100644
+--- a/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift
++++ b/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift
+@@ -84,11 +84,11 @@ struct NotificationThresholdTrackerTests {
+     @Test("unmark leaves a higher threshold marked since then")
+     func unmark_keeps_higher_mark() {
+         var t = NotificationThresholdTracker()
+-        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 75)],
+-                        sortedThresholds: thresholds)
++        let at70 = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 75)],
++                               sortedThresholds: thresholds)
+         _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
+                         sortedThresholds: thresholds)
+-        t.unmark(vendor: .xai, label: "W", threshold: 70)
++        t.unmark(vendor: .xai, label: "W", threshold: 70, token: at70[0].token)
+         expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 90)
+     }
+ 
+@@ -99,9 +99,9 @@ struct NotificationThresholdTrackerTests {
+         var t = NotificationThresholdTracker()
+         _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 75)],
+                         sortedThresholds: thresholds)
+-        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
+-                        sortedThresholds: thresholds)
+-        t.unmark(vendor: .xai, label: "W", threshold: 90)
++        let at90 = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
++                               sortedThresholds: thresholds)
++        t.unmark(vendor: .xai, label: "W", threshold: 90, token: at90[0].token)
+         expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 70)
+     }
+ 
+@@ -109,9 +109,23 @@ struct NotificationThresholdTrackerTests {
+     func unmark_current_mark_refires() {
+         var t = NotificationThresholdTracker()
+         let w = [UsageWindow(label: "W", utilizationPercent: 95)]
+-        _ = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
+-        t.unmark(vendor: .xai, label: "W", threshold: 90)
++        let fired = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
++        t.unmark(vendor: .xai, label: "W", threshold: 90, token: fired[0].token)
+         #expect(t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
+             .map(\.threshold) == [90])
+     }
++
++    /// RACE-MAE-004: a completion carrying the token of a crossing that a
++    /// reset replaced must not un-mark the re-crossed threshold.
++    @Test("unmark with a stale token after reset and re-cross is ignored")
++    func unmark_stale_token_is_ignored() {
++        var t = NotificationThresholdTracker()
++        let w = [UsageWindow(label: "W", utilizationPercent: 95)]
++        let first = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
++        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 5)],
++                        sortedThresholds: thresholds)
++        _ = t.crossings(vendor: .xai, windows: w, sortedThresholds: thresholds)
++        t.unmark(vendor: .xai, label: "W", threshold: 90, token: first[0].token)
++        expectTrue(t.highestNotified[.init(vendor: .xai, label: "W")] == 90)
++    }
+ }
+diff --git a/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift b/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift
+index 750b3fa..52f22f5 100644
+--- a/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift
++++ b/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift
+@@ -42,6 +42,17 @@ struct NotificationTitleLocalizationTests {
+         #expect(NotificationService.title(vendor: .anthropic, window: window)
+             == "\(VendorId.anthropic.displayName) — 5h at 93%")
+     }
++
++    /// BUG-MAE-014: the title's percent is a 64-bit `Int`; `%d` reads 32
++    /// bits of it. Harmless inside the 0...1000 clamp, wrong beyond it.
++    @Test("the title format reads the percent as a 64-bit Int", arguments: ["en", "pt-BR", "es"])
++    func title_format_is_64_bit(language: String) {
++        let previous = L10n.languageOverride
++        defer { L10n.languageOverride = previous }
++        L10n.languageOverride = language
++        let title = L10n.localizedString("notif_title_fmt", "V", "W", 5_000_000_000)
++        #expect(title.hasSuffix(" 5000000000%"))
++    }
+ }
+ 
+ /// CQ-MAE-018: one rounding rule for every whole-percent label.

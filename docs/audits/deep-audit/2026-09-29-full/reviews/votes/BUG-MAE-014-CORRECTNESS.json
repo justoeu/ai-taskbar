@@ -1,0 +1,14 @@
+{
+ "id": "BUG-MAE-014",
+ "verdict": "APROVA",
+ "reasoning": "notif_title_fmt now uses %ld in all three locales present (en, pt-BR, es). Its argument is PercentText.whole, which returns Int (64-bit). I reverted the three lines to %d, and title_format_is_64_bit failed in all 3 languages with 705032704%.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:78",
+  "Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:77",
+  "Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings:77"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a99dd66b38fc97477",
+ "batch": "B19-tail"
+}

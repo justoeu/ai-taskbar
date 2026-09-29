@@ -2658,6 +2658,29 @@
     "in_progress": false
   },
   {
+    "lens": "classic_bugs",
+    "severity": "LOW",
+    "path": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+    "line": 77,
+    "title": "Localizable format keys use %d for 64-bit Swift Int arguments (notif_discreet_body_fmt fed a user-controlled unclamped threshold, plus other %d keys)",
+    "evidence": "notif_discreet_body_fmt at NotificationService.swift:158 passes Int(saturating: threshold) from notify_at (no upper clamp); service_status_*_fmt, reset_confirm_message, credits_*_msgs_fmt, compare_vs_prev_*_fmt use %d (raised by Higia, Jano and Nemesis, remediation B19)",
+    "fix": "Sweep %d to %ld where the argument is Int in en/pt-BR/es; add a validate.sh ratchet for %d in strings files",
+    "impact": "A very large configured threshold prints a truncated number",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B19",
+    "domain": "classic_bugs",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "BUG-MAE-015",
+    "blocks_pr": false
+  },
+  {
     "title": "AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic",
     "lens": "complexity",
     "severity": "LOW",
@@ -3763,14 +3786,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B18 r2",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-023",
-    "blocks_pr": false
+    "resolved_test": "AnalyticsViewTests#average_usage_rounds,AnalyticsViewTests#average_usage_missing_summary_is_zero,AnalyticsViewTests#average_usage_empty",
+    "resolved_at": "2026-09-29 19:45:12 UTC",
+    "resolved_note": "batch B19-tail",
+    "progress": [
+      "2026-09-29: resolvido · teste AnalyticsViewTests#average_usage_rounds,AnalyticsViewTests#average_usage_missing_summary_is_zero,AnalyticsViewTests#average_usage_empty · revisão approved (3/3) · batch B19-tail"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:45:12 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "lens": "deps",
@@ -5514,14 +5568,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B18 r2",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "RACE-MAE-004",
-    "blocks_pr": false
+    "resolved_test": "NotificationDeliveryRollbackTests#stale_failure_after_reset_is_ignored,NotificationDeliveryRollbackTests#stale_success_after_reset_is_ignored,NotificationThresholdTrackerTests#unmark_stale_token_is_ignored",
+    "resolved_at": "2026-09-29 19:45:12 UTC",
+    "resolved_note": "batch B19-tail",
+    "progress": [
+      "2026-09-29: resolvido · teste NotificationDeliveryRollbackTests#stale_failure_after_reset_is_ignored,NotificationDeliveryRollbackTests#stale_success_after_reset_is_ignored,NotificationThresholdTrackerTests#unmark_stale_token_is_ignored · revisão approved (3/3) · batch B19-tail"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:45:12 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "agent": "Cérbero",
@@ -7761,14 +7846,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B18 r2",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-MAE-014",
-    "blocks_pr": false
+    "resolved_test": "NotificationTitleLocalizationTests#title_format_is_64_bit(en|pt-BR|es)",
+    "resolved_at": "2026-09-29 19:45:12 UTC",
+    "resolved_note": "batch B19-tail",
+    "progress": [
+      "2026-09-29: resolvido · teste NotificationTitleLocalizationTests#title_format_is_64_bit(en|pt-BR|es) · revisão approved (3/3) · batch B19-tail"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:45:12 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "title": "ClaudeSessionScanner.estimate fuses dir-walk, memo, aggregation and note-priority logic in one untested orchestrator",
@@ -8284,6 +8400,29 @@
     "in_progress": false
   },
   {
+    "lens": "quality",
+    "severity": "INFO",
+    "path": "Sources/AiTaskbarApp/NotificationService.swift",
+    "line": 124,
+    "title": "send -> deliveryFinished -> tracker threads four loose values (vendor, label, threshold, token) instead of one crossing reference",
+    "evidence": "Raised by Higia, remediation B19",
+    "fix": "Pass a single Crossing/PendingRef value",
+    "impact": "A future field could be dropped on one path",
+    "category": "review-followup-r2",
+    "confidence": "medium",
+    "agent": "Maestro",
+    "origin": "new_findings from review panel, remediation B19",
+    "domain": "quality",
+    "status": "open",
+    "test_red_green": {
+      "name": "TBD",
+      "assert_before": "reproduz o defeito",
+      "assert_after": "defeito eliminado"
+    },
+    "id": "CQ-MAE-024",
+    "blocks_pr": false
+  },
+  {
     "lens": "deps",
     "severity": "INFO",
     "path": "Makefile",
@@ -8599,14 +8738,45 @@
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B18 r2",
     "domain": "duplication",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-MAE-007",
-    "blocks_pr": false
+    "resolved_test": "NotificationThresholdTrackerTests (whole suite),NotificationDeliveryRollbackTests (whole suite)",
+    "resolved_at": "2026-09-29 19:45:12 UTC",
+    "resolved_note": "batch B19-tail",
+    "progress": [
+      "2026-09-29: resolvido · teste NotificationThresholdTrackerTests (whole suite),NotificationDeliveryRollbackTests (whole suite) · revisão approved (3/3) · batch B19-tail"
+    ],
+    "blocks_pr": false,
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 19:45:12 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "in_progress": false
   },
   {
     "agent": "Fantasma",

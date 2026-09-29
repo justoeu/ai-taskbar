@@ -1,0 +1,32 @@
+{
+ "findings": [
+  {
+   "lens": "classic_bugs",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings",
+   "line": 77,
+   "title": "Localizable format keys use %d for 64-bit Swift Int arguments (notif_discreet_body_fmt fed a user-controlled unclamped threshold, plus other %d keys)",
+   "evidence": "notif_discreet_body_fmt at NotificationService.swift:158 passes Int(saturating: threshold) from notify_at (no upper clamp); service_status_*_fmt, reset_confirm_message, credits_*_msgs_fmt, compare_vs_prev_*_fmt use %d (raised by Higia, Jano and Nemesis, remediation B19)",
+   "fix": "Sweep %d to %ld where the argument is Int in en/pt-BR/es; add a validate.sh ratchet for %d in strings files",
+   "impact": "A very large configured threshold prints a truncated number",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B19"
+  },
+  {
+   "lens": "quality",
+   "severity": "INFO",
+   "path": "Sources/AiTaskbarApp/NotificationService.swift",
+   "line": 124,
+   "title": "send -> deliveryFinished -> tracker threads four loose values (vendor, label, threshold, token) instead of one crossing reference",
+   "evidence": "Raised by Higia, remediation B19",
+   "fix": "Pass a single Crossing/PendingRef value",
+   "impact": "A future field could be dropped on one path",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B19"
+  }
+ ]
+}

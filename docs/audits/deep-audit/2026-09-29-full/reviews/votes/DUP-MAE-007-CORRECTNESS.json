@@ -1,0 +1,14 @@
+{
+ "id": "DUP-MAE-007",
+ "verdict": "APROVA",
+ "reasoning": "This is a pure refactor. forget(key) removes the same three maps that the reset and prune paths used to remove inline. dropEmptyPending is the same expression as the code it replaces. The rename of clearKnownDenialAndRearm keeps its body unchanged. There is no behavior to reverse. The tracker and rollback suites pass on the fixed tree.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:348",
+  "Sources/AiTaskbarApp/NotificationService.swift:368",
+  "Sources/AiTaskbarApp/NotificationService.swift:389"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a99dd66b38fc97477",
+ "batch": "B19-tail"
+}
