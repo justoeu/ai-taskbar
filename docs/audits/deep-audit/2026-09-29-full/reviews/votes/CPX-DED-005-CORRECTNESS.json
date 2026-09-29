@@ -1,0 +1,15 @@
+{
+ "id": "CPX-DED-005",
+ "verdict": "APROVA",
+ "reasoning": "SettingsViewModel.swift:254/276/282 emit prefer_antigravity, prefer_grok_cli and grok_base_url. These match the CodingKeys at AppConfig.swift:580/727/729. On reload, grok_base_url goes through the decoder at AppConfig.swift:696-701, which calls XAIConfig.validate and falls back to the default when a host is rejected, so the allowlist still applies. Reversal done: with the HEAD SettingsViewModel.swift restored, SettingsViewModelDiffTests fails with 3 issues (gemini.preferAntigravity, xai.preferGrokCLI, xai.grokBaseURL). With the fix copied back, the suite is green, and the working-tree diff is byte-identical to the saved B12-cleanup.diff. The Mirror-based guard also compares every stored field of every section, so a new field cannot be missed silently.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:254",
+  "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:282",
+  "Sources/AiTaskbarCore/Config/AppConfig.swift:696",
+  "Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift:150"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a27ecddc22c0d93ed",
+ "batch": "B12-cleanup"
+}

@@ -90,19 +90,3 @@ public struct GrokAuthReader: Sendable {
         throw AppError.credentials("No valid credentials found in Grok auth file at \(path.path)")
     }
 }
-
-/// Reader for local Grok cache files (e.g. `~/.grok/settings_cache.json`).
-public enum GrokLocalCache {
-    public static func readSubscriptionTierDisplay(at path: URL = Paths.defaultGrokSettingsCache()) -> String? {
-        guard let data = try? Data(contentsOf: path),
-              let json = try? JSONDecoder().decode([String: JSONValue].self, from: data),
-              case .string(let payloadStr)? = json["payload"],
-              let payloadData = payloadStr.data(using: .utf8),
-              let payloadJson = try? JSONDecoder().decode([String: JSONValue].self, from: payloadData),
-              case .object(let settings)? = payloadJson["settings"],
-              case .string(let tier)? = settings["subscription_tier_display"],
-              !tier.isEmpty
-        else { return nil }
-        return tier
-    }
-}

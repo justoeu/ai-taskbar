@@ -91,15 +91,21 @@ public final class NotificationService {
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(req) { _ in }
+        UNUserNotificationCenter.current().add(req) { error in
+            guard let error else { return }
+            AppLog.lifecycle.error("notification delivery failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
-    private static var relativeFormatter: RelativeDateTimeFormatter {
+    /// Built once. The locale is captured at first use, which is after
+    /// `AiTaskbarApp.init` applied the language override; a language change
+    /// needs a relaunch anyway (same contract as `PopoverContentView`).
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .short
         f.locale = L10n.effectiveLocale
         return f
-    }
+    }()
 
     private func thresholdMessage(threshold: Double, window: UsageWindow) -> String {
         let level: String

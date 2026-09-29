@@ -572,6 +572,37 @@ public struct VendorSectionView: View {
         vm.refresh(forceRefresh: true)
     }
 
+    /// Top-5 model share list shared by the OpenRouter and Z.AI cards.
+    private func topModelsList(_ models: [ModelShare]) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                L10n.text("models_label")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 6)
+            }
+            ForEach(models.prefix(5), id: \.model) { m in
+                HStack(spacing: 6) {
+                    Text("•")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                    Text(m.model)
+                        .font(.subheadline.monospaced())
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    Text("\(Int(saturating: m.percent.rounded()))%")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.leading, 4)
+            }
+        }
+        .padding(.leading, 2)
+    }
+
     @ViewBuilder
     private func extras(for snap: VendorSnapshot) -> some View {
         switch snap {
@@ -587,63 +618,11 @@ public struct VendorSectionView: View {
             }
         case .openrouter(let s):
             if let models = s.topModels, !models.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chart.bar.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        L10n.text("models_label")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 6)
-                    }
-                    ForEach(models.prefix(5), id: \.model) { m in
-                        HStack(spacing: 6) {
-                            Text("•")
-                                .font(.subheadline)
-                                .foregroundStyle(.tertiary)
-                            Text(m.model)
-                                .font(.subheadline.monospaced())
-                                .foregroundStyle(.secondary)
-                            Spacer(minLength: 4)
-                            Text("\(Int(saturating: m.percent.rounded()))%")
-                                .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.leading, 4)
-                    }
-                }
-                .padding(.leading, 2)
+                topModelsList(models)
             }
         case .zai(let s):
             if let models = s.topModels, !models.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chart.bar.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        L10n.text("models_label")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 6)
-                    }
-                    ForEach(models.prefix(5), id: \.model) { m in
-                        HStack(spacing: 6) {
-                            Text("•")
-                                .font(.subheadline)
-                                .foregroundStyle(.tertiary)
-                            Text(m.model)
-                                .font(.subheadline.monospaced())
-                                .foregroundStyle(.secondary)
-                            Spacer(minLength: 4)
-                            Text("\(Int(saturating: m.percent.rounded()))%")
-                                .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.leading, 4)
-                    }
-                }
-                .padding(.leading, 2)
+                topModelsList(models)
             }
         case .gemini(let s):
             VStack(alignment: .leading, spacing: 4) {

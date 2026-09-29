@@ -1,0 +1,30 @@
+[
+ [
+  "QUALITY",
+  "Tests/AiTaskbarCoreTests/DiskCacheTests.swift:85: the Swift function name payload_age_uses_injected_clock still refers to the removed payloadAge. Only the display name was updated. Cosmetic."
+ ],
+ [
+  "QUALITY",
+  "NotificationService: the rollback of the threshold mark when add() fails is still open (the rest of BEST-ATE-008). The failure is now logged but the user still does not get the notification for that window. Low priority, because the path is disabled on macOS 26."
+ ],
+ [
+  "SCOPE",
+  "config.example.toml documents none of prefer_antigravity ([gemini]), prefer_grok_cli ([xai]) or grok_base_url ([xai]), though README.md:477/490 does and the decoder reads all 3. This drift predates the diff; flag it for the docs lens."
+ ],
+ [
+  "SCOPE",
+  "The Settings UI (Sources/AiTaskbarApp/Views) has no control for gemini.preferAntigravity, xai.preferGrokCLI or xai.grokBaseURL. The diff branches CPX-DED-005 added are therefore correct but unreachable until those controls exist."
+ ],
+ [
+  "SCOPE",
+  "BEST-ATE-008 residue: NotificationService still hard-codes the English 'at' in the notification title (the finding's :102), and a failed add() does not roll back the threshold mark."
+ ],
+ [
+  "CORRECTNESS",
+  "Filtered suite (SettingsViewModel|Cost|DiskCache|GrokCredentials|VendorOrder|PinnedStatusItem|Notification|PricingTable) run by the reviewer: 102 tests in 11 suites passed. Reversal for CPX-DED-005 gave RED with 3 issues, and the tree was restored to match the saved diff exactly."
+ ],
+ [
+  "CORRECTNESS",
+  "Not blocking: XAIConfig.grokBaseURL is a plain stored var, so the Settings draft can hold a non-allowlisted URL until it is saved and reloaded. The decoder at AppConfig.swift:696 rejects it on reload, so it never reaches a provider without validation. This behavior predates this batch."
+ ]
+]

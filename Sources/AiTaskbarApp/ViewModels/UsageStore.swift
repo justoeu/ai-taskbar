@@ -201,17 +201,6 @@ public final class UsageStore: ObservableObject {
         vendors.first(where: { $0.vendorId == id })
     }
 
-    /// Place `id` immediately before `target` (or at the end when `target` is nil).
-    public func moveVendor(_ id: VendorId, before target: VendorId?) {
-        let current = sortedVendors.map(\.vendorId)
-        guard !current.isEmpty else { return }
-        let next = VendorOrder.moving(current, id: id, before: target)
-        guard next != current else { return }
-        preferredOrder = next
-        VendorOrder.save(preferredOrder)
-        applySortedOrder()
-    }
-
     /// Move one step toward the top of the popover list. No-op when already first.
     public func moveVendorUp(_ id: VendorId) {
         let current = sortedVendors.map(\.vendorId)
@@ -306,10 +295,6 @@ public final class UsageStore: ObservableObject {
 
     public func refresh(vendor: VendorId, forceRefresh: Bool = true) {
         vendorVM(vendor)?.refresh(forceRefresh: forceRefresh)
-    }
-
-    public func compactAllHistory() {
-        for v in vendors { v.compactHistory() }
     }
 
     /// Schedules a history compaction off the MainActor. The history stores

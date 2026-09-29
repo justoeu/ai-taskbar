@@ -1,0 +1,64 @@
+{
+  "id": "CPX-DED-005",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 16:43:29 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "SettingsViewModel.swift:254/276/282 emit prefer_antigravity, prefer_grok_cli and grok_base_url. These match the CodingKeys at AppConfig.swift:580/727/729. On reload, grok_base_url goes through the decoder at AppConfig.swift:696-701, which calls XAIConfig.validate and falls back to the default when a host is rejected, so the allowlist still applies. Reversal done: with the HEAD SettingsViewModel.swift restored, SettingsViewModelDiffTests fails with 3 issues (gemini.preferAntigravity, xai.preferGrokCLI, xai.grokBaseURL). With the fix copied back, the suite is green, and the working-tree diff is byte-identical to the saved B12-cleanup.diff. The Mirror-based guard also compares every stored field of every section, so a new field cannot be missed silently.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:254",
+        "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:282",
+        "Sources/AiTaskbarCore/Config/AppConfig.swift:696",
+        "Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift:150"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "This is proportionate. The finding itself says the cyclomatic score is a false positive on a flat comparator, so the fix adds an exhaustiveness test instead of refactoring. Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift:146-166 has one row per field, one expect per fact, and Mirror guards for sections and fields. That found 3 fields that were really missing, and they were added in SettingsViewModel.swift:254,276,282 following the existing pattern. The doc comment at :94 now points to the test that enforces the contract. None of the expects are Bool-optional.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift:146",
+        "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:94",
+        "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:254"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The finding asks for a one-field-at-a-time characterization test with an exhaustiveness guard. Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift is that test, and the guard uses Mirror over every section. The 3 new diff branches at SettingsViewModel.swift:254 (gemini.prefer_antigravity), :276 (xai.prefer_grok_cli) and :282 (xai.grok_base_url) are the gaps the test turned up, so they are in scope. They write keys the decoder already reads (AppConfig.swift:684-729), so the on-disk schema does not change and no migration is needed. grok_base_url is written from a draft that XAIConfig.init/validate already allowlisted, so no new host surface. On docs: no view under Sources/AiTaskbarApp binds preferAntigravity, preferGrokCLI or grokBaseURL, so no user can currently reach the bug. README already documents all 3 keys (lines 287, 316, 477, 490). CHANGELOG.md is generated from release notes by auto-tag/release.yml (it currently stops at v0.20.0), not edited by hand. No README or CHANGELOG line is needed.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:254",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift:684",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CHANGELOG.md:8"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

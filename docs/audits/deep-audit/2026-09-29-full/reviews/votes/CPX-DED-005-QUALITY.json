@@ -1,0 +1,14 @@
+{
+ "id": "CPX-DED-005",
+ "verdict": "APROVA",
+ "reasoning": "This is proportionate. The finding itself says the cyclomatic score is a false positive on a flat comparator, so the fix adds an exhaustiveness test instead of refactoring. Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift:146-166 has one row per field, one expect per fact, and Mirror guards for sections and fields. That found 3 fields that were really missing, and they were added in SettingsViewModel.swift:254,276,282 following the existing pattern. The doc comment at :94 now points to the test that enforces the contract. None of the expects are Bool-optional.",
+ "required_changes": [],
+ "cited_paths": [
+  "Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift:146",
+  "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:94",
+  "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:254"
+ ],
+ "lens": "QUALITY",
+ "_task": "aceff7b4bd1b6605b",
+ "batch": "B12-cleanup"
+}

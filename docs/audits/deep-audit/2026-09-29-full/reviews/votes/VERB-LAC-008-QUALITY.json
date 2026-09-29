@@ -1,0 +1,13 @@
+{
+ "id": "VERB-LAC-008",
+ "verdict": "APROVA",
+ "reasoning": "UsageStore.swift:300 and VendorViewModel.swift:349: the synchronous compactAllHistory and its only helper are removed. The only path left is compactAllHistoryDetached, used by RefreshScheduler.swift:163, and its comment does not mention the removed method.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:300",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:349"
+ ],
+ "lens": "QUALITY",
+ "_task": "aceff7b4bd1b6605b",
+ "batch": "B12-cleanup"
+}

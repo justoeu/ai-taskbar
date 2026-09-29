@@ -83,15 +83,6 @@ public struct DiskCache: Sendable {
 
     // MARK: - Reads
 
-    public func payloadAge() -> TimeInterval? {
-        withIOLock {
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
-                  let mtime = attrs[.modificationDate] as? Date
-            else { return nil }
-            return now().timeIntervalSince(mtime)
-        }
-    }
-
     /// Single stat+read for the hot cache-hit path (N1-NEX-004).
     public func freshPayloadWithAge() -> (Data, TimeInterval)? {
         withIOLock {

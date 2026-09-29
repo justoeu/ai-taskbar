@@ -1,0 +1,13 @@
+{
+ "id": "CPX-DED-004",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/Views/VendorSectionView.swift:576: the two identical 28-line blocks (openrouter and zai) become one private topModelsList(_:). Both cases now call it in one line. The duplication is gone, nesting is unchanged, and the name says what it renders.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Views/VendorSectionView.swift:576",
+  "Sources/AiTaskbarApp/Views/VendorSectionView.swift:621"
+ ],
+ "lens": "QUALITY",
+ "_task": "aceff7b4bd1b6605b",
+ "batch": "B12-cleanup"
+}

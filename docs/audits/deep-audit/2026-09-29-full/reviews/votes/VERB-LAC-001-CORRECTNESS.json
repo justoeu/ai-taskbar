@@ -1,0 +1,13 @@
+{
+ "id": "VERB-LAC-001",
+ "verdict": "APROVA",
+ "reasoning": "GrokLocalCache/readSubscriptionTierDisplay and Paths.defaultGrokSettingsCache are gone (GrokCredentials.swift:93, Paths.swift:74). grep over Sources, Tests, scripts and the docs finds 0 references. The only caller was the removed test. Filtered suite is green.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Credentials/GrokCredentials.swift:93",
+  "Sources/AiTaskbarCore/Util/Paths.swift:74"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a27ecddc22c0d93ed",
+ "batch": "B12-cleanup"
+}

@@ -1,0 +1,13 @@
+{
+ "id": "BEST-ATE-009",
+ "verdict": "APROVA",
+ "reasoning": "itemTint always returned .primary, so inlining .primary at PinnedStatusItemManager.swift:101/104/114 renders the same. Making init internal (PinnedStatusItemManager.swift:163) still compiles for @testable tests, and the PinnedStatusItem suite passes.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/PinnedStatusItemManager.swift:101",
+  "Sources/AiTaskbarApp/PinnedStatusItemManager.swift:163"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a27ecddc22c0d93ed",
+ "batch": "B12-cleanup"
+}

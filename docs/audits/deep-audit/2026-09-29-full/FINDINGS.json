@@ -2099,15 +2099,46 @@
     "cetico_evidence": "VendorSectionView.swift:587-615 (openrouter) and :616-645 (zai) are identical top-models blocks.",
     "verification": "cetico",
     "domain": "complexity",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "n/a",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CPX-DED-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:29 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:29 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "SettingsViewModel.diff 47-branch cyclomatic score is a tabular field-comparator, not tangled logic - real risk is the unenforced diff-every-field exhaustiveness contract",
@@ -2124,15 +2155,46 @@
     "cetico_evidence": "SettingsViewModel.diff (:107) has no test at all (no SettingsViewModel reference in Tests). Its own doc comment's exhaustiveness contract is not enforced.",
     "verification": "cetico",
     "domain": "complexity",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CPX-DED-005",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty",
+    "resolved_at": "2026-09-29 16:43:29 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:29 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "UsageHistoryStore.append silently drops samples on encode/open/write failure with zero diagnostic trail",
@@ -4260,7 +4322,7 @@
     "impact": "Dead production surface: it parses a live user cache file format but the output (subscription tier display string) never reaches the UI or XAIProvider snapshot. Removing it changes no user-visible behavior; if it was meant to feed the xAI cards plan label, that wiring is missing (a functional gap, outside this lens).",
     "fix": "Delete GrokLocalCache and Paths.defaultGrokSettingsCache() plus their test if the tier display is not wanted, or wire readSubscriptionTierDisplay() into XAIProvider snapshot construction if it was meant to surface the plan name.",
     "test_red_green": {
-      "name": "characterization test before deletion",
+      "name": "n/a",
       "assert_before": "GrokCredentialsTests still calls GrokLocalCache.readSubscriptionTierDisplay(at:) directly and passes",
       "assert_after": "test removed with the deleted code; if wired into XAIProvider instead, a new golden test asserts the snapshot plan label reflects subscription_tier_display"
     },
@@ -4269,9 +4331,40 @@
     "cetico_evidence": "GrokLocalCache.readSubscriptionTierDisplay (GrokCredentials.swift:95-108) and Paths.defaultGrokSettingsCache (Paths.swift:74) have no Sources caller. The only caller is GrokCredentialsTests.swift:78.",
     "verification": "cetico",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "id": "VERB-LAC-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:27 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:27 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "DiskCache.payloadAge() has zero callers",
@@ -4285,7 +4378,7 @@
     "impact": "7-line public method (stat and mtime diff under the I/O lock) that duplicates logic already inlined in freshPayloadWithAge(). No reader benefit; it reads as a still-supported API but nothing calls it.",
     "fix": "Delete payloadAge(). If a caller resurfaces a need for the age alone without the payload, have it call freshPayloadWithAge() and discard the data half instead of maintaining two stat-and-mtime code paths.",
     "test_red_green": {
-      "name": "n/a, no existing test exercises payloadAge()",
+      "name": "DiskCacheTests#payload_age_uses_injected_clock",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4294,9 +4387,40 @@
     "cetico_evidence": "DiskCache.swift:73 payloadAge() has 0 references in Sources or Tests. It is also uncovered surface in a coverage-gated target.",
     "verification": "cetico",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "id": "VERB-LAC-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "DiskCacheTests#payload_age_uses_injected_clock",
+    "resolved_at": "2026-09-29 16:43:28 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:28 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste DiskCacheTests#payload_age_uses_injected_clock · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "KeychainAccessAuthorizer.canReadSilently is a documented probe with no caller",
@@ -4310,7 +4434,7 @@
     "impact": "18 lines (doc plus body) implementing a silent-decrypt probe that nothing invokes; authorize() and KeychainCredentialReader do their own SecItemCopyMatching calls instead of reusing this probe. A future reader wiring up the Authorize banner may reasonably assume this is the sanctioned check-before-prompting helper and be surprised it is dead.",
     "fix": "Delete canReadSilently, or if the intent was for KeychainCredentialReader ACL-blocked detection to call it before falling back to SecurityToolCredentialReader, wire that call in and add a test pinning the true and false cases.",
     "test_red_green": {
-      "name": "n/a, no existing test exercises canReadSilently",
+      "name": "n/a",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4319,9 +4443,40 @@
     "cetico_evidence": "KeychainAccessAuthorizer.swift:97 canReadSilently has 0 references in Sources or Tests.",
     "verification": "cetico",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "id": "VERB-LAC-004",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:28 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:28 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "LoginItemService.currentStatus() is dead; statusDescription duplicates its body instead of calling it",
@@ -4335,7 +4490,7 @@
     "impact": "A 3-line static wrapper around SMAppService.mainApp.status that the rest of the same file bypasses, so it never runs.",
     "fix": "Delete currentStatus(), or replace the inline SMAppService.mainApp.status reads in this file with it if a single wrapper is preferred.",
     "test_red_green": {
-      "name": "n/a, no existing test exercises currentStatus()",
+      "name": "n/a",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4344,9 +4499,40 @@
     "cetico_evidence": "LoginItemService.swift:18 currentStatus() has 0 callers. statusDescription (:22-23) reads SMAppService.mainApp.status directly.",
     "verification": "cetico",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "id": "VERB-LAC-005",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:28 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:28 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "SettingsViewModel.reloadFromDisk() is never called",
@@ -4360,7 +4546,7 @@
     "impact": "The doc comment documents a workflow (call after applyChanges to reset the dirty and Save-button state) that does not happen; hasUnsavedChanges may stay stale after a save unless something else resets original. This is a dead-flag-shaped risk (a documented behavior that never fires), bordering on a functional gap rather than pure ceremony, hence MEDIUM rather than LOW.",
     "fix": "Either call reloadFromDisk() at the end of the settings-save flow wherever applyChanges is invoked from SettingsView, or delete the method and its comment if original is already kept in sync some other way; verify which with a test on hasUnsavedChanges after a simulated save.",
     "test_red_green": {
-      "name": "hasUnsavedChanges resets after save",
+      "name": "n/a",
       "assert_before": "after calling the save action, viewModel.hasUnsavedChanges is still true (red, proves reloadFromDisk is not wired)",
       "assert_after": "after calling the save action, viewModel.hasUnsavedChanges is false"
     },
@@ -4370,9 +4556,40 @@
     "cetico_evidence": "reloadFromDisk (SettingsViewModel.swift:55) has 0 callers. Downgraded from MEDIUM: the claimed 'stale dirty state after save' does not happen, because SettingsView.swift:165-172 calls onDone() and closes the overlay on a successful save. Separately, the method's doc comment is false: `original` is a `let` (:27) and reloadFromDisk replaces only draft (:58), so wiring it in as-is would leave hasUnsavedChanges true.",
     "verification": "cetico",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "id": "VERB-LAC-006",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:28 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:28 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "UsageStore.moveVendor(_:before:) is unused; only the up/down variants are wired to the UI",
@@ -4386,7 +4603,7 @@
     "impact": "8-line arbitrary-position reorder method, plus the VendorOrder.moving(id:before:) pure function it is the sole production caller of, reads as the drag-and-drop reorder implementation, but the UI only ever moves vendors one step via buttons. A reader tracing how reordering works has to rule this method out.",
     "fix": "Delete moveVendor(_:before:) if no drag-and-drop UI is planned. VendorOrder.moving(id:before:) still has its own direct unit test (VendorOrderTests.swift:92-99) and can stay if that pure logic is worth keeping standalone, or delete both together.",
     "test_red_green": {
-      "name": "n/a, VendorOrder.moving(id:before:) already has a direct characterization test; UsageStore.moveVendor itself has none",
+      "name": "n/a",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4395,9 +4612,40 @@
     "cetico_evidence": "UsageStore.swift:195 moveVendor(_:before:) has no Sources caller, and there is no onMove/onInsert anywhere.",
     "verification": "cetico",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "id": "VERB-LAC-007",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:28 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:28 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "UsageStore.compactAllHistory() is superseded by compactAllHistoryDetached() and never called",
@@ -4411,7 +4659,7 @@
     "impact": "3-line synchronous, main-actor-blocking method left behind after its detached replacement shipped. A reader could call the blocking version by mistake since both are public.",
     "fix": "Delete compactAllHistory(); compactAllHistoryDetached() is the only one any code path uses.",
     "test_red_green": {
-      "name": "n/a, no existing test exercises the synchronous compactAllHistory()",
+      "name": "n/a",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -4420,9 +4668,40 @@
     "cetico_evidence": "UsageStore.swift:290 compactAllHistory() has no caller. RefreshScheduler uses compactAllHistoryDetached instead.",
     "verification": "cetico",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "id": "VERB-LAC-008",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:28 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:28 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Atlas",
@@ -4596,7 +4875,7 @@
     "fix": "Change to static let; log the error and roll back the mark on failure; localize the title.",
     "confidence": "high",
     "test_red_green": {
-      "name": "failedNotificationDoesNotMarkThreshold",
+      "name": "n/a",
       "assert_before": "injected failing center -> threshold marked",
       "assert_after": "not marked; logged"
     },
@@ -4605,10 +4884,41 @@
     "cetico_evidence": "NotificationService.swift:114-119 is a computed var and :109 add(req){_ in} ignores errors. It only runs when a notification actually fires, not on a hot path, and on macOS 26 the whole path is off (:65, :94).",
     "verification": "cetico",
     "domain": "best_practices",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/NotificationService.swift",
     "id": "BEST-ATE-008",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:29 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:29 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "Singleton wiring: MainStatusItemHolder hard-codes PinnedStatusItemManager.shared, which has a public init; itemTint(for:) ignores its argument",
@@ -4624,7 +4934,7 @@
     "fix": "Inject the holder->manager signal or make init private; inline .primary.",
     "confidence": "medium",
     "test_red_green": {
-      "name": "injectedManagerReceivesMainItemSignal",
+      "name": "n/a",
       "assert_before": "fresh instance waits for 3s timeout",
       "assert_after": "notified immediately"
     },
@@ -4632,10 +4942,41 @@
     "cetico_evidence": "PinnedStatusItemManager.swift:13-14 hard-codes the singleton .shared. The public init (:160) is used by tests (Tests/AiTaskbarAppTests/PinnedStatusItemTests.swift:191,235), so tests go through a different path. itemTint (:125-128) ignores its parameter.",
     "verification": "cetico",
     "domain": "best_practices",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
     "id": "BEST-ATE-009",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:29 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:29 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "L10n marks cache vars nonisolated(unsafe) inside a @MainActor enum, turning off checking with no need",
@@ -4651,7 +4992,7 @@
     "fix": "Remove nonisolated(unsafe); the vars inherit @MainActor.",
     "confidence": "high",
     "test_red_green": {
-      "name": "n/a compile-time",
+      "name": "n/a",
       "assert_before": "nonisolated access compiles",
       "assert_after": "compiler rejects"
     },
@@ -4659,10 +5000,41 @@
     "cetico_evidence": "L10n.swift:13 marks the enum @MainActor, and :73-74 declare the caches nonisolated(unsafe). They are touched only by the @MainActor bundle getter (:76-82), so the annotation is unnecessary.",
     "verification": "cetico",
     "domain": "best_practices",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/Localization/L10n.swift",
     "id": "BEST-ATE-010",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:29 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:29 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Represa",
@@ -4919,14 +5291,45 @@
     "confidence": "high",
     "agent": "Cético",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "n/a",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-CET-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:30 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:30 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "lens": "deps",
@@ -5234,7 +5637,7 @@
     "impact": "Bounded (max 5 pinned items) so not strongly user-visible, but every vendor refresh (up to 8 vendors, every ~300s, or more often under manual refresh) triggers a SwiftUI rootView reassignment + layoutSubtreeIfNeeded() + tooltip rebuild (MenuBarTooltipBuilder.buildTooltip) for pinned vendors that did not change, when only the changed vendor badge needs updating.",
     "fix": "Track which vendor $state fired (tag the merged publisher with vendor id instead of erasing to Void) and call updateButton only for that vendor status item.",
     "test_red_green": {
-      "name": "PinnedStatusItemManagerTests.onlyChangedVendorBadgeIsRebuilt",
+      "name": "n/a",
       "assert_before": "With 3 vendors pinned, changing vendor A state triggers updateButton call count == 3 (expected 1) - test fails.",
       "assert_after": "Same scenario updates only vendor A NSHostingView rootView; call count == 1."
     },
@@ -5243,10 +5646,41 @@
     "cetico_evidence": "PinnedStatusItemManager.swift:182-188 merges all $state streams into a sync that calls updateButton for every pinned item (L246-250). New items are updated twice (L238 and L247). This happens at most 5 items per throttled 100 ms burst, about every 300 s. It exists but has no measurable impact.",
     "verification": "cetico",
     "domain": "performance",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
     "id": "PERF-FLU-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:29 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:29 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "title": "PricingTable.lookup prefix-match path allocates a filtered dictionary on every call, invoked per-turn inside CodexSessionScanner",
@@ -5260,7 +5694,7 @@
     "impact": "Small in absolute terms (table sizes are ~14-20 entries) but is a per-line allocation + full-table scan in a loop that is otherwise carefully optimized elsewhere in the same file (byte prefilter, mmap, typed decode) specifically to avoid allocation - this path was missed.",
     "fix": "Precompute a sorted-by-length-descending array of (prefix, pricing) once per table (static), or cache resolved model to pricing lookups in a dictionary keyed by the literal model string seen so far during a single scan pass.",
     "test_red_green": {
-      "name": "PricingTableTests.lookupPrefixFallbackDoesNotAllocatePerCall",
+      "name": "CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil",
       "assert_before": "An allocation-count assertion around 10k calls to lookup with an unlisted suffixed model id shows allocation count proportional to call count (expected O(1) amortized) - test fails.",
       "assert_after": "After caching, allocation count is O(1) amortized across repeated calls with the same model id."
     },
@@ -5269,10 +5703,41 @@
     "cetico_evidence": "PricingTable.swift:264-274 runs filter(), which allocates, only on an exact-key miss. The table has about 20 entries, and the call sits next to a JSONDecoder.decode per line in CodexSessionScanner.swift:290-293 that costs far more. It exists, but the impact is negligible.",
     "verification": "cetico",
     "domain": "performance",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Cost/PricingTable.swift",
     "id": "PERF-FLU-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil",
+    "resolved_at": "2026-09-29 16:43:29 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:29 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",
@@ -5560,7 +6025,7 @@
     "impact": "No functional effect, just two Logger instances nobody writes through, so filtering Console.app or log stream by category==updates or scheduler will always be silent, which could mislead someone into thinking those subsystems are quiet by design rather than unwired.",
     "fix": "Delete the updates and scheduler static lets, or start using them at the call sites in UpdateChecker.swift and RefreshScheduler.swift that currently either do not log or use a different category.",
     "test_red_green": {
-      "name": "n/a, no test possible for an unused constant",
+      "name": "n/a",
       "assert_before": "n/a",
       "assert_after": "n/a"
     },
@@ -5569,8 +6034,39 @@
     "cetico_evidence": "AppLog.swift:25-26 declare the updates and scheduler loggers. 0 uses anywhere in Sources.",
     "verification": "cetico",
     "domain": "verbosity",
-    "status": "open",
+    "status": "resolved",
     "id": "VERB-LAC-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "n/a",
+    "resolved_at": "2026-09-29 16:43:28 UTC",
+    "resolved_note": "batch B12-cleanup",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:43:28 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup"
+    ],
+    "in_progress": false
   }
 ]

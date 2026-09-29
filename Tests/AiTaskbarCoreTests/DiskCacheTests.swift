@@ -81,7 +81,7 @@ struct DiskCacheTests {
         #expect(cache.anyPayload() == nil)
     }
 
-    @Test("payloadAge reads the injected clock")
+    @Test("freshPayloadWithAge reads the injected clock")
     func payload_age_uses_injected_clock() throws {
         defer { try? FileManager.default.removeItem(at: tmp) }
         let clock = TestClock()
@@ -89,7 +89,7 @@ struct DiskCacheTests {
         let mtime = try writeAndReadMtime(cache)
         clock.date = mtime.addingTimeInterval(42)
 
-        #expect(cache.payloadAge() == 42)
+        #expect(cache.freshPayloadWithAge()?.1 == 42)
     }
 
     @Test("markFailed writes lastError and can read back")

@@ -1,0 +1,13 @@
+{
+ "id": "BEST-ATE-010",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/Localization/L10n.swift:73: L10n is `@MainActor public enum` (:13-14), so `nonisolated(unsafe)` was an unneeded escape hatch. Removing it lets the compiler check isolation again. The report says the build has 0 warnings.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Localization/L10n.swift:13",
+  "Sources/AiTaskbarApp/Localization/L10n.swift:73"
+ ],
+ "lens": "QUALITY",
+ "_task": "aceff7b4bd1b6605b",
+ "batch": "B12-cleanup"
+}

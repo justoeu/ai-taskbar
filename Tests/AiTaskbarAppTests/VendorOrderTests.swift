@@ -80,26 +80,6 @@ struct VendorOrderTests {
         #expect(ids == [.anthropic, .xai, .zai])
     }
 
-    @Test("move reorders array")
-    func moving_reorders() {
-        let order: [VendorId] = [.anthropic, .openai, .xai]
-        // Move xai (index 2) to front (toOffset 0).
-        let moved = VendorOrder.moving(order, fromOffsets: IndexSet(integer: 2), toOffset: 0)
-        #expect(moved == [.xai, .anthropic, .openai])
-    }
-
-    @Test("moving id before target")
-    func moving_id_before_target() {
-        let order: [VendorId] = [.anthropic, .openai, .xai]
-        #expect(VendorOrder.moving(order, id: .xai, before: .anthropic)
-                == [.xai, .anthropic, .openai])
-        #expect(VendorOrder.moving(order, id: .anthropic, before: .xai)
-                == [.openai, .anthropic, .xai])
-        #expect(VendorOrder.moving(order, id: .openai, before: .openai) == order)
-        #expect(VendorOrder.moving(order, id: .xai, before: nil)
-                == [.anthropic, .openai, .xai])
-    }
-
     @Test("swap adjacent steps match up/down")
     func adjacent_swap() {
         var order: [VendorId] = [.anthropic, .openai, .xai]

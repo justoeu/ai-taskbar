@@ -1,0 +1,12 @@
+{
+ "id": "CQ-CET-001",
+ "verdict": "APROVA",
+ "reasoning": "The method whose doc comment was false (it said it replaced `original` but only replaced `draft`) is deleted at SettingsViewModel.swift:52. With the method gone, the defect is gone, and there are no callers.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:52"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a27ecddc22c0d93ed",
+ "batch": "B12-cleanup"
+}

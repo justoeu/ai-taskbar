@@ -1,0 +1,14 @@
+{
+ "id": "VERB-LAC-007",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:204 and VendorOrder.swift:52: moveVendor(_:before:) is removed, and so are both VendorOrder.moving overloads that only it used, with their tests. No orphan code is left. The up/down moves and the adjacent_swap test stay.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:204",
+  "Sources/AiTaskbarApp/VendorOrder.swift:52",
+  "Tests/AiTaskbarAppTests/VendorOrderTests.swift:83"
+ ],
+ "lens": "QUALITY",
+ "_task": "aceff7b4bd1b6605b",
+ "batch": "B12-cleanup"
+}

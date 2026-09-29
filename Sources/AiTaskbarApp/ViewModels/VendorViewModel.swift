@@ -346,8 +346,4 @@ public final class VendorViewModel: ObservableObject, Identifiable {
             .filter { $0.at >= cutoff }
             .sorted { $0.at < $1.at }
     }
-
-    public func compactHistory() {
-        historyStore?.compact()
-    }
 }

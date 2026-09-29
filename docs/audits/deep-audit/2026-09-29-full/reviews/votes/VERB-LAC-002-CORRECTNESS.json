@@ -1,0 +1,12 @@
+{
+ "id": "VERB-LAC-002",
+ "verdict": "APROVA",
+ "reasoning": "AppLog.scheduler is removed at AppLog.swift:26 and grep finds 0 uses. `updates` is kept, which is correct because DMGVerifier logs to it.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Util/AppLog.swift:26"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a27ecddc22c0d93ed",
+ "batch": "B12-cleanup"
+}

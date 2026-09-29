@@ -1,0 +1,155 @@
+{
+ "batch": "B12-cleanup",
+ "results": [
+  {
+   "id": "VERB-LAC-001",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: deletion. No references outside the removed test",
+   "reversal": "n/a"
+  },
+  {
+   "id": "VERB-LAC-002",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: deleted AppLog.scheduler, which has 0 uses (RefreshScheduler has no log sites). `updates` is kept because DMGVerifier now logs to it 7 times",
+   "reversal": "n/a"
+  },
+  {
+   "id": "VERB-LAC-003",
+   "outcome": "fixed",
+   "tests": [
+    "DiskCacheTests#payload_age_uses_injected_clock"
+   ],
+   "red": "n/a: payloadAge had no production caller, so I deleted it. I kept the B6 clock test but pointed it at the production reader freshPayloadWithAge()?.1 instead of deleting it",
+   "reversal": "n/a"
+  },
+  {
+   "id": "VERB-LAC-004",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: canReadSilently deleted, 0 callers",
+   "reversal": "n/a"
+  },
+  {
+   "id": "VERB-LAC-005",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: currentStatus() deleted, statusDescription unchanged",
+   "reversal": "n/a"
+  },
+  {
+   "id": "VERB-LAC-006",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: reloadFromDisk and its false doc comment deleted (covers CQ-CET-001 too)",
+   "reversal": "n/a"
+  },
+  {
+   "id": "VERB-LAC-007",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: moveVendor(_:before:) deleted, plus both VendorOrder.moving overloads it left without callers and their 2 tests. Up/down moves kept",
+   "reversal": "n/a"
+  },
+  {
+   "id": "VERB-LAC-008",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: compactAllHistory() and VendorViewModel.compactHistory() deleted; the latter's only caller was compactAllHistory()",
+   "reversal": "n/a"
+  },
+  {
+   "id": "CPX-DED-004",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: extracted private topModelsList(_:). A script asserted the two blocks were byte-identical before merging them, so the view tree is unchanged",
+   "reversal": "n/a"
+  },
+  {
+   "id": "CPX-DED-005",
+   "outcome": "fixed",
+   "tests": [
+    "SettingsViewModel.diff#single_field_change",
+    "SettingsViewModel.diff#every_field_covered",
+    "SettingsViewModel.diff#every_section_covered",
+    "SettingsViewModel.diff#identical_is_empty"
+   ],
+   "red": "\u2718 ... argument row \u2192 gemini.preferAntigravity at SettingsViewModelDiffTests.swift:150:9: Expectation failed: (SettingsViewModel.diff(from: AppConfig(), to: changed) \u2192 []) == ([row.expected] \u2192 [AiTaskbarCore.ConfigChange.bool(section: \"gemini\", key: \"prefer_antigravity\", value: false)]). The same failure appeared for xai.preferGrokCLI and xai.grokBaseURL. Guard mutation: adding a temp field `mutationProbe` to ThresholdsConfig made the guard fail with (listed \u2192 [\"critical\",\"warning\"]) == (fields \u2192 [\"mutationProbe\",\"warning\",\"critical\"])",
+   "reversal": "ok: restoring the pre-fix SettingsViewModel brought back the same 3 failures, then I reapplied the fix"
+  },
+  {
+   "id": "BEST-ATE-008",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: relativeFormatter is now a `static let`, same pattern as PopoverContentView. add() errors are now logged through AppLog.lifecycle. Undoing the threshold mark on failure is not done: the callback runs off the MainActor and the path is disabled on macOS 26",
+   "reversal": "n/a"
+  },
+  {
+   "id": "BEST-ATE-009",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: removed itemTint and inlined .primary, so the rendering is the same. Made init internal and documented that only `.shared` receives the holder's signal",
+   "reversal": "n/a"
+  },
+  {
+   "id": "BEST-ATE-010",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: removed nonisolated(unsafe) from the 2 cached vars inside the @MainActor enum",
+   "reversal": "n/a"
+  },
+  {
+   "id": "PERF-FLU-002",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: new items are no longer updated twice. I did not add a per-vendor change check: with at most 5 items every 300 s, the risk outweighs the gain",
+   "reversal": "n/a"
+  },
+  {
+   "id": "PERF-FLU-003",
+   "outcome": "fixed",
+   "tests": [
+    "CostTests#lookup_nested_prefix_order",
+    "CostTests#lookup_no_prefix_is_nil"
+   ],
+   "red": "mutation: picking the shortest key instead of the longest failed on model \u2192 \"m-1-mini-x\" (expected 3.0) and \"m-1-x\" (expected 2.0)",
+   "reversal": "ok: fix restored after the mutation run"
+  },
+  {
+   "id": "CQ-CET-001",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "n/a: the method with the false doc comment (reloadFromDisk) was deleted together with VERB-LAC-006",
+   "reversal": "n/a"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1080,
+  "coverage": "92.88%",
+  "warnings": 0
+ },
+ "files": [
+  "Sources/AiTaskbarCore/Credentials/GrokCredentials.swift",
+  "Sources/AiTaskbarCore/Util/Paths.swift",
+  "Sources/AiTaskbarCore/Util/AppLog.swift",
+  "Sources/AiTaskbarCore/Cache/DiskCache.swift",
+  "Sources/AiTaskbarCore/Credentials/KeychainAccessAuthorizer.swift",
+  "Sources/AiTaskbarCore/Cost/PricingTable.swift",
+  "Sources/AiTaskbarApp/LoginItemService.swift",
+  "Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift",
+  "Sources/AiTaskbarApp/ViewModels/UsageStore.swift",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+  "Sources/AiTaskbarApp/VendorOrder.swift",
+  "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
+  "Sources/AiTaskbarApp/NotificationService.swift",
+  "Sources/AiTaskbarApp/PinnedStatusItemManager.swift",
+  "Sources/AiTaskbarApp/Localization/L10n.swift",
+  "Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift (new)",
+  "Tests/AiTaskbarAppTests/VendorOrderTests.swift",
+  "Tests/AiTaskbarCoreTests/CostTests.swift",
+  "Tests/AiTaskbarCoreTests/DiskCacheTests.swift",
+  "Tests/AiTaskbarCoreTests/GrokCredentialsTests.swift"
+ ]
+}

@@ -86,6 +86,8 @@ public struct PinnedStatusBadgeView: View {
         return SeverityColor.flameTint(forPercent: maxVal, thresholds: thresholds)
     }
 
+    /// Percentages always render in `.primary`, even at warning/critical
+    /// levels: severity is carried by the flame icon, not by tinting the text.
     public var body: some View {
         HStack(spacing: 3.5) {
             VendorIconView(vendorId: vendorId, size: 16)
@@ -96,10 +98,10 @@ public struct PinnedStatusBadgeView: View {
                 VStack(alignment: .trailing, spacing: -1) {
                     Text("\(Int(saturating: weekly.rounded()))%")
                         .font(Self.menuBarFont)
-                        .foregroundStyle(itemTint(for: weekly))
+                        .foregroundStyle(.primary)
                     Text("\(Int(saturating: current.rounded()))%")
                         .font(Self.menuBarFont)
-                        .foregroundStyle(itemTint(for: current))
+                        .foregroundStyle(.primary)
                 }
             } else {
                 // The main MenuBarExtra label ignores its custom font: the
@@ -109,7 +111,7 @@ public struct PinnedStatusBadgeView: View {
                 // Use the very font the system uses for the main item.
                 Text("\(Int(saturating: current.rounded()))%")
                     .font(Self.menuBarFont)
-                    .foregroundStyle(itemTint(for: current))
+                    .foregroundStyle(.primary)
             }
 
             if isFull {
@@ -120,12 +122,6 @@ public struct PinnedStatusBadgeView: View {
         }
         .padding(.horizontal, 3)
         .allowsHitTesting(false)
-    }
-
-    private func itemTint(for percent: Double) -> Color {
-        // Conforme solicitado: Quando o valor estiver tanto em laranja quanto em vermelho,
-        // deixa em branco (primary) mas acrescenta o ícone de fogo.
-        return .primary
     }
 }
 
@@ -160,7 +156,11 @@ public final class PinnedStatusItemManager: ObservableObject {
     /// degrades to "possibly misordered" rather than "never shown".
     nonisolated static let mainItemWaitLimit: TimeInterval = 3
 
-    public init() {}
+    /// Production uses `shared`: `MainStatusItemHolder` signals the main
+    /// item's arrival to `shared` only. Other instances (tests) never get
+    /// that signal and fall back to `configure`'s direct check plus the
+    /// `mainItemWaitLimit` timer, so the initializer is not public.
+    init() {}
 
     public func configure(store: UsageStore) {
         self.store = store
@@ -233,16 +233,13 @@ public final class PinnedStatusItemManager: ObservableObject {
         // 2. Add status items for newly pinned vendors in order. A new item
         // lands immediately left of this app's existing items, so creating
         // them in `pinnedVendorOrder` keeps the first pin next to the main
-        // icon and each later pin one slot further left.
+        // icon and each later pin one slot further left. Step 3 fills in
+        // their content, so they are not rendered twice.
         for vid in desiredOrder where statusItems[vid] == nil {
-            let item = Self.makePinnedStatusItem(for: vid)
-            statusItems[vid] = item
-            if let vm = store.vendorVM(vid) {
-                updateButton(for: item, vm: vm, store: store)
-            }
+            statusItems[vid] = Self.makePinnedStatusItem(for: vid)
         }
 
-        // 3. Update buttons for existing pinned items in-place.
+        // 3. Update buttons for every pinned item (new and existing) in-place.
         for vid in desiredOrder {
             if let item = statusItems[vid], let vm = store.vendorVM(vid) {
                 updateButton(for: item, vm: vm, store: store)

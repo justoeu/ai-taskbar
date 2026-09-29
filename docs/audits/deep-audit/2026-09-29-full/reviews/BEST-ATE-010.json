@@ -1,0 +1,58 @@
+{
+  "id": "BEST-ATE-010",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 16:43:29 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "L10n is declared @MainActor (L10n.swift:13). Dropping nonisolated(unsafe) from cachedBundle/cachedBundleLanguage (L10n.swift:73) puts them under that isolation, and the build is clean with the Ferreiro reporting 0 warnings.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Localization/L10n.swift:73"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/Localization/L10n.swift:73: L10n is `@MainActor public enum` (:13-14), so `nonisolated(unsafe)` was an unneeded escape hatch. Removing it lets the compiler check isolation again. The report says the build has 0 warnings.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Localization/L10n.swift:13",
+        "Sources/AiTaskbarApp/Localization/L10n.swift:73"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/Localization/L10n.swift:73-74 drops nonisolated(unsafe) from the two caches. They now inherit @MainActor from the enum. This is the minimal fix.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Localization/L10n.swift:73"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

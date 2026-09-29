@@ -1,0 +1,13 @@
+{
+ "id": "PERF-FLU-003",
+ "verdict": "APROVA",
+ "reasoning": "PricingTable.swift:272-276 does a single pass with strict > on key length. Two distinct keys that both prefix the same model can never have the same length, so this equals the old filter+max. I checked it with a scratch package linking the working-tree AiTaskbarCore. It compares the old filter/max lookup against PricingTable.lookup over every key of all 6 tables, plus every prefix of every key, 10 suffix variants, and cross-table keys: 1779 models, 0 mismatches. As a refactor it has no RED to reverse. The new nested-prefix tests do fail under the Ferreiro's shortest-key mutation.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cost/PricingTable.swift:272",
+  "Tests/AiTaskbarCoreTests/CostTests.swift:171"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a27ecddc22c0d93ed",
+ "batch": "B12-cleanup"
+}

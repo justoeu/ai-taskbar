@@ -1,0 +1,14 @@
+{
+ "id": "CPX-DED-005",
+ "verdict": "APROVA",
+ "reasoning": "The finding asks for a one-field-at-a-time characterization test with an exhaustiveness guard. Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift is that test, and the guard uses Mirror over every section. The 3 new diff branches at SettingsViewModel.swift:254 (gemini.prefer_antigravity), :276 (xai.prefer_grok_cli) and :282 (xai.grok_base_url) are the gaps the test turned up, so they are in scope. They write keys the decoder already reads (AppConfig.swift:684-729), so the on-disk schema does not change and no migration is needed. grok_base_url is written from a draft that XAIConfig.init/validate already allowlisted, so no new host surface. On docs: no view under Sources/AiTaskbarApp binds preferAntigravity, preferGrokCLI or grokBaseURL, so no user can currently reach the bug. README already documents all 3 keys (lines 287, 316, 477, 490). CHANGELOG.md is generated from release notes by auto-tag/release.yml (it currently stops at v0.20.0), not edited by hand. No README or CHANGELOG line is needed.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:254",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/SettingsViewModelDiffTests.swift:684",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CHANGELOG.md:8"
+ ],
+ "lens": "SCOPE",
+ "_task": "a84c778c32531d7f5",
+ "batch": "B12-cleanup"
+}
