@@ -342,7 +342,7 @@ final class RefreshSchedulerTests {
         scheduler.start()
         await updateSleeper.waitForSleeps(1)
         #expect(checker.status == .checking)
-        #expect(updateSleeper.durations == [14 * 3_600])
+        #expect(updateSleeper.durations == [TimeInterval(14 * 3_600)])
         scheduler.stop()
     }
 
@@ -359,7 +359,7 @@ final class RefreshSchedulerTests {
         // a stable point to read both durations from.
         await updateSleeper.waitForSleeps(2)
         #expect(checker.status == .checking)
-        #expect(updateSleeper.durations == [14 * 3_600, 86_400])
+        #expect(updateSleeper.durations == [TimeInterval(14 * 3_600), 86_400])
         scheduler.stop()
     }
 
@@ -401,7 +401,7 @@ final class RefreshSchedulerTests {
 
         scheduler.start()
         await updateSleeper.waitForSleeps(2)
-        #expect(updateSleeper.durations == [14 * 3_600, 86_400])
+        #expect(updateSleeper.durations == [TimeInterval(14 * 3_600), 86_400])
         scheduler.stop()
     }
 
