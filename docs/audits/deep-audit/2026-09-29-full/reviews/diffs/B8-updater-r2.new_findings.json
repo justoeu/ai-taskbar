@@ -1,6 +1,0 @@
-[
- [
-  "QUALITY",
-  "Cosmetic, out of scope: the doc comment at HTTPClient.swift:221 is one long line (~135 chars), while the other doc comments in the file wrap at about 80 columns. Wrap it on the next edit to this file."
- ]
-]
