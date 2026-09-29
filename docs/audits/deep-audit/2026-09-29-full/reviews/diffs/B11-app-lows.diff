@@ -1,0 +1,789 @@
+diff --git a/Sources/AiTaskbarApp/NotificationService.swift b/Sources/AiTaskbarApp/NotificationService.swift
+index 573004c..ba15c46 100644
+--- a/Sources/AiTaskbarApp/NotificationService.swift
++++ b/Sources/AiTaskbarApp/NotificationService.swift
+@@ -11,7 +11,7 @@ public final class NotificationService {
+ 
+     /// Tracks the highest threshold already notified for each vendor:window
+     /// since it last dropped below all thresholds.
+-    private var highestNotified: [String: Double] = [:]
++    private var tracker = NotificationThresholdTracker()
+ 
+     /// Whether the OS authorization prompt has already been requested in
+     /// this process. The auth request is deferred until the first notification
+@@ -65,27 +65,10 @@ public final class NotificationService {
+         // here keeps `observe()` cheap in the common path.
+         guard config.enabled, !Self.isRuntimeKnownIncompatible else { return }
+         let sortedThresholds = config.notifyAt.sorted()
+-        guard let minThreshold = sortedThresholds.first else { return }
+-
+-        for window in snapshot.windows {
+-            let key = "\(vendor.rawValue):\(window.label)"
+-            let percent = window.utilizationPercent
+-
+-            // Window dropped below all thresholds → reset so a new cycle re-arms.
+-            if percent < minThreshold {
+-                highestNotified.removeValue(forKey: key)
+-                continue
+-            }
+-
+-            // Find the highest threshold this reading has reached.
+-            let reached = sortedThresholds.last(where: { percent >= $0 })
+-            guard let reached else { continue }
+-            let alreadyNotified = highestNotified[key] ?? -1
+-            if reached > alreadyNotified {
+-                highestNotified[key] = reached
+-                ensureAuthorizedBeforeSend()
+-                send(vendor: vendor, window: window, threshold: reached)
+-            }
++        for crossing in tracker.crossings(vendor: vendor, windows: snapshot.windows,
++                                          sortedThresholds: sortedThresholds) {
++            ensureAuthorizedBeforeSend()
++            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold)
+         }
+     }
+ 
+@@ -134,3 +117,43 @@ public final class NotificationService {
+         return level
+     }
+ }
++
++/// Pure dedupe bookkeeping behind `NotificationService.observe`, split out so
++/// it is testable on runtimes where the service itself is short-circuited.
++struct NotificationThresholdTracker {
++    struct Key: Hashable {
++        let vendor: VendorId
++        let label: String
++    }
++
++    /// Highest threshold already notified per vendor window since it last
++    /// dropped below every threshold.
++    private(set) var highestNotified: [Key: Double] = [:]
++
++    /// Folds one snapshot's windows in and returns the crossings to notify.
++    mutating func crossings(vendor: VendorId, windows: [UsageWindow],
++                            sortedThresholds: [Double]) -> [(window: UsageWindow, threshold: Double)] {
++        guard let minThreshold = sortedThresholds.first else { return [] }
++        var fired: [(window: UsageWindow, threshold: Double)] = []
++        for window in windows {
++            let key = Key(vendor: vendor, label: window.label)
++            let percent = window.utilizationPercent
++            // Window dropped below all thresholds → reset so a new cycle re-arms.
++            if percent < minThreshold {
++                highestNotified.removeValue(forKey: key)
++                continue
++            }
++            // Find the highest threshold this reading has reached.
++            guard let reached = sortedThresholds.last(where: { percent >= $0 }) else { continue }
++            if reached > highestNotified[key] ?? -1 {
++                highestNotified[key] = reached
++                fired.append((window, reached))
++            }
++        }
++        // Prune this vendor's keys for windows no longer reported (xAI's
++        // "Monthly (YYYY-MM)" label rolls every cycle and would orphan one).
++        let current = Set(windows.map { Key(vendor: vendor, label: $0.label) })
++        highestNotified = highestNotified.filter { $0.key.vendor != vendor || current.contains($0.key) }
++        return fired
++    }
++}
+diff --git a/Sources/AiTaskbarApp/PinnedStatusItemManager.swift b/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
+index 7cf11c5..ac0da7a 100644
+--- a/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
++++ b/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
+@@ -78,12 +78,12 @@ public struct PinnedStatusBadgeView: View {
+ 
+     private var isFull: Bool {
+         let maxVal = max(weekly ?? 0, current)
+-        return maxVal >= thresholds.warning || maxVal >= 100
++        return SeverityColor.showsFlame(forPercent: maxVal, thresholds: thresholds)
+     }
+ 
+     private var flameColor: Color {
+         let maxVal = max(weekly ?? 0, current)
+-        return (maxVal >= thresholds.critical || maxVal >= 100) ? .red : .orange
++        return SeverityColor.flameTint(forPercent: maxVal, thresholds: thresholds)
+     }
+ 
+     public var body: some View {
+diff --git a/Sources/AiTaskbarApp/ReloginProcessTracker.swift b/Sources/AiTaskbarApp/ReloginProcessTracker.swift
+new file mode 100644
+index 0000000..26e193e
+--- /dev/null
++++ b/Sources/AiTaskbarApp/ReloginProcessTracker.swift
+@@ -0,0 +1,48 @@
++import Foundation
++
++/// The slice of `Process` the re-login tracker needs, so tests can use a fake.
++protocol ReloginProcessHandle: AnyObject {
++    var isRunning: Bool { get }
++    func terminate()
++}
++
++extension Process: ReloginProcessHandle {}
++
++/// Owns the child spawned by the "Re-login" button (`zsh -l -c <login>`).
++/// It used to be a local that was never stored, so every retry after an
++/// abandoned browser flow left another login CLI (and its OAuth callback
++/// listener) running. Now at most one is alive per vendor: a new spawn
++/// terminates the previous one first.
++@MainActor
++final class ReloginProcessTracker {
++    typealias Launcher = @MainActor (String) throws -> ReloginProcessHandle
++
++    private let launch: Launcher
++    private(set) var current: ReloginProcessHandle?
++
++    init(launch: @escaping Launcher = ReloginProcessTracker.zshLogin) {
++        self.launch = launch
++    }
++
++    /// Terminates any previous re-login child, then spawns `command`.
++    func start(command: String) throws {
++        stop()
++        current = try launch(command)
++    }
++
++    /// Terminates the tracked child if it is still running.
++    func stop() {
++        if let current, current.isRunning { current.terminate() }
++        current = nil
++    }
++
++    /// GUI apps inherit a minimal PATH that excludes `/opt/homebrew/bin`, so
++    /// the command runs through a login shell that sources the user's profile.
++    static func zshLogin(_ command: String) throws -> ReloginProcessHandle {
++        let task = Process()
++        task.executableURL = URL(fileURLWithPath: "/bin/zsh")
++        task.arguments = ["-l", "-c", command]
++        try task.run()
++        return task
++    }
++}
+diff --git a/Sources/AiTaskbarApp/ViewModels/UsageStore.swift b/Sources/AiTaskbarApp/ViewModels/UsageStore.swift
+index a5e4c95..b95cad9 100644
+--- a/Sources/AiTaskbarApp/ViewModels/UsageStore.swift
++++ b/Sources/AiTaskbarApp/ViewModels/UsageStore.swift
+@@ -98,12 +98,22 @@ public final class UsageStore: ObservableObject {
+         return v
+     }
+ 
++    /// Menu-bar space check consulted before pinning, given the current pin
++    /// count. Injected so the denied branch is testable without a live screen;
++    /// production uses `PinnedStatusItemManager.shared`.
++    public typealias PinSpaceCheck = @MainActor (Int) -> PinnedStatusItemManager.SpaceCheckResult
++    private let pinSpaceCheck: PinSpaceCheck
++
+     public init(vendors: [VendorViewModel],
+                 primary: VendorId?,
+                 thresholds: ThresholdsConfig = .init(),
+                 refreshIntervalSeconds: TimeInterval = 300,
+-                preferredOrder: [VendorId] = VendorOrder.load()) {
++                preferredOrder: [VendorId] = VendorOrder.load(),
++                pinSpaceCheck: @escaping PinSpaceCheck = { count in
++                    PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: count)
++                }) {
+         self.vendors = vendors
++        self.pinSpaceCheck = pinSpaceCheck
+         self.primary = primary
+         self.thresholds = thresholds
+         self.refreshIntervalSeconds = refreshIntervalSeconds
+@@ -241,7 +251,7 @@ public final class UsageStore: ObservableObject {
+             pinnedVendorOrder.removeAll(where: { $0 == id })
+             persistPinned(defaults: defaults)
+         } else {
+-            let spaceCheck = PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: pinnedVendorIds.count)
++            let spaceCheck = pinSpaceCheck(pinnedVendorIds.count)
+             guard spaceCheck.allowed else {
+                 pinLimitAlert = PinLimitAlertInfo(
+                     title: L10n.localizedString("pin_limit_reached_title"),
+diff --git a/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift b/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
+index c155d8d..4c4cecf 100644
+--- a/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
++++ b/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
+@@ -119,6 +119,12 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+         }
+     }
+ 
++    /// The "Re-login" child for this vendor. Lives on the view model, not the
++    /// view: the popover closes as soon as the user switches to the browser,
++    /// and the OAuth flow must survive that. Not stopped on recovery either:
++    /// a successful login exits on its own, and `agy` may be a live session.
++    let reloginProcess = ReloginProcessTracker()
++
+     public let historyStore: UsageHistoryStore?
+     private weak var notifications: NotificationService?
+     /// Bumped on every refresh — used to track in-flight task ownership
+diff --git a/Sources/AiTaskbarApp/Views/ColorTheme.swift b/Sources/AiTaskbarApp/Views/ColorTheme.swift
+index fe14fca..b085b0c 100644
+--- a/Sources/AiTaskbarApp/Views/ColorTheme.swift
++++ b/Sources/AiTaskbarApp/Views/ColorTheme.swift
+@@ -13,6 +13,19 @@ public enum SeverityColor {
+         if pct >= thresholds.warning  { return .yellow }
+         return .green
+     }
++
++    /// Whether the menu-bar flame is shown next to a percentage.
++    public static func showsFlame(forPercent pct: Double, thresholds: ThresholdsConfig) -> Bool {
++        pct >= thresholds.warning || pct >= 100
++    }
++
++    /// Menu-bar flame tint. Deliberately a two-tier scale distinct from
++    /// `tint`: orange from warning, red from critical (not from 100 %). The
++    /// flame only appears at >= warning, so its red marks the critical band.
++    /// Single source for `MenuBarLabelView` and `PinnedStatusBadgeView`.
++    public static func flameTint(forPercent pct: Double, thresholds: ThresholdsConfig) -> Color {
++        (pct >= thresholds.critical || pct >= 100) ? .red : .orange
++    }
+ }
+ 
+ extension ServiceStatusLevel {
+diff --git a/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift b/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
+index f5a4f45..f7c2be0 100644
+--- a/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
++++ b/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
+@@ -37,7 +37,7 @@ public struct MenuBarLabelView: View {
+         case .iconAndPercent:
+             iconForMaxPercent
+             let percent = store.maxUtilization
+-            let isFull = percent >= store.thresholds.warning || percent >= 100
++            let isFull = SeverityColor.showsFlame(forPercent: percent, thresholds: store.thresholds)
+             Text("\(Int(saturating: percent.rounded()))%")
+                 .font(.system(size: 15.0, weight: .bold, design: .monospaced))
+                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent,
+@@ -45,7 +45,7 @@ public struct MenuBarLabelView: View {
+             if isFull {
+                 Image(systemName: "flame.fill")
+                     .font(.system(size: 13.0, weight: .bold))
+-                    .foregroundStyle((percent >= store.thresholds.critical || percent >= 100) ? Color.red : Color.orange)
++                    .foregroundStyle(SeverityColor.flameTint(forPercent: percent, thresholds: store.thresholds))
+             }
+         case .rotating:
+             rotatingContent
+@@ -67,7 +67,7 @@ public struct MenuBarLabelView: View {
+         } else {
+             let vm = rotating[rotateIndex % rotating.count]
+             let percent = vm.state.outcome?.snapshot.maxUtilization ?? 0
+-            let isFull = percent >= store.thresholds.warning || percent >= 100
++            let isFull = SeverityColor.showsFlame(forPercent: percent, thresholds: store.thresholds)
+             Image(systemName: symbolName(for: percent))
+                 .symbolRenderingMode(.hierarchical)
+                 .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
+@@ -77,7 +77,7 @@ public struct MenuBarLabelView: View {
+             if isFull {
+                 Image(systemName: "flame.fill")
+                     .font(.system(size: 13.0, weight: .bold))
+-                    .foregroundStyle((percent >= store.thresholds.critical || percent >= 100) ? Color.red : Color.orange)
++                    .foregroundStyle(SeverityColor.flameTint(forPercent: percent, thresholds: store.thresholds))
+             }
+         }
+     }
+diff --git a/Sources/AiTaskbarApp/Views/VendorSectionView.swift b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+index 70d770a..b893c10 100644
+--- a/Sources/AiTaskbarApp/Views/VendorSectionView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+@@ -523,11 +523,10 @@ public struct VendorSectionView: View {
+     /// `scheduleReauthRetry()` re-checks the token afterwards.
+     private func runRelogin(command: String) {
+         reloginSpawnFailed = false
+-        let task = Process()
+-        task.launchPath = "/bin/zsh"
+-        task.arguments = ["-l", "-c", command]
+         do {
+-            try task.run()
++            // Tracked on the view model: a retry terminates the previous
++            // login child instead of stacking another one (LEAK-FAN-005).
++            try vm.reloginProcess.start(command: command)
+         } catch {
+             reloginSpawnFailed = true
+             return
+diff --git a/Sources/AiTaskbarCore/Models/CreditBaseline.swift b/Sources/AiTaskbarCore/Models/CreditBaseline.swift
+index d2c551d..45a9ff5 100644
+--- a/Sources/AiTaskbarCore/Models/CreditBaseline.swift
++++ b/Sources/AiTaskbarCore/Models/CreditBaseline.swift
+@@ -168,10 +168,21 @@ public final class CreditBaselineStore: Sendable {
+     /// denominator. A plain mutex, not the unfair lock, because this one is
+     /// held across file I/O.
+     private let writeGate = NSLock()
++    /// Test seam: runs inside `record` between the load and the save, so a
++    /// two-actor test can park a record mid read-modify-write.
++    private let afterLoadHook: (@Sendable () -> Void)?
+ 
+     public init(vendor: VendorId, baseDir: URL) {
+         self.vendor = vendor
+         self.baseDir = baseDir
++        self.afterLoadHook = nil
++    }
++
++    internal init(vendor: VendorId, baseDir: URL,
++                  afterLoadHook: @escaping @Sendable () -> Void) {
++        self.vendor = vendor
++        self.baseDir = baseDir
++        self.afterLoadHook = afterLoadHook
+     }
+ 
+     public static func defaultFor(_ vendor: VendorId) throws -> CreditBaselineStore {
+@@ -193,6 +204,7 @@ public final class CreditBaselineStore: Sendable {
+         writeGate.lock()
+         defer { writeGate.unlock() }
+         let stored = load()
++        afterLoadHook?()
+         let decision = CreditBaselineMath.decide(stored: stored, observation: observation)
+         let peak = decision.adoptsObservedBalance
+             ? CreditBaselineMath.updatedPeak(stored: nil, balance: observation.balance)
+@@ -239,9 +251,12 @@ public final class CreditBaselineStore: Sendable {
+         try? AtomicFileWrite.write(data, to: fileURL)
+     }
+ 
+-    /// Drops the baseline (both memory and disk). Used by tests and by a
+-    /// future "recalibrate" affordance.
++    /// Drops the baseline (both memory and disk). Used by tests and by the
++    /// "Recalibrate" affordance. Takes `writeGate` so a `record` already
++    /// between its load and save cannot re-save the old peak afterwards.
+     public func reset() {
++        writeGate.lock()
++        defer { writeGate.unlock() }
+         cached.withLock { $0 = nil }
+         try? FileManager.default.removeItem(at: fileURL)
+     }
+diff --git a/Sources/AiTaskbarProviders/AnthropicWireTypes.swift b/Sources/AiTaskbarProviders/AnthropicWireTypes.swift
+index ba60dfd..0a8a15d 100644
+--- a/Sources/AiTaskbarProviders/AnthropicWireTypes.swift
++++ b/Sources/AiTaskbarProviders/AnthropicWireTypes.swift
+@@ -157,8 +157,13 @@ extension AnthropicUsageResponse {
+         // *session* limit would otherwise be mislabeled "(7d)" AND could
+         // collide with a weekly one on the `id: \.label` the UI keys rows by.
+         // Dedupe by label as a belt-and-braces against a scoped entry
+-        // duplicating a flat window (e.g. a scoped "Opus" vs `seven_day_opus`).
+-        var seenScoped = Set<String>()
++        // duplicating a flat window (e.g. a scoped "Opus" vs `seven_day_opus`):
++        // the set is seeded with the flat labels actually emitted, so the flat
++        // window wins and `windows` never carries two rows with one label.
++        let session = window(five_hour, label: "Session (5h)")
++        let weekly = window(seven_day, label: "Weekly (7d)")
++        let opus = window(seven_day_opus, label: "Opus (7d)")
++        var seenScoped = Set([session, weekly, opus].compactMap { $0?.label })
+         let scoped: [UsageWindow] = (limits ?? []).compactMap { limit in
+             guard limit.kind == "weekly_scoped",
+                   let name = limit.scope?.model?.display_name,
+@@ -190,9 +195,9 @@ extension AnthropicUsageResponse {
+ 
+         return AnthropicSnapshot(
+             planLabel: planLabel,
+-            session: window(five_hour, label: "Session (5h)"),
+-            weekly:  window(seven_day, label: "Weekly (7d)"),
+-            opus:    window(seven_day_opus, label: "Opus (7d)"),
++            session: session,
++            weekly:  weekly,
++            opus:    opus,
+             scoped:  scoped,
+             credits: credits
+         )
+diff --git a/Sources/AiTaskbarProviders/CachedFetch.swift b/Sources/AiTaskbarProviders/CachedFetch.swift
+index 84e148e..e0830e2 100644
+--- a/Sources/AiTaskbarProviders/CachedFetch.swift
++++ b/Sources/AiTaskbarProviders/CachedFetch.swift
+@@ -23,10 +23,13 @@ public struct CachedFetch: Sendable {
+         fetch: () async throws -> Data
+     ) async throws -> CachedOutcome<Snapshot> {
+         try Task.checkCancellation()
+-        if !forceRefresh, let hit = cache.freshPayloadWithAge() {
+-            return try makeOutcome(from: hit.0, decode: decode,
+-                                    isStale: false, cacheAge: hit.1,
+-                                    lastError: nil)
++        // A fresh entry the current decoder rejects (schema change across an
++        // upgrade) falls through to the network instead of failing every tick
++        // until the TTL expires; the fetch below overwrites it on success.
++        if !forceRefresh, let hit = cache.freshPayloadWithAge(),
++           let snapshot = try? decode(hit.0) {
++            return makeOutcome(snapshot: snapshot, isStale: false,
++                               cacheAge: hit.1, lastError: nil)
+         }
+         do {
+             let data = try await fetch()
+diff --git a/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift b/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift
+new file mode 100644
+index 0000000..ef8671a
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift
+@@ -0,0 +1,54 @@
++import Testing
++import Foundation
++@testable import AiTaskbarApp
++@testable import AiTaskbarCore
++
++@Suite("NotificationThresholdTracker — per-window dedupe")
++struct NotificationThresholdTrackerTests {
++    private let thresholds: [Double] = [70, 90]
++
++    @Test("a crossing fires once, then is deduped")
++    func fires_once() {
++        var t = NotificationThresholdTracker()
++        let w = [UsageWindow(label: "Weekly (7d)", utilizationPercent: 75)]
++        #expect(t.crossings(vendor: .anthropic, windows: w, sortedThresholds: thresholds)
++            .map(\.threshold) == [70])
++        #expect(t.crossings(vendor: .anthropic, windows: w, sortedThresholds: thresholds).isEmpty)
++    }
++
++    @Test("dropping below every threshold re-arms the window")
++    func rearms() {
++        var t = NotificationThresholdTracker()
++        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 95)],
++                        sortedThresholds: thresholds)
++        _ = t.crossings(vendor: .xai, windows: [UsageWindow(label: "W", utilizationPercent: 5)],
++                        sortedThresholds: thresholds)
++        #expect(t.highestNotified.isEmpty)
++    }
++
++    /// LEAK-FAN-007: xAI labels its monthly window "Monthly (YYYY-MM)", so a
++    /// past cycle's key would otherwise live forever.
++    @Test("a window label that disappears (rolled monthly cycle) is pruned")
++    func rolled_cycle_key_is_pruned() {
++        var t = NotificationThresholdTracker()
++        _ = t.crossings(vendor: .xai,
++                        windows: [UsageWindow(label: "Monthly (2026-08)", utilizationPercent: 95)],
++                        sortedThresholds: thresholds)
++        _ = t.crossings(vendor: .xai,
++                        windows: [UsageWindow(label: "Monthly (2026-09)", utilizationPercent: 80)],
++                        sortedThresholds: thresholds)
++        #expect(t.highestNotified.keys.map(\.label) == ["Monthly (2026-09)"])
++    }
++
++    @Test("pruning one vendor leaves other vendors' keys alone")
++    func prune_is_per_vendor() {
++        var t = NotificationThresholdTracker()
++        _ = t.crossings(vendor: .anthropic,
++                        windows: [UsageWindow(label: "Weekly (7d)", utilizationPercent: 95)],
++                        sortedThresholds: thresholds)
++        _ = t.crossings(vendor: .xai,
++                        windows: [UsageWindow(label: "Monthly (2026-09)", utilizationPercent: 80)],
++                        sortedThresholds: thresholds)
++        #expect(t.highestNotified.count == 2)
++    }
++}
+diff --git a/Tests/AiTaskbarAppTests/PinnedStatusItemTests.swift b/Tests/AiTaskbarAppTests/PinnedStatusItemTests.swift
+index 7e45ea4..8dd491e 100644
+--- a/Tests/AiTaskbarAppTests/PinnedStatusItemTests.swift
++++ b/Tests/AiTaskbarAppTests/PinnedStatusItemTests.swift
+@@ -131,6 +131,31 @@ struct PinnedStatusItemTests {
+         #expect(afterRepin == ["openrouter", "openai", "anthropic"])
+     }
+ 
++    /// ARCH-ATL-005: the geometry-denied branch of `togglePinned` must be
++    /// reachable from a store-level test through the injected space check.
++    @Test("togglePinned honours an injected space check that denies")
++    func toggle_pinned_respects_denied_space_check() {
++        let name = "ai-taskbar.pinned.denied.test.\(UUID().uuidString)"
++        let suite = UserDefaults(suiteName: name)!
++        defer { suite.removePersistentDomain(forName: name) }
++        var seenCounts: [Int] = []
++        let store = UsageStore(
++            vendors: [VendorViewModel(provider: MockUsageProvider(vendorId: .openai))],
++            primary: nil,
++            preferredOrder: [.openai],
++            pinSpaceCheck: { count in
++                seenCounts.append(count)
++                return .denied(reason: "no room next to the notch")
++            }
++        )
++        store.togglePinned(.openai, defaults: suite)
++        expectFalse(store.isPinned(.openai))
++        #expect(store.pinLimitAlert?.message == "no room next to the notch")
++        #expect(store.pinLimitAlert?.title == L10n.localizedString("pin_limit_reached_title"))
++        #expect(seenCounts == [0])
++        #expect(suite.stringArray(forKey: UsageStore.pinnedDefaultsKey) == nil)
++    }
++
+     @Test("togglePinned blocks and triggers pinLimitAlert when cap is reached")
+     func toggle_pinned_blocks_when_cap_reached() {
+         let name = "ai-taskbar.pinned.cap.test.\(UUID().uuidString)"
+diff --git a/Tests/AiTaskbarAppTests/ReloginProcessTrackerTests.swift b/Tests/AiTaskbarAppTests/ReloginProcessTrackerTests.swift
+new file mode 100644
+index 0000000..e017a05
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/ReloginProcessTrackerTests.swift
+@@ -0,0 +1,72 @@
++import Testing
++import Foundation
++@testable import AiTaskbarApp
++
++private final class FakeHandle: ReloginProcessHandle {
++    var isRunning = true
++    private(set) var terminateCalls = 0
++    func terminate() { terminateCalls += 1; isRunning = false }
++}
++
++/// LEAK-FAN-005: repeated Re-login clicks must not stack login CLIs.
++@Suite("ReloginProcessTracker — one re-login child per vendor")
++@MainActor
++struct ReloginProcessTrackerTests {
++    private struct SpawnFailed: Error {}
++
++    private func tracker(_ handles: [FakeHandle]) -> (ReloginProcessTracker, () -> [String]) {
++        var queue = handles
++        var commands: [String] = []
++        let t = ReloginProcessTracker(launch: { cmd in
++            commands.append(cmd)
++            guard !queue.isEmpty else { throw SpawnFailed() }
++            return queue.removeFirst()
++        })
++        return (t, { commands })
++    }
++
++    @Test("a second spawn terminates the first")
++    func second_spawn_terminates_first() throws {
++        let first = FakeHandle(), second = FakeHandle()
++        let (t, _) = tracker([first, second])
++        try t.start(command: "claude /login")
++        try t.start(command: "claude /login")
++        #expect(first.terminateCalls == 1)
++        #expect(second.terminateCalls == 0)
++        #expect(t.current === second)
++    }
++
++    @Test("the command is handed to the launcher verbatim")
++    func passes_command() throws {
++        let (t, commands) = tracker([FakeHandle()])
++        try t.start(command: "codex login")
++        #expect(commands() == ["codex login"])
++    }
++
++    @Test("stop terminates a running child and forgets it")
++    func stop_terminates() throws {
++        let h = FakeHandle()
++        let (t, _) = tracker([h])
++        try t.start(command: "x")
++        t.stop()
++        #expect(h.terminateCalls == 1)
++        #expect(t.current == nil)
++    }
++
++    @Test("an already-exited child is not signalled")
++    func exited_child_not_terminated() throws {
++        let h = FakeHandle()
++        let (t, _) = tracker([h])
++        try t.start(command: "x")
++        h.isRunning = false
++        t.stop()
++        #expect(h.terminateCalls == 0)
++    }
++
++    @Test("a failed spawn rethrows and tracks nothing")
++    func failed_spawn() {
++        let (t, _) = tracker([])
++        #expect(throws: SpawnFailed.self) { try t.start(command: "x") }
++        #expect(t.current == nil)
++    }
++}
+diff --git a/Tests/AiTaskbarAppTests/SeverityColorFlameTests.swift b/Tests/AiTaskbarAppTests/SeverityColorFlameTests.swift
+new file mode 100644
+index 0000000..7284ad8
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/SeverityColorFlameTests.swift
+@@ -0,0 +1,44 @@
++import Testing
++import SwiftUI
++@testable import AiTaskbarApp
++@testable import AiTaskbarCore
++
++/// ARCH-ATL-007: the flame rule used by the menu bar and pinned badges lives
++/// in one helper. Its critical..99 band is red (current menu-bar behavior),
++/// which deliberately differs from `tint` (orange there).
++@Suite("SeverityColor flame rule")
++struct SeverityColorFlameTests {
++    private let t = ThresholdsConfig(warning: 70, critical: 90)
++
++    @Test("no flame below warning")
++    func hidden_below_warning() {
++        #expect(!SeverityColor.showsFlame(forPercent: 69, thresholds: t))
++    }
++
++    @Test("flame shown from warning")
++    func shown_from_warning() {
++        #expect(SeverityColor.showsFlame(forPercent: 70, thresholds: t))
++    }
++
++    @Test("flame shown at 100 even with thresholds above 100")
++    func shown_at_100() {
++        #expect(SeverityColor.showsFlame(forPercent: 100,
++                                         thresholds: ThresholdsConfig(warning: 150, critical: 200)))
++    }
++
++    @Test("warning..critical band is orange")
++    func warning_band_orange() {
++        #expect(SeverityColor.flameTint(forPercent: 80, thresholds: t) == .orange)
++    }
++
++    @Test("critical..99 band is red")
++    func critical_band_red() {
++        #expect(SeverityColor.flameTint(forPercent: 95, thresholds: t) == .red)
++    }
++
++    @Test("100 is red even with a critical threshold above 100")
++    func full_is_red() {
++        #expect(SeverityColor.flameTint(forPercent: 100,
++                                        thresholds: ThresholdsConfig(warning: 150, critical: 200)) == .red)
++    }
++}
+diff --git a/Tests/AiTaskbarCoreTests/CreditBaselineTests.swift b/Tests/AiTaskbarCoreTests/CreditBaselineTests.swift
+index 4be22a8..ba02428 100644
+--- a/Tests/AiTaskbarCoreTests/CreditBaselineTests.swift
++++ b/Tests/AiTaskbarCoreTests/CreditBaselineTests.swift
+@@ -213,6 +213,38 @@ final class CreditBaselineStoreTests {
+         #expect(s.recordAndPeak(balance: 100) == 100)
+     }
+ 
++    /// RACE-CRO-007: a `record` already between load and save must not
++    /// re-save its peak after a concurrent `reset` (Recalibrate) returned.
++    @Test("reset waits for an in-flight record, so Recalibrate is not reverted")
++    func reset_serializes_with_record() {
++        let parked = DispatchSemaphore(value: 0)
++        let release = DispatchSemaphore(value: 0)
++        let s = CreditBaselineStore(vendor: .openai, baseDir: dir, afterLoadHook: {
++            parked.signal()
++            release.wait()
++        })
++        let recordDone = DispatchSemaphore(value: 0)
++        let resetDone = DispatchSemaphore(value: 0)
++        DispatchQueue.global().async {
++            s.recordAndPeak(balance: 5000)
++            recordDone.signal()
++        }
++        parked.wait()
++        DispatchQueue.global().async {
++            s.reset()
++            resetDone.signal()
++        }
++        // Gated: reset cannot finish while the record holds the write gate.
++        let resetFinishedEarly = resetDone.wait(timeout: .now() + 0.3) == .success
++        release.signal()
++        recordDone.wait()
++        if !resetFinishedEarly { resetDone.wait() }
++        expectFalse(resetFinishedEarly)
++        expectTrue(s.load() == nil)
++        expectFalse(FileManager.default.fileExists(
++            atPath: dir.appendingPathComponent("openai.json").path))
++    }
++
+     @Test("an unwritable directory degrades to an in-memory baseline, never a crash")
+     func unwritable_dir_is_survivable() {
+         let bad = CreditBaselineStore(
+diff --git a/Tests/AiTaskbarProvidersTests/AnthropicScopedDedupTests.swift b/Tests/AiTaskbarProvidersTests/AnthropicScopedDedupTests.swift
+new file mode 100644
+index 0000000..9a87748
+--- /dev/null
++++ b/Tests/AiTaskbarProvidersTests/AnthropicScopedDedupTests.swift
+@@ -0,0 +1,59 @@
++import Testing
++import Foundation
++@testable import AiTaskbarCore
++@testable import AiTaskbarProviders
++
++/// ARCH-ATL-002: `UsageWindow.label` is the row identity (`ForEach(id: \.label)`)
++/// and the notification-dedupe key, so a scoped "Opus" limit must not emit a
++/// second "Opus (7d)" next to the flat `seven_day_opus` window.
++@Suite("Anthropic scoped vs flat window dedupe")
++struct AnthropicScopedDedupTests {
++    private static let json = #"""
++    {
++      "five_hour": { "utilization": 10 },
++      "seven_day": { "utilization": 20 },
++      "seven_day_opus": { "utilization": 30 },
++      "limits": [
++        { "kind": "weekly_scoped", "percent": 40,
++          "scope": { "model": { "display_name": "Opus" } } },
++        { "kind": "weekly_scoped", "percent": 50,
++          "scope": { "model": { "display_name": "Fable" } } }
++      ]
++    }
++    """#
++
++    private func snapshot() throws -> AnthropicSnapshot {
++        let parsed = try JSONDecoder().decode(
++            AnthropicUsageResponse.self, from: Data(Self.json.utf8))
++        return parsed.toSnapshot(planLabel: nil)
++    }
++
++    @Test("window labels are unique when seven_day_opus and a scoped Opus coexist")
++    func labelsUnique() throws {
++        let labels = try VendorSnapshot.anthropic(snapshot()).windows.map(\.label)
++        #expect(Set(labels).count == labels.count)
++    }
++
++    @Test("the flat seven_day_opus value wins over the scoped duplicate")
++    func flatOpusWins() throws {
++        let opus = try VendorSnapshot.anthropic(snapshot()).windows.filter { $0.label == "Opus (7d)" }
++        #expect(opus.map(\.utilizationPercent) == [30])
++    }
++
++    @Test("an unrelated scoped model is still emitted")
++    func otherScopedKept() throws {
++        let labels = try snapshot().scoped.map(\.label)
++        #expect(labels == ["Fable (7d)"])
++    }
++
++    @Test("a scoped Opus is kept when seven_day_opus is absent")
++    func scopedOpusWithoutFlat() throws {
++        let json = #"""
++        { "limits": [ { "kind": "weekly_scoped", "percent": 40,
++                        "scope": { "model": { "display_name": "Opus" } } } ] }
++        """#
++        let snap = try JSONDecoder().decode(
++            AnthropicUsageResponse.self, from: Data(json.utf8)).toSnapshot(planLabel: nil)
++        #expect(snap.scoped.map(\.label) == ["Opus (7d)"])
++    }
++}
+diff --git a/Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift b/Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift
+index c89428b..60ce0d5 100644
+--- a/Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift
++++ b/Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift
+@@ -35,6 +35,37 @@ struct CachedFetchEdgeTests {
+         #expect(!outcome.isStale)
+     }
+ 
++    /// ARCH-ATL-006: a fresh cache entry the current decoder rejects (e.g. a
++    /// schema change across an upgrade) must not fail every tick for the TTL;
++    /// the lifecycle falls through to the network and overwrites the entry.
++    @Test("fresh but undecodable cache falls through to the fetcher")
++    func fresh_undecodable_cache_falls_through_to_fetch() async throws {
++        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
++            .appendingPathComponent("ai-taskbar-cfbad-\(UUID().uuidString)")
++        try Paths.ensureDir(tmp)
++        defer { try? FileManager.default.removeItem(at: tmp) }
++        let cache = DiskCache(vendor: .kimi, baseDir: tmp, ttl: 600)
++        try cache.writePayload(Data("old-schema".utf8))
++        let fetcher = CachedFetch(cache: cache)
++        struct SchemaError: Error {}
++        let fetches = LockedCounter()
++
++        let outcome: CachedOutcome<String> = try await fetcher.run(
++            forceRefresh: false,
++            decode: { data in
++                let text = String(decoding: data, as: UTF8.self)
++                guard text == "new-schema" else { throw SchemaError() }
++                return text
++            },
++            fetch: { fetches.increment(); return Data("new-schema".utf8) }
++        )
++
++        #expect(outcome.snapshot == "new-schema")
++        #expect(!outcome.isStale)
++        #expect(fetches.value == 1)
++        #expect(cache.anyPayload() == Data("new-schema".utf8))
++    }
++
+     @Test("forceRefresh=false with fresh cache skips fetcher")
+     func uses_fresh_cache_without_fetcher() async throws {
+         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+@@ -226,3 +257,11 @@ private final class StubGate: @unchecked Sendable {
+         semaphore.signal()
+     }
+ }
++
++/// Thread-safe call counter for `@Sendable` fetch closures.
++private final class LockedCounter: @unchecked Sendable {
++    private let lock = NSLock()
++    private var count = 0
++    func increment() { lock.lock(); count += 1; lock.unlock() }
++    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
++}

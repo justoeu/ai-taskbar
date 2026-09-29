@@ -78,12 +78,12 @@ public struct PinnedStatusBadgeView: View {
 
     private var isFull: Bool {
         let maxVal = max(weekly ?? 0, current)
-        return maxVal >= thresholds.warning || maxVal >= 100
+        return SeverityColor.showsFlame(forPercent: maxVal, thresholds: thresholds)
     }
 
     private var flameColor: Color {
         let maxVal = max(weekly ?? 0, current)
-        return (maxVal >= thresholds.critical || maxVal >= 100) ? .red : .orange
+        return SeverityColor.flameTint(forPercent: maxVal, thresholds: thresholds)
     }
 
     public var body: some View {

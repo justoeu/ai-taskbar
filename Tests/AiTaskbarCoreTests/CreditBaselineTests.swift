@@ -213,6 +213,38 @@ final class CreditBaselineStoreTests {
         #expect(s.recordAndPeak(balance: 100) == 100)
     }
 
+    /// RACE-CRO-007: a `record` already between load and save must not
+    /// re-save its peak after a concurrent `reset` (Recalibrate) returned.
+    @Test("reset waits for an in-flight record, so Recalibrate is not reverted")
+    func reset_serializes_with_record() {
+        let parked = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let s = CreditBaselineStore(vendor: .openai, baseDir: dir, afterLoadHook: {
+            parked.signal()
+            release.wait()
+        })
+        let recordDone = DispatchSemaphore(value: 0)
+        let resetDone = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            s.recordAndPeak(balance: 5000)
+            recordDone.signal()
+        }
+        parked.wait()
+        DispatchQueue.global().async {
+            s.reset()
+            resetDone.signal()
+        }
+        // Gated: reset cannot finish while the record holds the write gate.
+        let resetFinishedEarly = resetDone.wait(timeout: .now() + 0.3) == .success
+        release.signal()
+        recordDone.wait()
+        if !resetFinishedEarly { resetDone.wait() }
+        expectFalse(resetFinishedEarly)
+        expectTrue(s.load() == nil)
+        expectFalse(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("openai.json").path))
+    }
+
     @Test("an unwritable directory degrades to an in-memory baseline, never a crash")
     func unwritable_dir_is_survivable() {
         let bad = CreditBaselineStore(

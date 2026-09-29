@@ -1,0 +1,12 @@
+{
+ "id": "LEAK-FAN-007",
+ "verdict": "APROVA",
+ "reasoning": "NotificationService.swift:68-72 and :121-159 move the dedupe logic into an internal NotificationThresholdTracker struct and add pruning per vendor. The notification identifier and content at :85-90 are unchanged, and nothing is persisted. The change stays in this file plus NotificationThresholdTrackerTests.swift.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:155"
+ ],
+ "lens": "SCOPE",
+ "_task": "a9dc967f30ddbf6d8",
+ "batch": "B11-app-lows"
+}

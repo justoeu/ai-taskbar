@@ -1,0 +1,14 @@
+{
+ "id": "LEAK-FAN-005",
+ "verdict": "APROVA",
+ "reasoning": "The new file ReloginProcessTracker.swift gets its own test file, ReloginProcessTrackerTests.swift. It is wired in at VendorViewModel.swift:122-126 and VendorSectionView.swift:523-530. The command string and the zsh -l -c invocation are unchanged. The deprecated launchPath is replaced by executableURL, the same binary. No new entitlement, host or dependency is added. The other Process users (CodexResetProcess.swift:9, ConfigWatcher.swift:69) already own their handles and are not the button-driven leak described in the finding. Not stopping the child when needsReauth flips false is a documented choice (the agy session can still be live).",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ReloginProcessTracker.swift:1",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:122",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift:526"
+ ],
+ "lens": "SCOPE",
+ "_task": "a9dc967f30ddbf6d8",
+ "batch": "B11-app-lows"
+}

@@ -1,0 +1,61 @@
+{
+  "id": "ARCH-ATL-002",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 16:28:05 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarProviders/AnthropicWireTypes.swift:163-166 now builds the flat session/weekly/opus windows first and puts their labels into seenScoped before the scoped entries are processed. A scoped 'Opus (7d)' next to seven_day_opus now fails the insert at :172, so the flat window wins. Only one route produces the defect, and the snapshot takes the same session/weekly/opus values as before, so the output is unchanged when nothing collides. The filtered run includes GoldenSnapshot and AnthropicProvider, and both are green. Reversal check: restoring HEAD turned 3 AnthropicScopedDedup tests red (label count 4 vs 5, [40,30] vs [30], a leftover 'Opus (7d)'). Minor note: a scoped entry whose display_name is 'Session' or 'Weekly' would also be dropped. That is the correct thing to do, because it prevents duplicate ids.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/AnthropicWireTypes.swift:163",
+        "Sources/AiTaskbarProviders/AnthropicWireTypes.swift:172",
+        "Tests/AiTaskbarProvidersTests/AnthropicScopedDedupTests.swift:34"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarProviders/AnthropicWireTypes.swift:163-166 now builds the session, weekly and opus windows once. The same values seed seenScoped and are passed to AnthropicSnapshot at :198-200, so no rule is copied. The comment now matches the code, which was the finding. No new nesting. Golden-style tests are in AnthropicScopedDedupTests.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/AnthropicWireTypes.swift:163",
+        "Sources/AiTaskbarProviders/AnthropicWireTypes.swift:198"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The change is limited to Sources/AiTaskbarProviders/AnthropicWireTypes.swift:157-200. The session, weekly and opus windows are now built once and their labels are put into seenScoped before the scoped entries are read. The public shape of AnthropicSnapshot is unchanged: the same fields and labels, and the flat window now wins a collision. No serialized format changed. The only test file added is AnthropicScopedDedupTests.swift. The larger fix the finding suggested, a stable UsageWindow.id used by VendorSectionView.swift:558 ForEach(id: \\.label) and by the notification keys, was left out on purpose. That keeps this fix small.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AnthropicWireTypes.swift:157",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorSectionView.swift:558"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

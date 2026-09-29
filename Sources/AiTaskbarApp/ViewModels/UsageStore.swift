@@ -98,12 +98,22 @@ public final class UsageStore: ObservableObject {
         return v
     }
 
+    /// Menu-bar space check consulted before pinning, given the current pin
+    /// count. Injected so the denied branch is testable without a live screen;
+    /// production uses `PinnedStatusItemManager.shared`.
+    public typealias PinSpaceCheck = @MainActor (Int) -> PinnedStatusItemManager.SpaceCheckResult
+    private let pinSpaceCheck: PinSpaceCheck
+
     public init(vendors: [VendorViewModel],
                 primary: VendorId?,
                 thresholds: ThresholdsConfig = .init(),
                 refreshIntervalSeconds: TimeInterval = 300,
-                preferredOrder: [VendorId] = VendorOrder.load()) {
+                preferredOrder: [VendorId] = VendorOrder.load(),
+                pinSpaceCheck: @escaping PinSpaceCheck = { count in
+                    PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: count)
+                }) {
         self.vendors = vendors
+        self.pinSpaceCheck = pinSpaceCheck
         self.primary = primary
         self.thresholds = thresholds
         self.refreshIntervalSeconds = refreshIntervalSeconds
@@ -241,7 +251,7 @@ public final class UsageStore: ObservableObject {
             pinnedVendorOrder.removeAll(where: { $0 == id })
             persistPinned(defaults: defaults)
         } else {
-            let spaceCheck = PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: pinnedVendorIds.count)
+            let spaceCheck = pinSpaceCheck(pinnedVendorIds.count)
             guard spaceCheck.allowed else {
                 pinLimitAlert = PinLimitAlertInfo(
                     title: L10n.localizedString("pin_limit_reached_title"),

@@ -1,0 +1,14 @@
+{
+ "id": "ARCH-ATL-007",
+ "verdict": "APROVA",
+ "reasoning": "ColorTheme.swift:17-28 adds the two helpers, showsFlame and flameTint. They replace all four inline copies: MenuBarLabelView.swift:40/48/70/80 and PinnedStatusItemManager.swift:81/86. Grep shows no other copy of the rule left in Sources. The behavior is preserved exactly (it was not changed to match SeverityColor.tint), and the doc comment explains why. The new test is SeverityColorFlameTests.swift.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/ColorTheme.swift:17",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:48",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/PinnedStatusItemManager.swift:86"
+ ],
+ "lens": "SCOPE",
+ "_task": "a9dc967f30ddbf6d8",
+ "batch": "B11-app-lows"
+}

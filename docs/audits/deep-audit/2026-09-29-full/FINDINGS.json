@@ -808,7 +808,7 @@
     "impact": "If the API returns seven_day_opus together with a weekly_scoped entry whose display_name is Opus, the result is duplicate SwiftUI ForEach ids (rows dropped or mis-diffed) and two windows sharing one notification-dedupe slot, so alerts re-fire whenever the two percentages alternate. Tying identity to English prose also blocks localizing labels without breaking dedupe.",
     "fix": "Seed seenScoped with the flat labels, or better, add a stable id to UsageWindow, use it for ForEach and notification keys, and keep label display-only.",
     "test_red_green": {
-      "name": "AnthropicGoldenTests.scoped_opus_does_not_duplicate_flat_opus",
+      "name": "AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat",
       "assert_before": "A fixture with seven_day_opus plus weekly_scoped display_name Opus yields windows with Opus (7d) twice; Set(labels).count != labels.count: FAIL",
       "assert_after": "Labels/ids are unique"
     },
@@ -817,10 +817,41 @@
     "cetico_evidence": "The mismatch is real: AnthropicWireTypes.swift:159-167 claims to dedupe a scoped 'Opus' against seven_day_opus, but seenScoped is seeded only with scoped labels, and :195 emits 'Opus (7d)' separately. The only observed payload scopes 'Fable' (Fixtures.swift:9,15-17), so the triggering input (seven_day_opus plus a weekly_scoped Opus) is unobserved.",
     "verification": "cetico",
     "domain": "architecture",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/AnthropicWireTypes.swift",
     "id": "ARCH-ATL-002",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat",
+    "resolved_at": "2026-09-29 16:28:05 UTC",
+    "resolved_note": "batch B11-app-lows",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:28:05 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Atlas",
@@ -947,7 +978,7 @@
     "impact": "The store-level integration of the notch/space limit, which took four fix PRs (#26-#29), cannot be tested: tests always see allowed, and a configured manager would read the live menu bar of the test machine. The pure evaluateSpaceMath is tested; its wiring into togglePinned is not.",
     "fix": "Inject a pinSpaceChecker closure/protocol into UsageStore, defaulted at the composition root to PinnedStatusItemManager.shared.canAddPinnedStatusItem.",
     "test_red_green": {
-      "name": "UsageStorePinTests.toggle_respects_denied_space_check",
+      "name": "PinnedStatusItemTests#toggle_pinned_respects_denied_space_check",
       "assert_before": "No way to make togglePinned see a denied geometry result without a live screen",
       "assert_after": "With a checker that always denies, togglePinned(.openai) leaves pinnedVendorIds empty and sets pinLimitAlert"
     },
@@ -955,10 +986,41 @@
     "cetico_evidence": "UsageStore.swift:244 calls PinnedStatusItemManager.shared directly. It returns allowed when no store or screen is configured, so the denied branch cannot be reached from store-level tests.",
     "verification": "cetico",
     "domain": "architecture",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/ViewModels/UsageStore.swift",
     "id": "ARCH-ATL-005",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "PinnedStatusItemTests#toggle_pinned_respects_denied_space_check",
+    "resolved_at": "2026-09-29 16:28:05 UTC",
+    "resolved_note": "batch B11-app-lows",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:28:05 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste PinnedStatusItemTests#toggle_pinned_respects_denied_space_check · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Atlas",
@@ -972,7 +1034,7 @@
     "impact": "When a decoder changes on upgrade (e.g. the XAICachedPayload envelope or the Gemini schema-throwing branch), a still-fresh cache entry makes each tick fail for up to the TTL (~5 min) without trying the network. last_error is not recorded, so the stale tooltip cannot explain it. It self-heals, so impact is limited.",
     "fix": "On a fresh-hit decode failure, discard the entry and fall through to fetch, inside CachedFetch (extend, do not fork).",
     "test_red_green": {
-      "name": "CachedFetchTests.fresh_undecodable_cache_falls_through_to_fetch",
+      "name": "CachedFetchEdgeTests#fresh_undecodable_cache_falls_through_to_fetch",
       "assert_before": "Seed a fresh cache with bytes that make decode throw and a fetch that returns valid bytes: run() throws",
       "assert_after": "run() returns the fetched snapshot with isStale false and overwrites the cache"
     },
@@ -980,10 +1042,41 @@
     "cetico_evidence": "CachedFetch.swift:26-30: the fresh-hit makeOutcome/decode sits outside the do/catch at :31-64, so there is no fetch fallthrough and no markFailed. Reachability is narrow: the cache is written only after a successful decode (:34-36), so it takes a decoder change across an upgrade within the TTL. It self-heals within ~5 min.",
     "verification": "cetico",
     "domain": "architecture",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/CachedFetch.swift",
     "id": "ARCH-ATL-006",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "CachedFetchEdgeTests#fresh_undecodable_cache_falls_through_to_fetch",
+    "resolved_at": "2026-09-29 16:28:05 UTC",
+    "resolved_note": "batch B11-app-lows",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:28:05 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste CachedFetchEdgeTests#fresh_undecodable_cache_falls_through_to_fetch · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "in_progress": false
   },
   {
     "title": "Interactive Keychain authorization blocks a cooperative-pool thread while holding the reader's mutation lock, ignoring the project's own readOffPool convention",
@@ -1524,10 +1617,22 @@
     "cetico_evidence": "It is true that UsageSnapshot.swift:44-46 puts s.credits in windows and therefore in maxUtilization. The premise that this is 'the same kind' as Codex credits does not hold. Anthropic extra_usage has a server-side denominator (monthly_limit plus utilization, AnthropicWireTypes.swift:176-185), while the CLAUDE.md rule targets Codex's locally derived high-water mark. OpenRouter, Kimi and xAI balances are also in windows by design. Whether an overage budget near its cap should tint the menu bar is a product decision, not a proven defect.",
     "verification": "cetico",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "accepted",
     "path": "Sources/AiTaskbarCore/Models/UsageSnapshot.swift",
     "id": "BUG-ART-008",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "accept": {
+      "type": "intencional",
+      "what": "Anthropic Usage credits keep driving maxUtilization and notifications",
+      "consequence": "A near-cap overage budget can tint the menu bar even when the plan windows are low",
+      "reopen_if": "The product owner decides overage budgets must not move the menu-bar %, or a user report shows it misleads",
+      "ratified_by": "user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    },
+    "accepted_at": "2026-09-29 16:28:06 UTC",
+    "progress": [
+      "2026-09-29: aceito (intencional) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Artemis",
@@ -2806,7 +2911,7 @@
     "impact": "Grows by one process tree per abandoned retry, bounded by clicks. Duplicate listeners can also make later logins fail.",
     "fix": "Keep the Process on VendorViewModel; do not re-spawn while it isRunning (or terminate the old one first); terminate it when needsReauth flips false.",
     "test_red_green": {
-      "name": "ReloginSpawnerTests.secondClickDoesNotStackProcesses",
+      "name": "ReloginProcessTrackerTests#second_spawn_terminates_first,#passes_command,#stop_terminates,#exited_child_not_terminated,#failed_spawn",
       "assert_before": "two spawns of sleep 600 -> 2 live pids",
       "assert_after": "1 live pid; the old pid is ESRCH"
     },
@@ -2814,10 +2919,41 @@
     "cetico_evidence": "VendorSectionView.swift:524-528 keeps the Process in a local variable and never tracks or stops it. The button is disabled for 120 s (:503, :533), so the growth is at most one tree per 120 s of user clicks. The claim that an abandoned claude/codex login waits for its callback forever was not verified.",
     "verification": "cetico",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/Views/VendorSectionView.swift",
     "id": "LEAK-FAN-005",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "ReloginProcessTrackerTests#second_spawn_terminates_first,#passes_command,#stop_terminates,#exited_child_not_terminated,#failed_spawn",
+    "resolved_at": "2026-09-29 16:28:06 UTC",
+    "resolved_note": "batch B11-app-lows",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:28:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste ReloginProcessTrackerTests#second_spawn_terminates_first,#passes_command,#stop_terminates,#exited_child_not_terminated,#failed_spawn · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Fantasma",
@@ -4300,7 +4436,7 @@
     "impact": "Between critical and 99% the flame is red while the adjacent icon is orange. The rule is copied three times, so a threshold change must be made in all of them. Cosmetic.",
     "fix": "Add SeverityColor.flame(forPercent:thresholds:) and use it at all three sites.",
     "test_red_green": {
-      "name": "SeverityColorTests.flame_band",
+      "name": "SeverityColorFlameTests (6 cases)",
       "assert_before": "Rule is inline in the views; nothing to assert",
       "assert_after": "The shared helper is pinned for the critical..99 band"
     },
@@ -4308,10 +4444,41 @@
     "cetico_evidence": "MenuBarLabelView.swift:48,80 and PinnedStatusItemManager.swift:86 each repeat `>= critical || >= 100 ? red : orange`. ColorTheme.swift:11-12 maps >=100 to red and >=critical to orange. The two rules diverge in the critical..99 band.",
     "verification": "cetico",
     "domain": "architecture",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/Views/MenuBarLabelView.swift",
     "id": "ARCH-ATL-007",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "SeverityColorFlameTests (6 cases)",
+    "resolved_at": "2026-09-29 16:28:06 UTC",
+    "resolved_note": "batch B11-app-lows",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:28:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste SeverityColorFlameTests (6 cases) · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "in_progress": false
   },
   {
     "title": "ConfigLoader.onAfterSave is typed @Sendable (callable anywhere) but its only consumer traps unless it runs on MainActor",
@@ -4859,7 +5026,7 @@
     "impact": "+1 tiny entry per month, negligible. The path is also disabled on macOS 26.",
     "fix": "Prune the keys of this vendor that are absent from snapshot.windows at the end of observe().",
     "test_red_green": {
-      "name": "NotificationServiceTests.rolledCycleKeyIsPruned",
+      "name": "NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms",
       "assert_before": "2 keys after a cycle rollover",
       "assert_after": "1 key"
     },
@@ -4867,10 +5034,41 @@
     "cetico_evidence": "NotificationService.swift:70-76 only removes a key when the same label drops below the threshold, so a monthly label leaves one tiny orphan entry each month. The whole path is off on macOS 26 (:65 isRuntimeKnownIncompatible).",
     "verification": "cetico",
     "domain": "memleak",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarApp/NotificationService.swift",
     "id": "LEAK-FAN-007",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms",
+    "resolved_at": "2026-09-29 16:28:06 UTC",
+    "resolved_note": "batch B11-app-lows",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:28:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Fantasma",
@@ -5156,7 +5354,7 @@
     "fix": "Take writeGate in reset(). Optionally skip record() for stale-fallback decodes.",
     "failure_scenario": "Fetch thread in record(): load() returns stored (peak 10000). Main thread: recalibrateCredits -> reset() clears the cache and the file. Fetch thread: save(peak 10000). On the next refresh the peak is 10000 again.",
     "test_red_green": {
-      "name": "creditBaseline_resetDuringRecord_isNotReverted",
+      "name": "CreditBaselineStoreTests#reset_serializes_with_record",
       "assert_before": "Two actors: A calls record() with a load hook paused on a barrier; B calls reset(); then release. Expect load() == nil afterwards. FAILS today (the old peak is restored).",
       "assert_after": "After reset completes, the baseline is nil or seeded only from observations that started after the reset."
     },
@@ -5165,9 +5363,40 @@
     "cetico_evidence": "reset() does skip writeGate (CreditBaseline.swift:244-247 vs :193). But record() writes only if stored != updated (:206). A concurrent 'keep' decode with unchanged flags therefore never re-saves the old peak. A revert needs the concurrent decode to also change has_credits/promo or push the balance past the peak, in the same microseconds as the click. recalibrateCredits then forces a refresh (VendorSectionView.swift:569-570), which re-seeds anyway.",
     "verification": "cetico",
     "domain": "race",
-    "status": "open",
+    "status": "resolved",
     "id": "RACE-CRO-007",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "CreditBaselineStoreTests#reset_serializes_with_record",
+    "resolved_at": "2026-09-29 16:28:06 UTC",
+    "resolved_note": "batch B11-app-lows",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 16:28:06 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": false
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste CreditBaselineStoreTests#reset_serializes_with_record · revisão approved (3/3) · batch B11-app-lows"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cronos",

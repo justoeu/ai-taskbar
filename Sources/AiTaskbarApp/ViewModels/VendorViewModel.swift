@@ -119,6 +119,12 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         }
     }
 
+    /// The "Re-login" child for this vendor. Lives on the view model, not the
+    /// view: the popover closes as soon as the user switches to the browser,
+    /// and the OAuth flow must survive that. Not stopped on recovery either:
+    /// a successful login exits on its own, and `agy` may be a live session.
+    let reloginProcess = ReloginProcessTracker()
+
     public let historyStore: UsageHistoryStore?
     private weak var notifications: NotificationService?
     /// Bumped on every refresh — used to track in-flight task ownership

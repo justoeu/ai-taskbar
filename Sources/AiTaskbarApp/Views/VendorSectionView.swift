@@ -523,11 +523,10 @@ public struct VendorSectionView: View {
     /// `scheduleReauthRetry()` re-checks the token afterwards.
     private func runRelogin(command: String) {
         reloginSpawnFailed = false
-        let task = Process()
-        task.launchPath = "/bin/zsh"
-        task.arguments = ["-l", "-c", command]
         do {
-            try task.run()
+            // Tracked on the view model: a retry terminates the previous
+            // login child instead of stacking another one (LEAK-FAN-005).
+            try vm.reloginProcess.start(command: command)
         } catch {
             reloginSpawnFailed = true
             return

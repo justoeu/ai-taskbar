@@ -168,10 +168,21 @@ public final class CreditBaselineStore: Sendable {
     /// denominator. A plain mutex, not the unfair lock, because this one is
     /// held across file I/O.
     private let writeGate = NSLock()
+    /// Test seam: runs inside `record` between the load and the save, so a
+    /// two-actor test can park a record mid read-modify-write.
+    private let afterLoadHook: (@Sendable () -> Void)?
 
     public init(vendor: VendorId, baseDir: URL) {
         self.vendor = vendor
         self.baseDir = baseDir
+        self.afterLoadHook = nil
+    }
+
+    internal init(vendor: VendorId, baseDir: URL,
+                  afterLoadHook: @escaping @Sendable () -> Void) {
+        self.vendor = vendor
+        self.baseDir = baseDir
+        self.afterLoadHook = afterLoadHook
     }
 
     public static func defaultFor(_ vendor: VendorId) throws -> CreditBaselineStore {
@@ -193,6 +204,7 @@ public final class CreditBaselineStore: Sendable {
         writeGate.lock()
         defer { writeGate.unlock() }
         let stored = load()
+        afterLoadHook?()
         let decision = CreditBaselineMath.decide(stored: stored, observation: observation)
         let peak = decision.adoptsObservedBalance
             ? CreditBaselineMath.updatedPeak(stored: nil, balance: observation.balance)
@@ -239,9 +251,12 @@ public final class CreditBaselineStore: Sendable {
         try? AtomicFileWrite.write(data, to: fileURL)
     }
 
-    /// Drops the baseline (both memory and disk). Used by tests and by a
-    /// future "recalibrate" affordance.
+    /// Drops the baseline (both memory and disk). Used by tests and by the
+    /// "Recalibrate" affordance. Takes `writeGate` so a `record` already
+    /// between its load and save cannot re-save the old peak afterwards.
     public func reset() {
+        writeGate.lock()
+        defer { writeGate.unlock() }
         cached.withLock { $0 = nil }
         try? FileManager.default.removeItem(at: fileURL)
     }

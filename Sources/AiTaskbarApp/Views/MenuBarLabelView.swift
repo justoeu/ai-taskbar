@@ -37,7 +37,7 @@ public struct MenuBarLabelView: View {
         case .iconAndPercent:
             iconForMaxPercent
             let percent = store.maxUtilization
-            let isFull = percent >= store.thresholds.warning || percent >= 100
+            let isFull = SeverityColor.showsFlame(forPercent: percent, thresholds: store.thresholds)
             Text("\(Int(saturating: percent.rounded()))%")
                 .font(.system(size: 15.0, weight: .bold, design: .monospaced))
                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent,
@@ -45,7 +45,7 @@ public struct MenuBarLabelView: View {
             if isFull {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 13.0, weight: .bold))
-                    .foregroundStyle((percent >= store.thresholds.critical || percent >= 100) ? Color.red : Color.orange)
+                    .foregroundStyle(SeverityColor.flameTint(forPercent: percent, thresholds: store.thresholds))
             }
         case .rotating:
             rotatingContent
@@ -67,7 +67,7 @@ public struct MenuBarLabelView: View {
         } else {
             let vm = rotating[rotateIndex % rotating.count]
             let percent = vm.state.outcome?.snapshot.maxUtilization ?? 0
-            let isFull = percent >= store.thresholds.warning || percent >= 100
+            let isFull = SeverityColor.showsFlame(forPercent: percent, thresholds: store.thresholds)
             Image(systemName: symbolName(for: percent))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
@@ -77,7 +77,7 @@ public struct MenuBarLabelView: View {
             if isFull {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 13.0, weight: .bold))
-                    .foregroundStyle((percent >= store.thresholds.critical || percent >= 100) ? Color.red : Color.orange)
+                    .foregroundStyle(SeverityColor.flameTint(forPercent: percent, thresholds: store.thresholds))
             }
         }
     }

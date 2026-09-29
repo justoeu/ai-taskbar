@@ -1,0 +1,13 @@
+{
+ "id": "ARCH-ATL-005",
+ "verdict": "APROVA",
+ "reasoning": "UsageStore.swift:101-116 adds a pinSpaceCheck init parameter. Its default calls PinnedStatusItemManager.shared, so every existing call site and the production behavior stay the same. The type is in the app target only, so no external contract changed. togglePinned at :254 is the only place that uses it. The test change is in PinnedStatusItemTests.swift only.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift:101",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/ViewModels/UsageStore.swift:254"
+ ],
+ "lens": "SCOPE",
+ "_task": "a9dc967f30ddbf6d8",
+ "batch": "B11-app-lows"
+}

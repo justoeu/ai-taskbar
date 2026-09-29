@@ -23,10 +23,13 @@ public struct CachedFetch: Sendable {
         fetch: () async throws -> Data
     ) async throws -> CachedOutcome<Snapshot> {
         try Task.checkCancellation()
-        if !forceRefresh, let hit = cache.freshPayloadWithAge() {
-            return try makeOutcome(from: hit.0, decode: decode,
-                                    isStale: false, cacheAge: hit.1,
-                                    lastError: nil)
+        // A fresh entry the current decoder rejects (schema change across an
+        // upgrade) falls through to the network instead of failing every tick
+        // until the TTL expires; the fetch below overwrites it on success.
+        if !forceRefresh, let hit = cache.freshPayloadWithAge(),
+           let snapshot = try? decode(hit.0) {
+            return makeOutcome(snapshot: snapshot, isStale: false,
+                               cacheAge: hit.1, lastError: nil)
         }
         do {
             let data = try await fetch()

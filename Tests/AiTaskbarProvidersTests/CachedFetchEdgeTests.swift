@@ -35,6 +35,37 @@ struct CachedFetchEdgeTests {
         #expect(!outcome.isStale)
     }
 
+    /// ARCH-ATL-006: a fresh cache entry the current decoder rejects (e.g. a
+    /// schema change across an upgrade) must not fail every tick for the TTL;
+    /// the lifecycle falls through to the network and overwrites the entry.
+    @Test("fresh but undecodable cache falls through to the fetcher")
+    func fresh_undecodable_cache_falls_through_to_fetch() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-cfbad-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cache = DiskCache(vendor: .kimi, baseDir: tmp, ttl: 600)
+        try cache.writePayload(Data("old-schema".utf8))
+        let fetcher = CachedFetch(cache: cache)
+        struct SchemaError: Error {}
+        let fetches = LockedCounter()
+
+        let outcome: CachedOutcome<String> = try await fetcher.run(
+            forceRefresh: false,
+            decode: { data in
+                let text = String(decoding: data, as: UTF8.self)
+                guard text == "new-schema" else { throw SchemaError() }
+                return text
+            },
+            fetch: { fetches.increment(); return Data("new-schema".utf8) }
+        )
+
+        #expect(outcome.snapshot == "new-schema")
+        #expect(!outcome.isStale)
+        #expect(fetches.value == 1)
+        #expect(cache.anyPayload() == Data("new-schema".utf8))
+    }
+
     @Test("forceRefresh=false with fresh cache skips fetcher")
     func uses_fresh_cache_without_fetcher() async throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -225,4 +256,12 @@ private final class StubGate: @unchecked Sendable {
         lock.unlock()
         semaphore.signal()
     }
+}
+
+/// Thread-safe call counter for `@Sendable` fetch closures.
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func increment() { lock.lock(); count += 1; lock.unlock() }
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
 }

@@ -1,0 +1,13 @@
+{
+ "id": "ARCH-ATL-005",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:101-116 adds a pinSpaceCheck init parameter. It defaults to PinnedStatusItemManager.shared, so production call sites stay the same. :254 uses the injected check. It is a small test seam with a documented reason, not speculative abstraction. The public typealias is needed because init is public.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:101",
+  "Sources/AiTaskbarApp/ViewModels/UsageStore.swift:254"
+ ],
+ "lens": "QUALITY",
+ "_task": "a7c893a28b9196648",
+ "batch": "B11-app-lows"
+}

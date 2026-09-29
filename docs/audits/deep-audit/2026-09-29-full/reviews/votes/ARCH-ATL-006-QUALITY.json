@@ -1,0 +1,13 @@
+{
+ "id": "ARCH-ATL-006",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarProviders/CachedFetch.swift:29-30 uses try? decode(hit.0) on the fresh-cache path. Checked against the CLAUDE.md try? rule, this does not swallow a user-visible error. The fresh cache is an optimization, and a decode failure falls through to the network. If the fetch succeeds, :41 overwrites the bad entry. If it fails, the catch blocks call markFailed, so last_error is recorded, which the finding said was missing. fallback() at :107 then re-decodes the same bytes with plain try, so the schema error still reaches the caller. Nothing is turned into a silent default value. The comment at :26-28 states why the try? is there. The old makeOutcome(from:decode:) overload is still used by fallback(), so no dead code is left.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/CachedFetch.swift:29",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:107"
+ ],
+ "lens": "QUALITY",
+ "_task": "a7c893a28b9196648",
+ "batch": "B11-app-lows"
+}

@@ -1,0 +1,15 @@
+{
+ "id": "ARCH-ATL-006",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarProviders/CachedFetch.swift:29-33: a decode throw on a fresh cache entry now falls through into the do/catch. There the fetch runs, a failure calls markFailed, and the stale fallback applies. All the Task.checkCancellation points are still there: at entry (:25), after the fetch (:36) and before writePayload (:38). CancellationError is still rethrown (:41). The fallback semantics are unchanged: anyPayloadWithAge, isStale=true, lastError set. The try? only covers the synchronous decode of cached bytes, and the network result is written only after its own decode succeeds, which is allowed as best-effort. Reversal check: restoring HEAD CachedFetch made the test fail with 'Caught error: SchemaError()'. Note: if the fetch also fails, fallback re-decodes the same bad bytes and throws the decode error rather than the network error. That was already the behaviour before the fix.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/CachedFetch.swift:29",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:36",
+  "Sources/AiTaskbarProviders/CachedFetch.swift:111",
+  "Tests/AiTaskbarProvidersTests/CachedFetchEdgeTests.swift:41"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "ac58d9b70f63aed99",
+ "batch": "B11-app-lows"
+}

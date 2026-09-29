@@ -11,7 +11,7 @@ public final class NotificationService {
 
     /// Tracks the highest threshold already notified for each vendor:window
     /// since it last dropped below all thresholds.
-    private var highestNotified: [String: Double] = [:]
+    private var tracker = NotificationThresholdTracker()
 
     /// Whether the OS authorization prompt has already been requested in
     /// this process. The auth request is deferred until the first notification
@@ -65,27 +65,10 @@ public final class NotificationService {
         // here keeps `observe()` cheap in the common path.
         guard config.enabled, !Self.isRuntimeKnownIncompatible else { return }
         let sortedThresholds = config.notifyAt.sorted()
-        guard let minThreshold = sortedThresholds.first else { return }
-
-        for window in snapshot.windows {
-            let key = "\(vendor.rawValue):\(window.label)"
-            let percent = window.utilizationPercent
-
-            // Window dropped below all thresholds → reset so a new cycle re-arms.
-            if percent < minThreshold {
-                highestNotified.removeValue(forKey: key)
-                continue
-            }
-
-            // Find the highest threshold this reading has reached.
-            let reached = sortedThresholds.last(where: { percent >= $0 })
-            guard let reached else { continue }
-            let alreadyNotified = highestNotified[key] ?? -1
-            if reached > alreadyNotified {
-                highestNotified[key] = reached
-                ensureAuthorizedBeforeSend()
-                send(vendor: vendor, window: window, threshold: reached)
-            }
+        for crossing in tracker.crossings(vendor: vendor, windows: snapshot.windows,
+                                          sortedThresholds: sortedThresholds) {
+            ensureAuthorizedBeforeSend()
+            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold)
         }
     }
 
@@ -132,5 +115,45 @@ public final class NotificationService {
             return L10n.localizedString("notif_resets_fmt", level, relative)
         }
         return level
+    }
+}
+
+/// Pure dedupe bookkeeping behind `NotificationService.observe`, split out so
+/// it is testable on runtimes where the service itself is short-circuited.
+struct NotificationThresholdTracker {
+    struct Key: Hashable {
+        let vendor: VendorId
+        let label: String
+    }
+
+    /// Highest threshold already notified per vendor window since it last
+    /// dropped below every threshold.
+    private(set) var highestNotified: [Key: Double] = [:]
+
+    /// Folds one snapshot's windows in and returns the crossings to notify.
+    mutating func crossings(vendor: VendorId, windows: [UsageWindow],
+                            sortedThresholds: [Double]) -> [(window: UsageWindow, threshold: Double)] {
+        guard let minThreshold = sortedThresholds.first else { return [] }
+        var fired: [(window: UsageWindow, threshold: Double)] = []
+        for window in windows {
+            let key = Key(vendor: vendor, label: window.label)
+            let percent = window.utilizationPercent
+            // Window dropped below all thresholds → reset so a new cycle re-arms.
+            if percent < minThreshold {
+                highestNotified.removeValue(forKey: key)
+                continue
+            }
+            // Find the highest threshold this reading has reached.
+            guard let reached = sortedThresholds.last(where: { percent >= $0 }) else { continue }
+            if reached > highestNotified[key] ?? -1 {
+                highestNotified[key] = reached
+                fired.append((window, reached))
+            }
+        }
+        // Prune this vendor's keys for windows no longer reported (xAI's
+        // "Monthly (YYYY-MM)" label rolls every cycle and would orphan one).
+        let current = Set(windows.map { Key(vendor: vendor, label: $0.label) })
+        highestNotified = highestNotified.filter { $0.key.vendor != vendor || current.contains($0.key) }
+        return fired
     }
 }
