@@ -1,6 +1,6 @@
 # Deep Audit Report
 
-> **Progresso:** 3 resolvidos · 16 refutados · 0 aceitos · 96 abertos (17% fechado) · atualizado 2026-09-29 04:54:30 UTC
+> **Progresso:** 159 resolvidos · 16 refutados · 10 aceitos · 3 abertos (98% fechado) · atualizado 2026-09-29 20:17:43 UTC
 
 **Projeto:** `ai-taskbar` - **versao** `0.23.6` (Makefile) - **branch** `audit/deep-audit-2026-09-29` - head at start `656075a`
 
@@ -133,3 +133,190 @@ lint-findings gate result: 115 achados, 96 aberto, 3 resolvido, 16 refutado, 0 a
 ## Verdict
 
 The HIGH-severity surface this round was real but narrow: two cost-accounting bugs (Claude transcript double-counting, opencode dollars leaking into Codex's total) and one integrity gap in the update path (DMG installed with no anchor outside the release itself and no quarantine flag). All three are now fixed, each with a red-before/green-after test that fails on git revert, and each cleared a 3-lens review; two of them only after a legitimate changes_requested round that caught real leftover debt (a renamed-but-still-zero computation, a roughly 30-line duplicated subprocess-kill routine), not rubber-stamped. The security-deep panel ran a genuine 3-voter quorum over 15 candidates (not a placeholder; panel_source "vote-files"), kept 5, and correctly dropped 10 speculative ones below quorum. Cetico's pass was substantive: 16 refutations with cited evidence and 10 HIGH claims correctly downgraded to MEDIUM/LOW on inspection, which is a healthy signal that the original wave agents over-called severity rather than under-called it. Coverage stayed above floor and even rose slightly (91.53% to 91.74%). Nothing was accepted or waived; the 96 open findings (10 MEDIUM, 71 LOW, 15 INFO) are genuinely open, not risk decisions in disguise, and the single dependency in the tree (TOMLKit) is confirmed current. The core is well hardened for this round's HIGH-only scope; the MEDIUM backlog (mostly cost/window-accounting edge cases and one more crash-hardening item, SEC-CER-002) is the honest next target, not a hidden gap.
+
+---
+
+## Remediação (fechamento pós-round-1, 2026-09-29)
+
+> Esta seção cobre o que aconteceu **depois** do fechamento acima (commit `dfca407`,
+> escopo "corrigir só os HIGH"). O coordenador manteve a rodada aberta e rodou 21
+> lotes de remediação (B1..B21) sobre o backlog de MEDIUM/LOW/INFO, mais os
+> follow-ups que o próprio painel de revisão levantou a cada lote, mais 1 item
+> reportado pelo usuário. `FINDINGS.json` (188 achados) é a fonte da verdade para
+> todo número abaixo; nada aqui foi inferido fora dele e do histórico git.
+
+**Projeto:** `ai-taskbar` · **versão** `0.23.6` (Makefile) · **branch** `audit/deep-audit-2026-09-29` · head final `2aef89b`
+
+### Estado final por severidade x desfecho
+
+| Severidade | Total | Resolvido | Aceito | Refutado | Aberto |
+|---|---|---|---|---|---|
+| CRITICAL | 0 | 0 | 0 | 0 | 0 |
+| HIGH | 3 | 3 | 0 | 0 | 0 |
+| MEDIUM | 11 | 11 | 0 | 0 | 0 |
+| LOW | 117 | 114 | 3 | 0 | 0 |
+| INFO | 57 | 31 | 7 | 16 | 3 |
+| **Total** | **188** | **159** | **10** | **16** | **3** |
+
+`refutado` (16) e `aceito` (10) são KPIs separados — nunca somados. Nenhum dos 16
+refutados veio das remediações B1-B21: todas as 16 refutações aconteceram no
+Cetico do round 1 (ver seção acima) e permanecem inalteradas.
+
+`lint-findings.mjs --dir PACK --gate` (sem `--fix`, achados já corretos):
+
+```
+188 achados · 3 aberto · 159 resolvido · 16 refutado · 10 aceito · 0 bloqueando PR
+severidade: CRITICAL 0 · HIGH 3 · MEDIUM 11 · LOW 117 · INFO 57
+OK (gate de fechamento passou)
+```
+
+### MEDIUM resolvido nesta fase (11/11), com destaque para o item reportado pelo usuário
+
+Todos os 11 MEDIUM abertos ao fim do round 1 (mais 2 que entraram como MEDIUM
+durante a remediação) foram fechados. O único reportado pelo usuário, não por um
+agente:
+
+- **UPDATE-SCHED-001** — "Update check loop sleeps a fixed 86400 s after a launch
+  check that UpdateChecker skips when the last check is < 24 h old, so the real
+  gap reaches ~48 h." Corrigido no batch **B17-update-sched**, commit
+  **`5f7a4ce`** ("fix(updates): check once per calendar day instead of a fixed
+  24 h sleep"): a checagem agora é devida sem checagem prévia, num novo dia
+  local, ou após 24 h; o loop dorme até a próxima marca (meia-noite local ou
+  +24 h, piso de 60 s) e recalcula a cada rodada. Prova: 14 testes
+  (`UpdateCheckDueTests#same_day_waits_for_midnight`, `...previous_day_is_due`,
+  `...never_checked_is_due`, `...older_than_a_day_is_due`,
+  `...future_last_check_is_capped`, `...delay_has_a_floor`,
+  `...dst_start_waits_for_shifted_day_start`, `...dst_start_new_day_is_due`,
+  `...dst_end_uses_24h_bound`, `...dst_end_same_day_after_24h_is_due`,
+  `...check_if_needed_runs_on_new_day`,
+  `RefreshSchedulerTests#update_loop_checks_on_relaunch_next_day`,
+  `...update_loop_sleeps_until_next_day`, `...update_loop_not_started_when_disabled`).
+  Revisão: aprovado 3/3 (`reviews/UPDATE-SCHED-001.json`, panel_source
+  vote-files). Também os 4 MEDIUM `SEC-CER-002/003/004/005` do painel
+  security-deep (round 1: sobreviventes de quórum, ainda abertos) foram
+  fechados no batch **B3-numeric**.
+
+### LOW: 114 resolvidos, 3 aceitos
+
+117 LOW no total; 114 corrigidos com teste red/green e revisão 3/3, 3 aceitos
+como won't-fix (ver tabela de aceites abaixo: `BUG-ART-008`, `BUG-MAE-003`,
+`DEP-PRI-003`).
+
+### INFO: 31 resolvidos, 7 aceitos, 16 refutados, 3 abertos
+
+57 INFO no total. Os 16 refutados são os mesmos 16 refutados pelo Cetico no
+round 1 (nenhum INFO novo foi refutado na remediação). Os 3 abertos abaixo são
+todos `review-followup-r2`, levantados pelo próprio painel de revisão do
+último lote (B21) e enfileirados para a próxima rodada — não há instância
+atual do problema em produção:
+
+| id | título | por que ficou aberto |
+|---|---|---|
+| CQ-MAE-025 | Over-long comment line in `check-source-ratchets.sh` check 4 block | Cosmético, levantado por Hígia no painel do B21; entra na fila, não bloqueia nada hoje |
+| DUP-MAE-008 | Six App test files copy the same `#filePath` walk-up to read `Localizable.strings` | Duplicação só em código de teste, levantada por Hígia no B21 |
+| TEST-MAE-013 | Inline format ratchet (check 4) does not scan `NSString(format:)`, `String(format:locale:)`, `.init(format:)`, formats held in a `let`, multi-line literals, or `%x` fed a Swift `Int` | Levantado por Ferreiro/Hígia/Nêmesis no B21; gap latente no gate, sem caso real hoje em `Sources/` |
+
+### Aceites (won't-fix) — 10, todos ratificados, nenhum silencioso
+
+Toda entrada `accepted` carrega `accept.type`, `accept.what`, `accept.consequence`
+e `accept.reopen_if` em `FINDINGS.json` — nenhuma foi apenas marcada e
+esquecida. Todas ratificadas pela mesma política: *"user won't-fix policy
+relayed by coordinator 2026-09-29 (pending product-owner confirmation)"* — ou
+seja, a decisão de não corrigir veio do usuário via coordenador, mas ainda
+aguarda confirmação formal do dono do produto.
+
+| id | sev | tipo | o quê | consequência | reabre se |
+|---|---|---|---|---|---|
+| BUG-ART-008 | LOW | intencional | Créditos de uso da Anthropic (`extra_usage`) continuam dentro de `windows`, movendo `maxUtilization`/notificações | Um overage perto do teto pode colorir a menu bar mesmo com as janelas do plano baixas | Dono do produto decidir que overage não deve mexer no %, ou relato de usuário confuso |
+| BUG-MAE-003 | LOW | sem-correção-disponível | OpenRouter não tem custo de Analytics em nenhuma janela; 30-day activity/uso vitalício ficam só no card | É um número ausente, não errado | Uma captura verbatim de `/api/v1/activity` mostrar campo de data por item |
+| DEP-PRI-003 | LOW | trade-off | `select-swift` não tem teto de versão, sempre builda com o Xcode mais novo da imagem | CI pode ficar vermelho sem mudança no repo; DMGs são locais, binário publicado não muda | CI/release passarem a anexar binário publicado, ou CI divergir de `make validate` local por bump de imagem |
+| ARCH-MAE-001 | INFO | trade-off | `UsageWindow.label` continua sendo texto de exibição e chave de identidade (ForEach id, chave de notificação) | Duas janelas com o mesmo label colidiriam; renomear um label rearma notificações uma vez | Um vendor emitir duas janelas com o mesmo label, ou labels serem localizados |
+| BEST-MAE-001 | INFO | dívida cosmética | `CostWindow` é público mas só o Core usa; `KeyedUsage.usage` é reconstruído a cada leitura | Pequeno custo de CPU em leituras | Um profile mostrar `KeyedUsage.usage` em hot path |
+| CQ-MAE-013 | INFO | dívida cosmética | `validate.sh` mistura as linhas do ratchet com sua própria saída colorida | Nenhuma no gate | Saída passar a ser parseada por alguma ferramenta |
+| CQ-MAE-020 | INFO | dívida cosmética | `gemini.prefer_antigravity`, `xai.prefer_grok_cli`, `xai.grok_base_url` só mudam editando `config.toml` | Usuário precisa editar o TOML para essas 3; defaults cobrem o caso comum | Um usuário pedir controle na Settings, ou o default mudar |
+| CQ-MAE-024 | INFO | dívida cosmética | `send -> deliveryFinished -> tracker` passa 4 valores soltos em vez de uma referência única | Nenhum defeito hoje; um 5º campo futuro poderia ser esquecido em algum call site | Um campo novo for adicionado, ou algo tocar as assinaturas de `unmark`/`delivered`/`park` |
+| PERF-MAE-001 | INFO | intencional | `AtomicFileWrite` agora faz fsync em toda escrita, incl. marcadores de erro do `DiskCache` e `ConfigLoader.save` | Poucos ms por escrita, uma vez por refresh/save | Um hitch de MainActor for rastreado até `AtomicFileWrite` |
+| TEST-MAE-008 | INFO | intencional | `COVERAGE_FLOOR` vazio cai para 0 (report-only) por expansão de default | Nenhuma em `make validate`/CI | CI/`validate.sh` passarem a enviar um valor vazio |
+
+### Revisão das correções (Nêmesis/Hígia/Jano)
+
+159 correções passaram pelo painel de 3 lentes (CORRECTNESS/QUALITY/SCOPE),
+todas com `panel_source: "vote-files"` e 3 votantes reais (não placeholder).
+**149 aprovadas de primeira** (3/3 `APROVA` na primeira rodada); **10
+precisaram de uma rodada de `MUDANCAS`** antes de aprovar: `BUG-ART-002`,
+`SEC-CER-001` (ambas já contadas no round 1, ver acima), mais
+`BUG-ART-010`, `RACE-CRO-002`, `RACE-CRO-010`, `TEST-ARG-001`, `BP-REP-003`,
+`CQ-MAE-011`, `CQ-MAE-012`, `BUG-MAE-010` na remediação — em todos os 8
+casos novos o lens que pediu mudança está registrado em
+`reviews/votes-round1/<batch>/<id>-<LENS>.json`. **Nenhuma dispensa
+(`review.waived`)** em nenhum dos 159 — zero ocorrências no campo em todo o
+`FINDINGS.json`, então não há dispensa silenciosa a relatar.
+
+### Dependências (deps-latest.json) — inalterado desde o round 1
+
+- 1 pacote consultado (SPM: `LebJe/TOMLKit`, única dependência de runtime).
+- 1 em dia, 0 atrás do latest stable, 0 erros de consulta (`runner_errors: []`).
+- Como `summary.errors` é 0, "0 desatualizado" é total real, não piso.
+- `update_map.batches` só tem a entrada `stack-detected` em prioridade `info`
+  (nenhum lote de atualização acionável). Isso aparece no Roadmap do
+  `report.html` e na seção "Roadmap de libs / dependências" do `TASKS.md`.
+- Nenhuma dependência nova entrou durante B1-B21; `deps-latest.json` não foi
+  re-executado porque o grafo de pacotes não mudou (nenhum commit tocou
+  `Package.swift`/`Package.resolved`).
+
+### Batches de remediação (B1..B21) — commits desde `dfca407`
+
+`dfca407` é o commit que publicou o pack do round 1 (report/findings/tasks).
+Todos os commits abaixo vêm depois dele, na ordem em que aconteceram
+(`git log --oneline dfca407..HEAD`):
+
+| batch | achados fechados | commit | resumo |
+|---|---|---|---|
+| B1-analytics | 7 | `9734f63` | Custo mensal correto na Analytics; nada de 30-day/ciclo na Week; modelos não sessões |
+| B2-scanners | 8 | `dd0b32a` | Uma janela de 7 dias calendário; eventos Codex rebilled não recontados; somas do opencode seguras |
+| B3-numeric | 7 | `1273b30` | Sem `Int(Double)` trapping em número de vendor/credencial/histórico (inclui SEC-CER-002/003/004/005) |
+| B4-i18n | 5 | `3baba88` | Avisos/erros de Gemini e Grok estruturados e localizados |
+| B5-history (+r2) | 8 | `b2e6d9d` | Carga de histórico de Analytics fora da main; só leituras ao vivo gravadas |
+| B6-files-tests (+r2) | 8 | `c5233a2` | 0600 na criação; segredos soltos travados; symlinks recusados; testes mais fortes |
+| B7-scheduler | 5 | `36ff002` | Um vendor travado não trava mais o refresh de todos; testes determinísticos |
+| B8-updater (+r2) | 8 | `a69b8ba` | Fetches limitados; opt-in de pre-release funcionando; precedência SemVer; sem vazamento de temp |
+| B9-bounded-io | 6 | `a236d38` | Corpo de resposta de vendor limitado; `agy` roda via `BoundedProcess` |
+| B10-oauth-keychain (+r2) | 4 | `98e3875` | Refresh atômico single-flight; sem troca de refresh-token obsoleto; Keychain fora do pool |
+| B11-app-lows | 7 | `a88c89c` | Dedup de janela Anthropic; fallback do `CachedFetch`; re-login rastreado; notificações podadas |
+| B12-cleanup | 16 | `518b03e` | Código morto removido; view de top-models dedupada; diff de Settings fixado; idiomas menores |
+| B13-gates-ci | 6 | `96cc790` | Ratchets de fonte compartilhados em CI+validate; coverage floor aceita decimal; checkout fixado; token CI read-only |
+| B14-app-followups | 10 | `29fe50c` | Janelas idle/calendário da Analytics; durações saturantes; chaves de notificação estáveis; tooltip stale localizado; fetch travado reiniciado; top-up de config logado |
+| B15-core-followups | 13 | `4126da0` | Config ilegível preservado intacto; redirects de DMG com allow-list; leituras limitadas em chunks; drenos de processo abandonáveis; priming de label com leitura única (inclui SEC-MAE-001) |
+| B16-final (+r2) | 16 | `72d6b13` | Cooldown de 429 por chegada; título de notificação localizado com retry em entrega falha; idade compartilhada do DiskCache; testes de analytics determinísticos |
+| B17-update-sched | 1 | `5f7a4ce` | **UPDATE-SCHED-001** (reportado pelo usuário) — checagem de update uma vez por dia calendário local |
+| B18-last-followups (+r2) | 13 | `86804e2` | Tracker de threshold ciente de entrega; percentual arredondado compartilhado; label de quota localizado; back-off de update em repo inválido |
+| B19-tail | 4 | `e58b83e` | Cruzamentos pendentes com token; média de analytics arredondada; título com formato 64-bit |
+| B20-format-sweep | 1 | `6997e97` | Especificadores de formato inteiro 64-bit em todos os arquivos de strings, com ratchet |
+| B21-strings-tail | 3 | `2aef89b` | Uma chave "done" por idioma; literais de formato inline 64-bit; ratchet de formato mais amplo |
+
+Cada linha `docs(audit): B<n> review votes, follow-ups and progress [skip
+release]` intercalada nesses commits no `git log` é o Escriba/Maestro
+publicando os votos e o progresso daquele lote — não uma correção de
+produto.
+
+### Verdict final (pós-remediação)
+
+Depois de 21 lotes adicionais sobre o backlog aberto no round 1, a rodada
+fecha em 188 achados: 0 CRITICAL, 3 HIGH (resolvidos no round 1), 11 MEDIUM
+(11 resolvidos, incluindo o único item reportado por usuário,
+UPDATE-SCHED-001, e os 4 sobreviventes MEDIUM/LOW do painel security-deep),
+117 LOW (114 resolvidos, 3 aceitos), 57 INFO (31 resolvidos, 7 aceitos, 16
+refutados no round 1, 3 abertos e enfileirados). As 159 correções passaram
+todas pelo painel de 3 lentes com voto real (vote-files, 3 votantes); 10
+precisaram de uma rodada de `MUDANCAS` antes de aprovar, e zero foram
+dispensadas sem o painel (`review.waived` = 0 em todo o arquivo). Os 10
+aceites são decisões de risco genuínas — cada um com `type`/`what`/
+`consequence`/`reopen_if` — não achados refutados disfarçados nem INFO
+cosméticos empurrados para lá sem dono; todos aguardam confirmação do
+product owner, conforme registrado. Os 3 abertos restantes são INFO
+levantados pelo próprio painel de revisão no último lote (B21), sem
+instância atual, corretamente enfileirados em vez de forçados a um
+desfecho. A dependência única do projeto (TOMLKit) segue no latest stable,
+sem erro de consulta. Não há CRITICAL nem HIGH abertos, e não há aceite
+disfarçando um MEDIUM ou HIGH não corrigido: o núcleo está bem blindado
+neste fechamento.
