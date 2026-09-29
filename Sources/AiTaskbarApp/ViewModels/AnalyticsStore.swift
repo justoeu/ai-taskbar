@@ -78,73 +78,60 @@ public final class AnalyticsStore: ObservableObject {
             .compactMap(VendorId.init(rawValue:))
     }
 
+    /// Folds opencode's per-vendor scans into the vendor estimates Analytics
+    /// shows. Pure so the default `estimatesProvider` merge is testable.
+    nonisolated static func mergingOpencode(
+        _ byVendor: [VendorId: CostEstimate],
+        opencode: [VendorId: OpencodeScan]
+    ) -> [VendorId: CostEstimate] {
+        var dict = byVendor
+        for (v, scan) in opencode {
+            // opencode is a client, not a vendor (see `CostEstimator.opencode`):
+            // its tokens are shown, its dollars are never added. OpenAI rides a
+            // subscription; xAI/Z.AI/Gemini totals must not be restated. Models
+            // keep a $0 entry so the breakdown still lists them.
+            if dict[v] == nil {
+                dict[v] = CostEstimate(
+                    usdToday: 0,
+                    usdLast7Days: 0,
+                    modelBreakdownToday: scan.todayByModel.mapValues { _ in 0 },
+                    modelBreakdownLast7Days: scan.last7DaysByModel.mapValues { _ in 0 },
+                    totalsByModel: scan.last7DaysByModel
+                )
+            } else if let existing = dict[v] {
+                var mergedToday = existing.modelBreakdownToday
+                for m in scan.todayByModel.keys where mergedToday[m] == nil {
+                    mergedToday[m] = 0
+                }
+                var mergedLast7 = existing.modelBreakdownLast7Days
+                for m in scan.last7DaysByModel.keys where mergedLast7[m] == nil {
+                    mergedLast7[m] = 0
+                }
+                var mergedTotals = existing.totalsByModel
+                for (m, u) in scan.last7DaysByModel {
+                    CostAggregator.add(u, into: &mergedTotals, model: m)
+                }
+                dict[v] = CostEstimate(
+                    usdToday: existing.usdToday,
+                    usdLast7Days: existing.usdLast7Days,
+                    modelBreakdownToday: mergedToday,
+                    modelBreakdownLast7Days: mergedLast7,
+                    totalsByModel: mergedTotals,
+                    computedAt: existing.computedAt,
+                    isApproximate: existing.isApproximate,
+                    note: existing.note
+                )
+            }
+        }
+        return dict
+    }
+
     public convenience init(usageStore: UsageStore, costEstimator: CostEstimator) {
         self.init(
             estimatesProvider: { [weak costEstimator, weak usageStore] in
                 guard let costEstimator else { return [:] }
-                var dict = costEstimator.byVendor
-                for (v, scan) in costEstimator.opencode {
-                    let table = PricingTable.table(for: v)
-                    var computedToday: [String: Double] = [:]
-                    for (model, usage) in scan.todayByModel {
-                        let existingCost = scan.costTodayByModel[model] ?? 0
-                        if existingCost > 0 {
-                            computedToday[model] = existingCost
-                        } else if let pricing = PricingTable.lookup(model, table: table) {
-                            computedToday[model] = CostMath.cost(usage: usage, pricing: pricing)
-                        } else {
-                            computedToday[model] = 0
-                        }
-                    }
-
-                    var computedLast7: [String: Double] = [:]
-                    for (model, usage) in scan.last7DaysByModel {
-                        let existingCost = scan.costLast7DaysByModel[model] ?? 0
-                        if existingCost > 0 {
-                            computedLast7[model] = existingCost
-                        } else if let pricing = PricingTable.lookup(model, table: table) {
-                            computedLast7[model] = CostMath.cost(usage: usage, pricing: pricing)
-                        } else {
-                            computedLast7[model] = 0
-                        }
-                    }
-
-                    let sumToday = computedToday.values.reduce(0, +)
-                    let sumLast7 = computedLast7.values.reduce(0, +)
-
-                    if dict[v] == nil {
-                        dict[v] = CostEstimate(
-                            usdToday: sumToday,
-                            usdLast7Days: sumLast7,
-                            modelBreakdownToday: computedToday,
-                            modelBreakdownLast7Days: computedLast7,
-                            totalsByModel: scan.last7DaysByModel
-                        )
-                    } else if let existing = dict[v] {
-                        var mergedToday = existing.modelBreakdownToday
-                        for (m, c) in computedToday {
-                            mergedToday[m, default: 0] += c
-                        }
-                        var mergedLast7 = existing.modelBreakdownLast7Days
-                        for (m, c) in computedLast7 {
-                            mergedLast7[m, default: 0] += c
-                        }
-                        var mergedTotals = existing.totalsByModel
-                        for (m, u) in scan.last7DaysByModel {
-                            CostAggregator.add(u, into: &mergedTotals, model: m)
-                        }
-                        dict[v] = CostEstimate(
-                            usdToday: existing.usdToday + sumToday,
-                            usdLast7Days: existing.usdLast7Days + sumLast7,
-                            modelBreakdownToday: mergedToday,
-                            modelBreakdownLast7Days: mergedLast7,
-                            totalsByModel: mergedTotals,
-                            computedAt: existing.computedAt,
-                            isApproximate: existing.isApproximate,
-                            note: existing.note
-                        )
-                    }
-                }
+                var dict = AnalyticsStore.mergingOpencode(
+                    costEstimator.byVendor, opencode: costEstimator.opencode)
                 if let usageStore {
                     for v in usageStore.vendors {
                         let vid = v.vendorId
