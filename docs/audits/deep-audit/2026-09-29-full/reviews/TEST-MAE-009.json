@@ -1,0 +1,61 @@
+{
+  "id": "TEST-MAE-009",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:43:56 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "AnalyticsEstimatesMergeTests.swift:67 swaps the fixed 100 ms sleep for drainMainQueue() (MainQueueDrain.swift:8) followed by await historyReloadTask. The receive(on: main) sinks (AnalyticsStore.swift:204,211) are all enqueued synchronously before the drain, so after it historyReloadTask is the last task created. This is deterministic rather than timing-based. The suite passes. The only later hop is the 600 ms re-recompute in refresh(force:), which the old sleep version didn't cover either.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:67",
+        "Tests/AiTaskbarAppTests/MainQueueDrain.swift:8",
+        "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:271"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:67: the fixed 100 ms sleep is replaced by the shared `drainMainQueue()`. That helper lives in one new 12-line file used by both tests, not copied inline. Its comment explains why a FIFO main-queue hop is deterministic.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:67",
+        "Tests/AiTaskbarAppTests/MainQueueDrain.swift:8"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:67 only. The fixed 100 ms sleep is replaced by the new shared helper Tests/AiTaskbarAppTests/MainQueueDrain.swift. No production code is touched.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:67",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/MainQueueDrain.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

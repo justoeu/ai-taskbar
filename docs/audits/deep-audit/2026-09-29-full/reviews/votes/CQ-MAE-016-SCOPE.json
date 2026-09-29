@@ -1,0 +1,12 @@
+{
+ "id": "CQ-MAE-016",
+ "verdict": "APROVA",
+ "reasoning": "Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift:35-50 only. Two tests now pin that the alias table is disjoint and non-empty, so a configuration error can never reach `.unavailable`. OpencodeScanner is not changed.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift:39"
+ ],
+ "lens": "SCOPE",
+ "_task": "a1f3f2dec09501900",
+ "batch": "B16-final"
+}

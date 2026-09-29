@@ -1,0 +1,15 @@
+{
+ "id": "CQ-MAE-012",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/NotificationService.swift:100-106 moves the title into a small `static func title(vendor:window:)` backed by the new key `notif_title_fmt`, added to all three .lproj files (en/pt-BR/es) in the same diff. This follows the repo's rule against user-facing English literals. Tests pin each locale with one #expect per test.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/NotificationService.swift:85",
+  "Sources/AiTaskbarApp/NotificationService.swift:103",
+  "Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:77",
+  "Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift:21"
+ ],
+ "lens": "QUALITY",
+ "_task": "ab05609a1a9d8c245",
+ "batch": "B16-final"
+}

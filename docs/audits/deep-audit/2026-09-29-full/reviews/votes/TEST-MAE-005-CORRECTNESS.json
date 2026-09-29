@@ -1,0 +1,13 @@
+{
+ "id": "TEST-MAE-005",
+ "verdict": "APROVA",
+ "reasoning": "AnalyticsStoreHistoryLoadTests.swift:40-43. settle() now drains the main queue and then awaits historyReloadTask, with no fixed sleep. I redid the mutation myself: removed the post-load publishSnapshot() at AnalyticsStore.swift:290 and loaded_history_reaches_snapshot went RED (samples 0 vs 1). Restored, and the diff is byte-identical to the saved one.",
+ "required_changes": [],
+ "cited_paths": [
+  "Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift:40",
+  "Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:290"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a03222027f28f6d15",
+ "batch": "B16-final"
+}

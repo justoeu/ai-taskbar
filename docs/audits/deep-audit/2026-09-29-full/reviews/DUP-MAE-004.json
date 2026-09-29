@@ -1,0 +1,62 @@
+{
+  "id": "DUP-MAE-004",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:43:56 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "DiskCache.swift:367-416. payloadAge() is now the only stat/mtime/age computation. freshPayloadWithAge and anyPayloadWithAge go through payloadWithAge(within:), and hasFreshPayload uses the same `age <= ttl`. The <= boundaries and the withIOLock scope are unchanged, and payloadAge is only called inside withIOLock. Mutation `age <= limit` -> `age < limit` in the shared helper: 'payload aged exactly ttl is still fresh' and 'maxStale boundary' both go RED. Restored.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cache/DiskCache.swift:367",
+        "Sources/AiTaskbarCore/Cache/DiskCache.swift:375",
+        "Sources/AiTaskbarCore/Cache/DiskCache.swift:393"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Cache/DiskCache.swift:89-128 replaces three copies of the stat+mtime+age code with one private `payloadAge()` and one `payloadWithAge(within:)`, which freshPayloadWithAge, anyPayloadWithAge and hasFreshPayload all use. Its doc states the lock precondition. The `try?` is on a cache read that was already best-effort, so no new swallowing. The public API is unchanged. The test rename to freshPayloadWithAge_uses_injected_clock makes the name match what it calls.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Cache/DiskCache.swift:89",
+        "Sources/AiTaskbarCore/Cache/DiskCache.swift:97",
+        "Tests/AiTaskbarCoreTests/DiskCacheTests.swift:99"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarCore/Cache/DiskCache.swift:86-124. The public surface is unchanged: `freshPayloadWithAge`, `hasFreshPayload` and `anyPayloadWithAge` keep their signatures and still check `<=`. The new helpers are private and run inside `withIOLock`. The hot path still does one stat plus one read, so no I/O was added. The test rename in DiskCacheTests.swift:99 is gratuitous (see new_findings).",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Cache/DiskCache.swift:405",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarCoreTests/DiskCacheTests.swift:99"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

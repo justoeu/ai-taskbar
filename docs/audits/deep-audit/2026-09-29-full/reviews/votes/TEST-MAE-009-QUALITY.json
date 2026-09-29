@@ -1,0 +1,13 @@
+{
+ "id": "TEST-MAE-009",
+ "verdict": "APROVA",
+ "reasoning": "Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:67: the fixed 100 ms sleep is replaced by the shared `drainMainQueue()`. That helper lives in one new 12-line file used by both tests, not copied inline. Its comment explains why a FIFO main-queue hop is deterministic.",
+ "required_changes": [],
+ "cited_paths": [
+  "Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:67",
+  "Tests/AiTaskbarAppTests/MainQueueDrain.swift:8"
+ ],
+ "lens": "QUALITY",
+ "_task": "ab05609a1a9d8c245",
+ "batch": "B16-final"
+}

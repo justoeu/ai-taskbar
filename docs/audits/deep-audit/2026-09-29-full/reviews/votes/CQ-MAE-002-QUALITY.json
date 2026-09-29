@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "CLAUDE.md and AGENTS.md get the same edit in the cost-scanner section (the Codex unchanged-total rule and the one CostWindow definition), so the two files stay in lockstep as the repo's doc policy requires. The text states a rule and says what not to reintroduce.",
+ "required_changes": [],
+ "cited_paths": [
+  "CLAUDE.md:386",
+  "AGENTS.md:386"
+ ],
+ "lens": "QUALITY",
+ "_task": "ab05609a1a9d8c245",
+ "batch": "B16-final"
+}

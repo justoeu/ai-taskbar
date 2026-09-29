@@ -1,0 +1,13 @@
+{
+ "id": "TEST-MAE-010",
+ "verdict": "APROVA",
+ "reasoning": "check-source-ratchets.sh:103-120. scrub() rewrites recursively. Only the `Int` name of a call with a top-level `radix:` becomes RADIX_PARSE, and its arguments are kept after being scrubbed themselves. The top-level test flattens nested parentheses before looking for `radix:`, so `Int(s, radix: Int(d))` is still caught. Restored the HEAD script and ran source-ratchet-selftest.sh: exit 1, with 'GATE IS BLIND' on all 3 new cases (:130-132). With the fix, both the selftest and the real gate exit 0, so the allowed forms at :105-106 still pass.",
+ "required_changes": [],
+ "cited_paths": [
+  "scripts/check-source-ratchets.sh:103",
+  "scripts/source-ratchet-selftest.sh:130"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a03222027f28f6d15",
+ "batch": "B16-final"
+}

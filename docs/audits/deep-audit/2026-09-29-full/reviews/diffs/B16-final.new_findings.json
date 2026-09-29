@@ -1,0 +1,42 @@
+[
+ [
+  "QUALITY",
+  "CQ-MAE-004 (partial, still open): the App still repeats the percent formatting at about 15 sites, and they disagree on rounding. NotificationService.title uses `Int(saturating: window.utilizationPercent)`, which truncates (92.9 shows as 92), while other sites use `.rounded()`. A shared percent formatter would make the notification match the card. Track this separately instead of treating CQ-MAE-004 as fully closed."
+ ],
+ [
+  "QUALITY",
+  "VendorViewModel.swift:~290: `self.lastNetworkFetch = .now` still reads the wall clock directly, next to the newly injected `clock`. This is not a defect of this fix, but it leaves two time sources in the same refresh path. Consider `self.clock()` for consistency in a later pass."
+ ],
+ [
+  "QUALITY",
+  "I agree with the 5 won't-fix items (ARCH-MAE-001, BEST-MAE-001, CQ-MAE-013, PERF-MAE-001, TEST-MAE-008): each has a concrete reopen_if and none breaks a written repo rule."
+ ],
+ [
+  "SCOPE",
+  "Tests/AiTaskbarCoreTests/DiskCacheTests.swift:99 renames `payload_age_uses_injected_clock` to `freshPayloadWithAge_uses_injected_clock`, and nothing required it. FINDINGS.json still cites `DiskCacheTests#payload_age_uses_injected_clock` as proof in the resolved records of batches B6-files-tests and B12-cleanup, so those references now point at a test that no longer exists. Either revert the rename or have the Maestro update the pack references."
+ ],
+ [
+  "SCOPE",
+  "CQ-MAE-011 is only partly done. The finding also says the Settings UI has no control for gemini.prefer_antigravity, xai.prefer_grok_cli or xai.grok_base_url. This diff only documents them in config.example.toml. If the UI gap is being accepted, record it as a trade-off."
+ ],
+ [
+  "SCOPE",
+  "CQ-MAE-004 is only partly done. The formatter extraction (`Int(saturating: x.rounded())` plus '%' at about 15 App sites, e.g. MenuBarTooltipBuilder.swift:26,56) was left out. Marking the id fixed rather than fixed-doc-only hides that half."
+ ],
+ [
+  "SCOPE",
+  "Won't-fix items: I have no objection to ARCH-MAE-001, BEST-MAE-001, CQ-MAE-013, PERF-MAE-001 or TEST-MAE-008. Their reopen conditions are concrete, and none of them changes a public contract or a safe default."
+ ],
+ [
+  "CORRECTNESS",
+  "Test and reversal evidence: the filtered suite (64 tests, 9 suites) passes. Fix-line reversals went RED for BUG-MAE-009, CQ-MAE-012, DUP-MAE-003 and TEST-MAE-010 (HEAD script, 3 BLIND cases). Mutations went RED for DUP-MAE-004, DUP-MAE-002 and TEST-MAE-005. After every restore, the working-tree `git diff` matches B16-final.diff byte for byte (cmp). The untracked reviews/votes/*-QUALITY|SCOPE.json files are from the other reviewers; I didn't touch them."
+ ],
+ [
+  "CORRECTNESS",
+  "Wontfix TEST-MAE-008 and PERF-MAE-001: I agree. ARCH-MAE-001, BEST-MAE-001 and CQ-MAE-013: I agree; there is no concrete defect today."
+ ],
+ [
+  "CORRECTNESS",
+  "Cosmetic: NotificationService.swift:100 gives the example 'Anthropic — 5h at 92%', but VendorId.anthropic.displayName renders 'Claude'."
+ ]
+]

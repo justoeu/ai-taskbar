@@ -24,7 +24,7 @@
       "event": "init"
     }
   ],
-  "merged_at": "2026-09-29 18:07:24 UTC",
+  "merged_at": "2026-09-29 18:44:21 UTC",
   "agent_sources": [
     {
       "file": "agent-argus.json",
@@ -95,12 +95,20 @@
       "count": 5
     },
     {
+      "file": "agent-maestro-b16-followups.json",
+      "count": 6
+    },
+    {
       "file": "agent-maestro-remediation-followups.json",
       "count": 33
     },
     {
       "file": "agent-maestro-review-followups.json",
       "count": 9
+    },
+    {
+      "file": "agent-maestro-user-items.json",
+      "count": 1
     },
     {
       "file": "agent-prisma-freshness.json",
@@ -115,6 +123,6 @@
       "count": 5
     }
   ],
-  "raw_findings": 161,
-  "unique_findings": 161
+  "raw_findings": 168,
+  "unique_findings": 168
 }

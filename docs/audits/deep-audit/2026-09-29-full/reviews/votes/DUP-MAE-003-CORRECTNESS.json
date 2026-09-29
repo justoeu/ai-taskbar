@@ -1,0 +1,14 @@
+{
+ "id": "DUP-MAE-003",
+ "verdict": "APROVA",
+ "reasoning": "AntigravityExecutor.swift:478-494 is now the one mapping for agy-reported errors (message() skips an empty error or response, and appError() handles context canceled). It is used by the live run (:131, :439-466) and the cached decode (GeminiProvider.swift:508). I checked that inspect() behaves the same as before: a non-error envelope still falls through, and the substring path still returns nil. Restored the HEAD GeminiProvider: agy_empty_error_uses_response goes RED ('io: agy: '). The stale Issue.record message in XAIProviderTests is fixed. Pre-existing and out of scope: the cached path only checks status == \"ERROR\", while the live path also treats a non-empty error with another status as an error.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarProviders/AntigravityExecutor.swift:478",
+  "Sources/AiTaskbarProviders/GeminiProvider.swift:508",
+  "Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift:115"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a03222027f28f6d15",
+ "batch": "B16-final"
+}

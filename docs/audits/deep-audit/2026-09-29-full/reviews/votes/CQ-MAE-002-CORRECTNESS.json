@@ -1,0 +1,14 @@
+{
+ "id": "CQ-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "Checked the CLAUDE.md/AGENTS.md text against the code. CodexSessionScanner skips an unchanged total_token_usage (previousTotal at :314, the ~6% note and BUG-ART-005 at :396). CostWindow.swift:28-31 computes startOfDay and date(byAdding: .day, value: -6). CostWindow is used by the Claude, Codex session, Codex log and opencode scanners and by AnalyticsAggregator.",
+ "required_changes": [],
+ "cited_paths": [
+  "CLAUDE.md:386",
+  "Sources/AiTaskbarCore/Cost/CostWindow.swift:30",
+  "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:396"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a03222027f28f6d15",
+ "batch": "B16-final"
+}

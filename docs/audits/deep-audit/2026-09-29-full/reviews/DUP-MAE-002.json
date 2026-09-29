@@ -1,0 +1,58 @@
+{
+  "id": "DUP-MAE-002",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:43:59 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "VendorAnalyticsCardView.swift:326-331 and :340-352. countLabel keeps the old precedence (sessions>0, else models>0, else nil) and the same singular/plural keys. Mutation swapping single and plural: all 4 AnalyticsCountLabelTests go RED. Restored.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:340"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:183 cuts the two 6-line branches to one `if let`. The single `countLabel` plus a private `count` helper (~294-309) hold the singular/plural rule once. This lowers nesting in the view body, and the helper can be tested headlessly.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:183",
+        "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:297"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "VendorAnalyticsCardView.swift:183-186,294-310. The duplicated logic is extracted into an internal static `countLabel`. It uses the same four keys as before, all still present in the three locales. The rendered output is identical, and there is a new test file AnalyticsCountLabelTests.swift.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:296"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

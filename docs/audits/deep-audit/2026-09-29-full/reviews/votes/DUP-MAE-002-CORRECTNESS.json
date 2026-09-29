@@ -1,0 +1,12 @@
+{
+ "id": "DUP-MAE-002",
+ "verdict": "APROVA",
+ "reasoning": "VendorAnalyticsCardView.swift:326-331 and :340-352. countLabel keeps the old precedence (sessions>0, else models>0, else nil) and the same singular/plural keys. Mutation swapping single and plural: all 4 AnalyticsCountLabelTests go RED. Restored.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:340"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a03222027f28f6d15",
+ "batch": "B16-final"
+}

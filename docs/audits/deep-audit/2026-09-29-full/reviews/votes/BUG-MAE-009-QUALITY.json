@@ -1,0 +1,14 @@
+{
+ "id": "BUG-MAE-009",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:~172-185 adds one injected `clock` with a default of `{ Date.now }`, so the public init stays source-compatible. The fix is small: `arrival` is a single closure used at all three `observeRateLimit` sites (~284/310/312), so the arrival rule is not copied. Nesting is unchanged. The doc comment on observeRateLimit was updated to say arrival, so it matches the code. The new test has an honest name (cooldown_starts_at_response_arrival), a gated provider and a manual clock, with no sleeps.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:172",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:284",
+  "Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift:106"
+ ],
+ "lens": "QUALITY",
+ "_task": "ab05609a1a9d8c245",
+ "batch": "B16-final"
+}

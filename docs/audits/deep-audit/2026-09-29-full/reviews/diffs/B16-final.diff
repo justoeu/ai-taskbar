@@ -1,0 +1,1149 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 7d20ea8..b7f261e 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -348,15 +348,28 @@ git checkout v0.16.1 && make publish && git checkout main
+ | Release job fails on a tag that CI passed | `ci.yml` and `release.yml` selected Swift independently and drifted (6.2.4 vs 6.0) | both call `.github/actions/select-swift`, which requires >= 6.2 |
+ | Universal DMG that is arm64-only | `make dmg` writes a host-arch app to `$(DMG)`, the universal name `UpdateChecker.pickDMGAsset` serves to Intel Macs | `universal-check` asserts x86_64 + arm64 and gates `release-universal` |
+ | Release notes missing the actual feature | the changelog spans previous-tag..this-tag; a tag that never produced a release swallows everything before it | regenerate with `gh release edit <tag> --notes-file` over the right range |
++| A merged CI-action bump cuts a release | a Dependabot `github-actions` PR changes no shipped code, but without the marker its merge is an ordinary push to `main` | `.github/dependabot.yml` sets that ecosystem's commit prefix to `ci(deps) [skip release]`; keep the marker if you edit the prefix |
+ 
+ **Doc-only commits pushed to `main` MUST carry `[skip release]`** — otherwise
+ they trigger a redundant version bump (this is how an accidental extra
+ `v0.10.1` got cut alongside `v0.10.0`).
+ 
++**Dependabot** (`.github/dependabot.yml`) watches two ecosystems weekly.
++`github-actions` bumps the SHA-pinned `uses:` lines and commits with the prefix
++`ci(deps) [skip release]`, so merging one never releases; removing that marker
++from the prefix would make every action bump cut a version. `swift` watches
++the SwiftPM graph (TOMLKit) with the plain prefix `deps`: a dependency bump
++changes shipped code, so it releases normally.
++
+ ## Architecture (don't break these)
+ 
+ - **`AiTaskbarCore`** — vendor-agnostic. Models, HTTP, Cache, Credentials,
+   Config, Cost helpers, History, Util (JSONValue, SharedCoders).
++  `HTTPClient.send` / `sendDecoding` refuse a body larger than
++  `HTTPClient.defaultMaximumResponseBytes` (8 MiB) before buffering it or
++  writing it to `DiskCache`. The Gemini provider's `ProcessAntigravityExecutor`
++  runs `agy` with a 35 s budget, closed stdin, stdout capped at 4 MiB (a larger
++  answer is rejected, not parsed) and only the first 64 KiB of stderr kept.
+ 
+ ### Cost scanners — token semantics differ per source, do not generalize
+ 
+@@ -370,7 +383,19 @@ produces numbers that are wrong by multiples while looking plausible:
+ | `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
+ 
+ Both were established against real data, not documentation, and both are pinned
+-by tests that fail if the other reading is applied. `OpencodeScanner` reads
++by tests that fail if the other reading is applied. `CodexSessionScanner` also
++skips a `token_count` event whose `total_token_usage` equals the previous
++event's: Codex re-emits the last turn's `last_token_usage` with an unchanged
++running total, and billing it again over-reported a real week by ~6%
++(BUG-ART-005). An event with no total carries no such signal and is kept.
++
++Every scanner (Claude, Codex rollouts and logs, opencode) and
++`AnalyticsAggregator` (Day and Week) take their windows from the one `CostWindow`: "today"
++starts at local midnight, and "last 7 days" is today plus the six previous
++local calendar days, built with `Calendar.date(byAdding:)` so DST does not
++shift it. Their figures are summed, so a scanner with its own cutoff (a
++rolling `now - 7 * 86_400`, or `startOfToday - 7 days`) disagrees with the
++others; do not reintroduce one. `OpencodeScanner` reads
+ per-MESSAGE, never `session.model` — that column holds the last model a session
+ used, so session-level attribution files every pre-switch token under the wrong
+ model (measured: ~20M tokens on this machine).
+@@ -673,7 +698,8 @@ skipped.
+   surface, and the pin is reproducible. Migration risk only — if it stops
+   building on a future Swift, vendor the ~2k lines we use or hand-roll the
+   small TOML subset `AppConfig` needs. Re-evaluate on Swift major; don't
+-  swap preemptively.
++  swap preemptively. Dependabot's `swift` ecosystem watches it weekly; a PR
++  there is a prompt to re-evaluate, not an instruction to merge.
+ - **`codex-auto-review` is priced by estimate.** Codex writes that model alias
+   to its rollout logs for the automatic review pass, and OpenAI publishes no
+   rate for it, so `PricingTable.openai` carries it at the Codex flagship tier
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 468bbe0..860f416 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -5,6 +5,114 @@ The format follows the release notes pattern from [GitHub Releases](https://gith
+ 
+ ---
+ 
++## [v0.23.6](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.6) - 2026-09-29
++
++### 🐛 Fixes
++
++-  pinned LLMs next to the main icon, real space limit, Claude 5.5 prices + fast mode (#30)
++
++---
++
++**Full diff:** [`v0.23.5...v0.23.6`](https://github.com/justoeu/ai-taskbar/compare/v0.23.5...v0.23.6)
++
++---
++
++## [v0.23.5](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.5) - 2026-09-28
++
++### 🐛 Fixes
++
++-  fix pin ordering, eliminate icon flicker and enforce accurate notch collision limit (#29)
++
++---
++
++**Full diff:** [`v0.23.4...v0.23.5`](https://github.com/justoeu/ai-taskbar/compare/v0.23.4...v0.23.5)
++
++---
++
++## [v0.23.4](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.4) - 2026-09-28
++
++### 🐛 Fixes
++
++-  remove false notch space collision check in favor of reliable 5-item cap (#28)
++
++---
++
++**Full diff:** [`v0.23.3...v0.23.4`](https://github.com/justoeu/ai-taskbar/compare/v0.23.3...v0.23.4)
++
++---
++
++## [v0.23.3](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.3) - 2026-09-28
++
++### 🐛 Fixes
++
++-  eliminate pin/unpin flicker by updating status items in place (#27)
++
++---
++
++**Full diff:** [`v0.23.2...v0.23.3`](https://github.com/justoeu/ai-taskbar/compare/v0.23.2...v0.23.3)
++
++---
++
++## [v0.23.2](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.2) - 2026-09-28
++
++### 🐛 Fixes
++
++-  enforce space limits and deterministic ordering for pinned items (#26)
++
++---
++
++**Full diff:** [`v0.23.1...v0.23.2`](https://github.com/justoeu/ai-taskbar/compare/v0.23.1...v0.23.2)
++
++---
++
++## [v0.23.1](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.1) - 2026-09-27
++
++### 🐛 Fixes
++
++-  fix openrouter balance quota semantics and contextualize comparison delta (#25)
++
++---
++
++**Full diff:** [`v0.23.0...v0.23.1`](https://github.com/justoeu/ai-taskbar/compare/v0.23.0...v0.23.1)
++
++---
++
++## [v0.23.0](https://github.com/justoeu/ai-taskbar/releases/tag/v0.23.0) - 2026-09-25
++
++### ✨ Features
++
++-  show daily and weekly reset countdowns in pinned LLM tooltips (#24)
++
++---
++
++**Full diff:** [`v0.22.0...v0.23.0`](https://github.com/justoeu/ai-taskbar/compare/v0.22.0...v0.23.0)
++
++---
++
++## [v0.22.0](https://github.com/justoeu/ai-taskbar/releases/tag/v0.22.0) - 2026-09-25
++
++### ✨ Features
++
++-  add daily background update check and popover update banner (#23)
++
++---
++
++**Full diff:** [`v0.21.0...v0.22.0`](https://github.com/justoeu/ai-taskbar/compare/v0.21.0...v0.22.0)
++
++---
++
++## [v0.21.0](https://github.com/justoeu/ai-taskbar/releases/tag/v0.21.0) - 2026-09-24
++
++### ✨ Features
++
++-  consumption dashboard, menubar pinned LLMs, session counters, and latency optimizations (#22)
++
++---
++
++**Full diff:** [`v0.20.0...v0.21.0`](https://github.com/justoeu/ai-taskbar/compare/v0.20.0...v0.21.0)
++
++---
++
+ ## [v0.20.0](https://github.com/justoeu/ai-taskbar/releases/tag/v0.20.0) - 2026-09-20
+ 
+ ### ✨ Features
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 7d20ea8..b7f261e 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -348,15 +348,28 @@ git checkout v0.16.1 && make publish && git checkout main
+ | Release job fails on a tag that CI passed | `ci.yml` and `release.yml` selected Swift independently and drifted (6.2.4 vs 6.0) | both call `.github/actions/select-swift`, which requires >= 6.2 |
+ | Universal DMG that is arm64-only | `make dmg` writes a host-arch app to `$(DMG)`, the universal name `UpdateChecker.pickDMGAsset` serves to Intel Macs | `universal-check` asserts x86_64 + arm64 and gates `release-universal` |
+ | Release notes missing the actual feature | the changelog spans previous-tag..this-tag; a tag that never produced a release swallows everything before it | regenerate with `gh release edit <tag> --notes-file` over the right range |
++| A merged CI-action bump cuts a release | a Dependabot `github-actions` PR changes no shipped code, but without the marker its merge is an ordinary push to `main` | `.github/dependabot.yml` sets that ecosystem's commit prefix to `ci(deps) [skip release]`; keep the marker if you edit the prefix |
+ 
+ **Doc-only commits pushed to `main` MUST carry `[skip release]`** — otherwise
+ they trigger a redundant version bump (this is how an accidental extra
+ `v0.10.1` got cut alongside `v0.10.0`).
+ 
++**Dependabot** (`.github/dependabot.yml`) watches two ecosystems weekly.
++`github-actions` bumps the SHA-pinned `uses:` lines and commits with the prefix
++`ci(deps) [skip release]`, so merging one never releases; removing that marker
++from the prefix would make every action bump cut a version. `swift` watches
++the SwiftPM graph (TOMLKit) with the plain prefix `deps`: a dependency bump
++changes shipped code, so it releases normally.
++
+ ## Architecture (don't break these)
+ 
+ - **`AiTaskbarCore`** — vendor-agnostic. Models, HTTP, Cache, Credentials,
+   Config, Cost helpers, History, Util (JSONValue, SharedCoders).
++  `HTTPClient.send` / `sendDecoding` refuse a body larger than
++  `HTTPClient.defaultMaximumResponseBytes` (8 MiB) before buffering it or
++  writing it to `DiskCache`. The Gemini provider's `ProcessAntigravityExecutor`
++  runs `agy` with a 35 s budget, closed stdin, stdout capped at 4 MiB (a larger
++  answer is rejected, not parsed) and only the first 64 KiB of stderr kept.
+ 
+ ### Cost scanners — token semantics differ per source, do not generalize
+ 
+@@ -370,7 +383,19 @@ produces numbers that are wrong by multiples while looking plausible:
+ | `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
+ 
+ Both were established against real data, not documentation, and both are pinned
+-by tests that fail if the other reading is applied. `OpencodeScanner` reads
++by tests that fail if the other reading is applied. `CodexSessionScanner` also
++skips a `token_count` event whose `total_token_usage` equals the previous
++event's: Codex re-emits the last turn's `last_token_usage` with an unchanged
++running total, and billing it again over-reported a real week by ~6%
++(BUG-ART-005). An event with no total carries no such signal and is kept.
++
++Every scanner (Claude, Codex rollouts and logs, opencode) and
++`AnalyticsAggregator` (Day and Week) take their windows from the one `CostWindow`: "today"
++starts at local midnight, and "last 7 days" is today plus the six previous
++local calendar days, built with `Calendar.date(byAdding:)` so DST does not
++shift it. Their figures are summed, so a scanner with its own cutoff (a
++rolling `now - 7 * 86_400`, or `startOfToday - 7 days`) disagrees with the
++others; do not reintroduce one. `OpencodeScanner` reads
+ per-MESSAGE, never `session.model` — that column holds the last model a session
+ used, so session-level attribution files every pre-switch token under the wrong
+ model (measured: ~20M tokens on this machine).
+@@ -673,7 +698,8 @@ skipped.
+   surface, and the pin is reproducible. Migration risk only — if it stops
+   building on a future Swift, vendor the ~2k lines we use or hand-roll the
+   small TOML subset `AppConfig` needs. Re-evaluate on Swift major; don't
+-  swap preemptively.
++  swap preemptively. Dependabot's `swift` ecosystem watches it weekly; a PR
++  there is a prompt to re-evaluate, not an instruction to merge.
+ - **`codex-auto-review` is priced by estimate.** Codex writes that model alias
+   to its rollout logs for the automatic review pass, and OpenAI publishes no
+   rate for it, so `PricingTable.openai` carries it at the Codex flagship tier
+diff --git a/README.md b/README.md
+index b303caf..c1f8210 100644
+--- a/README.md
++++ b/README.md
+@@ -297,7 +297,7 @@ AI Taskbar supports two modes for xAI:
+ AI Taskbar supports two monitoring paths for Google Gemini:
+ 
+ 1. **Antigravity CLI mode (default & recommended):**
+-   - **How it works:** AI Taskbar executes the local Antigravity CLI in the background (`agy --output-format json --print "/usage"`) with a safe 15-second budget and closed standard input.
++   - **How it works:** AI Taskbar executes the local Antigravity CLI in the background (`agy --output-format json --print "/usage"`) with a 35-second budget, closed standard input, stdout capped at 4 MiB (a larger answer is rejected, not parsed) and stderr truncated to 64 KiB.
+    - **Binary auto-detection:** Automatically discovers `agy` in standard install paths:
+      - `~/.local/bin/agy`
+      - `/opt/homebrew/bin/agy`
+@@ -412,6 +412,8 @@ The **`RefreshScheduler`** fires every `refresh_interval_seconds` (default 300s
+ 
+ If any vendor's last refresh ended in HTTP 429, the scheduler adds **`RefreshScheduler.rateLimitBackoff` = 60 s** to the next sleep. The back-off is read via `UsageStore.hasRateLimitedVendor` between cycles and stays applied for as long as at least one vendor keeps returning 429 — once they clear, the cadence drops back to the configured interval automatically. During the back-off the popover countdown shows "Aguardando rate-limit…" (anchored on `UsageStore.isInRateLimitBackoff`) so the header never silently freezes at 0:00. Independently, each `VendorViewModel` tracks consecutive 429s and refuses new network work until its own 5/10/20/40/60-minute cooldown expires; this keeps a throttled provider from blocking normal refreshes for the others.
+ 
++Every usage window's percentage is sanitized when it is built and again when it is read back from the cache: NaN becomes 0 and the value is clamped to 0–1000%, so a vendor reporting overuse still shows above 100% but a corrupt or hostile number cannot reach the bars or the menu-bar gauge.
++
+ The per-vendor `DiskCache` TTL is wired to `max(15, refresh_interval_seconds − 5)` in `AppEnvironment`. The 5 s margin means a scheduled tick at T=interval always sees an expired cache (`age ≈ interval > ttl`), so the scheduler doesn't need `forceRefresh: true` to defeat the cache. Popover opens between scheduled refreshes still serve from cache.
+ 
+ ## Configuration
+@@ -489,6 +491,7 @@ api_key_env = "DEEPSEEK_API_KEY"
+ enabled = true
+ prefer_grok_cli = true          # default true: reads ~/.grok/auth.json for SuperGrok Heavy quota
+ # grok_auth_path = "/Users/you/.grok/auth.json"
++# grok_base_url = "https://cli-chat-proxy.grok.com"   # host-allowlisted; anything else falls back
+ # Management API fallback (if prefer_grok_cli = false):
+ # api_key_env = "XAI_MANAGEMENT_KEY"
+ # api_key = "xai-..."
+diff --git a/Sources/AiTaskbarApp/NotificationService.swift b/Sources/AiTaskbarApp/NotificationService.swift
+index 74ef5b2..abbc739 100644
+--- a/Sources/AiTaskbarApp/NotificationService.swift
++++ b/Sources/AiTaskbarApp/NotificationService.swift
+@@ -82,7 +82,7 @@ public final class NotificationService {
+             content.title = L10n.localizedString("notif_discreet_title")
+             content.body  = L10n.localizedString("notif_discreet_body_fmt", Int(saturating: threshold))
+         } else {
+-            content.title = "\(vendor.displayName) — \(window.label) at \(Int(saturating: window.utilizationPercent))%"
++            content.title = Self.title(vendor: vendor, window: window)
+             content.body  = thresholdMessage(threshold: threshold, window: window)
+         }
+         content.sound = .default
+@@ -97,6 +97,14 @@ public final class NotificationService {
+         }
+     }
+ 
++    /// Non-discreet title, e.g. "Anthropic — 5h at 92%". Localized: it was a
++    /// hard-coded English sentence while the body beside it was not
++    /// (CQ-MAE-012). The window label is shown as the card shows it.
++    static func title(vendor: VendorId, window: UsageWindow) -> String {
++        L10n.localizedString("notif_title_fmt", vendor.displayName, window.label,
++                             Int(saturating: window.utilizationPercent))
++    }
++
+     /// Built once. The locale is captured at first use, which is after
+     /// `AiTaskbarApp.init` applied the language override; a language change
+     /// needs a relaunch anyway (same contract as `PopoverContentView`).
+diff --git a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+index 4f30a97..a7b04be 100644
+--- a/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings
+@@ -7,7 +7,6 @@
+ "refresh_all_help" = "Refresh all providers";
+ // The relative formatter already produces "X ago" / "in X" — we only add
+ // the verb tense prefix here, not the temporal direction.
+-"updated_ago_fmt" = "updated %@";
+ // Countdown until the next scheduled refresh. %@ becomes "4:59" (MM:SS).
+ "next_refresh_in_fmt" = "Next in %@";
+ "refreshing_now" = "Refreshing…";
+@@ -65,7 +64,6 @@
+ "today_cost_unavailable" = "Today: price unavailable";
+ "weekly_cost_unavailable" = "7d: price unavailable";
+ "price_unavailable_short" = "price unavailable";
+-"extra_usage_fmt" = "Extra usage: $%.2f";
+ "balance_fmt" = "Balance: $%.2f";
+ "voucher_fmt" = "Voucher: $%.2f";
+ "cash_fmt" = "Cash: $%.2f";
+@@ -77,6 +75,7 @@
+ "notif_resets_fmt" = "%@ Resets %@.";
+ "notif_discreet_title" = "AI Taskbar";
+ "notif_discreet_body_fmt" = "A monitored window crossed %d%%.";
++"notif_title_fmt" = "%@ — %@ at %d%%";
+ 
+ // About panel
+ "about_description" = "Tracks LLM usage across Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), and Kimi (Moonshot) — all from your menu bar.";
+@@ -148,7 +147,6 @@
+ "settings_updates_enabled" = "Check for updates";
+ "settings_updates_prereleases" = "Include pre-releases";
+ "settings_pin_hosts" = "Pinned hosts (one per line)";
+-"settings_pin_hosts_hint" = "TLS SPKI pinning, Trust-On-First-Use. Baseline pins for known vendor hosts ship in-binary.";
+ "settings_pin_audit_only" = "Audit only (log mismatches, don't block)";
+ "settings_pin_audit_help" = "When ON, a TLS pin mismatch is logged but the connection is still allowed. Useful for diagnosing pin rotation. Leave OFF for normal use.";
+ "settings_keychain_account" = "Keychain account";
+@@ -195,7 +193,6 @@
+ "settings_api_key_env_help" = "Name of the environment variable that holds the API key (e.g. ZAI_API_KEY). Export it before launching the app, or fall back to the inline key above.";
+ "settings_plan_tier_help" = "Z.AI subscription tier. Drives the usage limit used to compute the percentage. Pick the one matching your account.";
+ "settings_base_url_help" = "Vendor API endpoint. Use the .cn variant for Moonshot China region; leave default otherwise.";
+-"settings_primary_vendor_help" = "Vendor whose percentage is shown directly in the menu-bar icon (icon+percent mode).";
+ "settings_menu_bar_mode_help" = "How the menu-bar item looks: bare icon, icon with the primary vendor's percentage, or rotating through all enabled vendors.";
+ "settings_refresh_interval_help" = "How often the app polls each enabled vendor. Default 300s (5m). Floor is 15s — shorter intervals increase API quota consumption.";
+ "settings_language_help" = "Force the UI language regardless of the macOS system locale. Default follows the system.";
+@@ -315,9 +312,7 @@
+ "analytics_toolbar_button" = "Consumption Overview & Charts";
+ "analytics_title" = "Consumption & Analytics";
+ "analytics_subtitle" = "Consolidated overview across all LLMs";
+-"analytics_distribution_title" = "Usage & Cost Distribution";
+ "analytics_usage" = "Usage";
+-"analytics_usage_share" = "Usage Share";
+ "analytics_by_llm_title" = "Breakdown by LLM";
+ "analytics_empty_data" = "No consumption recorded in this timeframe.";
+ "analytics_busiest_day" = "Busiest day";
+@@ -338,7 +333,6 @@
+ "back" = "Back";
+ "analytics_usage_distribution_title" = "Usage Share (% Quota)";
+ "analytics_cost_distribution_title" = "Cost Consumption (USD)";
+-"compare_target_label" = "Compare with:";
+ "compare_prev_week_1" = "Previous week";
+ "compare_prev_week_2" = "2 weeks ago";
+ "compare_prev_week_3" = "3 weeks ago";
+@@ -356,7 +350,6 @@
+ "analytics_delta_quota_help" = "Change in average quota utilization compared to the selected previous period.";
+ "analytics_insufficient_history_short" = "No prior data";
+ "analytics_insufficient_history_help" = "Not enough historical data recorded yet for the selected comparison period.";
+-"vs_previous_period_fmt" = "%@ vs. previous";
+ "pin_to_menu_bar_help" = "Pin to menu bar";
+ "more_details" = "+ details";
+ "more_details_help" = "View detailed charts and consumption metrics for this LLM";
+diff --git a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+index 10bb03e..5cf44aa 100644
+--- a/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings
+@@ -6,7 +6,6 @@
+ "about_help" = "Acerca de AI Taskbar";
+ "refresh_all_help" = "Actualizar todos los proveedores";
+ // El RelativeDateTimeFormatter ya produce "hace X" / "en X" — aquí solo prefijamos el verbo.
+-"updated_ago_fmt" = "actualizado %@";
+ // Cuenta regresiva hasta el próximo refresh programado. %@ es "4:59" (MM:SS).
+ "next_refresh_in_fmt" = "Próx. en %@";
+ "refreshing_now" = "Actualizando…";
+@@ -64,7 +63,6 @@
+ "today_cost_unavailable" = "Hoy: precio no disponible";
+ "weekly_cost_unavailable" = "7d: precio no disponible";
+ "price_unavailable_short" = "precio no disponible";
+-"extra_usage_fmt" = "Uso extra: $%.2f";
+ "balance_fmt" = "Saldo: $%.2f";
+ "voucher_fmt" = "Voucher: $%.2f";
+ "cash_fmt" = "Efectivo: $%.2f";
+@@ -76,6 +74,7 @@
+ "notif_resets_fmt" = "%@ Se reinicia %@.";
+ "notif_discreet_title" = "AI Taskbar";
+ "notif_discreet_body_fmt" = "Una ventana monitoreada cruzó %d%%.";
++"notif_title_fmt" = "%@ — %@ al %d%%";
+ 
+ // About panel
+ "about_description" = "Monitorea el uso de LLM de Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM) y Kimi (Moonshot) — desde la barra de menú.";
+@@ -147,7 +146,6 @@
+ "settings_updates_enabled" = "Buscar actualizaciones";
+ "settings_updates_prereleases" = "Incluir pre-lanzamientos";
+ "settings_pin_hosts" = "Hosts con pin (uno por línea)";
+-"settings_pin_hosts_hint" = "TLS SPKI pinning, Trust-On-First-Use. Los pines para los hosts conocidos ya vienen en el binario.";
+ "settings_pin_audit_only" = "Solo auditar (registrar divergencias, no bloquear)";
+ "settings_pin_audit_help" = "Cuando ESTÁ ACTIVO, las divergencias de pin TLS se registran pero se permite la conexión. Útil para diagnosticar rotación de pin. Deja DESACTIVADO en uso normal.";
+ "settings_keychain_account" = "Cuenta del Llavero";
+@@ -194,7 +192,6 @@
+ "settings_api_key_env_help" = "Nombre de la variable de entorno que contiene la clave de API (ej.: ZAI_API_KEY). Expórtala antes de abrir la app, o usa la clave inline arriba como fallback.";
+ "settings_plan_tier_help" = "Tier de la suscripción Z.AI. Define el límite de uso usado para calcular el porcentaje. Elige el que corresponde a tu cuenta.";
+ "settings_base_url_help" = "Endpoint de la API del proveedor. Usa la variante .cn para Moonshot región China; si no, deja el predeterminado.";
+-"settings_primary_vendor_help" = "Proveedor cuyo porcentaje se muestra directo en el icono de la barra (modo icono+porcentaje).";
+ "settings_menu_bar_mode_help" = "Cómo se ve el item de la barra: solo icono, icono con porcentaje del proveedor primario, o rotativo entre todos los proveedores habilitados.";
+ "settings_refresh_interval_help" = "Con qué frecuencia la app consulta cada proveedor habilitado. Por defecto 300s (5m). Mínimo 15s — intervalos menores aumentan el consumo de cuota de la API.";
+ "settings_language_help" = "Fuerza el idioma de la UI independientemente del idioma del sistema. Por defecto sigue al sistema.";
+@@ -314,9 +311,7 @@
+ "analytics_toolbar_button" = "Resumen de Consumo y Gráficos";
+ "analytics_title" = "Consumo y Métricas";
+ "analytics_subtitle" = "Visión consolidada entre todos los LLMs";
+-"analytics_distribution_title" = "Distribución de Consumo y Costos";
+ "analytics_usage" = "Uso";
+-"analytics_usage_share" = "Cuota de Uso";
+ "analytics_by_llm_title" = "Consumo por LLM";
+ "analytics_empty_data" = "No hay consumo registrado en este período.";
+ "analytics_busiest_day" = "Día con mayor uso";
+@@ -337,7 +332,6 @@
+ "back" = "Volver";
+ "analytics_usage_distribution_title" = "Cuota de Uso (% Cuota)";
+ "analytics_cost_distribution_title" = "Consumo en Dólares (USD)";
+-"compare_target_label" = "Comparar con:";
+ "compare_prev_week_1" = "Semana anterior";
+ "compare_prev_week_2" = "Hace 2 semanas";
+ "compare_prev_week_3" = "Hace 3 semanas";
+@@ -355,7 +349,6 @@
+ "analytics_delta_quota_help" = "Variación en la utilización promedio de cuota en comparación con el período anterior seleccionado.";
+ "analytics_insufficient_history_short" = "Sin datos previos";
+ "analytics_insufficient_history_help" = "Aún no hay suficientes datos registrados en el historial para el período comparativo seleccionado.";
+-"vs_previous_period_fmt" = "%@ vs. anterior";
+ "pin_to_menu_bar_help" = "Fijar en la barra de menús";
+ "more_details" = "+ detalles";
+ "more_details_help" = "Ver gráficos y métricas de consumo de este LLM";
+diff --git a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+index b839cc1..61d6537 100644
+--- a/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
++++ b/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings
+@@ -6,7 +6,6 @@
+ "about_help" = "Sobre o AI Taskbar";
+ "refresh_all_help" = "Atualizar todos os provedores";
+ // O RelativeDateTimeFormatter já produz "há X" / "em X" — aqui só prefixamos o verbo.
+-"updated_ago_fmt" = "atualizado %@";
+ // Contador regressivo até o próximo refresh agendado. %@ vira "4:59" (MM:SS).
+ "next_refresh_in_fmt" = "Próx. em %@";
+ "refreshing_now" = "Atualizando…";
+@@ -64,7 +63,6 @@
+ "today_cost_unavailable" = "Hoje: preço indisponível";
+ "weekly_cost_unavailable" = "7d: preço indisponível";
+ "price_unavailable_short" = "preço indisponível";
+-"extra_usage_fmt" = "Uso extra: $%.2f";
+ "balance_fmt" = "Saldo: $%.2f";
+ "voucher_fmt" = "Voucher: $%.2f";
+ "cash_fmt" = "Dinheiro: $%.2f";
+@@ -76,6 +74,7 @@
+ "notif_resets_fmt" = "%@ Reseta %@.";
+ "notif_discreet_title" = "AI Taskbar";
+ "notif_discreet_body_fmt" = "Uma janela monitorada ultrapassou %d%%.";
++"notif_title_fmt" = "%@ — %@ em %d%%";
+ 
+ // About panel
+ "about_description" = "Acompanha o uso de LLMs do Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM) e Kimi (Moonshot) — direto da barra de menu.";
+@@ -147,7 +146,6 @@
+ "settings_updates_enabled" = "Verificar atualizações";
+ "settings_updates_prereleases" = "Incluir pré-lançamentos";
+ "settings_pin_hosts" = "Hosts com pin (um por linha)";
+-"settings_pin_hosts_hint" = "TLS SPKI pinning, Trust-On-First-Use. Os pins para os hosts conhecidos já vêm no binário.";
+ "settings_pin_audit_only" = "Apenas auditar (registrar divergências, não bloquear)";
+ "settings_pin_audit_help" = "Quando LIGADO, divergências de pin TLS são registradas mas a conexão é permitida. Útil para diagnosticar rotação de pin. Deixe DESLIGADO em uso normal.";
+ "settings_keychain_account" = "Conta do Keychain";
+@@ -194,7 +192,6 @@
+ "settings_api_key_env_help" = "Nome da variável de ambiente que contém a chave de API (ex.: ZAI_API_KEY). Exporte antes de abrir o app, ou use a chave inline acima como fallback.";
+ "settings_plan_tier_help" = "Tier da assinatura Z.AI. Define o limite de uso usado para calcular o percentual. Escolha o que corresponde à sua conta.";
+ "settings_base_url_help" = "Endpoint da API do provedor. Use a variante .cn para Moonshot região China; caso contrário deixe o padrão.";
+-"settings_primary_vendor_help" = "Provedor cujo percentual aparece direto no ícone da barra (modo ícone+percentual).";
+ "settings_menu_bar_mode_help" = "Como o item da barra aparece: só ícone, ícone com percentual do provedor primário, ou rotativo entre todos os provedores habilitados.";
+ "settings_refresh_interval_help" = "Com que frequência o app consulta cada provedor habilitado. Padrão 300s (5m). Mínimo 15s — intervalos menores aumentam o consumo de quota da API.";
+ "settings_language_help" = "Força o idioma da UI independente do idioma do sistema. Padrão segue o sistema.";
+@@ -314,9 +311,7 @@
+ "analytics_toolbar_button" = "Visão Geral de Consumo e Gráficos";
+ "analytics_title" = "Consumo & Métricas";
+ "analytics_subtitle" = "Visão consolidada entre todos os LLMs";
+-"analytics_distribution_title" = "Distribuição de Consumo e Custos";
+ "analytics_usage" = "Uso";
+-"analytics_usage_share" = "Fatia de Uso";
+ "analytics_by_llm_title" = "Consumo por LLM";
+ "analytics_empty_data" = "Nenhum consumo registrado no período.";
+ "analytics_busiest_day" = "Dia mais movimentado";
+@@ -337,7 +332,6 @@
+ "back" = "Voltar";
+ "analytics_usage_distribution_title" = "Fatia de Uso (% Quota)";
+ "analytics_cost_distribution_title" = "Consumo em Dólares (USD)";
+-"compare_target_label" = "Comparar com:";
+ "compare_prev_week_1" = "Semana anterior";
+ "compare_prev_week_2" = "Há 2 semanas";
+ "compare_prev_week_3" = "Há 3 semanas";
+@@ -355,7 +349,6 @@
+ "analytics_delta_quota_help" = "Variação na média de utilização de quota em relação ao período anterior selecionado.";
+ "analytics_insufficient_history_short" = "Sem dados anteriores";
+ "analytics_insufficient_history_help" = "Ainda não há dados suficientes gravados no histórico para o período comparativo selecionado.";
+-"vs_previous_period_fmt" = "%@ vs. anterior";
+ "pin_to_menu_bar_help" = "Fixar na barra de menus";
+ "more_details" = "+ detalhes";
+ "more_details_help" = "Ver gráficos e métricas de consumo deste LLM";
+diff --git a/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift b/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
+index 6b9087e..0e9d501 100644
+--- a/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
++++ b/Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift
+@@ -169,12 +169,18 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+     /// Backs `isExpanded`. Injected so tests never touch `.standard`.
+     private let defaults: UserDefaults
+ 
++    /// Wall clock read when a response arrives, to stamp the 429 cooldown.
++    /// Injected so tests can model a slow request (BUG-MAE-009).
++    private let clock: @MainActor () -> Date
++
+     public init(provider: any UsageProvider,
+                 notifications: NotificationService? = nil,
+                 defaults: UserDefaults = .standard,
+                 historyStoreFactory: (VendorId) throws -> UsageHistoryStore = UsageHistoryStore.defaultFor,
+-                historyLoader: @escaping HistoryLoader = VendorViewModel.detachedHistoryLoad) {
++                historyLoader: @escaping HistoryLoader = VendorViewModel.detachedHistoryLoad,
++                clock: @escaping @MainActor () -> Date = { Date.now }) {
+         self.vendorId = provider.vendorId
++        self.clock = clock
+         self.provider = provider
+         self.notifications = notifications
+         self.defaults = defaults
+@@ -265,15 +271,20 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+         let previous = state.outcome
+         loadingSince = now
+         state = .loading(previous: previous)
++        // The cooldown is stamped at ARRIVAL on the caller's timeline: the
++        // dispatch `now` plus however long the request took on `clock`, so a
++        // slow 429 still gets the full cooldown (BUG-MAE-009).
++        let dispatchedAt = clock()
+         refreshTask?.cancel()
+         refreshTask = Task { [weak self] in
+             guard let self else { return }
++            let arrival = { now.addingTimeInterval(self.clock().timeIntervalSince(dispatchedAt)) }
+             do {
+                 let outcome = try await self.provider.fetchUsage(forceRefresh: forceRefresh)
+                 if Task.isCancelled { return }
+                 guard myEpoch == self.epoch else { return }   // newer refresh wins
+                 self.state = .ok(outcome)
+-                self.observeRateLimit(status: outcome.lastError?.status, at: now)
++                self.observeRateLimit(status: outcome.lastError?.status, at: arrival())
+                 if Self.isNetworkOutcome(outcome) {
+                     self.lastNetworkFetch = .now
+                 }
+@@ -296,16 +307,16 @@ public final class VendorViewModel: ObservableObject, Identifiable {
+                 let fallback = previous ?? self.state.outcome
+                 self.state = .failed(error: appErr, fallback: fallback)
+                 if case .http(let status, _) = appErr {
+-                    self.observeRateLimit(status: status, at: now)
++                    self.observeRateLimit(status: status, at: arrival())
+                 } else {
+-                    self.observeRateLimit(status: nil, at: now)
++                    self.observeRateLimit(status: nil, at: arrival())
+                 }
+             }
+         }
+     }
+ 
+-    /// `now` is the dispatching refresh's clock, so the cooldown is stamped
+-    /// and checked on the same clock (measured from dispatch, not arrival).
++    /// `now` is the response-arrival time on the dispatching refresh's
++    /// clock, so the cooldown is stamped and checked on the same clock.
+     private func observeRateLimit(status: Int?, at now: Date) {
+         guard status == 429 else {
+             consecutiveRateLimits = 0
+diff --git a/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift b/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
+index c3c5bef..b529cdc 100644
+--- a/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
+@@ -180,18 +180,9 @@ public struct VendorAnalyticsCardView: View {
+                     HStack(spacing: 12) {
+                         // Real sessions where a session counter exists; otherwise
+                         // the number of models, labelled as such.
+-                        if summary.sessionCount > 0 {
+-                            let sessionLabel = summary.sessionCount == 1
+-                                ? "1 \(L10n.localizedString("analytics_session_single"))"
+-                                : "\(summary.sessionCount) \(L10n.localizedString("analytics_sessions"))"
+-                            Label(sessionLabel, systemImage: "macwindow")
+-                                .font(.callout)
+-                                .foregroundStyle(.secondary)
+-                        } else if summary.modelCount > 0 {
+-                            let modelLabel = summary.modelCount == 1
+-                                ? "1 \(L10n.localizedString("analytics_model_single"))"
+-                                : "\(summary.modelCount) \(L10n.localizedString("analytics_models"))"
+-                            Label(modelLabel, systemImage: "macwindow")
++                        if let countLabel = Self.countLabel(sessions: summary.sessionCount,
++                                                            models: summary.modelCount) {
++                            Label(countLabel, systemImage: "macwindow")
+                                 .font(.callout)
+                                 .foregroundStyle(.secondary)
+                         }
+@@ -299,3 +290,21 @@ public struct VendorAnalyticsCardView: View {
+         )
+     }
+ }
++
++extension VendorAnalyticsCardView {
++    /// "N sessions" where a session counter exists, else "N models", else
++    /// nil. One formatter for both counts (DUP-MAE-002).
++    static func countLabel(sessions: Int, models: Int) -> String? {
++        if sessions > 0 {
++            return count(sessions, single: "analytics_session_single", plural: "analytics_sessions")
++        }
++        if models > 0 {
++            return count(models, single: "analytics_model_single", plural: "analytics_models")
++        }
++        return nil
++    }
++
++    private static func count(_ n: Int, single: String, plural: String) -> String {
++        "\(n) \(L10n.localizedString(n == 1 ? single : plural))"
++    }
++}
+diff --git a/Sources/AiTaskbarCore/Cache/DiskCache.swift b/Sources/AiTaskbarCore/Cache/DiskCache.swift
+index fd7a873..a58875d 100644
+--- a/Sources/AiTaskbarCore/Cache/DiskCache.swift
++++ b/Sources/AiTaskbarCore/Cache/DiskCache.swift
+@@ -83,25 +83,35 @@ public struct DiskCache: Sendable {
+ 
+     // MARK: - Reads
+ 
+-    /// Single stat+read for the hot cache-hit path (N1-NEX-004).
+-    public func freshPayloadWithAge() -> (Data, TimeInterval)? {
++    /// Age of the payload file from its mtime, or nil when it is missing.
++    /// The one place freshness is measured, so the TTL probe and the reads
++    /// cannot drift apart (DUP-MAE-004). Call inside `withIOLock`.
++    private func payloadAge() -> TimeInterval? {
++        guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
++              let mtime = attrs[.modificationDate] as? Date else { return nil }
++        return now().timeIntervalSince(mtime)
++    }
++
++    /// Payload and its age when the age is within `limit`. Single stat+read
++    /// for the hot cache-hit path (N1-NEX-004).
++    private func payloadWithAge(within limit: TimeInterval) -> (Data, TimeInterval)? {
+         withIOLock {
+-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
+-                  let mtime = attrs[.modificationDate] as? Date else { return nil }
+-            let age = now().timeIntervalSince(mtime)
+-            guard age <= ttl,
++            guard let age = payloadAge(), age <= limit,
+                   let data = try? Data(contentsOf: payloadURL) else { return nil }
+             return (data, age)
+         }
+     }
+ 
++    public func freshPayloadWithAge() -> (Data, TimeInterval)? {
++        payloadWithAge(within: ttl)
++    }
++
+     /// Stat-only freshness probe: true when `freshPayloadWithAge()` would
+     /// currently serve an entry, without reading the payload.
+     public func hasFreshPayload() -> Bool {
+         withIOLock {
+-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
+-                  let mtime = attrs[.modificationDate] as? Date else { return false }
+-            return now().timeIntervalSince(mtime) <= ttl
++            guard let age = payloadAge() else { return false }
++            return age <= ttl
+         }
+     }
+ 
+@@ -110,14 +120,7 @@ public struct DiskCache: Sendable {
+     }
+ 
+     public func anyPayloadWithAge() -> (Data, TimeInterval)? {
+-        withIOLock {
+-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: payloadURL.path),
+-                  let mtime = attrs[.modificationDate] as? Date else { return nil }
+-            let age = now().timeIntervalSince(mtime)
+-            guard age <= maxStale,
+-                  let data = try? Data(contentsOf: payloadURL) else { return nil }
+-            return (data, age)
+-        }
++        payloadWithAge(within: maxStale)
+     }
+ 
+     public func anyPayload() -> Data? {
+diff --git a/Sources/AiTaskbarProviders/AntigravityExecutor.swift b/Sources/AiTaskbarProviders/AntigravityExecutor.swift
+index 2d03720..9f1d778 100644
+--- a/Sources/AiTaskbarProviders/AntigravityExecutor.swift
++++ b/Sources/AiTaskbarProviders/AntigravityExecutor.swift
+@@ -128,10 +128,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+             } else if fullErr.contains("UNAVAILABLE") || fullErr.contains("unavailable") {
+                 throw AppError.guidance(.antigravityUnavailable)
+             } else if let structured = structuredError {
+-                if structured == "context canceled" {
+-                    throw AppError.guidance(.antigravityCanceled)
+-                }
+-                throw AppError.io("agy: \(structured)")
++                throw AntigravityReportedError.appError(for: structured)
+             }
+             let raw = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                 ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
+@@ -154,13 +151,15 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+             let response: String?
+         }
+ 
++        func reported(_ env: AgyEnvelope) -> String? {
++            guard env.status == "ERROR" || !(env.error ?? "").isEmpty else { return nil }
++            return AntigravityReportedError.message(error: env.error, response: env.response)
++        }
++
+         func inspect(_ data: Data) -> String? {
+-            if let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: data) {
+-                if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
+-                    if let err = env.error, !err.isEmpty { return err }
+-                    if let resp = env.response, !resp.isEmpty { return resp }
+-                    return "agy reported an error"
+-                }
++            if let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: data),
++               let message = reported(env) {
++                return message
+             }
+             let str = String(data: data, encoding: .utf8) ?? ""
+             if let start = str.firstIndex(of: "{"),
+@@ -168,11 +167,7 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+                 let sub = String(str[start...end])
+                 if let subData = sub.data(using: .utf8),
+                    let env = try? SharedCoders.decoder.decode(AgyEnvelope.self, from: subData) {
+-                    if env.status == "ERROR" || (env.error != nil && !(env.error?.isEmpty ?? true)) {
+-                        if let err = env.error, !err.isEmpty { return err }
+-                        if let resp = env.response, !resp.isEmpty { return resp }
+-                        return "agy reported an error"
+-                    }
++                    return reported(env)
+                 }
+             }
+             return nil
+@@ -181,3 +176,24 @@ public struct ProcessAntigravityExecutor: AntigravityExecuting {
+         return inspect(outData) ?? inspect(errData)
+     }
+ }
++
++/// The one mapping for an error `agy` reports in its JSON envelope, shared by
++/// the live run (`ProcessAntigravityExecutor`) and the cached-payload decode
++/// (`GeminiProvider`) so the two cannot drift (DUP-MAE-003).
++enum AntigravityReportedError {
++    /// `error` when non-empty, else `response` when non-empty, else a
++    /// generic message.
++    static func message(error: String?, response: String?) -> String {
++        if let error, !error.isEmpty { return error }
++        if let response, !response.isEmpty { return response }
++        return "agy reported an error"
++    }
++
++    /// `context canceled` is guidance (the run was interrupted, retry);
++    /// anything else is an I/O error carrying agy's own words.
++    static func appError(for message: String) -> AppError {
++        message == "context canceled"
++            ? .guidance(.antigravityCanceled)
++            : .io("agy: \(message)")
++    }
++}
+diff --git a/Sources/AiTaskbarProviders/GeminiProvider.swift b/Sources/AiTaskbarProviders/GeminiProvider.swift
+index 17abab8..b4ad883 100644
+--- a/Sources/AiTaskbarProviders/GeminiProvider.swift
++++ b/Sources/AiTaskbarProviders/GeminiProvider.swift
+@@ -109,11 +109,8 @@ public final class GeminiProvider: UsageProvider {
+                 throw AppError.schema("agy usage decode: \(error)")
+             }
+             if agy.status == "ERROR" {
+-                let err = agy.error ?? agy.response ?? "agy reported an error"
+-                if err == "context canceled" {
+-                    throw AppError.guidance(.antigravityCanceled)
+-                }
+-                throw AppError.io("agy: \(err)")
++                throw AntigravityReportedError.appError(
++                    for: AntigravityReportedError.message(error: agy.error, response: agy.response))
+             }
+             return .gemini(agy.toSnapshot())
+         }
+diff --git a/Tests/AiTaskbarAppTests/AnalyticsCountLabelTests.swift b/Tests/AiTaskbarAppTests/AnalyticsCountLabelTests.swift
+new file mode 100644
+index 0000000..fad18ff
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/AnalyticsCountLabelTests.swift
+@@ -0,0 +1,41 @@
++import Foundation
++import Testing
++@testable import AiTaskbarApp
++
++/// DUP-MAE-002: the sessions and models counts on the Analytics card were two
++/// copies of one block; both now go through `countLabel(sessions:models:)`.
++@MainActor
++@Suite("Analytics card count label", .serialized)
++struct AnalyticsCountLabelTests {
++    private static func label(sessions: Int, models: Int) -> String? {
++        let previous = L10n.languageOverride
++        defer { L10n.languageOverride = previous }
++        L10n.languageOverride = "en"
++        return VendorAnalyticsCardView.countLabel(sessions: sessions, models: models)
++    }
++
++    @Test("sessions win over models")
++    func sessions_first() {
++        #expect(Self.label(sessions: 3, models: 5) == "3 active sessions")
++    }
++
++    @Test("one session is singular")
++    func one_session() {
++        #expect(Self.label(sessions: 1, models: 5) == "1 active session")
++    }
++
++    @Test("models are used when there is no session counter")
++    func models_fallback() {
++        #expect(Self.label(sessions: 0, models: 2) == "2 models used")
++    }
++
++    @Test("one model is singular")
++    func one_model() {
++        #expect(Self.label(sessions: 0, models: 1) == "1 model used")
++    }
++
++    @Test("no counts, no label")
++    func no_counts() {
++        #expect(Self.label(sessions: 0, models: 0) == nil)
++    }
++}
+diff --git a/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift b/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift
+index d5224a5..70f8e05 100644
+--- a/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift
++++ b/Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift
+@@ -64,7 +64,7 @@ struct AnalyticsEstimatesMergeTests {
+                                    historyProvider: { _ in [] })
+         store.timeframe = .weekly
+         store.refresh(force: true)
+-        try await Task.sleep(nanoseconds: 100_000_000)
++        await drainMainQueue()
+         await store.historyReloadTask?.value
+         let summaries = store.snapshot?.vendorSummaries ?? []
+         return Dictionary(uniqueKeysWithValues: summaries.map { ($0.vendor, $0) })
+diff --git a/Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift b/Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift
+index e071944..b28168a 100644
+--- a/Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift
++++ b/Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift
+@@ -37,8 +37,9 @@ private final class LoadRecorder: Sendable {
+ @Suite("AnalyticsStore history loading", .serialized)
+ struct AnalyticsStoreHistoryLoadTests {
+     private func settle(_ store: AnalyticsStore) async {
+-        // Let queued `receive(on: .main)` deliveries run, then await the load.
+-        try? await Task.sleep(nanoseconds: 100_000_000)
++        // Let queued `receive(on: .main)` deliveries run, then await the
++        // store's own completion signal: the history load they started.
++        await drainMainQueue()
+         await store.historyReloadTask?.value
+     }
+ 
+diff --git a/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift b/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
+index c7363c8..8571fc7 100644
+--- a/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
++++ b/Tests/AiTaskbarAppTests/CostEstimatorLoadingTests.swift
+@@ -32,6 +32,23 @@ struct CostEstimatorLoadingTests {
+         expectTrue(CostEstimator.opencodeProviders[.gemini] == ["gemini", "google"])
+     }
+ 
++    /// CQ-MAE-016: `OpencodeScanner.scanOutcome` answers `.unavailable` — the
++    /// same case as a read failure, which keeps the previous rows — when an
++    /// alias is in two groups or no alias is given. The alias table is the
++    /// only caller, so it must never hit that misuse path.
++    @Test("each opencode alias belongs to exactly one vendor")
++    func opencode_aliases_are_disjoint() {
++        let aliases = CostEstimator.opencodeProviders.values.flatMap { $0 }
++        #expect(!aliases.isEmpty)
++        #expect(Set(aliases).count == aliases.count)
++    }
++
++    @Test("no opencode alias is empty")
++    func opencode_aliases_are_non_empty() {
++        let aliases = CostEstimator.opencodeProviders.values.flatMap { $0 }
++        #expect(!aliases.contains(""))
++    }
++
+     /// CQ-MAE-003: "not installed" publishes empty rows; a failed read
+     /// publishes nothing so the previous rows stay (BUG-ART-013).
+     @Test("opencode outcomes map to empty rows, kept rows, or the scan")
+diff --git a/Tests/AiTaskbarAppTests/MainQueueDrain.swift b/Tests/AiTaskbarAppTests/MainQueueDrain.swift
+new file mode 100644
+index 0000000..a912b38
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/MainQueueDrain.swift
+@@ -0,0 +1,12 @@
++import Foundation
++
++/// Resumes after every block already enqueued on the main queue has run.
++/// Combine's `receive(on: DispatchQueue.main)` delivers with `main.async`,
++/// and the main queue is FIFO, so this is a deterministic "queued sink
++/// deliveries have landed" signal — unlike a fixed sleep, it cannot lose a
++/// race on a loaded CI machine (TEST-MAE-005 / TEST-MAE-009).
++func drainMainQueue() async {
++    await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
++        DispatchQueue.main.async { c.resume() }
++    }
++}
+diff --git a/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift b/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift
+new file mode 100644
+index 0000000..c9441fb
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/NotificationTitleLocalizationTests.swift
+@@ -0,0 +1,34 @@
++import Foundation
++import Testing
++import AiTaskbarCore
++@testable import AiTaskbarApp
++
++/// CQ-MAE-012: the non-discreet notification title was a hard-coded English
++/// sentence ("… at 92%") while its body was localized.
++@MainActor
++@Suite("Notification title localization", .serialized)
++struct NotificationTitleLocalizationTests {
++    private static let window = UsageWindow(label: "5h", utilizationPercent: 92.4)
++
++    private static func title(in language: String) -> String {
++        let previous = L10n.languageOverride
++        defer { L10n.languageOverride = previous }
++        L10n.languageOverride = language
++        return NotificationService.title(vendor: .anthropic, window: window)
++    }
++
++    @Test("en title")
++    func title_en() {
++        #expect(Self.title(in: "en") == "\(VendorId.anthropic.displayName) — 5h at 92%")
++    }
++
++    @Test("pt-BR title")
++    func title_pt_br() {
++        #expect(Self.title(in: "pt-BR") == "\(VendorId.anthropic.displayName) — 5h em 92%")
++    }
++
++    @Test("es title")
++    func title_es() {
++        #expect(Self.title(in: "es") == "\(VendorId.anthropic.displayName) — 5h al 92%")
++    }
++}
+diff --git a/Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift b/Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift
+index 63034ba..821499e 100644
+--- a/Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift
++++ b/Tests/AiTaskbarAppTests/VendorViewModelRateLimitTests.swift
+@@ -18,6 +18,34 @@ private final class RateLimitedProvider: UsageProvider, @unchecked Sendable {
+     }
+ }
+ 
++/// Answers HTTP 429 only after the test releases it, so the test can move
++/// the injected clock while the request is in flight.
++private final class GatedRateLimitedProvider: UsageProvider, @unchecked Sendable {
++    let vendorId: VendorId = .openrouter
++    var displayName: String { vendorId.displayName }
++    var credentialFileURL: URL? { nil }
++    private let gate = OSAllocatedUnfairLock<CheckedContinuation<Void, Never>?>(initialState: nil)
++    var isWaiting: Bool { gate.withLock { $0 != nil } }
++    func release() {
++        let c = gate.withLock { c -> CheckedContinuation<Void, Never>? in
++            defer { c = nil }
++            return c
++        }
++        c?.resume()
++    }
++    func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {
++        await withCheckedContinuation { c in gate.withLock { $0 = c } }
++        throw AppError.http(status: 429, body: "slow down")
++    }
++}
++
++/// Test-controlled clock for `VendorViewModel(clock:)`.
++@MainActor
++private final class ManualClock {
++    var now: Date
++    init(_ now: Date) { self.now = now }
++}
++
+ /// CQ-MAE-014: `refresh(forceRefresh:now:)` took an injected clock but only
+ /// used it for `loadingSince`; the 429 cooldown gate read `Date.now`, so a
+ /// caller-supplied time past the cooldown was still refused.
+@@ -75,4 +103,30 @@ struct VendorViewModelRateLimitTests {
+         await waitUntil { provider.callCount == 2 }
+         #expect(provider.callCount == 2)
+     }
++
++    /// BUG-MAE-009: the cooldown was stamped from the dispatch time, so a
++    /// 429 that took 100 s to arrive got a cooldown 100 s shorter than
++    /// `rateLimitCooldown(forAttempt:)`. It must be measured from arrival.
++    @Test("a slow 429 is cooled down from its arrival, not its dispatch")
++    func cooldown_starts_at_response_arrival() async throws {
++        defer { cleanup() }
++        let provider = GatedRateLimitedProvider()
++        let dir = tmp
++        let start = Date(timeIntervalSince1970: 1_000_000)
++        let clock = ManualClock(start)
++        let vm = VendorViewModel(
++            provider: provider, defaults: defaults,
++            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) },
++            clock: { clock.now })
++
++        vm.refresh(forceRefresh: true, now: start)
++        await waitUntil { provider.isWaiting }
++        clock.now = start.addingTimeInterval(100)   // the request is slow
++        provider.release()
++        await waitUntil { isFailed(vm) }
++
++        let retryAt = try #require(vm.rateLimitRetryAt)
++        let expected = start.addingTimeInterval(100 + VendorViewModel.rateLimitCooldown(forAttempt: 1))
++        #expect(retryAt == expected)
++    }
+ }
+diff --git a/Tests/AiTaskbarCoreTests/DiskCacheTests.swift b/Tests/AiTaskbarCoreTests/DiskCacheTests.swift
+index 212d2d6..f4af648 100644
+--- a/Tests/AiTaskbarCoreTests/DiskCacheTests.swift
++++ b/Tests/AiTaskbarCoreTests/DiskCacheTests.swift
+@@ -96,7 +96,7 @@ struct DiskCacheTests {
+     }
+ 
+     @Test("freshPayloadWithAge reads the injected clock")
+-    func payload_age_uses_injected_clock() throws {
++    func freshPayloadWithAge_uses_injected_clock() throws {
+         defer { try? FileManager.default.removeItem(at: tmp) }
+         let clock = TestClock()
+         let cache = DiskCache(vendor: .anthropic, baseDir: tmp, now: { clock.date })
+diff --git a/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift b/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift
+index ee82059..83085ce 100644
+--- a/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift
++++ b/Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift
+@@ -108,6 +108,16 @@ struct GeminiXAILocaleNeutralTests {
+         #expect(message == AppError.guidance(.antigravityCanceled).description)
+     }
+ 
++    /// DUP-MAE-003: the cached-payload path read `error ?? response`, so an
++    /// empty `error` hid agy's real message behind "agy: ", while the live
++    /// executor already skipped empty fields. Both now share one mapping.
++    @Test("an empty agy error falls back to the response text, as the executor does")
++    func agy_empty_error_uses_response() async throws {
++        let body = #"{"conversation_id":"","status":"ERROR","response":"quota backend down","error":""}"#
++        let message = try await Self.fetchError(agyPayload: Data(body.utf8))
++        #expect(message == AppError.io("agy: quota backend down").description)
++    }
++
+     @Test("non-JSON payload is a schema error")
+     func non_json_payload_is_schema_error() async throws {
+         let message = try await Self.fetchError(agyPayload: Data("not json".utf8))
+diff --git a/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift b/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
+index 2f65151..fa2a0ca 100644
+--- a/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
++++ b/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift
+@@ -268,7 +268,7 @@ struct XAIProviderTests {
+ 
+         do {
+             _ = try await provider.fetchUsage(forceRefresh: true)
+-            Issue.record("expected credentials error")
++            Issue.record("expected grokCLIRequired guidance")
+         } catch let error as AppError {
+             expectTrue(error == .guidance(.grokCLIRequired))
+         } catch {
+diff --git a/config.example.toml b/config.example.toml
+index dc87f7e..2b43b42 100644
+--- a/config.example.toml
++++ b/config.example.toml
+@@ -90,7 +90,9 @@ api_key_env = "MOONSHOT_API_KEY"
+ 
+ [gemini]
+ enabled = true
+-api_key_env = "GEMINI_API_KEY"
++prefer_antigravity = true    # default true: query the local Antigravity CLI (`agy`) for quota windows
++# agy_path = "/path/to/agy"  # optional: explicit binary if not in a standard install path
++api_key_env = "GEMINI_API_KEY"   # heartbeat fallback when `agy` is missing or unauthenticated
+ # api_key = "AIza..."        # inline fallback if env not set
+ # base_url = "https://generativelanguage.googleapis.com/v1beta"
+ # Note: Google AI doesn't expose a public usage/billing REST endpoint —
+@@ -106,6 +108,10 @@ api_key_env = "DEEPSEEK_API_KEY"
+ 
+ [xai]
+ enabled = true
++prefer_grok_cli = true       # default true: read the Grok CLI login (~/.grok/auth.json) for plan quota
++# grok_auth_path = "~/.grok/auth.json"
++# grok_base_url = "https://cli-chat-proxy.grok.com"  # only this host is accepted; anything else falls back
++# Management API fallback (used when prefer_grok_cli = false):
+ api_key_env = "XAI_MANAGEMENT_KEY"
+ # api_key = "xai-..."         # management key from console.x.ai → Settings → Management Keys
+ #                             # (NOT the inference API key used with api.x.ai)
+diff --git a/scripts/check-source-ratchets.sh b/scripts/check-source-ratchets.sh
+index 512e122..5690900 100755
+--- a/scripts/check-source-ratchets.sh
++++ b/scripts/check-source-ratchets.sh
+@@ -100,11 +100,24 @@ fi
+ if ! bare_int=$(find "$wire_dir" -maxdepth 1 -name '*WireTypes.swift' -type f -print0 | sort -z \
+     | xargs -0 perl -ne '
+         next if /^\s*\/\//;
+-        # Blank out only the radix string parses themselves (balanced
++        # Neutralise only the radix string parses themselves (balanced
+         # parentheses, so Int(String(x), radix: 16) is one call); skipping the
+         # whole line let `Int(s, radix: 16) ?? Int(d)` through (TEST-MAE-007).
+-        (my $l = $_) =~ s{\bU?Int(?:8|16|32|64)?(\((?:[^()]++|(?1))*\))}{
+-            my $m = $&; $1 =~ /\bradix\s*:/ ? "RADIX_PARSE" : $m }ge;
++        # Only the `Int` name is renamed: the arguments are scrubbed
++        # recursively and kept, so a trapping conversion nested inside, as in
++        # `Int(String(Int(d)), radix: 16)`, is still seen (TEST-MAE-010).
++        # `radix:` must be a TOP-LEVEL argument of the call itself.
++        sub scrub {
++            my ($s) = @_;
++            $s =~ s{\b(U?Int(?:8|16|32|64)?)(\((?:[^()]++|(?2))*\))}{
++                my ($name, $call) = ($1, $2);
++                my $inner = scrub(substr($call, 1, -1));
++                (my $top = $inner) =~ s/(\((?:[^()]++|(?1))*\))/()/g;
++                ($top =~ /\bradix\s*:/ ? "RADIX_PARSE" : $name) . "(" . $inner . ")"
++            }ge;
++            return $s;
++        }
++        my $l = scrub($_);
+         my $hit = $l =~ /\bU?Int(?:8|16|32|64)?\((?:\s*[^a-zA-Z_ )]|\s*[a-zA-Z_][a-zA-Z0-9_.]*[^a-zA-Z0-9_.:])/
+             || $l =~ /\bU?Int(?:8|16|32|64)?\.init\b(?!\s*\(\s*(?:saturating|checkedTruncating|exactly|clamping|truncatingIfNeeded)\s*:)/;
+         print "$ARGV:$.: $_" if $hit;
+diff --git a/scripts/source-ratchet-selftest.sh b/scripts/source-ratchet-selftest.sh
+index 795f2fc..373cedc 100755
+--- a/scripts/source-ratchet-selftest.sh
++++ b/scripts/source-ratchet-selftest.sh
+@@ -102,6 +102,8 @@ let f = UInt8(truncatingIfNeeded: n)
+ let g = Int(s, radix: 16)
+ let k = Int(String(x), radix: 16)
+ let m = UInt8(s, radix: 2) ?? 0
++let p = Int(String(Int(saturating: d)), radix: 16)
++let q = Int(Int(s, radix: 16).map(String.init) ?? "", radix: 10)
+ let h = xs.map(Int.init(saturating:))
+ let i = Int.init(checkedTruncating: d)
+ let j = Int64(saturating: d)
+@@ -125,6 +127,9 @@ expect_reject wire 'UInt8(x * 2)'          FooWireTypes.swift 'let a = UInt8(x *
+ expect_reject wire 'point-free .map(Int.init)' FooWireTypes.swift 'let a = xs.map(Int.init)'
+ expect_reject wire 'Int.init(d)'           FooWireTypes.swift 'let a = Int.init(d)'
+ expect_reject wire 'radix parse + Int(d) on one line' FooWireTypes.swift 'let a = Int(s, radix: 16) ?? Int(d)'
++expect_reject wire 'Int(d) nested in a radix call' FooWireTypes.swift 'let a = Int(String(Int(d)), radix: 16)'
++expect_reject wire 'Int(Int(d), radix: 16)'        FooWireTypes.swift 'let a = Int(Int(d), radix: 16)'
++expect_reject wire 'Int(d) as the radix argument'  FooWireTypes.swift 'let a = Int(s, radix: Int(d))'
+ 
+ echo "[4/4] a missing directory must fail closed, not read as clean"
+ rc=0

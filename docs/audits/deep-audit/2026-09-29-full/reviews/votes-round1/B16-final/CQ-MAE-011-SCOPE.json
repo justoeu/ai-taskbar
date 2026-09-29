@@ -1,0 +1,13 @@
+{
+ "id": "CQ-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "config.example.toml:93-114 now documents `prefer_antigravity`, `agy_path`, `prefer_grok_cli`, `grok_auth_path` and `grok_base_url`. Each key and default matches the decoders: AppConfig.swift:538 and 694 both default to `?? true`, `grok_base_url` is allow-listed at AppConfig.swift:661, and `~` is expanded at AppConfig.swift:668. README.md:494 gained the matching `grok_base_url` line. No safe default changed. The Settings UI part of the finding was not addressed (see new_findings).",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/config.example.toml:93",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Config/AppConfig.swift:694"
+ ],
+ "lens": "SCOPE",
+ "_task": "a1f3f2dec09501900",
+ "batch": "B16-final"
+}

@@ -1,0 +1,14 @@
+{
+ "id": "TEST-MAE-010",
+ "verdict": "APROVA",
+ "reasoning": "scripts/check-source-ratchets.sh:103-120: the one-shot substitution became a recursive `scrub` sub, about 10 lines with nesting depth 2. It is commented with the exact case it closes and states the rule that `radix:` must be a top-level argument. Complexity grows in step with the problem (nested calls need recursion), and scripts/source-ratchet-selftest.sh adds three reject cases and two accept cases, so the new logic cannot pass while blind.",
+ "required_changes": [],
+ "cited_paths": [
+  "scripts/check-source-ratchets.sh:103",
+  "scripts/source-ratchet-selftest.sh:105",
+  "scripts/source-ratchet-selftest.sh:130"
+ ],
+ "lens": "QUALITY",
+ "_task": "ab05609a1a9d8c245",
+ "batch": "B16-final"
+}

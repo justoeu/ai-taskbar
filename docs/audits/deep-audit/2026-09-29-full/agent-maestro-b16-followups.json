@@ -1,0 +1,88 @@
+{
+ "findings": [
+  {
+   "lens": "quality",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarApp",
+   "line": 0,
+   "title": "Percent formatting repeated at ~15 App sites with inconsistent rounding (notification title truncates 92.9 to 92, cards round)",
+   "evidence": "Remaining half of CQ-MAE-004 (raised by Higia and Jano, remediation B16)",
+   "fix": "One shared percent formatter used by cards, tooltip and notification title",
+   "impact": "Notification can show 1 point less than the card",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B16"
+  },
+  {
+   "lens": "quality",
+   "severity": "INFO",
+   "path": "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+   "line": 290,
+   "title": "lastNetworkFetch = .now reads the wall clock next to the injected clock; default clock is not monotonic",
+   "evidence": "Two time sources in one refresh path; a backwards wall-clock jump shortens the measured request duration (raised by Higia and Nemesis, remediation B16)",
+   "fix": "Use self.clock() consistently; consider ContinuousClock for elapsed time",
+   "impact": "Minor: testability and a rare shorter cooldown on clock jumps",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B16"
+  },
+  {
+   "lens": "classic_bugs",
+   "severity": "INFO",
+   "path": "Sources/AiTaskbarProviders/GeminiProvider.swift",
+   "line": 508,
+   "title": "Cached agy path treats only status == ERROR as an error while the live path also treats a non-empty error with another status as an error",
+   "evidence": "Pre-existing divergence noted by Nemesis, remediation B16",
+   "fix": "Share one predicate between live and cached paths",
+   "impact": "A cached envelope with error text and non-ERROR status may render as data",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B16"
+  },
+  {
+   "lens": "classic_bugs",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarApp/NotificationService.swift",
+   "line": 203,
+   "title": "Failed-delivery unmark drops the key instead of restoring the previously delivered lower mark, so a later lower reading can re-send an already delivered threshold",
+   "evidence": "70 delivered, 90 failed, next reading 75 re-sends 70 (raised by Nemesis, remediation B16 r2)",
+   "fix": "Keep the prior mark and restore it on failure",
+   "impact": "Occasional duplicate notification",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B16 r2"
+  },
+  {
+   "lens": "performance",
+   "severity": "LOW",
+   "path": "Sources/AiTaskbarApp/NotificationService.swift",
+   "line": 127,
+   "title": "With notification permission denied, every tick above a threshold makes one failed add() and one error-level log line indefinitely",
+   "evidence": "unmark re-arms after notificationsNotAllowed (raised by Higia and Jano, remediation B16 r2)",
+   "fix": "Skip re-arming (or downgrade the log) when authorization is known denied",
+   "impact": "~12 error log lines per hour per window",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B16 r2"
+  },
+  {
+   "lens": "quality",
+   "severity": "INFO",
+   "path": "config.example.toml",
+   "line": 93,
+   "title": "gemini.prefer_antigravity, xai.prefer_grok_cli and xai.grok_base_url have no Settings UI controls (config-file-only)",
+   "evidence": "Settings-UI half of CQ-MAE-011 intentionally not done (raised by Jano, remediation B16 r2)",
+   "fix": "Accept as config-file-only knobs, or add Settings controls",
+   "impact": "Users must edit config.toml for these keys",
+   "category": "review-followup-r2",
+   "confidence": "medium",
+   "agent": "Maestro",
+   "origin": "new_findings from review panel, remediation B16 r2"
+  }
+ ]
+}

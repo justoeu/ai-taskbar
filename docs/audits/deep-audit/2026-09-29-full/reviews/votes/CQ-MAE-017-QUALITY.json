@@ -1,0 +1,14 @@
+{
+ "id": "CQ-MAE-017",
+ "verdict": "APROVA",
+ "reasoning": "The release-failure table gets the Dependabot row; a Dependabot paragraph is added under Releasing; and the TOMLKit note says a PR there is a prompt, not an instruction. All three are identical in CLAUDE.md and AGENTS.md, which covers everything the finding's fix asked for.",
+ "required_changes": [],
+ "cited_paths": [
+  "CLAUDE.md:351",
+  "CLAUDE.md:701",
+  "AGENTS.md:351"
+ ],
+ "lens": "QUALITY",
+ "_task": "ab05609a1a9d8c245",
+ "batch": "B16-final"
+}

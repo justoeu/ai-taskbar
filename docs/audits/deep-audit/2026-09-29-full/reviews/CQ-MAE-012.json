@@ -1,0 +1,73 @@
+{
+  "id": "CQ-MAE-012",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:43:59 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The defect is gone. When add() fails, the completion at Sources/AiTaskbarApp/NotificationService.swift:128-138 logs the error and then hops with Task { @MainActor in self?.tracker.unmark(...) }. The service class is @MainActor (line 38), so the tracker is only changed on the main actor, and [weak self] avoids a retain. unmark (lines 203-207) removes the mark only when highestNotified[key] == threshold. If a higher threshold was marked in the meantime it stays, which unmark_keeps_higher_mark pins. send() is the only route to add(), and observe() is its only caller, so no second route was left untouched. Tests: I ran --filter 'NotificationDeliveryRollbackTests|NotificationThresholdTrackerTests' and all 12 passed across 2 suites. Reversal: I replaced only the unmark line with a no-op, and failed_add_is_resent went RED at NotificationDeliveryRollbackTests.swift:52:9, (center.identifiers.count → 1) == 2. I then restored the file: the shasum fc9233a5 is identical, and git diff is byte-identical to reviews/diffs/B16-final-r2.diff (checked with cmp). The tests never reach the real UNUserNotificationCenter. The only test construction uses the internal init with FakeNotificationCenter and runtimeIncompatible:false. The real center is reached only through SystemNotificationCenter, via the public convenience init, which no test calls. The drain is deterministic: the completion runs in an awaited Task.detached, so the @MainActor Task is enqueued before drainMainQueue's main.async. Minor caveat, not blocking: unmark removes the whole key instead of restoring the lower mark. Example: 70 was delivered, then 90 failed, then the next reading is 75. That re-sends 70, a duplicate of a notification already delivered. The same applies if a failure completes after a reset-and-recross to the same threshold that was delivered. Both are rare and cost only a duplicate, never a lost alert.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:128",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:203",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift:52",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift:85"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "The seam is small and has a real purpose. NotificationPosting (NotificationService.swift:9-13) has two methods and two users: SystemNotificationCenter in production and FakeNotificationCenter in tests. It exists so the send path can be tested without the real center, which crashes on macOS 26, so it is not a speculative abstraction. The authorization body was moved into SystemNotificationCenter.requestAuthorizationIfNeeded (lines 16-27) together with its Sendable comment, so nothing is duplicated. The public init(config:) keeps its signature as a convenience init, and the injectable init stays internal. runtimeIncompatible replaces both Self.isRuntimeKnownIncompatible reads (the observe guard and the defense-in-depth check in send), so neither copy was missed. No error is swallowed: the completion still logs through AppLog.lifecycle.error and now also calls unmark via Task { @MainActor } with [weak self] (lines 127-138), so a failed add() re-sends on the next tick instead of disappearing. tracker.unmark (lines 200-207) has one guard, nesting depth 1 and 3 lines, and its name matches what it does. Guarding on the exact recorded mark stops it from undoing a higher threshold or a reset, and a unit test pins that. The title moved into static func title (lines 146-148), backed by notif_title_fmt in all three .lproj files (en:78, es:77, pt-BR:77), so the hard-coded English is gone. The tests are atomic, with one #expect per fact, and use expectTrue for the optional comparison as CLAUDE.md requires. drainMainQueue replaces a sleep with a deterministic FIFO signal. The Ferreiro report says the gate is green: 0 warnings, 93.22% coverage.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/NotificationService.swift:9",
+        "Sources/AiTaskbarApp/NotificationService.swift:16",
+        "Sources/AiTaskbarApp/NotificationService.swift:56",
+        "Sources/AiTaskbarApp/NotificationService.swift:127",
+        "Sources/AiTaskbarApp/NotificationService.swift:146",
+        "Sources/AiTaskbarApp/NotificationService.swift:200",
+        "Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift:45",
+        "Tests/AiTaskbarAppTests/NotificationThresholdTrackerTests.swift:85",
+        "Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:78"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "The public contract is unchanged. `public init(config:)` became `public convenience init(config:)` with the same signature (NotificationService.swift:56-59). It passes SystemNotificationCenter, whose requestAuthorizationIfNeeded/add bodies are the old inline code moved as-is. It also passes Self.isRuntimeKnownIncompatible, which is a `public static let` (:78). Reading it once at init is therefore the same as the old per-call reads, and SettingsView.swift:311-322 still uses the static. The only production caller, AiTaskbarApp.swift:46, is untouched. The class is `final`, so turning the init into a convenience init cannot break a subclass. The new NotificationPosting protocol, SystemNotificationCenter and the 3-argument init are all internal, so there is no new public surface. There is no new dependency, host, entitlement or secret file. The notification identifier, the dedupe key and the discreet path are unchanged. `unmark` (:203-207) only removes the mark when it still equals the failed threshold, so a higher mark or a reset is never undone. The DiskCacheTests rename was reverted, so that file equals HEAD and is correctly absent from the diff. The tests reach the service only through the internal seam with a fake center. The behaviour change (a failed add() is now retried) needs no README, Localizable or config change. The release is a patch bump via auto-tag, so no manual version edit is needed.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:56",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:78",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:127",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:203",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/AiTaskbarApp.swift:46",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarAppTests/NotificationDeliveryRollbackTests.swift:40"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

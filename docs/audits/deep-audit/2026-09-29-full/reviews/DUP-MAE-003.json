@@ -1,0 +1,64 @@
+{
+  "id": "DUP-MAE-003",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:44:00 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "AntigravityExecutor.swift:478-494 is now the one mapping for agy-reported errors (message() skips an empty error or response, and appError() handles context canceled). It is used by the live run (:131, :439-466) and the cached decode (GeminiProvider.swift:508). I checked that inspect() behaves the same as before: a non-error envelope still falls through, and the substring path still returns nil. Restored the HEAD GeminiProvider: agy_empty_error_uses_response goes RED ('io: agy: '). The stale Issue.record message in XAIProviderTests is fixed. Pre-existing and out of scope: the cached path only checks status == \"ERROR\", while the live path also treats a non-empty error with another status as an error.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/AntigravityExecutor.swift:478",
+        "Sources/AiTaskbarProviders/GeminiProvider.swift:508",
+        "Tests/AiTaskbarProvidersTests/GeminiXAILocaleNeutralTests.swift:115"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarProviders/AntigravityExecutor.swift:180-199 adds `AntigravityReportedError` as the single message rule and single error mapping. All three copies now use it (two in the executor via the local `reported`, one in GeminiProvider.swift:112), so none of the clones is left behind. The awkward `(env.error != nil && !(env.error?.isEmpty ?? true))` became `!(env.error ?? \"\").isEmpty`, which is easier to read. The `try? decode` was already there and is a probe with a fallback, not a swallowed error.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/AntigravityExecutor.swift:131",
+        "Sources/AiTaskbarProviders/AntigravityExecutor.swift:154",
+        "Sources/AiTaskbarProviders/AntigravityExecutor.swift:183",
+        "Sources/AiTaskbarProviders/GeminiProvider.swift:112"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "AntigravityExecutor.swift:131,154-179,506-525 and GeminiProvider.swift:112-113. The new `AntigravityReportedError` enum is module-internal, not public. The only intended behavior change is that an empty `error` now falls back to `response` in GeminiProvider, which is the defect being fixed. The one-line change in XAIProviderTests.swift:271 corrects the stale `Issue.record` message this same finding cites.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/AntigravityExecutor.swift:508",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiProvider.swift:112",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Tests/AiTaskbarProvidersTests/XAIProviderTests.swift:271"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

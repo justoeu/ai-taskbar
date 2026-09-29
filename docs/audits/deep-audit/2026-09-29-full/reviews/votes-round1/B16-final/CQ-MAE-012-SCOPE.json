@@ -1,0 +1,15 @@
+{
+ "id": "CQ-MAE-012",
+ "verdict": "APROVA",
+ "reasoning": "NotificationService.swift:85,100-106. The new `notif_title_fmt` key is present in all three locales with the same specifiers `%@ %@ %d%%`: en 'at', pt-BR 'em', es 'al'. The arguments passed are (String, String, Int), which matches. Only the non-discreet title changed. The discreet path, the notification identifier and the dedupe key are unchanged, so the notification contract holds.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift:103",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:78",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/pt-BR.lproj/Localizable.strings:77",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Resources/es.lproj/Localizable.strings:77"
+ ],
+ "lens": "SCOPE",
+ "_task": "a1f3f2dec09501900",
+ "batch": "B16-final"
+}

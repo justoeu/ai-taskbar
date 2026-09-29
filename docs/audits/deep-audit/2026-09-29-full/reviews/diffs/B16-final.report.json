@@ -1,0 +1,211 @@
+{
+ "batch": "B16-final",
+ "results": [
+  {
+   "id": "BUG-MAE-009",
+   "outcome": "fixed",
+   "tests": [
+    "VendorViewModelRateLimitTests#cooldown_starts_at_response_arrival"
+   ],
+   "red": "Expectation failed: (retryAt → 1970-01-12 13:51:40 +0000) == (expected → 1970-01-12 13:53:20 +0000)",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-MAE-004",
+   "outcome": "fixed",
+   "tests": [
+    "DiskCacheTests (all 14; boundary TEST-ARG-012 cases)"
+   ],
+   "red": "mutation age<=limit -> age<limit in shared payloadWithAge: 'payload aged exactly ttl is still fresh' and 'maxStale boundary' fail",
+   "reversal": "ok"
+  },
+  {
+   "id": "TEST-MAE-009",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsEstimatesMergeTests#*"
+   ],
+   "red": "test-only: 100 ms sleep replaced by drainMainQueue()+historyReloadTask; mutation (drop post-load publishSnapshot) fails loaded_history_reaches_snapshot 3/3 runs",
+   "reversal": "ok"
+  },
+  {
+   "id": "TEST-MAE-005",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot"
+   ],
+   "red": "same mutation: Expectation failed: (samples → 0) == 1",
+   "reversal": "ok"
+  },
+  {
+   "id": "TEST-MAE-010",
+   "outcome": "fixed",
+   "tests": [
+    "source-ratchet-selftest.sh [3/4] nested radix cases"
+   ],
+   "red": "✗ GATE IS BLIND to: Int(d) nested in a radix call / Int(Int(d), radix: 16) / Int(d) as the radix argument",
+   "reversal": "ok"
+  },
+  {
+   "id": "CQ-MAE-002",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "doc",
+   "reversal": "n/a"
+  },
+  {
+   "id": "CQ-MAE-009",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "doc (35 s, 4 MiB stdout, 64 KiB stderr, 8 MiB HTTP cap, checked in code)",
+   "reversal": "n/a"
+  },
+  {
+   "id": "CQ-MAE-011",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "doc: config.example.toml:113 said 'only this host is accepted'. It now matches XAIConfig.validate: https only, host cli-chat-proxy.grok.com or management-api.x.ai (the shared allowedHosts), anything else falls back to the default. Validation code not changed.",
+   "reversal": "n/a",
+   "round": 2
+  },
+  {
+   "id": "CQ-MAE-017",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "doc",
+   "reversal": "n/a"
+  },
+  {
+   "id": "CQ-MAE-004",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "doc (README clamp); formatter extraction not done: 15 UI sites, no behavior gain",
+   "reversal": "n/a"
+  },
+  {
+   "id": "CQ-MAE-008",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "CHANGELOG v0.21.0..v0.23.6 taken word for word from git log/tags",
+   "reversal": "n/a"
+  },
+  {
+   "id": "CQ-MAE-012",
+   "outcome": "fixed",
+   "tests": [
+    "NotificationDeliveryRollbackTests#failed_add_is_resent",
+    "NotificationDeliveryRollbackTests#delivered_add_is_not_resent",
+    "NotificationThresholdTrackerTests#unmark_keeps_higher_mark",
+    "NotificationThresholdTrackerTests#unmark_current_mark_refires"
+   ],
+   "red": "NotificationDeliveryRollbackTests.swift:52:9: Expectation failed: (center.identifiers.count → 1) == 2",
+   "reversal": "ok",
+   "round": 2
+  },
+  {
+   "id": "CQ-MAE-016",
+   "outcome": "fixed",
+   "tests": [
+    "CostEstimatorLoadingTests#opencode_aliases_are_disjoint",
+    "#opencode_aliases_are_non_empty"
+   ],
+   "red": "mutation .xai:[\"xai\",\"openai\"]: (Set(aliases).count → 6) == (aliases.count → 7)",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-MAE-002",
+   "outcome": "fixed",
+   "tests": [
+    "AnalyticsCountLabelTests#*"
+   ],
+   "red": "mutation singular/plural swapped: \"3 active session\" == \"3 active sessions\"",
+   "reversal": "ok"
+  },
+  {
+   "id": "DUP-MAE-003",
+   "outcome": "fixed",
+   "tests": [
+    "GeminiXAILocaleNeutralTests#agy_empty_error_uses_response"
+   ],
+   "red": "(message → \"io: agy: \") == \"io: agy: quota backend down\"",
+   "reversal": "ok"
+  },
+  {
+   "id": "VERB-MAE-002",
+   "outcome": "fixed",
+   "tests": [],
+   "red": "deleted 8 dead keys from en/pt-BR/es; checked no literal or dynamic use",
+   "reversal": "n/a"
+  },
+  {
+   "id": "ARCH-MAE-001",
+   "outcome": "wontfix",
+   "reason": "Changing the identity model for UsageWindow.label across every vendor is a broad change with no user-visible defect today",
+   "what": "the label is both display text and identity (ForEach id, notification/dedupe key); CreditBaselineStore.reset waits on writeGate",
+   "consequence": "two windows with the same label would collide; renaming a label re-arms notifications once",
+   "reopen_if": "a vendor emits two windows with the same label, or labels get localized",
+   "accept_type": "trade-off"
+  },
+  {
+   "id": "BEST-MAE-001",
+   "outcome": "wontfix",
+   "reason": "Just an observation. Making CostWindow non-public or caching KeyedUsage has no behavioral benefit",
+   "what": "public CostWindow used only in Core; KeyedUsage.usage rebuilt per read",
+   "consequence": "a small CPU cost on reads",
+   "reopen_if": "a profile shows KeyedUsage.usage on a hot path",
+   "accept_type": "divida-cosmetica"
+  },
+  {
+   "id": "CQ-MAE-013",
+   "outcome": "wontfix",
+   "reason": "Cosmetic output mix",
+   "what": "ratchet plain lines mixed with coloured validate.sh output",
+   "consequence": "none on the gate",
+   "reopen_if": "output parsed by a tool",
+   "accept_type": "divida-cosmetica"
+  },
+  {
+   "id": "PERF-MAE-001",
+   "outcome": "wontfix",
+   "reason": "fsync on every write is the deliberate durability choice for credential/cache files",
+   "what": "fsync per AtomicFileWrite, including error markers and ConfigLoader.save",
+   "consequence": "a few ms per write, once per refresh or save",
+   "reopen_if": "a MainActor hitch traced to AtomicFileWrite",
+   "accept_type": "intencional"
+  },
+  {
+   "id": "TEST-MAE-008",
+   "outcome": "wontfix",
+   "reason": "Setting COVERAGE_FLOOR explicitly empty turns the floor off; that is the documented local-experiment behavior. Makefile ?=90 and CI pass 90",
+   "what": "COVERAGE_FLOOR= disables the floor",
+   "consequence": "none on make validate or CI",
+   "reopen_if": "CI or validate.sh starts passing an empty value",
+   "accept_type": "intencional"
+  }
+ ],
+ "validate": {
+  "exit": 0,
+  "tests": 1137,
+  "coverage": "93.24%",
+  "warnings": 0
+ },
+ "files": [
+  "CLAUDE.md",
+  "AGENTS.md",
+  "README.md",
+  "CHANGELOG.md",
+  "config.example.toml",
+  "scripts/check-source-ratchets.sh",
+  "scripts/source-ratchet-selftest.sh",
+  "Sources/AiTaskbarApp/NotificationService.swift",
+  "Sources/AiTaskbarApp/Resources/{en,pt-BR,es}.lproj/Localizable.strings",
+  "Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift",
+  "Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift",
+  "Sources/AiTaskbarCore/Cache/DiskCache.swift",
+  "Sources/AiTaskbarProviders/AntigravityExecutor.swift",
+  "Sources/AiTaskbarProviders/GeminiProvider.swift",
+  "Tests/AiTaskbarAppTests/{AnalyticsEstimatesMergeTests,AnalyticsStoreHistoryLoadTests,CostEstimatorLoadingTests,VendorViewModelRateLimitTests,MainQueueDrain(new),NotificationTitleLocalizationTests(new),AnalyticsCountLabelTests(new)}.swift",
+  "Tests/AiTaskbarCoreTests/DiskCacheTests.swift",
+  "Tests/AiTaskbarProvidersTests/{GeminiXAILocaleNeutralTests,XAIProviderTests}.swift"
+ ]
+}

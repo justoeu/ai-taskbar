@@ -8,9 +8,9 @@
 
 **Lentes:** Bugs clássicos · Segurança · Arquitetura · Qualidade · Performance · Testes · Boas práticas · Backpressure · Complexidade · Dependências · Duplicação · Memory leak · Race · Verbosidade · N+1
 
-**Resumo:** 156 tasks · 121 resolvidas · 0 em progresso · 16 pendentes · 16 refutadas · 3 aceitas · **90% fechadas** · ✅ nenhum HIGH aberto
+**Resumo:** 161 tasks · 137 resolvidas · 0 em progresso · 0 pendentes · 16 refutadas · 8 aceitas · **100% fechadas** · ✅ nenhum HIGH aberto
 
-**Revisão das correções (painel Nêmesis · Hígia · Jano):** 121/121 aprovadas
+**Revisão das correções (painel Nêmesis · Hígia · Jano):** 137/137 aprovadas
 
 Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · `[-]` refutado · `[!]` aceito
 
@@ -48,7 +48,7 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 - [x] **TEST-ARG-002** · Testes · MEDIUM · `Sources/AiTaskbarProviders/AnthropicProvider.swift:88` — The canPersistCredentials guard that stops rotation of a /usr/bin/security-fallback credential is never tested at provider level · resp: Argus · teste: `AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnthropicProviderE2ETests#non_persistable_credential_is_never_rotated · revisão approved (3/3) · batch B6-files-tests
 
-### LOW (93/100 resolvidos)
+### LOW (101/104 resolvidos)
 
 - [x] **ARCH-ATL-002** · Arquitetura · LOW · `Sources/AiTaskbarProviders/AnthropicWireTypes.swift:161` — UsageWindow.label is both English display text and the identity key; Anthropic scoped vs flat Opus (7d) can collide despite a comment claiming dedupe · resp: Atlas · teste: `AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat · revisão approved (3/3) · batch B11-app-lows
@@ -112,6 +112,8 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste NotificationThresholdTrackerTests#transient_absence_does_not_refire,NotificationThresholdTrackerTests#rolled_cycle_key_kept_before_threshold,NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned · revisão approved (3/3) · batch B14-app-followups
 - [x] **BUG-MAE-008** · Bugs clássicos · LOW · `Sources/AiTaskbarCore/Config/ConfigLoader.swift` — ensureAllVendorSections reads config.toml with try? ?? empty string; an unreadable config would be rewritten with only default sections · resp: Maestro · teste: `ConfigLoaderTests#ensure_unreadable_config_throws_and_keeps_file` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste ConfigLoaderTests#ensure_unreadable_config_throws_and_keeps_file · revisão approved (3/3) · batch B15-core-followups
+- [x] **BUG-MAE-009** · Bugs clássicos · LOW · `Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:316` — 429 cooldown is stamped from dispatch time, not response arrival, so a slow 429 gets a shorter cooldown · resp: Maestro · teste: `VendorViewModelRateLimitTests#cooldown_starts_at_response_arrival` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste VendorViewModelRateLimitTests#cooldown_starts_at_response_arrival · revisão approved (3/3) · batch B16-final
 - [x] **CPX-DED-003** · Complexidade · LOW · `Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:81` — AnalyticsStore cost-merge closure nests loop, if/else-if, inner loop, switch and if/else-if with 4x duplicated existing-or-priced-or-zero logic · resp: Dédalo · teste: `AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#*` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMerge#scanner_estimates_pass_through,AnalyticsEstimatesMerge#* · revisão approved (3/3) · batch B1-analytics
 - [x] **CPX-DED-004** · Complexidade · LOW · `Sources/AiTaskbarApp/Views/VendorSectionView.swift:575` — VendorSectionView.extras(for:) switch measures over the cyclomatic ceiling but is a plain per-vendor dispatch, not tangled logic - real gap is duplicated openrouter/zai blocks with no test · resp: Dédalo · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -124,7 +126,8 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste PinStoreTests#set_unwritable_dir_reports_failure,PinStoreTests#clear_unremovable_pin_reports_failure,PinStoreTests#clear_missing_pin_is_success,PinStoreTests#set_writable_dir_reports_success · revisão approved (3/3) · batch B5-history
 - [x] **CQ-MAE-001** · Qualidade · LOW · `Sources/AiTaskbarApp/Views/CostFooterView.swift:198` — Verify the popover footer does not show opencode dollars for subscription (OpenAI) traffic · resp: Maestro · teste: `OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste OpencodeFooterTests#subscription_opencode_shows_no_dollars,OpencodeFooterTests#missing_cost_shows_no_dollars,OpencodeFooterTests#pay_per_token_opencode_shows_recorded_dollars · revisão approved (3/3) · batch B1-analytics
-- [ ] **CQ-MAE-002** · Qualidade · LOW · `CLAUDE.md:1` — CLAUDE.md cost-scanner section lacks the Codex unchanged-total rule and the shared CostWindow definition · resp: Maestro · teste: —
+- [x] **CQ-MAE-002** · Qualidade · LOW · `CLAUDE.md:1` — CLAUDE.md cost-scanner section lacks the Codex unchanged-total rule and the shared CostWindow definition · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B16-final
 - [x] **CQ-MAE-003** · Qualidade · LOW · `Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:62` — OpencodeScanner returns the same nil for four causes; doc says nil means not installed; CostEstimator re-probes fileExists · resp: Maestro · teste: `OpencodeScannerTests#scan_outcome_distinguishes_causes,OpencodeScannerTests#scan_outcome_scanned,CostEstimatorLoadingTests#opencode_outcome_mapping` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste OpencodeScannerTests#scan_outcome_distinguishes_causes,OpencodeScannerTests#scan_outcome_scanned,CostEstimatorLoadingTests#opencode_outcome_mapping · revisão approved (3/3) · batch B15-core-followups
 - [x] **CQ-MAE-005** · Qualidade · LOW · `Sources/AiTaskbarApp/Views/VendorSectionView.swift:294` — Stale-card tooltip shows lastError.body raw: guidance errors appear as English diagnostic with internal prefix, not localized · resp: Maestro · teste: `StaleDetailLocalizationTests#guidance_tooltip_is_localized,StaleDetailLocalizationTests#guidance_tooltip_is_localized_en,StaleDetailLocalizationTests#guidance_keeps_status` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -133,14 +136,18 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMergeTests#history_store_failure_is_reported,AnalyticsEstimatesMergeTests#history_store_success_reports_nothing · revisão approved (3/3) · batch B14-app-followups
 - [x] **CQ-MAE-007** · Qualidade · LOW · `Sources/AiTaskbarApp/AppEnvironment.swift:23` — Symlinked config.toml now fails writes; at launch ensureAllVendorSections runs via try? in AppEnvironment.swift:23 so the refusal is silent; · resp: Maestro · teste: `ConfigTopUpTests#symlinked_config_failure_is_reported,ConfigTopUpTests#regular_config_is_topped_up` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste ConfigTopUpTests#symlinked_config_failure_is_reported,ConfigTopUpTests#regular_config_is_topped_up · revisão approved (3/3) · batch B14-app-followups
-- [ ] **CQ-MAE-009** · Qualidade · LOW · `README.md:300` — README says agy runs with a 15-second budget; code uses 35 s; README/CLAUDE.md do not mention the 8 MiB send cap and agy output caps · resp: Maestro · teste: —
+- [x] **CQ-MAE-009** · Qualidade · LOW · `README.md:300` — README says agy runs with a 15-second budget; code uses 35 s; README/CLAUDE.md do not mention the 8 MiB send cap and agy output caps · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B16-final
 - [x] **CQ-MAE-010** · Qualidade · LOW · `Sources/AiTaskbarProviders/CachedFetch.swift:29` — CachedFetch fresh-cache decode failure is not logged when the network then succeeds; fallback throws decode error instead of the network cau · resp: Maestro · teste: `CachedFetchEdgeTests#network_failure_over_undecodable_cache_keeps_network_cause` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste CachedFetchEdgeTests#network_failure_over_undecodable_cache_keeps_network_cause · revisão approved (3/3) · batch B15-core-followups
-- [ ] **CQ-MAE-011** · Qualidade · LOW · `config.example.toml:1` — config.example.toml does not document gemini.prefer_antigravity, xai.prefer_grok_cli, xai.grok_base_url (README and decoder do); Settings UI · resp: Maestro · teste: —
+- [x] **CQ-MAE-011** · Qualidade · LOW · `config.example.toml:1` — config.example.toml does not document gemini.prefer_antigravity, xai.prefer_grok_cli, xai.grok_base_url (README and decoder do); Settings UI · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B16-final
 - [x] **CQ-MAE-014** · Qualidade · LOW · `Sources/AiTaskbarApp/ViewModels/VendorViewModel.swift:498` — VendorViewModel.refresh(now:) uses the injected now only for loadingSince; the rate-limit cooldown still reads Date.now · resp: Maestro · teste: `VendorViewModelRateLimitTests#cooldown_uses_injected_now` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste VendorViewModelRateLimitTests#cooldown_uses_injected_now · revisão approved (3/3) · batch B15-core-followups
 - [x] **CQ-MAE-015** · Qualidade · LOW · `Sources/AiTaskbarCore/Cache/DiskCache.swift:128` — FetchError.guidance is not persisted in .last_error; a relaunch rebuilds the error without guidance · resp: Maestro · teste: `CachedFetchEdgeTests#guidance_stays_in_memory_on_the_stale_path` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste CachedFetchEdgeTests#guidance_stays_in_memory_on_the_stale_path · revisão approved (3/3) · batch B15-core-followups
+- [x] **CQ-MAE-017** · Qualidade · LOW · `CLAUDE.md` — CLAUDE.md/AGENTS.md do not document .github/dependabot.yml, its [skip release] prefix, or that the swift ecosystem watches TOMLKit · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B16-final
 - [x] **DEP-MAE-002** · Dependências · LOW · `.github/workflows/ci.yml:23` — SHA-pinned actions have no updater: no .github/dependabot.yml for github-actions · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B15-core-followups
 - [x] **DEP-PRI-001** · Dependências · LOW · `.github/workflows/auto-tag.yml:46` — GitHub Actions checked out via floating major tag, not commit SHA · resp: Prisma · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -161,6 +168,8 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste NumericConversionTrapTests#zai_huge_unit_and_number_are_dropped,NumericConversionTrapTests#openai_huge_window_seconds_uses_default_label,NumericConversionTrapTests#gemini_huge_remaining_fraction_is_clamped · revisão approved (3/3) · batch B3-numeric
 - [x] **DUP-MAE-001** · Duplicação · LOW · `Sources/AiTaskbarApp/DMGVerifier.swift:78` — Code-signature requirement checks are hand-written in three places · resp: Maestro · teste: `CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste CodeSignatureInfoTests#requirement_apple_anchor_passes,#requirement_wrong_team_fails,#requirement_nested_code_passes,#requirement_unparseable_fails,#requirement_missing_path_fails · revisão approved (3/3) · batch B8-updater
+- [x] **DUP-MAE-004** · Duplicação · LOW · `Sources/AiTaskbarCore/Cache/DiskCache.swift:87` — DiskCache freshPayloadWithAge, hasFreshPayload and anyPayloadWithAge repeat the same stat/mtime/age block · resp: Maestro · teste: `DiskCacheTests (all 14; boundary TEST-ARG-012 cases)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste DiskCacheTests (all 14; boundary TEST-ARG-012 cases) · revisão approved (3/3) · batch B16-final
 - [x] **LEAK-FAN-001** · Memory leak · LOW · `Sources/AiTaskbarProviders/AntigravityExecutor.swift:101` — AntigravityExecutor drains stdout then stderr serially, has no cancellation, and its watchdog only kills the direct child: a GCD worker, continuation, 2 pipes and a Process can be pinned per refresh · resp: Fantasma · teste: `AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AntigravityExecutorProcessTests#cancellation_kills_child,BoundedProcessTests#cancellation_kills_child · revisão approved (3/3) · batch B9-bounded-io
 - [x] **LEAK-FAN-002** · Memory leak · LOW · `Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:116` — A cancelled transcript scan calls memo.retain(paths:) with a partial seenPaths set and evicts every entry it did not reach · resp: Fantasma · teste: `ClaudeSessionScannerTests#cancelled_scan_keeps_memo,CodexSessionScannerEstimateTests#cancelled_scan_keeps_memo` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -235,7 +244,10 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste RefreshSchedulerTests#hung_vendor_does_not_starve_others,RefreshSchedulerTests#healthy_cycle_has_no_backoff · revisão approved (3/3) · batch B14-app-followups
 - [x] **TEST-MAE-007** · Testes · LOW · `scripts/check-source-ratchets.sh:103` — Bare-Int ratchet exempts a whole line containing radix:, so Int(s, radix: 16) + Int(d) on one line passes · resp: Maestro · teste: `source-ratchet-selftest#radix parse + Int(d) on one line` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste source-ratchet-selftest#radix parse + Int(d) on one line · revisão approved (3/3) · batch B15-core-followups
-- [ ] **TEST-MAE-009** · Testes · LOW · `Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:66` — AnalyticsEstimatesMergeTests.weeklySummaries waits a fixed 100 ms before awaiting historyReloadTask · resp: Maestro · teste: —
+- [x] **TEST-MAE-009** · Testes · LOW · `Tests/AiTaskbarAppTests/AnalyticsEstimatesMergeTests.swift:66` — AnalyticsEstimatesMergeTests.weeklySummaries waits a fixed 100 ms before awaiting historyReloadTask · resp: Maestro · teste: `AnalyticsEstimatesMergeTests#*` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMergeTests#* · revisão approved (3/3) · batch B16-final
+- [x] **TEST-MAE-010** · Testes · LOW · `scripts/check-source-ratchets.sh:106` — Bare-Int ratchet blanks the whole radix call, hiding a trapping conversion nested in its arguments such as Int(Int(d), radix: 16) · resp: Maestro · teste: `source-ratchet-selftest.sh [3/4] nested radix cases` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste source-ratchet-selftest.sh [3/4] nested radix cases · revisão approved (3/3) · batch B16-final
 - [x] **VERB-LAC-001** · Verbosidade · LOW · `Sources/AiTaskbarCore/Credentials/GrokCredentials.swift:96` — GrokLocalCache.readSubscriptionTierDisplay is never called in production · resp: Lacônio · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup
 - [x] **VERB-LAC-003** · Verbosidade · LOW · `Sources/AiTaskbarCore/Cache/DiskCache.swift:73` — DiskCache.payloadAge() has zero callers · resp: Lacônio · teste: `DiskCacheTests#payload_age_uses_injected_clock` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -253,11 +265,14 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
 - [x] **VERB-MAE-001** · Verbosidade · LOW · `Sources/AiTaskbarApp/ViewModels/AnalyticsStore.swift:136` — AnalyticsStore.defaultEstimates ignores its snapshots parameter; currentSnapshots computed each refresh for nothing · resp: Maestro · teste: `AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste AnalyticsEstimatesMergeTests#openrouter_activity_not_weekly_cost,AnalyticsEstimatesMergeTests#snapshots_reach_analytics,AnalyticsEstimatesMergeTests#scanner_estimates_pass_through_wiring · revisão approved (3/3) · batch B14-app-followups
 
-### INFO (15/43 resolvidos)
+### INFO (23/44 resolvidos)
 
 - [x] **ARCH-ATL-007** · Arquitetura · INFO · `Sources/AiTaskbarApp/Views/MenuBarLabelView.swift:48` — Flame severity color rule duplicated in 3 places and diverging from SeverityColor · resp: Atlas · teste: `SeverityColorFlameTests (6 cases)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SeverityColorFlameTests (6 cases) · revisão approved (3/3) · batch B11-app-lows
-- [ ] **ARCH-MAE-001** · Arquitetura · INFO · `Sources/AiTaskbarApp/Views/VendorSectionView.swift:558` — UsageWindow.label remains display text and identity key (ForEach id, notification key) for all vendors; CreditBaselineStore.reset now waits · resp: Maestro · teste: —
+- [!] **ARCH-MAE-001** · Arquitetura · INFO · `Sources/AiTaskbarApp/Views/VendorSectionView.swift:558` — UsageWindow.label remains display text and identity key (ForEach id, notification key) for all vendors; CreditBaselineStore.reset now waits · resp: Maestro · teste: —
+  > aceito (trade-off): the label is both display text and identity (ForEach id, notification/dedupe key); CreditBaselineStore.reset waits on writeGate
+  > consequência: two windows with the same label would collide; renaming a label re-arms notifications once · reabre se: a vendor emits two windows with the same label, or labels get localized · ratificou: user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+  > progresso 2026-09-29: aceito (trade-off) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
 - [-] **BEST-ATE-002** · Boas práticas · INFO · `Sources/AiTaskbarApp/AiTaskbarApp.swift:38` — ConfigLoader.onAfterSave is typed @Sendable (callable anywhere) but its only consumer traps unless it runs on MainActor · resp: Atena · teste: `configSaveOffMainDoesNotTrap`
   > refutado: Cetico: No off-main caller exists. save/applyChanges are called only at SettingsViewModel.swift:74 and :88, and that class is @MainActor (:11). ensureAllVendorSections writes on its own without calling onAfterSave (ConfigLoader.swift ~:276). The claimed crash needs a caller that does not exist. What remains is signature hardening (INFO).
   > progresso 2026-09-29: refutado · Cetico: No off-main caller exists. save/applyChanges are called only at SettingsViewModel.swift:74 and :88, and that class is @MainActor (:11). ensureAllVendorSections writes on its own without calling onAfterSave (ConfigLoader.swift ~:276). The claimed crash needs a caller that does not exist. What remains is signature hardening (INFO).
@@ -273,7 +288,10 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup
 - [x] **BEST-ATE-010** · Boas práticas · INFO · `Sources/AiTaskbarApp/Localization/L10n.swift:73` — L10n marks cache vars nonisolated(unsafe) inside a @MainActor enum, turning off checking with no need · resp: Atena · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup
-- [ ] **BEST-MAE-001** · Boas práticas · INFO · `Sources/AiTaskbarCore/Cost/CostWindow.swift:21` — CostWindow is public but only Core uses it; KeyedUsage.usage rebuilds per read (CPU for memory trade) · resp: Maestro · teste: —
+- [!] **BEST-MAE-001** · Boas práticas · INFO · `Sources/AiTaskbarCore/Cost/CostWindow.swift:21` — CostWindow is public but only Core uses it; KeyedUsage.usage rebuilds per read (CPU for memory trade) · resp: Maestro · teste: —
+  > aceito (divida-cosmetica): public CostWindow used only in Core; KeyedUsage.usage rebuilt per read
+  > consequência: a small CPU cost on reads · reabre se: a profile shows KeyedUsage.usage on a hot path · ratificou: user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+  > progresso 2026-09-29: aceito (divida-cosmetica) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
 - [-] **BP-REP-004** · Backpressure · INFO · `Sources/AiTaskbarCore/Cost/ClaudeSessionScanner.swift:203` — Cost scanners buffer and decode a JSONL line with no max-length guard, unlike the Codex RPC reader 1 MiB cap · resp: Represa · teste: `sessionScannerSkipsOversizedLine`
   > refutado: Cetico: There is no amplification. The file is mmapped (ClaudeSessionScanner.swift:91, .mappedIfSafe) and the scan is linear in file size whether or not it has newlines. Only lines carrying both the usage and type:assistant markers get decoded (:210-211), and those are exactly the lines that must be decoded to count cost, so a length cap would under-count. The input is the user's own transcript files, and the memo skips unchanged files. No realistic vector.
   > progresso 2026-09-29: refutado · Cetico: There is no amplification. The file is mmapped (ClaudeSessionScanner.swift:91, .mappedIfSafe) and the scan is linear in file size whether or not it has newlines. Only lines carrying both the usage and type:assistant markers get decoded (:210-211), and those are exactly the lines that must be decoded to count cost, so a length cap would under-count. The input is the user's own transcript files, and the memo skips unchanged files. No realistic vector.
@@ -292,17 +310,27 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste VendorNoticeLocalizationTests#keys_exist_in_every_language · revisão approved (3/3) · batch B4-i18n
 - [x] **CQ-CET-001** · Qualidade · INFO · `Sources/AiTaskbarApp/ViewModels/SettingsViewModel.swift:55` — SettingsViewModel.reloadFromDisk doc comment is false: original is a let and only draft is replaced · resp: Cético · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup
-- [ ] **CQ-MAE-004** · Qualidade · INFO · `README.md:1` — README does not mention the 0..1000% utilization clamp; App repeats Int(saturating: x.rounded())+% at ~15 sites (formatter candidate) · resp: Maestro · teste: —
-- [ ] **CQ-MAE-008** · Qualidade · INFO · `CHANGELOG.md:1` — CHANGELOG.md stops at v0.20.0 while repo is v0.23.6 · resp: Maestro · teste: —
-- [ ] **CQ-MAE-012** · Qualidade · INFO · `Sources/AiTaskbarApp/NotificationService.swift:102` — NotificationService title hard-codes English at; failed add() does not roll back the threshold mark; DiskCacheTests function name still says · resp: Maestro · teste: —
-- [ ] **CQ-MAE-013** · Qualidade · INFO · `scripts/validate.sh:106` — validate.sh mixes the ratchet script plain check lines with its own coloured ok/fail output · resp: Maestro · teste: —
+- [x] **CQ-MAE-004** · Qualidade · INFO · `README.md:1` — README does not mention the 0..1000% utilization clamp; App repeats Int(saturating: x.rounded())+% at ~15 sites (formatter candidate) · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B16-final
+- [x] **CQ-MAE-008** · Qualidade · INFO · `CHANGELOG.md:1` — CHANGELOG.md stops at v0.20.0 while repo is v0.23.6 · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B16-final
+- [x] **CQ-MAE-012** · Qualidade · INFO · `Sources/AiTaskbarApp/NotificationService.swift:102` — NotificationService title hard-codes English at; failed add() does not roll back the threshold mark; DiskCacheTests function name still says · resp: Maestro · teste: `NotificationDeliveryRollbackTests#failed_add_is_resent,NotificationDeliveryRollbackTests#delivered_add_is_not_resent,NotificationThresholdTrackerTests#unmark_keeps_higher_mark,NotificationThresholdTrackerTests#unmark_current_mark_refires` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste NotificationDeliveryRollbackTests#failed_add_is_resent,NotificationDeliveryRollbackTests#delivered_add_is_not_resent,NotificationThresholdTrackerTests#unmark_keeps_higher_mark,NotificationThresholdTrackerTests#unmark_current_mark_refires · revisão approved (3/3) · batch B16-final
+- [!] **CQ-MAE-013** · Qualidade · INFO · `scripts/validate.sh:106` — validate.sh mixes the ratchet script plain check lines with its own coloured ok/fail output · resp: Maestro · teste: —
+  > aceito (divida-cosmetica): ratchet plain lines mixed with coloured validate.sh output
+  > consequência: none on the gate · reabre se: output parsed by a tool · ratificou: user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+  > progresso 2026-09-29: aceito (divida-cosmetica) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+- [x] **CQ-MAE-016** · Qualidade · INFO · `Sources/AiTaskbarCore/Cost/OpencodeScanner.swift:284` — OpencodeScanner .unavailable groups caller configuration errors with SQLite read failures · resp: Maestro · teste: `CostEstimatorLoadingTests#opencode_aliases_are_disjoint,#opencode_aliases_are_non_empty` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste CostEstimatorLoadingTests#opencode_aliases_are_disjoint,#opencode_aliases_are_non_empty · revisão approved (3/3) · batch B16-final
 - [x] **DEP-MAE-001** · Dependências · INFO · `Makefile:339` — Fail-closed update checksum makes the checksums upload in make publish a hard requirement with no guard · resp: Maestro · teste: `SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON)` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste SCRATCH/ferreiro-B8/assets-check-test.sh (fake gh + fake JSON) · revisão approved (3/3) · batch B8-updater
 - [-] **DUP-ECO-003** · Duplicação · INFO · `Sources/AiTaskbarProviders/RSSStatusSource.swift:287` — safeSourceURL host/scheme validation duplicated between RSSStatusSource and StatuspageSource with different scheme-recovery behavior · resp: Eco · teste: —
   > refutado: Cetico: RSSStatusSource.swift:287-299 and StatuspageSource.swift:352-362 enforce the same security predicate: https scheme, exact host equality with the descriptor host, no user, password or port. RSS's only extra step (L290) prepends https:// to a string that already starts with the expected host, and the result then goes through the same checks, so the acceptance set is no wider. The two copies do not differ in exposure. What remains is about 10 duplicated lines with no defect.
   > progresso 2026-09-29: refutado · Cetico: RSSStatusSource.swift:287-299 and StatuspageSource.swift:352-362 enforce the same security predicate: https scheme, exact host equality with the descriptor host, no user, password or port. RSS's only extra step (L290) prepends https:// to a string that already starts with the expected host, and the result then goes through the same checks, so the acceptance set is no wider. The two copies do not differ in exposure. What remains is about 10 duplicated lines with no defect.
-- [ ] **DUP-MAE-002** · Duplicação · INFO · `Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:181` — Duplicated count+label block (sessions vs models) in VendorAnalyticsCardView · resp: Maestro · teste: —
-- [ ] **DUP-MAE-003** · Duplicação · INFO · `Sources/AiTaskbarProviders/AntigravityExecutor.swift:160` — agy error fallback and context-canceled mapping duplicated (AntigravityExecutor.swift:160,172,122; GeminiProvider.swift:112-113); stale Issu · resp: Maestro · teste: —
+- [x] **DUP-MAE-002** · Duplicação · INFO · `Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift:181` — Duplicated count+label block (sessions vs models) in VendorAnalyticsCardView · resp: Maestro · teste: `AnalyticsCountLabelTests#*` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste AnalyticsCountLabelTests#* · revisão approved (3/3) · batch B16-final
+- [x] **DUP-MAE-003** · Duplicação · INFO · `Sources/AiTaskbarProviders/AntigravityExecutor.swift:160` — agy error fallback and context-canceled mapping duplicated (AntigravityExecutor.swift:160,172,122; GeminiProvider.swift:112-113); stale Issu · resp: Maestro · teste: `GeminiXAILocaleNeutralTests#agy_empty_error_uses_response` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste GeminiXAILocaleNeutralTests#agy_empty_error_uses_response · revisão approved (3/3) · batch B16-final
 - [x] **LEAK-FAN-007** · Memory leak · INFO · `Sources/AiTaskbarApp/NotificationService.swift:71` — NotificationService.highestNotified keeps an orphan key every month for the xAI Monthly (YYYY-MM) window label · resp: Fantasma · teste: `NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms · revisão approved (3/3) · batch B11-app-lows
 - [x] **LEAK-FAN-008** · Memory leak · INFO · `Sources/AiTaskbarApp/ViewModels/RefreshScheduler.swift:77` — RefreshScheduler loops upgrade [weak self] to strong for the whole infinite loop, so the cancels in deinit can never run · resp: Fantasma · teste: `RefreshScheduler#started_scheduler_is_released` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
@@ -320,7 +348,10 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup
 - [x] **PERF-FLU-003** · Performance · INFO · `Sources/AiTaskbarCore/Cost/PricingTable.swift:264` — PricingTable.lookup prefix-match path allocates a filtered dictionary on every call, invoked per-turn inside CodexSessionScanner · resp: Fluxo · teste: `CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste CostTests#lookup_nested_prefix_order,CostTests#lookup_no_prefix_is_nil · revisão approved (3/3) · batch B12-cleanup
-- [ ] **PERF-MAE-001** · Performance · INFO · `Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:67` — AtomicFileWrite now fsyncs every write (incl. DiskCache error markers, ConfigLoader.save possibly on MainActor); confirm no MainActor hot pa · resp: Maestro · teste: —
+- [!] **PERF-MAE-001** · Performance · INFO · `Sources/AiTaskbarCore/Cache/AtomicFileWrite.swift:67` — AtomicFileWrite now fsyncs every write (incl. DiskCache error markers, ConfigLoader.save possibly on MainActor); confirm no MainActor hot pa · resp: Maestro · teste: —
+  > aceito (intencional): fsync per AtomicFileWrite, including error markers and ConfigLoader.save
+  > consequência: a few ms per write, once per refresh or save · reabre se: a MainActor hitch traced to AtomicFileWrite · ratificou: user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+  > progresso 2026-09-29: aceito (intencional) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
 - [-] **RACE-CRO-005** · Race · INFO · `Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:57` — Codex auth.json writeBack can lose a concurrent Codex CLI update: the file contents read before the OAuth network await are written back unchanged · resp: Cronos · teste: `writeBack_doesNotClobberConcurrentCLIWrite`
   > refutado: Cetico: The scenario needs the Codex CLI to be rewriting auth.json at the same time as the app's opt-in refresh. CLAUDE.md Hard rules say manage_oauth_refresh=true is 'opt-in, standalone use without that CLI', and the default is read-only (OpenAIProvider.swift:39 manageOAuthRefresh=false). Concurrent writes with the CLI fall outside the supported configuration, so this is a documented decision, not a defect.
   > progresso 2026-09-29: refutado · Cetico: The scenario needs the Codex CLI to be rewriting auth.json at the same time as the app's opt-in refresh. CLAUDE.md Hard rules say manage_oauth_refresh=true is 'opt-in, standalone use without that CLI', and the default is read-only (OpenAIProvider.swift:39 manageOAuthRefresh=false). Concurrent writes with the CLI fall outside the supported configuration, so this is a documented decision, not a defect.
@@ -340,30 +371,20 @@ Legenda: `[ ]` pendente · `[~]` em progresso · `[x]` resolvido (com teste) · 
   > progresso 2026-09-29: refutado · Cetico: There is no defect. The finding itself says these are intentional negative controls (TestingInfrastructureTests.swift:113-120, withKnownIssue). Close it.
 - [x] **TEST-MAE-003** · Testes · INFO · `Tests/AiTaskbarAppTests/UpdateCheckerDownloadTests.swift:1` — UpdateCheckerDownloadTests leave temp directories and UserDefaults suites behind; one test sits in a misnamed suite · resp: Maestro · teste: `UpdateCheckerDownloadTests#quarantine_failure_throws` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste UpdateCheckerDownloadTests#quarantine_failure_throws · revisão approved (3/3) · batch B6-files-tests
-- [ ] **TEST-MAE-005** · Testes · INFO · `Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift:1` — AnalyticsStoreHistoryLoadTests settle() uses fixed 100ms sleep (possible CI flake); VendorViewModel.swift:80 misaligned continuation · resp: Maestro · teste: —
-- [ ] **TEST-MAE-008** · Testes · INFO · `scripts/coverage.sh:28` — Empty COVERAGE_FLOOR argument falls back to 0 (report-only) via default expansion · resp: Maestro · teste: —
+- [x] **TEST-MAE-005** · Testes · INFO · `Tests/AiTaskbarAppTests/AnalyticsStoreHistoryLoadTests.swift:1` — AnalyticsStoreHistoryLoadTests settle() uses fixed 100ms sleep (possible CI flake); VendorViewModel.swift:80 misaligned continuation · resp: Maestro · teste: `AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot · revisão approved (3/3) · batch B16-final
+- [!] **TEST-MAE-008** · Testes · INFO · `scripts/coverage.sh:28` — Empty COVERAGE_FLOOR argument falls back to 0 (report-only) via default expansion · resp: Maestro · teste: —
+  > aceito (intencional): COVERAGE_FLOOR= disables the floor
+  > consequência: none on make validate or CI · reabre se: CI or validate.sh starts passing an empty value · ratificou: user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
+  > progresso 2026-09-29: aceito (intencional) · ratificado por user won-t-fix policy relayed by coordinator 2026-09-29 (pending product-owner confirmation)
 - [x] **VERB-LAC-002** · Verbosidade · INFO · `Sources/AiTaskbarCore/Util/AppLog.swift:25` — Two of AppLog seven Logger categories are declared but never logged to · resp: Lacônio · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
   > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B12-cleanup
-- [ ] **VERB-MAE-002** · Verbosidade · INFO · `Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:1` — 8 more unused localization keys (e.g. updated_ago_fmt, analytics_usage_share, vs_previous_period_fmt) in all locales · resp: Maestro · teste: —
+- [x] **VERB-MAE-002** · Verbosidade · INFO · `Sources/AiTaskbarApp/Resources/en.lproj/Localizable.strings:1` — 8 more unused localization keys (e.g. updated_ago_fmt, analytics_usage_share, vs_previous_period_fmt) in all locales · resp: Maestro · teste: `n/a` · revisão: approved (3/3 — CORRECTNESS:APROVA QUALITY:APROVA SCOPE:APROVA)
+  > progresso 2026-09-29: resolvido · teste n/a · revisão approved (3/3) · batch B16-final
 
 ## Ainda aberto
 
-- **CQ-MAE-002** (LOW) — CLAUDE.md cost-scanner section lacks the Codex unchanged-total rule and the shared CostWindow definition · plano: see evidence
-- **CQ-MAE-009** (LOW) — README says agy runs with a 15-second budget; code uses 35 s; README/CLAUDE.md do not mention the 8 MiB send cap and agy output caps · plano: see evidence
-- **CQ-MAE-011** (LOW) — config.example.toml does not document gemini.prefer_antigravity, xai.prefer_grok_cli, xai.grok_base_url (README and decoder do); Settings UI · plano: see evidence
-- **TEST-MAE-009** (LOW) — AnalyticsEstimatesMergeTests.weeklySummaries waits a fixed 100 ms before awaiting historyReloadTask · plano: Await the store completion signal instead of sleeping
-- **ARCH-MAE-001** (INFO) — UsageWindow.label remains display text and identity key (ForEach id, notification key) for all vendors; CreditBaselineStore.reset now waits · plano: see evidence
-- **BEST-MAE-001** (INFO) — CostWindow is public but only Core uses it; KeyedUsage.usage rebuilds per read (CPU for memory trade) · plano: see evidence
-- **CQ-MAE-004** (INFO) — README does not mention the 0..1000% utilization clamp; App repeats Int(saturating: x.rounded())+% at ~15 sites (formatter candidate) · plano: see evidence
-- **CQ-MAE-008** (INFO) — CHANGELOG.md stops at v0.20.0 while repo is v0.23.6 · plano: see evidence
-- **CQ-MAE-012** (INFO) — NotificationService title hard-codes English at; failed add() does not roll back the threshold mark; DiskCacheTests function name still says · plano: see evidence
-- **CQ-MAE-013** (INFO) — validate.sh mixes the ratchet script plain check lines with its own coloured ok/fail output · plano: Cosmetic only
-- **DUP-MAE-002** (INFO) — Duplicated count+label block (sessions vs models) in VendorAnalyticsCardView · plano: see evidence
-- **DUP-MAE-003** (INFO) — agy error fallback and context-canceled mapping duplicated (AntigravityExecutor.swift:160,172,122; GeminiProvider.swift:112-113); stale Issu · plano: see evidence
-- **PERF-MAE-001** (INFO) — AtomicFileWrite now fsyncs every write (incl. DiskCache error markers, ConfigLoader.save possibly on MainActor); confirm no MainActor hot pa · plano: see evidence
-- **TEST-MAE-005** (INFO) — AnalyticsStoreHistoryLoadTests settle() uses fixed 100ms sleep (possible CI flake); VendorViewModel.swift:80 misaligned continuation · plano: see evidence
-- **TEST-MAE-008** (INFO) — Empty COVERAGE_FLOOR argument falls back to 0 (report-only) via default expansion · plano: None required; documented behavior for local experiments
-- **VERB-MAE-002** (INFO) — 8 more unused localization keys (e.g. updated_ago_fmt, analytics_usage_share, vs_previous_period_fmt) in all locales · plano: see evidence
+_Nada aberto._ 🎉
 
 ## Roadmap de libs / dependências
 
@@ -373,6 +394,27 @@ _Toda lib pesquisada está no latest stable._ ✅
 
 ## Log de iterações
 
+- **2026-09-29 18:44:01 UTC** — aceito TEST-MAE-008 (intencional) — won-t-fix: Setting COVERAGE_FLOOR explicitly empty turns the floor off; that is the documented local-experiment behavior. Makefile ?=90 and CI pass 90
+- **2026-09-29 18:44:01 UTC** — aceito PERF-MAE-001 (intencional) — won-t-fix: fsync on every write is the deliberate durability choice for credential/cache files
+- **2026-09-29 18:44:00 UTC** — aceito CQ-MAE-013 (divida-cosmetica) — won-t-fix: Cosmetic output mix
+- **2026-09-29 18:44:00 UTC** — aceito BEST-MAE-001 (divida-cosmetica) — won-t-fix: Just an observation. Making CostWindow non-public or caching KeyedUsage has no behavioral benefit
+- **2026-09-29 18:44:00 UTC** — aceito ARCH-MAE-001 (trade-off) — won-t-fix: Changing the identity model for UsageWindow.label across every vendor is a broad change with no user-visible defect today
+- **2026-09-29 18:44:00 UTC** — resolvido VERB-MAE-002 (teste: n/a) — batch B16-final
+- **2026-09-29 18:44:00 UTC** — resolvido DUP-MAE-003 (teste: GeminiXAILocaleNeutralTests#agy_empty_error_uses_response) — batch B16-final
+- **2026-09-29 18:43:59 UTC** — resolvido DUP-MAE-002 (teste: AnalyticsCountLabelTests#*) — batch B16-final
+- **2026-09-29 18:43:59 UTC** — resolvido CQ-MAE-016 (teste: CostEstimatorLoadingTests#opencode_aliases_are_disjoint,#opencode_aliases_are_non_empty) — batch B16-final
+- **2026-09-29 18:43:59 UTC** — resolvido CQ-MAE-012 (teste: NotificationDeliveryRollbackTests#failed_add_is_resent,NotificationDeliveryRollbackTests#delivered_add_is_not_resent,NotificationThresholdTrackerTests#unmark_keeps_higher_mark,NotificationThresholdTrackerTests#unmark_current_mark_refires) — batch B16-final
+- **2026-09-29 18:43:59 UTC** — resolvido CQ-MAE-008 (teste: n/a) — batch B16-final
+- **2026-09-29 18:43:58 UTC** — resolvido CQ-MAE-004 (teste: n/a) — batch B16-final
+- **2026-09-29 18:43:58 UTC** — resolvido CQ-MAE-017 (teste: n/a) — batch B16-final
+- **2026-09-29 18:43:58 UTC** — resolvido CQ-MAE-011 (teste: n/a) — batch B16-final
+- **2026-09-29 18:43:57 UTC** — resolvido CQ-MAE-009 (teste: n/a) — batch B16-final
+- **2026-09-29 18:43:57 UTC** — resolvido CQ-MAE-002 (teste: n/a) — batch B16-final
+- **2026-09-29 18:43:57 UTC** — resolvido TEST-MAE-010 (teste: source-ratchet-selftest.sh [3/4] nested radix cases) — batch B16-final
+- **2026-09-29 18:43:56 UTC** — resolvido TEST-MAE-005 (teste: AnalyticsStoreHistoryLoadTests#loaded_history_reaches_snapshot) — batch B16-final
+- **2026-09-29 18:43:56 UTC** — resolvido TEST-MAE-009 (teste: AnalyticsEstimatesMergeTests#*) — batch B16-final
+- **2026-09-29 18:43:56 UTC** — resolvido DUP-MAE-004 (teste: DiskCacheTests (all 14; boundary TEST-ARG-012 cases)) — batch B16-final
+- **2026-09-29 18:43:55 UTC** — resolvido BUG-MAE-009 (teste: VendorViewModelRateLimitTests#cooldown_starts_at_response_arrival) — batch B16-final
 - **2026-09-29 18:07:07 UTC** — resolvido DEP-MAE-002 (teste: n/a) — batch B15-core-followups
 - **2026-09-29 18:07:07 UTC** — resolvido TEST-MAE-007 (teste: source-ratchet-selftest#radix parse + Int(d) on one line) — batch B15-core-followups
 - **2026-09-29 18:07:07 UTC** — resolvido CQ-MAE-003 (teste: OpencodeScannerTests#scan_outcome_distinguishes_causes,OpencodeScannerTests#scan_outcome_scanned,CostEstimatorLoadingTests#opencode_outcome_mapping) — batch B15-core-followups
@@ -412,24 +454,7 @@ _Toda lib pesquisada está no latest stable._ ✅
 - **2026-09-29 16:43:29 UTC** — resolvido BEST-ATE-008 (teste: n/a) — batch B12-cleanup
 - **2026-09-29 16:43:29 UTC** — resolvido CPX-DED-005 (teste: SettingsViewModel.diff#single_field_change,SettingsViewModel.diff#every_field_covered,SettingsViewModel.diff#every_section_covered,SettingsViewModel.diff#identical_is_empty) — batch B12-cleanup
 - **2026-09-29 16:43:29 UTC** — resolvido CPX-DED-004 (teste: n/a) — batch B12-cleanup
-- **2026-09-29 16:43:28 UTC** — resolvido VERB-LAC-008 (teste: n/a) — batch B12-cleanup
-- **2026-09-29 16:43:28 UTC** — resolvido VERB-LAC-007 (teste: n/a) — batch B12-cleanup
-- **2026-09-29 16:43:28 UTC** — resolvido VERB-LAC-006 (teste: n/a) — batch B12-cleanup
-- **2026-09-29 16:43:28 UTC** — resolvido VERB-LAC-005 (teste: n/a) — batch B12-cleanup
-- **2026-09-29 16:43:28 UTC** — resolvido VERB-LAC-004 (teste: n/a) — batch B12-cleanup
-- **2026-09-29 16:43:28 UTC** — resolvido VERB-LAC-003 (teste: DiskCacheTests#payload_age_uses_injected_clock) — batch B12-cleanup
-- **2026-09-29 16:43:28 UTC** — resolvido VERB-LAC-002 (teste: n/a) — batch B12-cleanup
-- **2026-09-29 16:43:27 UTC** — resolvido VERB-LAC-001 (teste: n/a) — batch B12-cleanup
-- **2026-09-29 16:28:06 UTC** — resolvido LEAK-FAN-007 (teste: NotificationThresholdTrackerTests#rolled_cycle_key_is_pruned,#prune_is_per_vendor,#fires_once,#rearms) — batch B11-app-lows
-- **2026-09-29 16:28:06 UTC** — resolvido ARCH-ATL-007 (teste: SeverityColorFlameTests (6 cases)) — batch B11-app-lows
-- **2026-09-29 16:28:06 UTC** — resolvido RACE-CRO-007 (teste: CreditBaselineStoreTests#reset_serializes_with_record) — batch B11-app-lows
-- **2026-09-29 16:28:06 UTC** — resolvido LEAK-FAN-005 (teste: ReloginProcessTrackerTests#second_spawn_terminates_first,#passes_command,#stop_terminates,#exited_child_not_terminated,#failed_spawn) — batch B11-app-lows
-- **2026-09-29 16:28:06 UTC** — aceito BUG-ART-008 (intencional) — won-t-fix: CLAUDE.md's 'credits not in windows' rule is written for Codex's locally derived high-water mark. Anthropic extra_usage has a real server-side monthly_limit and utilization, and OpenRouter, Kimi and xAI balances are in windows by design.
-- **2026-09-29 16:28:05 UTC** — resolvido ARCH-ATL-006 (teste: CachedFetchEdgeTests#fresh_undecodable_cache_falls_through_to_fetch) — batch B11-app-lows
-- **2026-09-29 16:28:05 UTC** — resolvido ARCH-ATL-005 (teste: PinnedStatusItemTests#toggle_pinned_respects_denied_space_check) — batch B11-app-lows
-- **2026-09-29 16:28:05 UTC** — resolvido ARCH-ATL-002 (teste: AnthropicScopedDedupTests#labelsUnique,#flatOpusWins,#otherScopedKept,#scopedOpusWithoutFlat) — batch B11-app-lows
-- **2026-09-29 16:10:11 UTC** — resolvido BEST-ATE-001 (teste: OAuthKeychainConcurrencyTests#authorize_runs_off_cooperative_pool,SingleFlightTests#offpool_leaves_cooperative_pool,SingleFlightTests#offpool_rethrows) — batch B10-oauth-keychain
-- **2026-09-29 16:10:11 UTC** — resolvido RACE-CRO-004 (teste: OAuthKeychainConcurrencyTests#anthropic_cache_hit_plan_label_reads_off_pool) — batch B10-oauth-keychain
-- **2026-09-29 16:10:11 UTC** — resolvido RACE-CRO-002 (teste: OAuthKeychainConcurrencyTests#openai_reactive_refresh_skips_rotated_refresh_token,OAuthKeychainConcurrencyTests#anthropic_refresh_skips_rotated_refresh_token) — batch B10-oauth-keychain
-- **2026-09-29 16:10:10 UTC** — resolvido RACE-CRO-001 (teste: OAuthKeychainConcurrencyTests#openai_concurrent_refresh_exchanges_once,OAuthKeychainConcurrencyTests#anthropic_concurrent_refresh_exchanges_once,SingleFlightTests#concurrent_callers_share_one_run,SingleFlightTests#finished_flight_allows_next_run,SingleFlightTests#error_propagates_and_clears) — batch B10-oauth-keychain
-- **2026-09-29 15:47:00 UTC** — resolvido RACE-CRO-008 (teste: AntigravityExecutorProcessTests#large_stderr_completes_promptly) — batch B9-bounded-io
+
+## ✅ RODADA FECHADA
+
+Todos os 161 achados têm desfecho: 137 resolvidos · 16 refutados · 8 aceitos. Nenhum aberto.

@@ -1,0 +1,61 @@
+{
+  "id": "CQ-MAE-002",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 18:43:57 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "Checked the CLAUDE.md/AGENTS.md text against the code. CodexSessionScanner skips an unchanged total_token_usage (previousTotal at :314, the ~6% note and BUG-ART-005 at :396). CostWindow.swift:28-31 computes startOfDay and date(byAdding: .day, value: -6). CostWindow is used by the Claude, Codex session, Codex log and opencode scanners and by AnalyticsAggregator.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "CLAUDE.md:386",
+        "Sources/AiTaskbarCore/Cost/CostWindow.swift:30",
+        "Sources/AiTaskbarCore/Cost/CodexSessionScanner.swift:396"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "CLAUDE.md and AGENTS.md get the same edit in the cost-scanner section (the Codex unchanged-total rule and the one CostWindow definition), so the two files stay in lockstep as the repo's doc policy requires. The text states a rule and says what not to reintroduce.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "CLAUDE.md:386",
+        "AGENTS.md:386"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "CLAUDE.md:383-398 now documents the rule that Codex skips a `token_count` event whose running total is unchanged, and that all scanners share one `CostWindow`. AGENTS.md is byte-identical to CLAUDE.md, so they are in lockstep.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/CLAUDE.md:386",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/AGENTS.md"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": false
+}

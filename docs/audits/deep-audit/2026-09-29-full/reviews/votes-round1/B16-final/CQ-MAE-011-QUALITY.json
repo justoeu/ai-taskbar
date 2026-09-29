@@ -1,0 +1,14 @@
+{
+ "id": "CQ-MAE-011",
+ "verdict": "APROVA",
+ "reasoning": "config.example.toml:93-114 documents prefer_antigravity, agy_path, prefer_grok_cli, grok_auth_path and grok_base_url, with the defaults and the allowlist caveat. README.md:494 gains the matching grok_base_url line.",
+ "required_changes": [],
+ "cited_paths": [
+  "config.example.toml:93",
+  "config.example.toml:111",
+  "README.md:494"
+ ],
+ "lens": "QUALITY",
+ "_task": "ab05609a1a9d8c245",
+ "batch": "B16-final"
+}

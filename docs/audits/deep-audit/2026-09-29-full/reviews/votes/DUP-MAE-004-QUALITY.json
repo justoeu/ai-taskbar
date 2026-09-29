@@ -1,0 +1,14 @@
+{
+ "id": "DUP-MAE-004",
+ "verdict": "APROVA",
+ "reasoning": "Sources/AiTaskbarCore/Cache/DiskCache.swift:89-128 replaces three copies of the stat+mtime+age code with one private `payloadAge()` and one `payloadWithAge(within:)`, which freshPayloadWithAge, anyPayloadWithAge and hasFreshPayload all use. Its doc states the lock precondition. The `try?` is on a cache read that was already best-effort, so no new swallowing. The public API is unchanged. The test rename to freshPayloadWithAge_uses_injected_clock makes the name match what it calls.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/Cache/DiskCache.swift:89",
+  "Sources/AiTaskbarCore/Cache/DiskCache.swift:97",
+  "Tests/AiTaskbarCoreTests/DiskCacheTests.swift:99"
+ ],
+ "lens": "QUALITY",
+ "_task": "ab05609a1a9d8c245",
+ "batch": "B16-final"
+}

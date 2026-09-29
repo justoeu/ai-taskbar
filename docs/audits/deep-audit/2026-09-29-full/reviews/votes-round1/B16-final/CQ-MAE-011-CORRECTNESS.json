@@ -1,0 +1,16 @@
+{
+ "id": "CQ-MAE-011",
+ "verdict": "MUDANCAS",
+ "reasoning": "The config keys are right: prefer_antigravity (default true, AppConfig.swift:538), agy_path (:579), prefer_grok_cli (default true, :694), grok_auth_path with tilde expansion (:668), grok_base_url (:729). But config.example.toml:113 says for grok_base_url 'only this host is accepted'. That is false. XAIConfig.validate (AppConfig.swift:715-722) checks the shared allowedHosts set (:659-662), which also contains management-api.x.ai. So `grok_base_url = \"https://management-api.x.ai\"` is accepted and used as the Grok proxy base, contradicting the comment. README.md:494 ('host-allowlisted; anything else falls back') is accurate.",
+ "required_changes": [
+  "Fix config.example.toml:113 to state what the code does, e.g. 'host-allowlisted (cli-chat-proxy.grok.com / management-api.x.ai); anything else falls back to the default'. Alternatively, narrow the validation to cli-chat-proxy.grok.com and document that."
+ ],
+ "cited_paths": [
+  "config.example.toml:113",
+  "Sources/AiTaskbarCore/Config/AppConfig.swift:659",
+  "Sources/AiTaskbarCore/Config/AppConfig.swift:715"
+ ],
+ "lens": "CORRECTNESS",
+ "_task": "a03222027f28f6d15",
+ "batch": "B16-final"
+}
