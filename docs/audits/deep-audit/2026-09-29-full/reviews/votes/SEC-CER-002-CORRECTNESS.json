@@ -1,0 +1,14 @@
+{
+ "id": "SEC-CER-002",
+ "verdict": "APROVA",
+ "reasoning": "The cause is fixed where the data is stored, not just where it is shown. UsageHistoryStore.swift:52-63 now sanitizes Sample.max both at init and in a custom init(from:), so a saved 1e300 is neither written again nor read back from an old file. As a second layer, AnalyticsFormatters.swift:46,48 now use Int(saturating:). I ran the reversal myself: with the production files set back to HEAD, peak_day_text_huge_utilization crashes with 'Double value cannot be converted to Int ... greater than Int.max' and history_sanitizes_append_and_load fails with [1e+300] != [1000,1000]. With the fix back, both pass.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:52",
+  "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:46"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "ad8f7632f7b93ba34",
+ "batch": "B3-numeric"
+}

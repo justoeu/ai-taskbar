@@ -1,0 +1,13 @@
+{
+ "id": "SEC-CER-003",
+ "verdict": "APROVA",
+ "reasoning": "Public contract check: UsageWindow.swift:22-39 adds a custom init(from:) whose CodingKeys match the synthesized names (label, utilizationPercent, resetsAt, detail). Encoding stays synthesized, so cached snapshots stay wire-compatible, and usage_window_sanitizes_decode covers the old format. The only semantic change is the documented clamp to 0...1000, with NaN read as 0. The report says the golden tests stay green. The sinks this finding names are converted: MenuBarLabelView, MenuBarTooltipBuilder, NotificationService, PinnedStatusItemManager and ProviderRowView. NotificationService's identifier format is unchanged for real thresholds.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:22",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae1ed7587868844ec",
+ "batch": "B3-numeric"
+}

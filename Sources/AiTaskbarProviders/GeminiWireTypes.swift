@@ -147,11 +147,14 @@ extension AntigravityUsageResponse {
                     let is5h = bWin == "5h" || bId.contains("5h")
                     let isWeekly = bWin == "weekly" || bId.contains("weekly")
 
-                    let rem = bucket.remainingFraction ?? 1.0
-                    let consumedFraction = max(0.0, min(1.0, 1.0 - rem))
+                    let rawRem = bucket.remainingFraction ?? 1.0
+                    // Clamp once: the detail line and the consumed fraction
+                    // must agree, and an unclamped 1e300 trapped in `Int(_:)`.
+                    let rem = rawRem.isNaN ? 1.0 : max(0.0, min(1.0, rawRem))
+                    let consumedFraction = 1.0 - rem
                     let util = consumedFraction * 100.0
                     let resetsAt = bucket.resetTime.flatMap(ISO8601Parsing.parse)
-                    let remPercentInt = Int((rem * 100.0).rounded())
+                    let remPercentInt = Int(saturating: (rem * 100.0).rounded())
                     let detail = "\(remPercentInt)% remaining"
 
                     if isGemini {

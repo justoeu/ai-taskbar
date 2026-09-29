@@ -1,0 +1,57 @@
+{
+  "id": "BUG-CET-001",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 13:18:17 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "FileCredentialReader.swift:168 now uses Int64(saturating:). It is used only to compare which of two tokens is newer, and saturating keeps that ordering (larger stays larger). Reversal: codex_reconciliation_huge_exp crashes with the Int64.max fatal error. With the fix back it passes.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:168"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "FileCredentialReader.swift:168 is a one-line swap to Int64(saturating:). Saturating fits here because the value is only used to compare which token is freshest, never for an authz decision, and the existing doc comment says so. Nothing new is swallowed and no nesting is added.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:168"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "This is a one-line change at FileCredentialReader.swift:168. expiryMs is only used for comparison, and a saturated value keeps the ordering intact. No other change to CodexReconciliation.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift:168"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

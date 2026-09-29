@@ -80,8 +80,8 @@ public struct ZAILimitEntry: Decodable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         type = try c.decodeIfPresent(String.self, forKey: .type)
-        unit = c.flexibleDoubleIfPresent(forKey: .unit).map { Int($0) }
-        number = c.flexibleDoubleIfPresent(forKey: .number).map { Int($0) }
+        unit = c.flexibleDoubleIfPresent(forKey: .unit).flatMap { Int(checkedTruncating: $0) }
+        number = c.flexibleDoubleIfPresent(forKey: .number).flatMap { Int(checkedTruncating: $0) }
         usage = c.flexibleDoubleIfPresent(forKey: .usage)
         currentValue = c.flexibleDoubleIfPresent(forKey: .currentValue)
         remaining = c.flexibleDoubleIfPresent(forKey: .remaining)

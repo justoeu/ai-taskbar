@@ -23,7 +23,7 @@ public struct ProviderRowView: View {
                 Text(window.label)
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                Text("\(Int(percent.rounded()))%")
+                Text("\(Int(saturating: percent.rounded()))%")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: thresholds))
             }

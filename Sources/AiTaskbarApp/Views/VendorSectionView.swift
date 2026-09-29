@@ -605,7 +605,7 @@ public struct VendorSectionView: View {
                                 .font(.subheadline.monospaced())
                                 .foregroundStyle(.secondary)
                             Spacer(minLength: 4)
-                            Text("\(Int(m.percent.rounded()))%")
+                            Text("\(Int(saturating: m.percent.rounded()))%")
                                 .font(.subheadline.monospacedDigit())
                                 .foregroundStyle(.tertiary)
                         }
@@ -635,7 +635,7 @@ public struct VendorSectionView: View {
                                 .font(.subheadline.monospaced())
                                 .foregroundStyle(.secondary)
                             Spacer(minLength: 4)
-                            Text("\(Int(m.percent.rounded()))%")
+                            Text("\(Int(saturating: m.percent.rounded()))%")
                                 .font(.subheadline.monospacedDigit())
                                 .foregroundStyle(.tertiary)
                         }

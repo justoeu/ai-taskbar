@@ -1,0 +1,61 @@
+{
+  "id": "SEC-CER-003",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 13:18:17 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "UsageWindow.swift:22 sanitizes in init, and the new init(from:) at :32-39 routes decoding through that init. Every vendor that builds a window gets the clamp, and so does a cached snapshot. MenuBarLabelView:41,74, NotificationService:100-107, MenuBarTooltipBuilder:26,56, PinnedStatusItemManager and ProviderRowView use Int(saturating:). Reversal: anthropic_huge_utilization_is_clamped goes RED (1e+300 != 1000), usage_window_sanitizes_init and usage_window_sanitizes_decode go RED, and tooltip_huge_anthropic_utilization crashes. On clamp semantics: overuse above 100% is kept up to 1000% (utilization_overuse keeps 137.5). The only documentation on this, UsageWindow.swift:7, says '(or higher if the vendor reports overuse)', which this does not contradict. Nothing in the docs promises values above 1000%.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Models/UsageWindow.swift:22",
+        "Sources/AiTaskbarCore/Models/UsageWindow.swift:32",
+        "Sources/AiTaskbarCore/Util/SafeNumeric.swift:55"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "UsageWindow.swift:22,33-39 sanitizes in one place, UtilizationPercent.sanitized, at init and on decode. The decoder delegates to init, so the clamp is not duplicated. The explicit CodingKeys match the fields the synthesized code covered before, so the cache shape stays the same. The app sites (MenuBarTooltipBuilder:26,56, MenuBarLabelView:41,74, ProviderRowView:26, PinnedStatusItemManager:97-110, SparklineView:116,126) are one-token mechanical swaps with no added nesting. The 1000 % cap has a written reason in SafeNumeric.swift:492-497.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/Models/UsageWindow.swift:22",
+        "Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift:26"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Public contract check: UsageWindow.swift:22-39 adds a custom init(from:) whose CodingKeys match the synthesized names (label, utilizationPercent, resetsAt, detail). Encoding stays synthesized, so cached snapshots stay wire-compatible, and usage_window_sanitizes_decode covers the old format. The only semantic change is the documented clamp to 0...1000, with NaN read as 0. The report says the golden tests stay green. The sinks this finding names are converted: MenuBarLabelView, MenuBarTooltipBuilder, NotificationService, PinnedStatusItemManager and ProviderRowView. NotificationService's identifier format is unchanged for real thresholds.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/Models/UsageWindow.swift:22",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/NotificationService.swift"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

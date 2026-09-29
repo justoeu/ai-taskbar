@@ -188,7 +188,7 @@ public struct AnalyticsView: View {
             )
         }
 
-        let avgUsage = shares.isEmpty ? 0 : Int(shares.map { share in
+        let avgUsage = shares.isEmpty ? 0 : Int(saturating: shares.map { share in
             snapshot?.vendorSummaries.first(where: { $0.vendor == share.vendor })?.totalUsagePercent ?? 0
         }.reduce(0, +) / Double(shares.count))
 
@@ -206,7 +206,7 @@ public struct AnalyticsView: View {
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
-                            Text("\(Int(h.value.rounded()))%")
+                            Text("\(Int(saturating: h.value.rounded()))%")
                                 .font(.headline.weight(.bold).monospacedDigit())
                                 .foregroundStyle(h.color)
                         } else {

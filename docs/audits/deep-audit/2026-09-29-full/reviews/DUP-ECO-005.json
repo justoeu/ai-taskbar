@@ -1,0 +1,64 @@
+{
+  "id": "DUP-ECO-005",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 13:18:17 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "ZAIWireTypes.swift:83-84 uses flatMap(Int(checkedTruncating:)), so an absurd value reads as absent. OpenAIWireTypes.swift:210-216 falls back to the default label. GeminiWireTypes.swift:150-157 clamps rem once (NaN becomes 1.0) and uses saturating conversion. For in-range inputs util is unchanged. For rem > 1 the detail line now reads '100% remaining' where it used to read '120%', which is consistent with the clamped consumed fraction. Reversal: all three tests crash with the Int.max fatal error. The validate.sh ratchet works. On the current tree it is green. Pointed at a planted copy, it flags Int($0), Int(x), Int64(d.rounded()), Int( y ), UInt32(v * 2), Int((…)), Int(-z) and Int(k) // comment, then exits with rc=1. It also accepts saturating:, checkedTruncating:, exactly:, clamping:, truncatingIfNeeded: and radix:. It would have caught the HEAD form Int($0). Minor gaps that do not block: point-free .map(Int.init), a call that opens 'Int(' on one line and puts the argument on the next, and the fact that the radix: exemption covers the whole line.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/ZAIWireTypes.swift:83",
+        "Sources/AiTaskbarProviders/OpenAIWireTypes.swift:211",
+        "Sources/AiTaskbarProviders/GeminiWireTypes.swift:153",
+        "scripts/validate.sh:138"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "ZAIWireTypes.swift:83-84 now uses flatMap with Int(checkedTruncating:), so an out-of-range value reads as absent, which fits a decoded field. GeminiWireTypes.swift:150-157 clamps rem once and derives consumedFraction from it. That removes the divergence the finding pointed at (one value clamped, its sibling not), and the change is smaller than before. OpenAIWireTypes.swift:210-216 adds two single-level guards; the fallback string now appears three times in that 10-line closure, which I accept at fix size. The ratchet added at validate.sh:129-145 blocks the same bug from coming back in any *WireTypes.swift. I checked its regex against the current tree: it catches Int($0) and Int(days.rounded()) and exempts the labeled forms.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarProviders/ZAIWireTypes.swift:83",
+        "Sources/AiTaskbarProviders/GeminiWireTypes.swift:150",
+        "Sources/AiTaskbarProviders/OpenAIWireTypes.swift:210",
+        "scripts/validate.sh:129"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "Only the three wire types this finding names changed: ZAIWireTypes.swift:83-84, OpenAIWireTypes.swift:210-217 (falls back to the default span label) and GeminiWireTypes.swift:150-157 (rem clamped once, fixing the divergence from consumedFraction). The Snapshot shape is unchanged, so the golden contract holds. The validate.sh:129-145 ratchet is proportionate to a 'diverged safety invariant' finding and only scans *WireTypes.swift.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiWireTypes.swift:150",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/validate.sh:129"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

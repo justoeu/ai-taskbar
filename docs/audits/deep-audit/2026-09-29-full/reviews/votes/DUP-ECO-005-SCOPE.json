@@ -1,0 +1,13 @@
+{
+ "id": "DUP-ECO-005",
+ "verdict": "APROVA",
+ "reasoning": "Only the three wire types this finding names changed: ZAIWireTypes.swift:83-84, OpenAIWireTypes.swift:210-217 (falls back to the default span label) and GeminiWireTypes.swift:150-157 (rem clamped once, fixing the divergence from consumedFraction). The Snapshot shape is unchanged, so the golden contract holds. The validate.sh:129-145 ratchet is proportionate to a 'diverged safety invariant' finding and only scans *WireTypes.swift.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarProviders/GeminiWireTypes.swift:150",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/scripts/validate.sh:129"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae1ed7587868844ec",
+ "batch": "B3-numeric"
+}

@@ -45,9 +45,21 @@ public final class UsageHistoryStore: @unchecked Sendable {
     public struct Sample: Sendable, Equatable, Codable {
         public let at: TimeInterval
         public let max: Double
+        /// `max` is sanitized via `UtilizationPercent` here AND when a line
+        /// is decoded, so an absurd value is neither persisted nor replayed
+        /// from a file an older build wrote (it would otherwise sit in the
+        /// 90-day history and crash every render of it).
         public init(at: TimeInterval, max: Double) {
             self.at = at
-            self.max = max
+            self.max = UtilizationPercent.sanitized(max)
+        }
+
+        private enum CodingKeys: String, CodingKey { case at, max }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(at: try c.decode(TimeInterval.self, forKey: .at),
+                      max: try c.decode(Double.self, forKey: .max))
         }
     }
 

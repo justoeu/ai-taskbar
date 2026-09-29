@@ -382,13 +382,24 @@ public struct ZAISnapshot: Sendable, Equatable, Codable {
 /// `ModelUsage`, which is already taken by the local cost aggregator).
 public struct ModelShare: Sendable, Equatable, Codable {
     public let model: String
+    /// Share of the vendor total, sanitized via `UtilizationPercent` (at init
+    /// and on decode) so an overflowing total (`inf / inf` = NaN) reads 0.
     public let percent: Double
     public let rawUsage: Double
 
     public init(model: String, percent: Double, rawUsage: Double) {
         self.model = model
-        self.percent = percent
+        self.percent = UtilizationPercent.sanitized(percent)
         self.rawUsage = rawUsage
+    }
+
+    private enum CodingKeys: String, CodingKey { case model, percent, rawUsage }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(model: try c.decode(String.self, forKey: .model),
+                  percent: try c.decode(Double.self, forKey: .percent),
+                  rawUsage: try c.decode(Double.self, forKey: .rawUsage))
     }
 }
 

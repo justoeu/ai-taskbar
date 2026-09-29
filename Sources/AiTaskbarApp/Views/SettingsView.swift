@@ -210,7 +210,7 @@ public struct SettingsView: View {
                 Stepper(value: refreshIntervalBinding,
                         in: 15...3600,
                         step: 15) {
-                    Text("\(Int(viewModel.draft.ui.refreshIntervalSeconds))s")
+                    Text("\(Int(saturating: viewModel.draft.ui.refreshIntervalSeconds))s")
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
@@ -272,7 +272,7 @@ public struct SettingsView: View {
                     set: { viewModel.draft.thresholds.warning = $0 }),
                        in: 0...100) { EmptyView() }
                     .frame(maxWidth: 140)
-                Text("\(Int(viewModel.draft.thresholds.warning))%")
+                Text("\(Int(saturating: viewModel.draft.thresholds.warning))%")
                     .font(.subheadline.monospacedDigit())
                     .frame(width: 36, alignment: .trailing)
             }
@@ -285,7 +285,7 @@ public struct SettingsView: View {
                     set: { viewModel.draft.thresholds.critical = $0 }),
                        in: 0...100) { EmptyView() }
                     .frame(maxWidth: 140)
-                Text("\(Int(viewModel.draft.thresholds.critical))%")
+                Text("\(Int(saturating: viewModel.draft.thresholds.critical))%")
                     .font(.subheadline.monospacedDigit())
                     .frame(width: 36, alignment: .trailing)
             }

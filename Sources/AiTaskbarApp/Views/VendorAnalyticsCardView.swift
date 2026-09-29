@@ -102,7 +102,7 @@ public struct VendorAnalyticsCardView: View {
                                  : "—")
                                 .font(.headline.monospacedDigit())
                             if summary.totalUsagePercent > 0 {
-                                Text("\(Int(summary.totalUsagePercent))% quota")
+                                Text("\(Int(saturating: summary.totalUsagePercent))% quota")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

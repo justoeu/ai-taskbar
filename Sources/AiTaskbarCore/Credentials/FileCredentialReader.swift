@@ -165,6 +165,6 @@ public enum CodexReconciliation {
     /// comparison only — never for an authz decision.
     private static func expiryMs(of auth: CodexAuth) -> Int64? {
         guard let date = JWT.expiry(auth.tokens.idToken) else { return nil }
-        return Int64(date.timeIntervalSince1970 * 1000)
+        return Int64(saturating: date.timeIntervalSince1970 * 1000)
     }
 }

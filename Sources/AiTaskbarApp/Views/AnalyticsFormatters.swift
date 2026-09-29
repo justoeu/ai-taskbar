@@ -43,9 +43,9 @@ public enum AnalyticsFormatters {
     public static func peakDayText(_ record: PeakDayRecord) -> String {
         let dateStr = dateFormatter.string(from: record.date)
         if record.costUSD > 0 {
-            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(Int(record.utilizationPercent))% quota)"
+            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(Int(saturating: record.utilizationPercent))% quota)"
         } else {
-            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(Int(record.utilizationPercent))% quota)"
+            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(Int(saturating: record.utilizationPercent))% quota)"
         }
     }
 

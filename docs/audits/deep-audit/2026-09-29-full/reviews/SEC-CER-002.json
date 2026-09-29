@@ -1,0 +1,61 @@
+{
+  "id": "SEC-CER-002",
+  "verdict": "approved",
+  "reviewed_at": "2026-09-29 13:18:16 UTC",
+  "panel_source": "vote-files",
+  "voters": 3,
+  "lenses": [
+    "CORRECTNESS",
+    "QUALITY",
+    "SCOPE"
+  ],
+  "votes": [
+    {
+      "lens": "CORRECTNESS",
+      "verdict": "APROVA",
+      "reasoning": "The cause is fixed where the data is stored, not just where it is shown. UsageHistoryStore.swift:52-63 now sanitizes Sample.max both at init and in a custom init(from:), so a saved 1e300 is neither written again nor read back from an old file. As a second layer, AnalyticsFormatters.swift:46,48 now use Int(saturating:). I ran the reversal myself: with the production files set back to HEAD, peak_day_text_huge_utilization crashes with 'Double value cannot be converted to Int ... greater than Int.max' and history_sanitizes_append_and_load fails with [1e+300] != [1000,1000]. With the fix back, both pass.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:52",
+        "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:46"
+      ],
+      "test_reversal_checked": true,
+      "agent": "Nêmesis"
+    },
+    {
+      "lens": "QUALITY",
+      "verdict": "APROVA",
+      "reasoning": "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:46,48 only swaps Int(_:) for Int(saturating:). The persistence side is handled in UsageHistoryStore.swift:48-62: Sample.init sanitizes, and the custom init(from:) decodes through that same init, so the rule has one owner and is not copied. That matches the new hard rule in CLAUDE.md. No try?, no swallowed error, nesting unchanged. The tests follow the optional-Bool rule, and each #expect checks one fact.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:46",
+        "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:48",
+        "Sources/AiTaskbarCore/Util/SafeNumeric.swift:498"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Hígia"
+    },
+    {
+      "lens": "SCOPE",
+      "verdict": "APROVA",
+      "reasoning": "UsageHistoryStore.swift:48-63 sanitizes Sample.max at init and again in a new init(from:), which uses the same keys (at, max), so JSONL history written by older builds still decodes and a stored 1e300 is clamped on load. AnalyticsFormatters.swift:48 sink uses Int(saturating:). No on-disk format change.",
+      "required_changes": [],
+      "new_findings": [],
+      "unrelated_files": [],
+      "cited_paths": [
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:48",
+        "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:48"
+      ],
+      "test_reversal_checked": false,
+      "agent": "Jano"
+    }
+  ],
+  "required_changes": [],
+  "new_findings": [],
+  "unrelated_files": [],
+  "test_reversal_checked": true
+}

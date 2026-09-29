@@ -1,0 +1,42 @@
+[
+ [
+  "QUALITY",
+  "scripts/validate.sh:135-137: WIRE_TYPES_DIR is described as existing 'only so the ratchet can be exercised against a planted file', but no committed self-test uses it. CLAUDE.md §5 says a gate that has not been shown to fail is worse than none. Add a planted-file check next to scripts/warn-ratchet-selftest.sh, or drop the knob."
+ ],
+ [
+  "QUALITY",
+  "The bare-Int ratchet only scans *WireTypes.swift. Core decoders of external input (JWT.swift, the Credentials/ decoders) are not covered, so a future bare Int64(d) there would get through. The remaining bare conversions I found in Core and Providers (OpencodeScanner:127-128, CodexLogScanner:33-34, DeepSeekStatusSource:23-24, TOMLEditor:60, which is guarded by abs<1e15) all work on local Dates or bounded values, so none is live today."
+ ],
+ [
+  "QUALITY",
+  "Tests/AiTaskbarCoreTests/NumericConversionTrapTests.swift:661 marks the suite .serialized, but it does not use StubURLProtocol or any shared static state. The trait adds nothing (minor)."
+ ],
+ [
+  "QUALITY",
+  "The App layer repeats `Int(saturating: x.rounded())` + \"%\" at about 15 sites. This duplication predates the fix (the old sites repeated `Int(x.rounded())`). A single whole-percent formatter could replace them in a later round."
+ ],
+ [
+  "SCOPE",
+  "validate.sh:129-145 adds a new gate but ships no self-test that plants a bare Int( in a WIRE_TYPES_DIR fixture and asserts the gate fails. CLAUDE.md requires such a test (warn-ratchet-selftest.sh precedent), so the gate is not yet proven able to fail."
+ ],
+ [
+  "SCOPE",
+  "The ratchet only scans *WireTypes.swift. Bare Double->Int calls remain on data from outside: StatusPanelView.swift:342 and :401 (RSS/status-feed incident dates) and PopoverContentView.swift:484-485. Send to the numeric/classic_bugs lens for triage. CodexLogScanner:33-34, OpencodeScanner:127-128 and DeepSeekStatusSource:23-24 use locally computed dates, so the risk there is low."
+ ],
+ [
+  "SCOPE",
+  "Clamping utilization to 1000% changes the meaning of the public UsageWindow/ModelShare/Sample value, and anything that assumed raw vendor numbers could exceed 1000 is affected. It is documented in CLAUDE.md/AGENTS.md but not mentioned in the README. Check whether the README's percentage/overuse text needs a line, per the always-update-docs policy."
+ ],
+ [
+  "CORRECTNESS",
+  "Commands I ran myself: the filtered suite (196 tests passed); the full swift test --no-parallel (935 tests passed, no golden or snapshot test changed); swift run ai-taskbar-validate (429 passed, 0 failed). Reversal method: git apply -R of the production patch, keeping SafeNumeric.swift and the tests, then each of the 17 behavioral tests run on its own. All 17 went RED. I then reapplied the patch: diff -r against the backup in scratchpad/review-B3-numeric/fixed/Sources matches, and git diff HEAD matches reviews/diffs/B3-numeric.diff apart from index lines."
+ ],
+ [
+  "CORRECTNESS",
+  "Out of scope, possible follow-up: the ratchet only looks at *WireTypes.swift. Bare Double-to-Int conversions are still present in Sources/AiTaskbarCore/Config/TOMLEditor.swift:60 (Int64(d) on a config value), OpencodeScanner.swift:127-128, CodexLogScanner.swift:33-34 and DeepSeekStatusSource.swift:23-24. The last three work on local dates, so they are bounded in practice."
+ ],
+ [
+  "CORRECTNESS",
+  "Ratchet gaps (checked by planting lines in a scratch copy): point-free Int.init / Int64.init, a call split across lines as 'Int(' with the argument on the next line, and a line containing radix: is exempt in full."
+ ]
+]

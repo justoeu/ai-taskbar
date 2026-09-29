@@ -113,7 +113,7 @@ public struct SparklineView: View {
                     .fill(tint)
                     .frame(width: 4, height: 4)
                     .position(x: xFor(last.at), y: yFor(last.max))
-                Text("\(Int(last.max.rounded()))%")
+                Text("\(Int(saturating: last.max.rounded()))%")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(tint)
                     .position(x: plotWidth + valueLabelWidth / 2,
@@ -123,7 +123,7 @@ public struct SparklineView: View {
             // Peak indicator when meaningfully higher than current — surfaces
             // recent spikes that may have already drained.
             if maxPercent > currentPercent + 5 {
-                Text("↑\(Int(maxPercent.rounded()))%")
+                Text("↑\(Int(saturating: maxPercent.rounded()))%")
                     .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(.tertiary)
                     .position(x: plotWidth + valueLabelWidth / 2,

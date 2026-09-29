@@ -94,10 +94,10 @@ public struct PinnedStatusBadgeView: View {
 
             if let weekly = weekly {
                 VStack(alignment: .trailing, spacing: -1) {
-                    Text("\(Int(weekly.rounded()))%")
+                    Text("\(Int(saturating: weekly.rounded()))%")
                         .font(Self.menuBarFont)
                         .foregroundStyle(itemTint(for: weekly))
-                    Text("\(Int(current.rounded()))%")
+                    Text("\(Int(saturating: current.rounded()))%")
                         .font(Self.menuBarFont)
                         .foregroundStyle(itemTint(for: current))
                 }
@@ -107,7 +107,7 @@ public struct PinnedStatusBadgeView: View {
                 // our own NSHostingView, so a custom font here WOULD apply and
                 // render visibly larger than the main icon's percentage.
                 // Use the very font the system uses for the main item.
-                Text("\(Int(current.rounded()))%")
+                Text("\(Int(saturating: current.rounded()))%")
                     .font(Self.menuBarFont)
                     .foregroundStyle(itemTint(for: current))
             }

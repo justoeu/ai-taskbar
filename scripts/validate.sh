@@ -126,6 +126,24 @@ if [ "${vacuous:-0}" -gt 0 ]; then
 fi
 ok "no vacuous #expect forms"
 
+# Trapping Double->Int ratchet (B3-numeric). `Int(_: Double)` is a fatal
+# error for NaN, infinity or out-of-range values, and wire types decode
+# untrusted vendor JSON where `1e300` is valid. In *WireTypes.swift every
+# integer conversion must use a labeled, non-trapping initializer
+# (`saturating:` / `checkedTruncating:` from Core's SafeNumeric.swift, or
+# `exactly:` / `clamping:` / `truncatingIfNeeded:`). Comment lines and
+# `radix:` string parses are exempt. WIRE_TYPES_DIR exists only so the
+# ratchet can be exercised against a planted file outside the repo.
+wire_dir="${WIRE_TYPES_DIR:-Sources/AiTaskbarProviders}"
+bare_int_re='\bU?Int(8|16|32|64)?\((\s*[^a-zA-Z_ )]|\s*[a-zA-Z_][a-zA-Z0-9_.]*[^a-zA-Z0-9_.:])'
+bare_int=$(grep -HnE "$bare_int_re" "$wire_dir"/*WireTypes.swift 2>/dev/null \
+    | grep -vE '^[^:]+:[0-9]+:\s*//' | grep -v 'radix:' || true)
+if [ -n "$bare_int" ]; then
+    echo "$bare_int" | head -5
+    fail "bare Int(...) conversion in *WireTypes.swift — use Int(saturating:) / Int(checkedTruncating:)"
+fi
+ok "no trapping integer conversions in wire types"
+
 # Warnings ratchet.
 #
 # Measured on a CLEAN build (--scratch-path to a temp dir): an incremental

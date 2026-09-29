@@ -1,0 +1,14 @@
+{
+ "id": "SEC-CER-004",
+ "verdict": "APROVA",
+ "reasoning": "Same root fix as SEC-CER-002: samples are clamped on append and on load, so maxPercent in SparklineView is at most 1000. The labels at SparklineView.swift:116,126 are also saturating. Reversal: history_sanitizes_append_and_load goes RED. There is no view test for the sparkline, but it was not needed, because the data source is proven sanitized.",
+ "required_changes": [],
+ "cited_paths": [
+  "Sources/AiTaskbarCore/History/UsageHistoryStore.swift:54",
+  "Sources/AiTaskbarApp/Views/SparklineView.swift:126"
+ ],
+ "test_reversal_checked": true,
+ "lens": "CORRECTNESS",
+ "_task": "ad8f7632f7b93ba34",
+ "batch": "B3-numeric"
+}

@@ -550,13 +550,44 @@
       }
     },
     "test_red_green": {
-      "name": "TBD",
+      "name": "NumericConversionTrapTests#history_sanitizes_append_and_load,NumericConversionTrapAppTests#peak_day_text_huge_utilization",
       "assert_before": "exploit or deny-path fails open",
       "assert_after": "exploit blocked; legitimate path unchanged"
     },
-    "status": "open",
+    "status": "resolved",
     "blocks_pr": false,
-    "id": "SEC-CER-002"
+    "id": "SEC-CER-002",
+    "resolved_test": "NumericConversionTrapTests#history_sanitizes_append_and_load,NumericConversionTrapAppTests#peak_day_text_huge_utilization",
+    "resolved_at": "2026-09-29 13:18:16 UTC",
+    "resolved_note": "batch B3-numeric",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:18:16 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#history_sanitizes_append_and_load,NumericConversionTrapAppTests#peak_day_text_huge_utilization · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "in_progress": false
   },
   {
     "title": "AtomicFileWrite overwrite keeps the old file mode (0644 survives a 0o600 write), and no test exercises that path",
@@ -779,7 +810,7 @@
     "fix": "Add `Int.checked(_ d: Double) -> Int?` / saturating variant in AiTaskbarCore/Util (finite + range guard or Int(exactly: d.rounded(.towardZero))). Replace every Int(/Int64( over a decoded Double with it. Add a validate.sh grep ratchet for wire types.",
     "confidence": "high",
     "test_red_green": {
-      "name": "jwtHugeExpDoesNotTrap",
+      "name": "NumericConversionTrapTests#jwt_huge_int_claim_is_nil,NumericConversionTrapTests#jwt_huge_int64_claim_is_nil,NumericConversionTrapTests#anthropic_credentials_huge_expiry_saturates,NumericConversionTrapTests#anthropic_rotated_huge_expiry_saturates,SafeNumericTests#*",
       "assert_before": "payload {\"exp\":1e300}; claim as Int crashes the process",
       "assert_after": "returns nil/saturated; test passes"
     },
@@ -788,10 +819,41 @@
     "cetico_evidence": "Int64(d) at AnthropicCredentials.swift:45 and Int((rem*100).rounded()) at GeminiWireTypes.swift:154 trap on 1e300. The cited JWT.swift:52-53 site is unreachable in production: the only claim calls ask for String (OpenAIProvider.swift:214, OpenAIResetProtocol.swift:47). Separate reachable site: FileCredentialReader.swift:168 Int64(timeIntervalSince1970*1000). Downgraded: every input comes from a trusted local source (a Keychain item written by the CLI, agy, a signed JWT).",
     "verification": "cetico",
     "domain": "best_practices",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarCore/Util/JWT.swift",
     "id": "BEST-ATE-003",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "NumericConversionTrapTests#jwt_huge_int_claim_is_nil,NumericConversionTrapTests#jwt_huge_int64_claim_is_nil,NumericConversionTrapTests#anthropic_credentials_huge_expiry_saturates,NumericConversionTrapTests#anthropic_rotated_huge_expiry_saturates,SafeNumericTests#*",
+    "resolved_at": "2026-09-29 13:18:17 UTC",
+    "resolved_note": "batch B3-numeric",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:18:17 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#jwt_huge_int_claim_is_nil,NumericConversionTrapTests#jwt_huge_int64_claim_is_nil,NumericConversionTrapTests#anthropic_credentials_huge_expiry_saturates,NumericConversionTrapTests#anthropic_rotated_huge_expiry_saturates,SafeNumericTests#* · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "in_progress": false
   },
   {
     "title": "Gemini decodeSnapshot sniffs the agy payload with try?, so agy schema drift is reported as 'base_url may be wrong'",
@@ -1239,14 +1301,45 @@
     "confidence": "medium",
     "agent": "Cético",
     "domain": "classic_bugs",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
-      "name": "TBD",
+      "name": "NumericConversionTrapTests#codex_reconciliation_huge_exp",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "BUG-CET-001",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "NumericConversionTrapTests#codex_reconciliation_huge_exp",
+    "resolved_at": "2026-09-29 13:18:17 UTC",
+    "resolved_note": "batch B3-numeric",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:18:17 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#codex_reconciliation_huge_exp · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "in_progress": false
   },
   {
     "lens": "classic_bugs",
@@ -1761,15 +1854,46 @@
     "cetico_evidence": "ZAIWireTypes.swift:82-83 does Int($0) on an unbounded flexibleDoubleIfPresent value. GeminiWireTypes.swift:154 does Int((rem*100).rounded()) with rem unclamped. OpenAIWireTypes.swift:211/213 do Int(days/hours.rounded()) with no upper bound. JSONDecoder rejects NaN and Inf by default, but a finite value such as 1e300 decodes and traps. The vector needs a TLS-authenticated vendor (or the agy CLI output) to send an absurd number, hence LOW.",
     "verification": "cetico",
     "domain": "duplication",
-    "status": "open",
+    "status": "resolved",
     "path": "Sources/AiTaskbarProviders/ZAIWireTypes.swift",
     "test_red_green": {
-      "name": "TBD",
+      "name": "NumericConversionTrapTests#zai_huge_unit_and_number_are_dropped,NumericConversionTrapTests#openai_huge_window_seconds_uses_default_label,NumericConversionTrapTests#gemini_huge_remaining_fraction_is_clamped",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-ECO-005",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_test": "NumericConversionTrapTests#zai_huge_unit_and_number_are_dropped,NumericConversionTrapTests#openai_huge_window_seconds_uses_default_label,NumericConversionTrapTests#gemini_huge_remaining_fraction_is_clamped",
+    "resolved_at": "2026-09-29 13:18:17 UTC",
+    "resolved_note": "batch B3-numeric",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:18:17 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#zai_huge_unit_and_number_are_dropped,NumericConversionTrapTests#openai_huge_window_seconds_uses_default_label,NumericConversionTrapTests#gemini_huge_remaining_fraction_is_clamped · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "in_progress": false
   },
   {
     "lens": "duplication",
@@ -2262,13 +2386,44 @@
       }
     },
     "test_red_green": {
-      "name": "TBD",
+      "name": "NumericConversionTrapTests#anthropic_huge_utilization_is_clamped,NumericConversionTrapAppTests#tooltip_huge_anthropic_utilization,NumericConversionTrapTests#usage_window_sanitizes_init,NumericConversionTrapTests#usage_window_sanitizes_decode",
       "assert_before": "exploit or deny-path fails open",
       "assert_after": "exploit blocked; legitimate path unchanged"
     },
-    "status": "open",
+    "status": "resolved",
     "blocks_pr": false,
-    "id": "SEC-CER-003"
+    "id": "SEC-CER-003",
+    "resolved_test": "NumericConversionTrapTests#anthropic_huge_utilization_is_clamped,NumericConversionTrapAppTests#tooltip_huge_anthropic_utilization,NumericConversionTrapTests#usage_window_sanitizes_init,NumericConversionTrapTests#usage_window_sanitizes_decode",
+    "resolved_at": "2026-09-29 13:18:17 UTC",
+    "resolved_note": "batch B3-numeric",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:18:17 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#anthropic_huge_utilization_is_clamped,NumericConversionTrapAppTests#tooltip_huge_anthropic_utilization,NumericConversionTrapTests#usage_window_sanitizes_init,NumericConversionTrapTests#usage_window_sanitizes_decode · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cérbero",
@@ -2317,13 +2472,44 @@
       }
     },
     "test_red_green": {
-      "name": "TBD",
+      "name": "NumericConversionTrapTests#history_sanitizes_append_and_load",
       "assert_before": "exploit or deny-path fails open",
       "assert_after": "exploit blocked; legitimate path unchanged"
     },
-    "status": "open",
+    "status": "resolved",
     "blocks_pr": false,
-    "id": "SEC-CER-004"
+    "id": "SEC-CER-004",
+    "resolved_test": "NumericConversionTrapTests#history_sanitizes_append_and_load",
+    "resolved_at": "2026-09-29 13:18:17 UTC",
+    "resolved_note": "batch B3-numeric",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:18:17 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#history_sanitizes_append_and_load · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "in_progress": false
   },
   {
     "agent": "Cérbero",
@@ -2371,13 +2557,44 @@
       }
     },
     "test_red_green": {
-      "name": "TBD",
+      "name": "NumericConversionTrapTests#zai_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#openrouter_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#model_share_sanitizes",
       "assert_before": "exploit or deny-path fails open",
       "assert_after": "exploit blocked; legitimate path unchanged"
     },
-    "status": "open",
+    "status": "resolved",
     "blocks_pr": false,
-    "id": "SEC-CER-005"
+    "id": "SEC-CER-005",
+    "resolved_test": "NumericConversionTrapTests#zai_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#openrouter_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#model_share_sanitizes",
+    "resolved_at": "2026-09-29 13:18:17 UTC",
+    "resolved_note": "batch B3-numeric",
+    "review": {
+      "verdict": "approved",
+      "reviewed_at": "2026-09-29 13:18:17 UTC",
+      "panel_source": "vote-files",
+      "voters": 3,
+      "votes": [
+        {
+          "lens": "CORRECTNESS",
+          "verdict": "APROVA",
+          "agent": "Nêmesis"
+        },
+        {
+          "lens": "QUALITY",
+          "verdict": "APROVA",
+          "agent": "Hígia"
+        },
+        {
+          "lens": "SCOPE",
+          "verdict": "APROVA",
+          "agent": "Jano"
+        }
+      ],
+      "test_reversal_checked": true
+    },
+    "progress": [
+      "2026-09-29: resolvido · teste NumericConversionTrapTests#zai_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#openrouter_overflowing_totals_yield_finite_shares,NumericConversionTrapTests#model_share_sanitizes · revisão approved (3/3) · batch B3-numeric"
+    ],
+    "in_progress": false
   },
   {
     "title": "The vacuous-#expect grep misses the Optional-Bool form when a message argument follows, and a live instance guards TLS pins",

@@ -42,7 +42,9 @@ public struct AnthropicCredentials: Codable, Sendable, Equatable {
             self.expiresAtMs = i
         } else {
             let d = try c.decode(Double.self, forKey: .expiresAtMs)
-            self.expiresAtMs = Int64(d)
+            // Saturate: an absurd expiry must not crash the credential read;
+            // the server still rejects a token that is really expired.
+            self.expiresAtMs = Int64(saturating: d)
         }
         self.subscriptionType = try c.decodeIfPresent(String.self, forKey: .subscriptionType)
         self.rateLimitTier = try c.decodeIfPresent(String.self, forKey: .rateLimitTier)
@@ -72,7 +74,8 @@ public struct AnthropicCredentials: Codable, Sendable, Equatable {
         AnthropicCredentials(
             accessToken: accessToken,
             refreshToken: refreshToken ?? self.refreshToken,
-            expiresAtMs: Int64(expiresAt.timeIntervalSince1970 * 1000),
+            // `expiresAt` derives from the vendor's `expires_in`.
+            expiresAtMs: Int64(saturating: expiresAt.timeIntervalSince1970 * 1000),
             subscriptionType: subscriptionType,
             rateLimitTier: rateLimitTier
         )

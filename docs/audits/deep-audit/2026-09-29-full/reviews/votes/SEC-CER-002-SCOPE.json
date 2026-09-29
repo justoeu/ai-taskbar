@@ -1,0 +1,13 @@
+{
+ "id": "SEC-CER-002",
+ "verdict": "APROVA",
+ "reasoning": "UsageHistoryStore.swift:48-63 sanitizes Sample.max at init and again in a new init(from:), which uses the same keys (at, max), so JSONL history written by older builds still decodes and a stored 1e300 is clamped on load. AnalyticsFormatters.swift:48 sink uses Int(saturating:). No on-disk format change.",
+ "required_changes": [],
+ "cited_paths": [
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarCore/History/UsageHistoryStore.swift:48",
+  "/Users/justoeu/Developer/Workspace/ai-taskbar/.claude/worktrees/agent-a0baad922aaf6c74d/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift:48"
+ ],
+ "lens": "SCOPE",
+ "_task": "ae1ed7587868844ec",
+ "batch": "B3-numeric"
+}

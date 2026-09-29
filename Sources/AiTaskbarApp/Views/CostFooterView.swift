@@ -256,8 +256,8 @@ public struct CostFooterView: View {
 
     @ViewBuilder
     private func modelRow(_ row: ModelRow, totalToday: Double, total7d: Double) -> some View {
-        let todayPct = totalToday > 0 ? Int((row.usdToday / totalToday * 100).rounded()) : 0
-        let weekPct  = total7d > 0    ? Int((row.usd7d   / total7d   * 100).rounded()) : 0
+        let todayPct = totalToday > 0 ? Int(saturating: (row.usdToday / totalToday * 100).rounded()) : 0
+        let weekPct  = total7d > 0    ? Int(saturating: (row.usd7d   / total7d   * 100).rounded()) : 0
         HStack(spacing: 0) {
             Text("•  ")
                 .font(.callout)

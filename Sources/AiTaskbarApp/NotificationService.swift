@@ -97,14 +97,14 @@ public final class NotificationService {
         let content = UNMutableNotificationContent()
         if config.discreet {
             content.title = L10n.localizedString("notif_discreet_title")
-            content.body  = L10n.localizedString("notif_discreet_body_fmt", Int(threshold))
+            content.body  = L10n.localizedString("notif_discreet_body_fmt", Int(saturating: threshold))
         } else {
-            content.title = "\(vendor.displayName) — \(window.label) at \(Int(window.utilizationPercent))%"
+            content.title = "\(vendor.displayName) — \(window.label) at \(Int(saturating: window.utilizationPercent))%"
             content.body  = thresholdMessage(threshold: threshold, window: window)
         }
         content.sound = .default
         let req = UNNotificationRequest(
-            identifier: "ai-taskbar.\(vendor.rawValue).\(window.label).\(Int(threshold))",
+            identifier: "ai-taskbar.\(vendor.rawValue).\(window.label).\(Int(saturating: threshold))",
             content: content,
             trigger: nil
         )

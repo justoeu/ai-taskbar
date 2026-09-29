@@ -521,6 +521,15 @@ that came out of fixing that:
 - **TOML decoders must use `KeyedDecodingContainer.flexibleDouble` /
   `flexibleDoubleArray`** when expecting a `Double` field. TOML's `70`
   literal parses as `Int64`, not `Double`, and TOMLKit will not auto-cast.
+- **Never convert an external Double with a bare `Int(_:)` / `Int64(_:)`.**
+  It traps on NaN, infinity or out-of-range values, and vendor JSON,
+  credential files, JWT claims and persisted history can all carry `1e300`.
+  Use `Int(saturating:)` for display/ordering or `Int(checkedTruncating:)`
+  (nil = absent) for decoded fields — both in `Util/SafeNumeric.swift`.
+  Utilization is sanitized once by `UtilizationPercent.sanitized` (NaN → 0,
+  clamped to 0…1000 %) inside `UsageWindow`, `ModelShare` and
+  `UsageHistoryStore.Sample`, at init AND on decode. `validate.sh` rejects
+  bare integer conversions in `*WireTypes.swift`.
 - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
   cleanup, marker writes). If a credential write fails, the user must see it.
 - **Keychain reads AND writes** must run inside

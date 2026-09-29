@@ -1,0 +1,943 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 7eb5a8b..d81902b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -521,6 +521,15 @@ that came out of fixing that:
+ - **TOML decoders must use `KeyedDecodingContainer.flexibleDouble` /
+   `flexibleDoubleArray`** when expecting a `Double` field. TOML's `70`
+   literal parses as `Int64`, not `Double`, and TOMLKit will not auto-cast.
++- **Never convert an external Double with a bare `Int(_:)` / `Int64(_:)`.**
++  It traps on NaN, infinity or out-of-range values, and vendor JSON,
++  credential files, JWT claims and persisted history can all carry `1e300`.
++  Use `Int(saturating:)` for display/ordering or `Int(checkedTruncating:)`
++  (nil = absent) for decoded fields — both in `Util/SafeNumeric.swift`.
++  Utilization is sanitized once by `UtilizationPercent.sanitized` (NaN → 0,
++  clamped to 0…1000 %) inside `UsageWindow`, `ModelShare` and
++  `UsageHistoryStore.Sample`, at init AND on decode. `validate.sh` rejects
++  bare integer conversions in `*WireTypes.swift`.
+ - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
+   cleanup, marker writes). If a credential write fails, the user must see it.
+ - **Keychain reads AND writes** must run inside
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 7eb5a8b..d81902b 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -521,6 +521,15 @@ that came out of fixing that:
+ - **TOML decoders must use `KeyedDecodingContainer.flexibleDouble` /
+   `flexibleDoubleArray`** when expecting a `Double` field. TOML's `70`
+   literal parses as `Int64`, not `Double`, and TOMLKit will not auto-cast.
++- **Never convert an external Double with a bare `Int(_:)` / `Int64(_:)`.**
++  It traps on NaN, infinity or out-of-range values, and vendor JSON,
++  credential files, JWT claims and persisted history can all carry `1e300`.
++  Use `Int(saturating:)` for display/ordering or `Int(checkedTruncating:)`
++  (nil = absent) for decoded fields — both in `Util/SafeNumeric.swift`.
++  Utilization is sanitized once by `UtilizationPercent.sanitized` (NaN → 0,
++  clamped to 0…1000 %) inside `UsageWindow`, `ModelShare` and
++  `UsageHistoryStore.Sample`, at init AND on decode. `validate.sh` rejects
++  bare integer conversions in `*WireTypes.swift`.
+ - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
+   cleanup, marker writes). If a credential write fails, the user must see it.
+ - **Keychain reads AND writes** must run inside
+diff --git a/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift b/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift
+index 586f8e7..fdbe4c2 100644
+--- a/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift
++++ b/Sources/AiTaskbarApp/MenuBarTooltipBuilder.swift
+@@ -23,7 +23,7 @@ public enum MenuBarTooltipBuilder {
+         locale: Locale = L10n.effectiveLocale
+     ) -> String {
+         guard let snapshot else {
+-            return "\(vendorId.displayName): \(Int(currentPercent.rounded()))%"
++            return "\(vendorId.displayName): \(Int(saturating: currentPercent.rounded()))%"
+         }
+ 
+         let (dailyWindow, weeklyWindow) = snapshot.menuBarResetWindows
+@@ -53,7 +53,7 @@ public enum MenuBarTooltipBuilder {
+         }
+ 
+         if lines.isEmpty {
+-            return "\(vendorId.displayName): \(Int(currentPercent.rounded()))%"
++            return "\(vendorId.displayName): \(Int(saturating: currentPercent.rounded()))%"
+         }
+ 
+         return ([vendorId.displayName] + lines).joined(separator: "\n")
+diff --git a/Sources/AiTaskbarApp/NotificationService.swift b/Sources/AiTaskbarApp/NotificationService.swift
+index 02942a7..573004c 100644
+--- a/Sources/AiTaskbarApp/NotificationService.swift
++++ b/Sources/AiTaskbarApp/NotificationService.swift
+@@ -97,14 +97,14 @@ public final class NotificationService {
+         let content = UNMutableNotificationContent()
+         if config.discreet {
+             content.title = L10n.localizedString("notif_discreet_title")
+-            content.body  = L10n.localizedString("notif_discreet_body_fmt", Int(threshold))
++            content.body  = L10n.localizedString("notif_discreet_body_fmt", Int(saturating: threshold))
+         } else {
+-            content.title = "\(vendor.displayName) — \(window.label) at \(Int(window.utilizationPercent))%"
++            content.title = "\(vendor.displayName) — \(window.label) at \(Int(saturating: window.utilizationPercent))%"
+             content.body  = thresholdMessage(threshold: threshold, window: window)
+         }
+         content.sound = .default
+         let req = UNNotificationRequest(
+-            identifier: "ai-taskbar.\(vendor.rawValue).\(window.label).\(Int(threshold))",
++            identifier: "ai-taskbar.\(vendor.rawValue).\(window.label).\(Int(saturating: threshold))",
+             content: content,
+             trigger: nil
+         )
+diff --git a/Sources/AiTaskbarApp/PinnedStatusItemManager.swift b/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
+index f004341..7cf11c5 100644
+--- a/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
++++ b/Sources/AiTaskbarApp/PinnedStatusItemManager.swift
+@@ -94,10 +94,10 @@ public struct PinnedStatusBadgeView: View {
+ 
+             if let weekly = weekly {
+                 VStack(alignment: .trailing, spacing: -1) {
+-                    Text("\(Int(weekly.rounded()))%")
++                    Text("\(Int(saturating: weekly.rounded()))%")
+                         .font(Self.menuBarFont)
+                         .foregroundStyle(itemTint(for: weekly))
+-                    Text("\(Int(current.rounded()))%")
++                    Text("\(Int(saturating: current.rounded()))%")
+                         .font(Self.menuBarFont)
+                         .foregroundStyle(itemTint(for: current))
+                 }
+@@ -107,7 +107,7 @@ public struct PinnedStatusBadgeView: View {
+                 // our own NSHostingView, so a custom font here WOULD apply and
+                 // render visibly larger than the main icon's percentage.
+                 // Use the very font the system uses for the main item.
+-                Text("\(Int(current.rounded()))%")
++                Text("\(Int(saturating: current.rounded()))%")
+                     .font(Self.menuBarFont)
+                     .foregroundStyle(itemTint(for: current))
+             }
+diff --git a/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift b/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
+index 1879df1..2a8ede0 100644
+--- a/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
++++ b/Sources/AiTaskbarApp/Views/AnalyticsFormatters.swift
+@@ -43,9 +43,9 @@ public enum AnalyticsFormatters {
+     public static func peakDayText(_ record: PeakDayRecord) -> String {
+         let dateStr = dateFormatter.string(from: record.date)
+         if record.costUSD > 0 {
+-            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(Int(record.utilizationPercent))% quota)"
++            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(Int(saturating: record.utilizationPercent))% quota)"
+         } else {
+-            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(Int(record.utilizationPercent))% quota)"
++            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(Int(saturating: record.utilizationPercent))% quota)"
+         }
+     }
+ 
+diff --git a/Sources/AiTaskbarApp/Views/AnalyticsView.swift b/Sources/AiTaskbarApp/Views/AnalyticsView.swift
+index c83bbac..0d321cc 100644
+--- a/Sources/AiTaskbarApp/Views/AnalyticsView.swift
++++ b/Sources/AiTaskbarApp/Views/AnalyticsView.swift
+@@ -188,7 +188,7 @@ public struct AnalyticsView: View {
+             )
+         }
+ 
+-        let avgUsage = shares.isEmpty ? 0 : Int(shares.map { share in
++        let avgUsage = shares.isEmpty ? 0 : Int(saturating: shares.map { share in
+             snapshot?.vendorSummaries.first(where: { $0.vendor == share.vendor })?.totalUsagePercent ?? 0
+         }.reduce(0, +) / Double(shares.count))
+ 
+@@ -206,7 +206,7 @@ public struct AnalyticsView: View {
+                                 .font(.system(size: 9, weight: .semibold))
+                                 .foregroundStyle(.secondary)
+                                 .lineLimit(1)
+-                            Text("\(Int(h.value.rounded()))%")
++                            Text("\(Int(saturating: h.value.rounded()))%")
+                                 .font(.headline.weight(.bold).monospacedDigit())
+                                 .foregroundStyle(h.color)
+                         } else {
+diff --git a/Sources/AiTaskbarApp/Views/CostFooterView.swift b/Sources/AiTaskbarApp/Views/CostFooterView.swift
+index 82120ee..52e0e27 100644
+--- a/Sources/AiTaskbarApp/Views/CostFooterView.swift
++++ b/Sources/AiTaskbarApp/Views/CostFooterView.swift
+@@ -256,8 +256,8 @@ public struct CostFooterView: View {
+ 
+     @ViewBuilder
+     private func modelRow(_ row: ModelRow, totalToday: Double, total7d: Double) -> some View {
+-        let todayPct = totalToday > 0 ? Int((row.usdToday / totalToday * 100).rounded()) : 0
+-        let weekPct  = total7d > 0    ? Int((row.usd7d   / total7d   * 100).rounded()) : 0
++        let todayPct = totalToday > 0 ? Int(saturating: (row.usdToday / totalToday * 100).rounded()) : 0
++        let weekPct  = total7d > 0    ? Int(saturating: (row.usd7d   / total7d   * 100).rounded()) : 0
+         HStack(spacing: 0) {
+             Text("•  ")
+                 .font(.callout)
+diff --git a/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift b/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
+index bf46d9e..f5a4f45 100644
+--- a/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
++++ b/Sources/AiTaskbarApp/Views/MenuBarLabelView.swift
+@@ -38,7 +38,7 @@ public struct MenuBarLabelView: View {
+             iconForMaxPercent
+             let percent = store.maxUtilization
+             let isFull = percent >= store.thresholds.warning || percent >= 100
+-            Text("\(Int(percent.rounded()))%")
++            Text("\(Int(saturating: percent.rounded()))%")
+                 .font(.system(size: 15.0, weight: .bold, design: .monospaced))
+                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent,
+                                                                         thresholds: store.thresholds))
+@@ -71,7 +71,7 @@ public struct MenuBarLabelView: View {
+             Image(systemName: symbolName(for: percent))
+                 .symbolRenderingMode(.hierarchical)
+                 .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
+-            Text("\(shortLabel(for: vm.vendorId)) \(Int(percent.rounded()))%")
++            Text("\(shortLabel(for: vm.vendorId)) \(Int(saturating: percent.rounded()))%")
+                 .font(.system(size: 14.0, weight: .bold, design: .monospaced))
+                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
+             if isFull {
+diff --git a/Sources/AiTaskbarApp/Views/ProviderRowView.swift b/Sources/AiTaskbarApp/Views/ProviderRowView.swift
+index 8713155..b391c73 100644
+--- a/Sources/AiTaskbarApp/Views/ProviderRowView.swift
++++ b/Sources/AiTaskbarApp/Views/ProviderRowView.swift
+@@ -23,7 +23,7 @@ public struct ProviderRowView: View {
+                 Text(window.label)
+                     .font(.subheadline.weight(.medium))
+                 Spacer()
+-                Text("\(Int(percent.rounded()))%")
++                Text("\(Int(saturating: percent.rounded()))%")
+                     .font(.subheadline.monospacedDigit())
+                     .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: thresholds))
+             }
+diff --git a/Sources/AiTaskbarApp/Views/SettingsView.swift b/Sources/AiTaskbarApp/Views/SettingsView.swift
+index a17ee1e..0146d9a 100644
+--- a/Sources/AiTaskbarApp/Views/SettingsView.swift
++++ b/Sources/AiTaskbarApp/Views/SettingsView.swift
+@@ -210,7 +210,7 @@ public struct SettingsView: View {
+                 Stepper(value: refreshIntervalBinding,
+                         in: 15...3600,
+                         step: 15) {
+-                    Text("\(Int(viewModel.draft.ui.refreshIntervalSeconds))s")
++                    Text("\(Int(saturating: viewModel.draft.ui.refreshIntervalSeconds))s")
+                         .font(.subheadline.monospacedDigit())
+                         .foregroundStyle(.secondary)
+                 }
+@@ -272,7 +272,7 @@ public struct SettingsView: View {
+                     set: { viewModel.draft.thresholds.warning = $0 }),
+                        in: 0...100) { EmptyView() }
+                     .frame(maxWidth: 140)
+-                Text("\(Int(viewModel.draft.thresholds.warning))%")
++                Text("\(Int(saturating: viewModel.draft.thresholds.warning))%")
+                     .font(.subheadline.monospacedDigit())
+                     .frame(width: 36, alignment: .trailing)
+             }
+@@ -285,7 +285,7 @@ public struct SettingsView: View {
+                     set: { viewModel.draft.thresholds.critical = $0 }),
+                        in: 0...100) { EmptyView() }
+                     .frame(maxWidth: 140)
+-                Text("\(Int(viewModel.draft.thresholds.critical))%")
++                Text("\(Int(saturating: viewModel.draft.thresholds.critical))%")
+                     .font(.subheadline.monospacedDigit())
+                     .frame(width: 36, alignment: .trailing)
+             }
+diff --git a/Sources/AiTaskbarApp/Views/SparklineView.swift b/Sources/AiTaskbarApp/Views/SparklineView.swift
+index 57935e8..010044b 100644
+--- a/Sources/AiTaskbarApp/Views/SparklineView.swift
++++ b/Sources/AiTaskbarApp/Views/SparklineView.swift
+@@ -113,7 +113,7 @@ public struct SparklineView: View {
+                     .fill(tint)
+                     .frame(width: 4, height: 4)
+                     .position(x: xFor(last.at), y: yFor(last.max))
+-                Text("\(Int(last.max.rounded()))%")
++                Text("\(Int(saturating: last.max.rounded()))%")
+                     .font(.subheadline.monospacedDigit())
+                     .foregroundStyle(tint)
+                     .position(x: plotWidth + valueLabelWidth / 2,
+@@ -123,7 +123,7 @@ public struct SparklineView: View {
+             // Peak indicator when meaningfully higher than current — surfaces
+             // recent spikes that may have already drained.
+             if maxPercent > currentPercent + 5 {
+-                Text("↑\(Int(maxPercent.rounded()))%")
++                Text("↑\(Int(saturating: maxPercent.rounded()))%")
+                     .font(.system(size: 12).monospacedDigit())
+                     .foregroundStyle(.tertiary)
+                     .position(x: plotWidth + valueLabelWidth / 2,
+diff --git a/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift b/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
+index 5f0c766..b5c3b72 100644
+--- a/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorAnalyticsCardView.swift
+@@ -102,7 +102,7 @@ public struct VendorAnalyticsCardView: View {
+                                  : "—")
+                                 .font(.headline.monospacedDigit())
+                             if summary.totalUsagePercent > 0 {
+-                                Text("\(Int(summary.totalUsagePercent))% quota")
++                                Text("\(Int(saturating: summary.totalUsagePercent))% quota")
+                                     .font(.caption)
+                                     .foregroundStyle(.secondary)
+                             }
+diff --git a/Sources/AiTaskbarApp/Views/VendorSectionView.swift b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+index 903c6ce..75f9d3a 100644
+--- a/Sources/AiTaskbarApp/Views/VendorSectionView.swift
++++ b/Sources/AiTaskbarApp/Views/VendorSectionView.swift
+@@ -605,7 +605,7 @@ public struct VendorSectionView: View {
+                                 .font(.subheadline.monospaced())
+                                 .foregroundStyle(.secondary)
+                             Spacer(minLength: 4)
+-                            Text("\(Int(m.percent.rounded()))%")
++                            Text("\(Int(saturating: m.percent.rounded()))%")
+                                 .font(.subheadline.monospacedDigit())
+                                 .foregroundStyle(.tertiary)
+                         }
+@@ -635,7 +635,7 @@ public struct VendorSectionView: View {
+                                 .font(.subheadline.monospaced())
+                                 .foregroundStyle(.secondary)
+                             Spacer(minLength: 4)
+-                            Text("\(Int(m.percent.rounded()))%")
++                            Text("\(Int(saturating: m.percent.rounded()))%")
+                                 .font(.subheadline.monospacedDigit())
+                                 .foregroundStyle(.tertiary)
+                         }
+diff --git a/Sources/AiTaskbarCore/Credentials/AnthropicCredentials.swift b/Sources/AiTaskbarCore/Credentials/AnthropicCredentials.swift
+index 07648ef..3d5d7e1 100644
+--- a/Sources/AiTaskbarCore/Credentials/AnthropicCredentials.swift
++++ b/Sources/AiTaskbarCore/Credentials/AnthropicCredentials.swift
+@@ -42,7 +42,9 @@ public struct AnthropicCredentials: Codable, Sendable, Equatable {
+             self.expiresAtMs = i
+         } else {
+             let d = try c.decode(Double.self, forKey: .expiresAtMs)
+-            self.expiresAtMs = Int64(d)
++            // Saturate: an absurd expiry must not crash the credential read;
++            // the server still rejects a token that is really expired.
++            self.expiresAtMs = Int64(saturating: d)
+         }
+         self.subscriptionType = try c.decodeIfPresent(String.self, forKey: .subscriptionType)
+         self.rateLimitTier = try c.decodeIfPresent(String.self, forKey: .rateLimitTier)
+@@ -72,7 +74,8 @@ public struct AnthropicCredentials: Codable, Sendable, Equatable {
+         AnthropicCredentials(
+             accessToken: accessToken,
+             refreshToken: refreshToken ?? self.refreshToken,
+-            expiresAtMs: Int64(expiresAt.timeIntervalSince1970 * 1000),
++            // `expiresAt` derives from the vendor's `expires_in`.
++            expiresAtMs: Int64(saturating: expiresAt.timeIntervalSince1970 * 1000),
+             subscriptionType: subscriptionType,
+             rateLimitTier: rateLimitTier
+         )
+diff --git a/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift b/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift
+index 64f9223..4f711df 100644
+--- a/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift
++++ b/Sources/AiTaskbarCore/Credentials/FileCredentialReader.swift
+@@ -165,6 +165,6 @@ public enum CodexReconciliation {
+     /// comparison only — never for an authz decision.
+     private static func expiryMs(of auth: CodexAuth) -> Int64? {
+         guard let date = JWT.expiry(auth.tokens.idToken) else { return nil }
+-        return Int64(date.timeIntervalSince1970 * 1000)
++        return Int64(saturating: date.timeIntervalSince1970 * 1000)
+     }
+ }
+diff --git a/Sources/AiTaskbarCore/History/UsageHistoryStore.swift b/Sources/AiTaskbarCore/History/UsageHistoryStore.swift
+index a944ddb..b4387ee 100644
+--- a/Sources/AiTaskbarCore/History/UsageHistoryStore.swift
++++ b/Sources/AiTaskbarCore/History/UsageHistoryStore.swift
+@@ -45,9 +45,21 @@ public final class UsageHistoryStore: @unchecked Sendable {
+     public struct Sample: Sendable, Equatable, Codable {
+         public let at: TimeInterval
+         public let max: Double
++        /// `max` is sanitized via `UtilizationPercent` here AND when a line
++        /// is decoded, so an absurd value is neither persisted nor replayed
++        /// from a file an older build wrote (it would otherwise sit in the
++        /// 90-day history and crash every render of it).
+         public init(at: TimeInterval, max: Double) {
+             self.at = at
+-            self.max = max
++            self.max = UtilizationPercent.sanitized(max)
++        }
++
++        private enum CodingKeys: String, CodingKey { case at, max }
++
++        public init(from decoder: Decoder) throws {
++            let c = try decoder.container(keyedBy: CodingKeys.self)
++            self.init(at: try c.decode(TimeInterval.self, forKey: .at),
++                      max: try c.decode(Double.self, forKey: .max))
+         }
+     }
+ 
+diff --git a/Sources/AiTaskbarCore/Models/UsageSnapshot.swift b/Sources/AiTaskbarCore/Models/UsageSnapshot.swift
+index 3a4959f..5ce192c 100644
+--- a/Sources/AiTaskbarCore/Models/UsageSnapshot.swift
++++ b/Sources/AiTaskbarCore/Models/UsageSnapshot.swift
+@@ -382,14 +382,25 @@ public struct ZAISnapshot: Sendable, Equatable, Codable {
+ /// `ModelUsage`, which is already taken by the local cost aggregator).
+ public struct ModelShare: Sendable, Equatable, Codable {
+     public let model: String
++    /// Share of the vendor total, sanitized via `UtilizationPercent` (at init
++    /// and on decode) so an overflowing total (`inf / inf` = NaN) reads 0.
+     public let percent: Double
+     public let rawUsage: Double
+ 
+     public init(model: String, percent: Double, rawUsage: Double) {
+         self.model = model
+-        self.percent = percent
++        self.percent = UtilizationPercent.sanitized(percent)
+         self.rawUsage = rawUsage
+     }
++
++    private enum CodingKeys: String, CodingKey { case model, percent, rawUsage }
++
++    public init(from decoder: Decoder) throws {
++        let c = try decoder.container(keyedBy: CodingKeys.self)
++        self.init(model: try c.decode(String.self, forKey: .model),
++                  percent: try c.decode(Double.self, forKey: .percent),
++                  rawUsage: try c.decode(Double.self, forKey: .rawUsage))
++    }
+ }
+ 
+ public struct KimiSnapshot: Sendable, Equatable, Codable {
+diff --git a/Sources/AiTaskbarCore/Models/UsageWindow.swift b/Sources/AiTaskbarCore/Models/UsageWindow.swift
+index e0de9d3..d7412e7 100644
+--- a/Sources/AiTaskbarCore/Models/UsageWindow.swift
++++ b/Sources/AiTaskbarCore/Models/UsageWindow.swift
+@@ -4,7 +4,9 @@ import Foundation
+ public struct UsageWindow: Sendable, Equatable, Codable {
+     /// Label shown in the UI ("Session 5h", "Weekly 7d", "Sonnet 7d", ...).
+     public let label: String
+-    /// 0...100 (or higher if the vendor reports overuse).
++    /// 0...100 (or higher if the vendor reports overuse). Always passed
++    /// through `UtilizationPercent.sanitized` — at init AND on decode from
++    /// the cache — so it is never NaN, negative, or above 1000.
+     public let utilizationPercent: Double
+     /// When the window resets (absolute time). May be nil if the vendor only
+     /// reports a "seconds-until-reset" without an anchor.
+@@ -17,11 +19,25 @@ public struct UsageWindow: Sendable, Equatable, Codable {
+                 resetsAt: Date? = nil,
+                 detail: String? = nil) {
+         self.label = label
+-        self.utilizationPercent = utilizationPercent
++        self.utilizationPercent = UtilizationPercent.sanitized(utilizationPercent)
+         self.resetsAt = resetsAt
+         self.detail = detail
+     }
+ 
++    private enum CodingKeys: String, CodingKey {
++        case label, utilizationPercent, resetsAt, detail
++    }
++
++    /// Decodes through `init` so a snapshot cached by an older build (or a
++    /// tampered cache file) cannot bypass the sanitization.
++    public init(from decoder: Decoder) throws {
++        let c = try decoder.container(keyedBy: CodingKeys.self)
++        self.init(label: try c.decode(String.self, forKey: .label),
++                  utilizationPercent: try c.decode(Double.self, forKey: .utilizationPercent),
++                  resetsAt: try c.decodeIfPresent(Date.self, forKey: .resetsAt),
++                  detail: try c.decodeIfPresent(String.self, forKey: .detail))
++    }
++
+     /// True once `resetsAt` has passed but a fresh snapshot hasn't landed
+     /// yet. The UI shows an "awaiting auto-refresh" message in this phase
+     /// instead of letting a relative-date countdown count back up.
+diff --git a/Sources/AiTaskbarCore/Util/JWT.swift b/Sources/AiTaskbarCore/Util/JWT.swift
+index 8f9c206..e250169 100644
+--- a/Sources/AiTaskbarCore/Util/JWT.swift
++++ b/Sources/AiTaskbarCore/Util/JWT.swift
+@@ -49,8 +49,9 @@ public enum JWT {
+         case (.int(let i),    is Int64.Type):   return i as? T
+         case (.int(let i),    is Double.Type):  return Double(i) as? T
+         case (.double(let d), is Double.Type):  return d as? T
+-        case (.double(let d), is Int.Type):     return Int(d) as? T
+-        case (.double(let d), is Int64.Type):   return Int64(d) as? T
++        // A non-representable number (1e300) reads as an absent claim.
++        case (.double(let d), is Int.Type):     return Int(checkedTruncating: d) as? T
++        case (.double(let d), is Int64.Type):   return Int64(checkedTruncating: d) as? T
+         case (.bool(let b),   is Bool.Type):    return b as? T
+         default:                                 return nil
+         }
+diff --git a/Sources/AiTaskbarCore/Util/SafeNumeric.swift b/Sources/AiTaskbarCore/Util/SafeNumeric.swift
+new file mode 100644
+index 0000000..b711f54
+--- /dev/null
++++ b/Sources/AiTaskbarCore/Util/SafeNumeric.swift
+@@ -0,0 +1,60 @@
++import Foundation
++
++// Double -> integer conversions that never trap.
++//
++// `Int(_: Double)` / `Int64(_: Double)` are fatal errors for NaN, infinity
++// and anything outside the integer's range. Vendor JSON, credential files,
++// JWT claims and persisted history are all external input and can carry any
++// finite Double (`1e300` is valid JSON; sums of large values overflow to
++// infinity; `inf / inf` is NaN). Every such conversion goes through one of
++// the two initializers below; bare `Int(someDouble)` on external input is a
++// crash waiting for a malformed payload.
++//
++// Policy — pick by what the number is for:
++// - `init(saturating:)` for DISPLAY and ordering: truncates toward zero like
++//   `Int(_:)`, NaN becomes 0, out-of-range clamps to `.min` / `.max`. A label
++//   showing a huge number is wrong but harmless; a crash is not.
++// - `init?(checkedTruncating:)` for DECODED FIELDS whose absurd value means
++//   "not a usable value": returns nil, so the field reads as absent.
++public extension FixedWidthInteger {
++    /// Saturating conversion: truncates toward zero, NaN -> 0, values beyond
++    /// the type's range -> `.min` / `.max`. Never traps.
++    init(saturating value: Double) {
++        if value.isNaN {
++            self = 0
++        } else if value >= Double(Self.max) {
++            // `Double(Int64.max)` rounds UP to 2^63, which is itself out of
++            // range, so `>=` (not `>`) is what keeps the fallthrough safe.
++            self = .max
++        } else if value <= Double(Self.min) {
++            self = .min
++        } else {
++            self.init(value)
++        }
++    }
++
++    /// Checked conversion: truncates toward zero, nil for NaN, infinity or a
++    /// value the type cannot represent. Never traps.
++    init?(checkedTruncating value: Double) {
++        self.init(exactly: value.rounded(.towardZero))
++    }
++}
++
++/// The single sanitization point for utilization percentages, applied where
++/// vendor numbers become `UsageWindow` / `ModelShare` and where history
++/// samples are appended or loaded.
++///
++/// Decision: CLAMP, don't drop. NaN -> 0; everything else is clamped to
++/// `0...maximum`. `maximum` is 1000 % — ten times over quota, far above any
++/// overuse a vendor has reported, so no real reading changes, while an absurd
++/// value (1e300, infinity) still renders as "maxed out" instead of vanishing
++/// or crashing the integer formatting downstream. Negative readings carry no
++/// meaning for a quota and clamp to 0.
++public enum UtilizationPercent {
++    public static let maximum: Double = 1000
++
++    public static func sanitized(_ value: Double) -> Double {
++        guard !value.isNaN else { return 0 }
++        return Swift.min(Swift.max(value, 0), maximum)
++    }
++}
+diff --git a/Sources/AiTaskbarProviders/GeminiWireTypes.swift b/Sources/AiTaskbarProviders/GeminiWireTypes.swift
+index 048d0e8..b10ff41 100644
+--- a/Sources/AiTaskbarProviders/GeminiWireTypes.swift
++++ b/Sources/AiTaskbarProviders/GeminiWireTypes.swift
+@@ -147,11 +147,14 @@ extension AntigravityUsageResponse {
+                     let is5h = bWin == "5h" || bId.contains("5h")
+                     let isWeekly = bWin == "weekly" || bId.contains("weekly")
+ 
+-                    let rem = bucket.remainingFraction ?? 1.0
+-                    let consumedFraction = max(0.0, min(1.0, 1.0 - rem))
++                    let rawRem = bucket.remainingFraction ?? 1.0
++                    // Clamp once: the detail line and the consumed fraction
++                    // must agree, and an unclamped 1e300 trapped in `Int(_:)`.
++                    let rem = rawRem.isNaN ? 1.0 : max(0.0, min(1.0, rawRem))
++                    let consumedFraction = 1.0 - rem
+                     let util = consumedFraction * 100.0
+                     let resetsAt = bucket.resetTime.flatMap(ISO8601Parsing.parse)
+-                    let remPercentInt = Int((rem * 100.0).rounded())
++                    let remPercentInt = Int(saturating: (rem * 100.0).rounded())
+                     let detail = "\(remPercentInt)% remaining"
+ 
+                     if isGemini {
+diff --git a/Sources/AiTaskbarProviders/OpenAIWireTypes.swift b/Sources/AiTaskbarProviders/OpenAIWireTypes.swift
+index 434f5dc..17060df 100644
+--- a/Sources/AiTaskbarProviders/OpenAIWireTypes.swift
++++ b/Sources/AiTaskbarProviders/OpenAIWireTypes.swift
+@@ -207,10 +207,13 @@ extension OpenAIUsageResponse {
+             guard let s = seconds, s > 0 else { return "\(prefix) (\(defaultSpan))" }
+             let hours = s / 3600
+             let days = s / 86_400
++            // A span no Int can hold is not a real window: use the default.
+             if days >= 1 {
+-                return "\(prefix) (\(Int(days.rounded()))d)"
++                guard let d = Int(checkedTruncating: days.rounded()) else { return "\(prefix) (\(defaultSpan))" }
++                return "\(prefix) (\(d)d)"
+             } else {
+-                return "\(prefix) (\(Int(hours.rounded()))h)"
++                guard let h = Int(checkedTruncating: hours.rounded()) else { return "\(prefix) (\(defaultSpan))" }
++                return "\(prefix) (\(h)h)"
+             }
+         }
+     }
+diff --git a/Sources/AiTaskbarProviders/RSSStatusSource.swift b/Sources/AiTaskbarProviders/RSSStatusSource.swift
+index 846dd29..a865015 100644
+--- a/Sources/AiTaskbarProviders/RSSStatusSource.swift
++++ b/Sources/AiTaskbarProviders/RSSStatusSource.swift
+@@ -84,7 +84,7 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
+         var titleStarts = Set<String>()
+         var unique: [ServiceIncident] = []
+         for incident in mapped {
+-            let pair = "\(normalized(incident.title))|\(Int64(incident.startedAt.timeIntervalSince1970))"
++            let pair = "\(normalized(incident.title))|\(Int64(saturating: incident.startedAt.timeIntervalSince1970))"
+             guard !ids.contains(incident.id), !titleStarts.contains(pair) else { continue }
+             ids.insert(incident.id)
+             titleStarts.insert(pair)
+@@ -268,7 +268,7 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
+         }
+         let id = plainText(item.guid ?? "", limit: 200)
+             ?? safeSourceURL(item.link)?.absoluteString
+-            ?? "\(normalized(title))-\(Int64(startedAt.timeIntervalSince1970))"
++            ?? "\(normalized(title))-\(Int64(saturating: startedAt.timeIntervalSince1970))"
+ 
+         return ServiceIncident(
+             id: id,
+diff --git a/Sources/AiTaskbarProviders/ZAIWireTypes.swift b/Sources/AiTaskbarProviders/ZAIWireTypes.swift
+index 8851b26..d441201 100644
+--- a/Sources/AiTaskbarProviders/ZAIWireTypes.swift
++++ b/Sources/AiTaskbarProviders/ZAIWireTypes.swift
+@@ -80,8 +80,8 @@ public struct ZAILimitEntry: Decodable {
+     public init(from decoder: Decoder) throws {
+         let c = try decoder.container(keyedBy: CodingKeys.self)
+         type = try c.decodeIfPresent(String.self, forKey: .type)
+-        unit = c.flexibleDoubleIfPresent(forKey: .unit).map { Int($0) }
+-        number = c.flexibleDoubleIfPresent(forKey: .number).map { Int($0) }
++        unit = c.flexibleDoubleIfPresent(forKey: .unit).flatMap { Int(checkedTruncating: $0) }
++        number = c.flexibleDoubleIfPresent(forKey: .number).flatMap { Int(checkedTruncating: $0) }
+         usage = c.flexibleDoubleIfPresent(forKey: .usage)
+         currentValue = c.flexibleDoubleIfPresent(forKey: .currentValue)
+         remaining = c.flexibleDoubleIfPresent(forKey: .remaining)
+diff --git a/Tests/AiTaskbarAppTests/NumericConversionTrapTests.swift b/Tests/AiTaskbarAppTests/NumericConversionTrapTests.swift
+new file mode 100644
+index 0000000..b8fa4ef
+--- /dev/null
++++ b/Tests/AiTaskbarAppTests/NumericConversionTrapTests.swift
+@@ -0,0 +1,46 @@
++import Testing
++import Foundation
++@testable import AiTaskbarApp
++@testable import AiTaskbarCore
++import AiTaskbarProviders
++
++/// The App formats vendor / history percentages with integer conversions.
++/// An absurd value that reached these formatters trapped the whole app —
++/// on every launch while it sat in the cache or the 90-day history
++/// (B3-numeric: SEC-CER-002/003/004).
++@MainActor
++@Suite("Numeric conversion traps — App formatters")
++struct NumericConversionTrapAppTests {
++    @Test("Busiest-day text survives an absurd persisted utilization")
++    func peak_day_text_huge_utilization() {
++        let record = PeakDayRecord(date: Date(timeIntervalSince1970: 1_700_000_000),
++                                   costUSD: 0, utilizationPercent: 1e300)
++        let text = AnalyticsFormatters.peakDayText(record)
++        #expect(text.contains("\(Int.max)% quota"))
++    }
++
++    @Test("Busiest-day text keeps truncating normal values")
++    func peak_day_text_normal_utilization() {
++        let record = PeakDayRecord(date: Date(timeIntervalSince1970: 1_700_000_000),
++                                   costUSD: 1, utilizationPercent: 84.9)
++        #expect(AnalyticsFormatters.peakDayText(record).contains("84% quota"))
++    }
++
++    @Test("Menu-bar tooltip survives an Anthropic utilization of 1e300 end to end")
++    func tooltip_huge_anthropic_utilization() throws {
++        let json = #"{ "five_hour": { "utilization": 1e300 } }"#
++        let parsed = try JSONDecoder().decode(AnthropicUsageResponse.self, from: Data(json.utf8))
++        let snap = VendorSnapshot.anthropic(parsed.toSnapshot(planLabel: nil))
++        let text = MenuBarTooltipBuilder.buildTooltip(vendorId: .anthropic, snapshot: nil,
++                                                      currentPercent: snap.maxUtilization)
++        #expect(text == "Claude: 1000%")
++    }
++
++    @Test("Whole-percent formatting saturates non-finite values and rounds normal ones")
++    func whole_percent_formatting() {
++        #expect(MenuBarTooltipBuilder.buildTooltip(vendorId: .anthropic, snapshot: nil,
++                                                   currentPercent: .nan) == "Claude: 0%")
++        #expect(MenuBarTooltipBuilder.buildTooltip(vendorId: .anthropic, snapshot: nil,
++                                                   currentPercent: 41.6) == "Claude: 42%")
++    }
++}
+diff --git a/Tests/AiTaskbarCoreTests/NumericConversionTrapTests.swift b/Tests/AiTaskbarCoreTests/NumericConversionTrapTests.swift
+new file mode 100644
+index 0000000..b6abee3
+--- /dev/null
++++ b/Tests/AiTaskbarCoreTests/NumericConversionTrapTests.swift
+@@ -0,0 +1,172 @@
++import Testing
++import Foundation
++@testable import AiTaskbarCore
++
++private func b64url(_ s: String) -> String {
++    Data(s.utf8).base64EncodedString()
++        .replacingOccurrences(of: "+", with: "-")
++        .replacingOccurrences(of: "/", with: "_")
++        .replacingOccurrences(of: "=", with: "")
++}
++
++private func token(payload: String) -> String {
++    "\(b64url(#"{"alg":"none"}"#)).\(b64url(payload))."
++}
++
++/// Credential files, JWT claims and persisted history are external input:
++/// any finite Double they carry must convert to an integer without trapping
++/// (B3-numeric: BEST-ATE-003, BUG-CET-001, SEC-CER-002/004).
++@Suite("Numeric conversion traps — credentials, JWT, history", .serialized)
++struct NumericConversionTrapTests {
++    @Test("JWT Int claim of 1e300 is not representable → nil, not a trap")
++    func jwt_huge_int_claim_is_nil() {
++        let t = token(payload: #"{"n":1e300}"#)
++        expectTrue(JWT.claim(t, key: "n", as: Int.self) == nil)
++    }
++
++    @Test("JWT Int64 claim of -1e300 is not representable → nil, not a trap")
++    func jwt_huge_int64_claim_is_nil() {
++        let t = token(payload: #"{"n":-1e300}"#)
++        expectTrue(JWT.claim(t, key: "n", as: Int64.self) == nil)
++    }
++
++    @Test("JWT fractional Int claim still truncates as before")
++    func jwt_fractional_int_claim_truncates() {
++        let t = token(payload: #"{"n":42.9}"#)
++        #expect(JWT.claim(t, key: "n", as: Int.self) == 42)
++    }
++
++    @Test("Anthropic credential expiresAt 1e300 saturates instead of trapping")
++    func anthropic_credentials_huge_expiry_saturates() throws {
++        let json = #"{"accessToken":"a","refreshToken":"r","expiresAt":1e300}"#
++        let creds = try JSONDecoder().decode(AnthropicCredentials.self, from: Data(json.utf8))
++        #expect(creds.expiresAtMs == Int64.max)
++    }
++
++    @Test("Anthropic credential fractional expiresAt still truncates")
++    func anthropic_credentials_fractional_expiry_truncates() throws {
++        let json = #"{"accessToken":"a","refreshToken":"r","expiresAt":1700000000000.7}"#
++        let creds = try JSONDecoder().decode(AnthropicCredentials.self, from: Data(json.utf8))
++        #expect(creds.expiresAtMs == 1_700_000_000_000)
++    }
++
++    @Test("Anthropic rotated() with an absurd expires_in saturates instead of trapping")
++    func anthropic_rotated_huge_expiry_saturates() {
++        let creds = AnthropicCredentials(accessToken: "a", refreshToken: "r", expiresAtMs: 1)
++        let rotated = creds.rotated(accessToken: "b", refreshToken: nil,
++                                    expiresAt: Date(timeIntervalSince1970: 1e300))
++        #expect(rotated.expiresAtMs == Int64.max)
++    }
++
++    @Test("Codex reconciliation with a JWT exp of 1e300 does not trap; huge exp is freshest")
++    func codex_reconciliation_huge_exp() {
++        let huge = CodexAuth(tokens: CodexTokens(accessToken: "p", refreshToken: "r",
++                                                 idToken: token(payload: #"{"exp":1e300}"#)))
++        let normal = CodexAuth(tokens: CodexTokens(accessToken: "d", refreshToken: "r",
++                                                   idToken: token(payload: #"{"exp":1000}"#)))
++        let v = CodexReconciliation.pick(disk: normal, pending: huge)
++        #expect(v?.credentials == huge)
++    }
++
++    @Test("UsageWindow clamps a non-finite / absurd utilization at init")
++    func usage_window_sanitizes_init() {
++        #expect(UsageWindow(label: "x", utilizationPercent: 1e300).utilizationPercent == 1000)
++        #expect(UsageWindow(label: "x", utilizationPercent: .nan).utilizationPercent == 0)
++        #expect(UsageWindow(label: "x", utilizationPercent: 47.2).utilizationPercent == 47.2)
++    }
++
++    @Test("UsageWindow clamps a cached (decoded) absurd utilization")
++    func usage_window_sanitizes_decode() throws {
++        let json = #"{"label":"x","utilizationPercent":1e300}"#
++        let w = try JSONDecoder().decode(UsageWindow.self, from: Data(json.utf8))
++        #expect(w.utilizationPercent == 1000)
++    }
++
++    @Test("ModelShare replaces a NaN / absurd percent, also when decoded from cache")
++    func model_share_sanitizes() throws {
++        #expect(ModelShare(model: "m", percent: .nan, rawUsage: 1).percent == 0)
++        let json = #"{"model":"m","percent":1e300,"rawUsage":1}"#
++        let s = try JSONDecoder().decode(ModelShare.self, from: Data(json.utf8))
++        #expect(s.percent == 1000)
++    }
++
++    @Test("UsageHistoryStore never persists / replays an absurd utilization")
++    func history_sanitizes_append_and_load() throws {
++        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
++            .appendingPathComponent("ai-taskbar-numeric-\(UUID().uuidString)")
++        try Paths.ensureDir(dir)
++        defer { try? FileManager.default.removeItem(at: dir) }
++        let store = UsageHistoryStore(vendor: .anthropic, baseDir: dir)
++        // A line an older build already wrote to disk.
++        try Data(#"{"at":1700000000,"max":1e300}"#.utf8 + [0x0a])
++            .write(to: store.fileURL)
++        store.append(maxUtilization: .infinity, at: Date(timeIntervalSince1970: 1_700_000_100))
++        let samples = store.load(since: Date(timeIntervalSince1970: 0))
++        #expect(samples.map(\.max) == [1000, 1000])
++    }
++}
++
++@Suite("SafeNumeric — non-trapping Double to integer conversion")
++struct SafeNumericTests {
++    @Test("saturating: NaN is 0")
++    func saturating_nan() { #expect(Int(saturating: .nan) == 0) }
++
++    @Test("saturating: +inf clamps to .max")
++    func saturating_positive_infinity() { #expect(Int(saturating: .infinity) == Int.max) }
++
++    @Test("saturating: 1e300 clamps to Int64.max")
++    func saturating_positive_overflow() { #expect(Int64(saturating: 1e300) == Int64.max) }
++
++    @Test("saturating: 2^63 (Double(Int.max)) is .max, not a trap")
++    func saturating_exact_boundary() { #expect(Int(saturating: Double(Int.max)) == Int.max) }
++
++    @Test("saturating: -inf clamps to .min")
++    func saturating_negative_infinity() { #expect(Int(saturating: -.infinity) == Int.min) }
++
++    @Test("saturating: narrow type negative overflow clamps to .min")
++    func saturating_narrow_negative_overflow() { #expect(Int32(saturating: -1e10) == Int32.min) }
++
++    @Test("saturating: in-range positive truncates toward zero like Int(_:)")
++    func saturating_truncates_positive() { #expect(Int(saturating: 84.9) == 84) }
++
++    @Test("saturating: in-range negative truncates toward zero like Int(_:)")
++    func saturating_truncates_negative() { #expect(Int(saturating: -2.7) == -2) }
++
++    @Test("saturating: unsigned negative clamps to 0")
++    func saturating_unsigned() { #expect(UInt64(saturating: -5) == 0) }
++
++    @Test("checked: NaN is nil")
++    func checked_nan() { expectTrue(Int(checkedTruncating: .nan) == nil) }
++
++    @Test("checked: infinity is nil")
++    func checked_infinity() { expectTrue(Int(checkedTruncating: .infinity) == nil) }
++
++    @Test("checked: out-of-range is nil")
++    func checked_out_of_range() { expectTrue(Int64(checkedTruncating: 1e19) == nil) }
++
++    @Test("checked: in-range positive truncates toward zero")
++    func checked_truncates_positive() { #expect(Int(checkedTruncating: 5.99) == 5) }
++
++    @Test("checked: in-range negative truncates toward zero")
++    func checked_truncates_negative() { #expect(Int(checkedTruncating: -5.99) == -5) }
++
++    @Test("UtilizationPercent: NaN is 0")
++    func utilization_nan() { #expect(UtilizationPercent.sanitized(.nan) == 0) }
++
++    @Test("UtilizationPercent: negative clamps to 0")
++    func utilization_negative() { #expect(UtilizationPercent.sanitized(-3) == 0) }
++
++    @Test("UtilizationPercent: infinity clamps to the documented maximum")
++    func utilization_infinity() {
++        #expect(UtilizationPercent.sanitized(.infinity) == UtilizationPercent.maximum)
++    }
++
++    @Test("UtilizationPercent: maximum is 1000 %")
++    func utilization_maximum_value() { #expect(UtilizationPercent.maximum == 1000) }
++
++    @Test("UtilizationPercent: normal reading unchanged")
++    func utilization_normal() { #expect(UtilizationPercent.sanitized(47.2) == 47.2) }
++
++    @Test("UtilizationPercent: vendor-reported overuse unchanged")
++    func utilization_overuse() { #expect(UtilizationPercent.sanitized(137.5) == 137.5) }
++}
+diff --git a/Tests/AiTaskbarProvidersTests/NumericConversionTrapTests.swift b/Tests/AiTaskbarProvidersTests/NumericConversionTrapTests.swift
+new file mode 100644
+index 0000000..dfd60fb
+--- /dev/null
++++ b/Tests/AiTaskbarProvidersTests/NumericConversionTrapTests.swift
+@@ -0,0 +1,94 @@
++import Testing
++import Foundation
++@testable import AiTaskbarCore
++@testable import AiTaskbarProviders
++import AiTaskbarTesting
++
++/// Vendor JSON may carry any finite Double (1e300 is valid JSON). Nothing on
++/// the decode -> snapshot path may feed such a value to a trapping `Int(_:)`,
++/// and no utilization / share may leave the wire type outside the
++/// `UtilizationPercent` bounds (B3-numeric: SEC-CER-003/005, DUP-ECO-005).
++@Suite("Numeric conversion traps — vendor wire types")
++struct NumericConversionTrapTests {
++    @Test("Anthropic utilization 1e300 is clamped at the UsageWindow boundary")
++    func anthropic_huge_utilization_is_clamped() throws {
++        let json = #"{ "five_hour": { "utilization": 1e300 } }"#
++        let parsed = try JSONDecoder().decode(AnthropicUsageResponse.self, from: Data(json.utf8))
++        let snap = VendorSnapshot.anthropic(parsed.toSnapshot(planLabel: nil))
++        #expect(snap.maxUtilization == 1000)
++    }
++
++    @Test("Z.AI unit/number 1e300 decode without trapping (dropped as nil)")
++    func zai_huge_unit_and_number_are_dropped() throws {
++        let json = #"{ "type": "TOKENS_LIMIT", "unit": 1e300, "number": -1e300, "percentage": 5 }"#
++        let entry = try JSONDecoder().decode(ZAILimitEntry.self, from: Data(json.utf8))
++        expectTrue(entry.unit == nil)
++        expectTrue(entry.number == nil)
++    }
++
++    @Test("Z.AI in-range unit/number still decode (truncating, as before)")
++    func zai_normal_unit_and_number_decode() throws {
++        let json = #"{ "type": "TOKENS_LIMIT", "unit": 3, "number": 5.0 }"#
++        let entry = try JSONDecoder().decode(ZAILimitEntry.self, from: Data(json.utf8))
++        #expect(entry.unit == 3)
++        #expect(entry.number == 5)
++    }
++
++    @Test("Z.AI overflowing per-model totals never yield a NaN share")
++    func zai_overflowing_totals_yield_finite_shares() throws {
++        let json = #"""
++        { "code": 200, "success": true, "data": { "level": "lite", "limits": [
++          { "type": "TIME_LIMIT", "percentage": 1, "usageDetails": [
++            { "modelCode": "a", "usage": 1.7e308 },
++            { "modelCode": "a", "usage": 1.7e308 },
++            { "modelCode": "b", "usage": 1.0 } ] } ] } }
++        """#
++        let env = try JSONDecoder().decode(ZAIEnvelope.self, from: Data(json.utf8))
++        let shares = env.toSnapshot(configTier: nil).topModels ?? []
++        #expect(shares.count == 2)
++        #expect(shares.allSatisfy { $0.percent.isFinite && $0.percent >= 0 && $0.percent <= 100 })
++    }
++
++    @Test("OpenRouter overflowing per-model totals never yield a NaN share")
++    func openrouter_overflowing_totals_yield_finite_shares() throws {
++        let credits = try JSONDecoder().decode(
++            OpenRouterCreditsResponse.self, from: Fixtures.data(Fixtures.openrouterCredits200))
++        let key = try JSONDecoder().decode(
++            OpenRouterKeyResponse.self, from: Fixtures.data(Fixtures.openrouterKeyFreeTier200))
++        let activityJSON = #"""
++        { "data": [ { "model": "x", "usage": 1.7e308 }, { "model": "x", "usage": 1.7e308 },
++                    { "model": "y", "usage": 2.0 } ] }
++        """#
++        let activity = try JSONDecoder().decode(
++            OpenRouterActivityResponse.self, from: Data(activityJSON.utf8))
++        let shares = OpenRouterCachedPayload(credits: credits, key: key, activity: activity)
++            .toSnapshot().topModels ?? []
++        #expect(shares.count == 2)
++        #expect(shares.allSatisfy { $0.percent.isFinite && $0.percent >= 0 && $0.percent <= 100 })
++    }
++
++    @Test("OpenAI limit_window_seconds 1e300 falls back to the default span label")
++    func openai_huge_window_seconds_uses_default_label() throws {
++        let json = #"""
++        { "plan_type": "plus", "rate_limit": {
++            "primary_window": { "used_percent": 1, "limit_window_seconds": 1e300 },
++            "secondary_window": { "used_percent": 1, "limit_window_seconds": 1e300 } } }
++        """#
++        let parsed = try JSONDecoder().decode(OpenAIUsageResponse.self, from: Data(json.utf8))
++        let snap = parsed.toSnapshot(planLabel: nil, fallbackNow: Date(timeIntervalSince1970: 0))
++        #expect(snap.primary?.label == "Session (5h)")
++        #expect(snap.secondary?.label == "Weekly (7d)")
++    }
++
++    @Test("Antigravity remaining_fraction 1e300 is clamped like consumedFraction")
++    func gemini_huge_remaining_fraction_is_clamped() throws {
++        let json = #"""
++        { "status": "SUCCESS", "command": { "name": "usage", "data": { "groups": [
++          { "name": "Gemini Models", "buckets": [
++            { "id": "gemini-5h", "window": "5h", "remaining_fraction": 1e300 } ] } ] } } }
++        """#
++        let parsed = try JSONDecoder().decode(AntigravityUsageResponse.self, from: Data(json.utf8))
++        let window = parsed.toSnapshot().fiveHour
++        #expect(window?.detail == "100% remaining")
++    }
++}
+diff --git a/scripts/validate.sh b/scripts/validate.sh
+index 969bcc1..8706731 100755
+--- a/scripts/validate.sh
++++ b/scripts/validate.sh
+@@ -126,6 +126,24 @@ if [ "${vacuous:-0}" -gt 0 ]; then
+ fi
+ ok "no vacuous #expect forms"
+ 
++# Trapping Double->Int ratchet (B3-numeric). `Int(_: Double)` is a fatal
++# error for NaN, infinity or out-of-range values, and wire types decode
++# untrusted vendor JSON where `1e300` is valid. In *WireTypes.swift every
++# integer conversion must use a labeled, non-trapping initializer
++# (`saturating:` / `checkedTruncating:` from Core's SafeNumeric.swift, or
++# `exactly:` / `clamping:` / `truncatingIfNeeded:`). Comment lines and
++# `radix:` string parses are exempt. WIRE_TYPES_DIR exists only so the
++# ratchet can be exercised against a planted file outside the repo.
++wire_dir="${WIRE_TYPES_DIR:-Sources/AiTaskbarProviders}"
++bare_int_re='\bU?Int(8|16|32|64)?\((\s*[^a-zA-Z_ )]|\s*[a-zA-Z_][a-zA-Z0-9_.]*[^a-zA-Z0-9_.:])'
++bare_int=$(grep -HnE "$bare_int_re" "$wire_dir"/*WireTypes.swift 2>/dev/null \
++    | grep -vE '^[^:]+:[0-9]+:\s*//' | grep -v 'radix:' || true)
++if [ -n "$bare_int" ]; then
++    echo "$bare_int" | head -5
++    fail "bare Int(...) conversion in *WireTypes.swift — use Int(saturating:) / Int(checkedTruncating:)"
++fi
++ok "no trapping integer conversions in wire types"
++
+ # Warnings ratchet.
+ #
+ # Measured on a CLEAN build (--scratch-path to a temp dir): an incremental
