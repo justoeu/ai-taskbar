@@ -133,7 +133,12 @@ contract, not an implementation detail.
   site and the macro only ever sees a bare identifier. A non-optional
   `#expect(flag)` / `#expect(!flag)` is safe, and so are non-`Bool`
   comparisons (`#expect(3 == 4)` and `#expect(s == "b")` fail correctly).
-  `scripts/validate.sh` fails the build on any known-vacuous form.
+  `scripts/check-source-ratchets.sh` (run by both `validate.sh` and CI) fails
+  the build on any known-vacuous form in `#expect` or `#require`, including
+  ones with a message argument, `!=`, or split across lines; closure bodies
+  inside the arguments are exempt. `scripts/source-ratchet-selftest.sh` plants
+  every rejected and every allowed form and runs first, so a pattern that
+  stops matching fails the gate. Widen the self-test with the check.
 - For pure logic without I/O, you can still extend
   `Sources/AiTaskbarValidate/main.swift` — it runs faster than `swift test`
   for sanity checks and double-checks the `Testing` results.
@@ -542,7 +547,8 @@ that came out of fixing that:
   Utilization is sanitized once by `UtilizationPercent.sanitized` (NaN → 0,
   clamped to 0…1000 %) inside `UsageWindow`, `ModelShare` and
   `UsageHistoryStore.Sample`, at init AND on decode. `validate.sh` rejects
-  bare integer conversions in `*WireTypes.swift`.
+  bare integer conversions in `*WireTypes.swift` (point-free `Int.init`
+  included), via the same shared script and self-test.
 - **Don't swallow errors with `try?`** unless it's truly best-effort (cache
   cleanup, marker writes). If a credential write fails, the user must see it.
 - **Keychain reads AND writes** must run inside

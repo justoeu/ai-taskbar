@@ -359,7 +359,7 @@ struct PinBaselineTests {
         for host in expectedVendorHosts {
             let pin = PinBaseline.pin(for: host)
             #expect(pin != nil, "missing baseline pin for \(host)")
-            #expect(pin?.isEmpty == false, "empty baseline pin for \(host)")
+            expectFalse(pin?.isEmpty ?? true, "empty baseline pin for \(host)")
         }
     }
 

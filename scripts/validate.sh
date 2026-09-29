@@ -103,46 +103,18 @@ if ! cmp -s CLAUDE.md AGENTS.md; then
 fi
 ok "CLAUDE.md ≡ AGENTS.md"
 
-# The former mixed Swift 6.3.2 / standalone Testing 0.99.0 stack
-# mis-evaluated Bool sub-expressions. These forms all PASSED when false —
-# verified by running them, not by reading the macro:
-#
-#   #expect(false == true)                    #expect(opt ?? false)
-#   #expect(opt == Optional(false))           #expect(opt.map { !$0 } ?? false)
-#
-# and `#expect(!(opt ?? true))` is inverted outright: it FAILS where plain
-# Swift evaluates the same expression to true. An assert written any of these
-# ways defends nothing. Use expectTrue/expectFalse from AiTaskbarTestSupport,
-# which take a plain Bool parameter so the condition is evaluated as ordinary
-# Swift before the macro sees it. Bare `#expect(flag)` / `#expect(!flag)` on a
-# non-optional Bool is fine, as are non-Bool comparisons.
-vacuous_re='#expect\((.*== *(true|false)\)|.*\?\? *(true|false)\)|.*== *Optional\()'
-# `|| true` is load-bearing under `set -o pipefail`: grep exits 1 when it finds
-# nothing, which is the PASSING case here and would otherwise abort the script.
-vacuous=$(grep -rnE "$vacuous_re" Tests/ 2>/dev/null | wc -l | tr -d ' ' || true)
-if [ "${vacuous:-0}" -gt 0 ]; then
-    grep -rnE "$vacuous_re" Tests/ | head -5 || true
-    fail "$vacuous vacuous #expect form(s) — use expectTrue/expectFalse (AiTaskbarTestSupport)"
+# Vacuous-#expect ratchet + trapping Double->Int ratchet for *WireTypes.swift.
+# Both live in one script shared with ci.yml so the two cannot drift, and the
+# self-test runs first: it plants every form each check must reject or accept
+# in a scratch tree, so a regex that silently stopped matching fails here
+# instead of reporting a clean tree. See the scripts for the rationale.
+if ! selftest_out=$(scripts/source-ratchet-selftest.sh 2>&1); then
+    echo "$selftest_out"
+    fail "source-ratchet self-test failed — the gate itself is broken"
 fi
-ok "no vacuous #expect forms"
-
-# Trapping Double->Int ratchet (B3-numeric). `Int(_: Double)` is a fatal
-# error for NaN, infinity or out-of-range values, and wire types decode
-# untrusted vendor JSON where `1e300` is valid. In *WireTypes.swift every
-# integer conversion must use a labeled, non-trapping initializer
-# (`saturating:` / `checkedTruncating:` from Core's SafeNumeric.swift, or
-# `exactly:` / `clamping:` / `truncatingIfNeeded:`). Comment lines and
-# `radix:` string parses are exempt. WIRE_TYPES_DIR exists only so the
-# ratchet can be exercised against a planted file outside the repo.
-wire_dir="${WIRE_TYPES_DIR:-Sources/AiTaskbarProviders}"
-bare_int_re='\bU?Int(8|16|32|64)?\((\s*[^a-zA-Z_ )]|\s*[a-zA-Z_][a-zA-Z0-9_.]*[^a-zA-Z0-9_.:])'
-bare_int=$(grep -HnE "$bare_int_re" "$wire_dir"/*WireTypes.swift 2>/dev/null \
-    | grep -vE '^[^:]+:[0-9]+:\s*//' | grep -v 'radix:' || true)
-if [ -n "$bare_int" ]; then
-    echo "$bare_int" | head -5
-    fail "bare Int(...) conversion in *WireTypes.swift — use Int(saturating:) / Int(checkedTruncating:)"
-fi
-ok "no trapping integer conversions in wire types"
+ok "source-ratchet self-test (planted forms caught, allowed forms pass)"
+scripts/check-source-ratchets.sh \
+    || fail "source ratchet — use expectTrue/expectFalse / Int(saturating:) / Int(checkedTruncating:)"
 
 # Warnings ratchet.
 #
