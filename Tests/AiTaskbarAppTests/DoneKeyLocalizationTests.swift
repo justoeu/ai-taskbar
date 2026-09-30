@@ -9,13 +9,8 @@ import Testing
 @Suite("\"done\" key localization")
 struct DoneKeyLocalizationTests {
     private static func values(of key: String, in language: String) throws -> [String] {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
-        let file = root
-            .appendingPathComponent("Sources/AiTaskbarApp/Resources")
-            .appendingPathComponent("\(language).lproj/Localizable.strings")
         let prefix = "\"\(key)\" = \""
-        return try String(contentsOf: file, encoding: .utf8)
+        return try LocalizableStrings.contents(language)
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.hasPrefix(prefix) }

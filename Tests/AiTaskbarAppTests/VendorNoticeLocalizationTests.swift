@@ -10,12 +10,7 @@ import AiTaskbarCore
 @Suite("Vendor notice localization", .serialized)
 struct VendorNoticeLocalizationTests {
     private static func strings(_ language: String) throws -> String {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
-        let file = root
-            .appendingPathComponent("Sources/AiTaskbarApp/Resources")
-            .appendingPathComponent("\(language).lproj/Localizable.strings")
-        return try String(contentsOf: file, encoding: .utf8)
+        try LocalizableStrings.contents(language)
     }
 
     private static var allKeys: [String] {
@@ -25,10 +20,10 @@ struct VendorNoticeLocalizationTests {
 
     @Test("every notice key exists in en, pt-BR and es")
     func keys_exist_in_every_language() throws {
-        for language in ["en", "pt-BR", "es"] {
+        for language in LocalizableStrings.languages {
             let contents = try Self.strings(language)
             for key in Self.allKeys {
-                expectTrue(contents.contains("\"\(key)\" = "), "missing \(key) in \(language)")
+                expectTrue(LocalizableStrings.defines(key, in: contents), "missing \(key) in \(language)")
             }
         }
     }
@@ -69,7 +64,7 @@ struct VendorNoticeLocalizationTests {
     func guidance_resolves_everywhere() {
         let prev = L10n.languageOverride
         defer { L10n.languageOverride = prev }
-        for language in ["en", "pt-BR", "es"] {
+        for language in LocalizableStrings.languages {
             L10n.languageOverride = language
             for g in VendorGuidance.allCases {
                 let key = VendorNoticeText.key(for: g)
