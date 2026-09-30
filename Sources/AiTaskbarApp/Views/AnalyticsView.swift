@@ -10,7 +10,6 @@ public struct AnalyticsView: View {
 
     @State private var hoveredUsageVendor: String? = nil
     @State private var hoveredCostVendor: String? = nil
-    @State private var showSyncHelp: Bool = false
 
     public init(onClose: @escaping () -> Void) {
         self.onClose = onClose
@@ -65,57 +64,20 @@ public struct AnalyticsView: View {
     }()
 
     private var syncOrderBar: some View {
-        HStack(spacing: 8) {
-            Toggle(isOn: $analyticsStore.syncVendorOrder) {
-                Text(L10n.localizedString("sync_vendor_order"))
-                    .font(.callout.weight(.medium))
-            }
-            .toggleStyle(.checkbox)
-
-            Button {
-                showSyncHelp.toggle()
-            } label: {
-                Image(systemName: "questionmark.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help(L10n.localizedString("sync_vendor_order_help"))
-            .popover(isPresented: $showSyncHelp, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .foregroundStyle(Color.accentColor)
-                        Text(L10n.localizedString("sync_vendor_order"))
-                            .font(.headline)
-                    }
-                    Text(L10n.localizedString("sync_vendor_order_help"))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(14)
-                .frame(width: 280)
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.03))
+        VendorOrderSyncBar(isOn: $analyticsStore.syncVendorOrder)
     }
+
+    /// Also the popover toolbar button's icon.
+    static let headerSymbol = "chart.pie.fill"
 
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            Button {
-                close()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.body.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            .focused($closeButtonFocused)
-            .accessibilityLabel(L10n.localizedString("back"))
+            // The feature's own icon (same as the popover button that opens
+            // it), like the Service Status page; "Back" lives in the footer.
+            Image(systemName: Self.headerSymbol)
+                .font(.title2)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 L10n.text("analytics_title")
@@ -448,6 +410,7 @@ public struct AnalyticsView: View {
             } label: {
                 Label(L10n.localizedString("back"), systemImage: "chevron.backward")
             }
+            .focused($closeButtonFocused)
             .buttonStyle(.bordered)
             .controlSize(.small)
             .keyboardShortcut(.defaultAction)

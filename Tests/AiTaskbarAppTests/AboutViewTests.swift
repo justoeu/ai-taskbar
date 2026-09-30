@@ -26,8 +26,6 @@ struct AboutViewTests {
 
     @Test("Quit confirmation localization keys exist across all supported languages")
     func localization_keys() throws {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
 
         let keys = [
             "quit_app",
@@ -39,11 +37,10 @@ struct AboutViewTests {
             "about_description"
         ] + AboutView.facts.map(\.key) + AboutView.facts.compactMap(\.helpKey)
 
-        for language in ["en", "pt-BR", "es"] {
-            let file = root.appendingPathComponent("Sources/AiTaskbarApp/Resources/\(language).lproj/Localizable.strings")
-            let contents = try String(contentsOf: file, encoding: .utf8)
+        for language in LocalizableStrings.languages {
+            let contents = try LocalizableStrings.contents(language)
             for key in keys {
-                expectTrue(contents.contains("\"\(key)\" = "), "missing \(key) in \(language)")
+                expectTrue(LocalizableStrings.defines(key, in: contents), "missing \(key) in \(language)")
             }
         }
     }

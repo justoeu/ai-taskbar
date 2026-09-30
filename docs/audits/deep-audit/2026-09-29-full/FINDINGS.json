@@ -8586,16 +8586,22 @@
     "confidence": "medium",
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B21",
-    "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance).",
     "domain": "quality",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "CQ-MAE-025",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_at": "2026-09-30 19:09:16 UTC",
+    "resolved_note": "chore/audit-open-items",
+    "resolved_test": "scripts/source-ratchet-selftest.sh (gate green)",
+    "in_progress": false,
+    "progress": [
+      "2026-09-30: resolvido · Rewrapped the over-long check-3 comment line in check-source-ratchets.sh (line numbers moved since the audit). · teste scripts/source-ratchet-selftest.sh (gate green) · chore/audit-open-items"
+    ]
   },
   {
     "lens": "deps",
@@ -8966,16 +8972,22 @@
     "confidence": "medium",
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B21",
-    "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance).",
     "domain": "duplication",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "DUP-MAE-008",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_at": "2026-09-30 19:09:16 UTC",
+    "resolved_note": "chore/audit-open-items",
+    "resolved_test": "LocalizableStringsHelperTests#positive_and_negative_control",
+    "in_progress": false,
+    "progress": [
+      "2026-09-30: resolvido · Shared Tests/AiTaskbarAppTests/LocalizableStrings.swift replaces the eight #filePath walk-ups; the helper has its own positive and negative control. · teste LocalizableStringsHelperTests#positive_and_negative_control · chore/audit-open-items"
+    ]
   },
   {
     "agent": "Fantasma",
@@ -9818,16 +9830,22 @@
     "confidence": "medium",
     "agent": "Maestro",
     "origin": "new_findings from review panel, remediation B21",
-    "open_reason": "Open: raised by the review panel of the final wrap-up batch B21; queued for the next round (latent, no current instance).",
     "domain": "tests",
-    "status": "open",
+    "status": "resolved",
     "test_red_green": {
       "name": "TBD",
       "assert_before": "reproduz o defeito",
       "assert_after": "defeito eliminado"
     },
     "id": "TEST-MAE-013",
-    "blocks_pr": false
+    "blocks_pr": false,
+    "resolved_at": "2026-09-30 19:09:16 UTC",
+    "resolved_note": "chore/audit-open-items",
+    "resolved_test": "source-ratchet-selftest.sh [7/8] NSString(format:), String.init(format:), inferred .init(format:), String(format:locale:), localizedStringWithFormat, multi-line literal",
+    "in_progress": false,
+    "progress": [
+      "2026-09-30: resolvido · Check 4 scans every literal-format entry point and multi-line literals, with self-test plants. Not tracked by design: a format held in a let (not a literal at the call site) and unsigned %x (32-bit on purpose for fixed-width values). · teste source-ratchet-selftest.sh [7/8] NSString(format:), String.init(format:), inferred .init(format:), String(format:locale:), localizedStringWithFormat, multi-line literal · chore/audit-open-items"
+    ]
   },
   {
     "title": "Two of AppLog seven Logger categories are declared but never logged to",

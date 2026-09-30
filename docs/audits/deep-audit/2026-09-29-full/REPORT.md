@@ -1,6 +1,6 @@
 # Deep Audit Report
 
-> **Progresso:** 159 resolvidos · 16 refutados · 10 aceitos · 3 abertos (98% fechado) · atualizado 2026-09-29 20:17:43 UTC
+> **Progresso:** 162 resolvidos · 16 refutados · 10 aceitos · 0 abertos (100% fechado) · atualizado 2026-09-30
 
 **Projeto:** `ai-taskbar` - **versao** `0.23.6` (Makefile) - **branch** `audit/deep-audit-2026-09-29` - head at start `656075a`
 
@@ -155,8 +155,8 @@ The HIGH-severity surface this round was real but narrow: two cost-accounting bu
 | HIGH | 3 | 3 | 0 | 0 | 0 |
 | MEDIUM | 11 | 11 | 0 | 0 | 0 |
 | LOW | 117 | 114 | 3 | 0 | 0 |
-| INFO | 57 | 31 | 7 | 16 | 3 |
-| **Total** | **188** | **159** | **10** | **16** | **3** |
+| INFO | 57 | 34 | 7 | 16 | 0 |
+| **Total** | **188** | **162** | **10** | **16** | **0** |
 
 `refutado` (16) e `aceito` (10) são KPIs separados — nunca somados. Nenhum dos 16
 refutados veio das remediações B1-B21: todas as 16 refutações aconteceram no
@@ -165,7 +165,7 @@ Cetico do round 1 (ver seção acima) e permanecem inalteradas.
 `lint-findings.mjs --dir PACK --gate` (sem `--fix`, achados já corretos):
 
 ```
-188 achados · 3 aberto · 159 resolvido · 16 refutado · 10 aceito · 0 bloqueando PR
+188 achados · 0 aberto · 162 resolvido · 16 refutado · 10 aceito · 0 bloqueando PR
 severidade: CRITICAL 0 · HIGH 3 · MEDIUM 11 · LOW 117 · INFO 57
 OK (gate de fechamento passou)
 ```
@@ -202,19 +202,20 @@ agente:
 como won't-fix (ver tabela de aceites abaixo: `BUG-ART-008`, `BUG-MAE-003`,
 `DEP-PRI-003`).
 
-### INFO: 31 resolvidos, 7 aceitos, 16 refutados, 3 abertos
+### INFO: 34 resolvidos, 7 aceitos, 16 refutados, 0 abertos
 
 57 INFO no total. Os 16 refutados são os mesmos 16 refutados pelo Cetico no
-round 1 (nenhum INFO novo foi refutado na remediação). Os 3 abertos abaixo são
-todos `review-followup-r2`, levantados pelo próprio painel de revisão do
-último lote (B21) e enfileirados para a próxima rodada — não há instância
-atual do problema em produção:
+round 1 (nenhum INFO novo foi refutado na remediação). Os 3 que ficaram
+abertos ao fim da rodada — todos `review-followup-r2`, levantados pelo painel
+de revisão do último lote (B21) — foram resolvidos em 2026-09-30 no branch
+`chore/audit-open-items`, com `make validate` verde. Não passaram pelo painel
+de 3 lentes (as 159 correções da rodada, sim):
 
-| id | título | por que ficou aberto |
+| id | título | como foi resolvido |
 |---|---|---|
-| CQ-MAE-025 | Over-long comment line in `check-source-ratchets.sh` check 4 block | Cosmético, levantado por Hígia no painel do B21; entra na fila, não bloqueia nada hoje |
-| DUP-MAE-008 | Six App test files copy the same `#filePath` walk-up to read `Localizable.strings` | Duplicação só em código de teste, levantada por Hígia no B21 |
-| TEST-MAE-013 | Inline format ratchet (check 4) does not scan `NSString(format:)`, `String(format:locale:)`, `.init(format:)`, formats held in a `let`, multi-line literals, or `%x` fed a Swift `Int` | Levantado por Ferreiro/Hígia/Nêmesis no B21; gap latente no gate, sem caso real hoje em `Sources/` |
+| CQ-MAE-025 | Over-long comment line in `check-source-ratchets.sh` | Comentário re-quebrado (os números de linha mudaram desde a auditoria) |
+| DUP-MAE-008 | Six App test files copy the same `#filePath` walk-up to read `Localizable.strings` | Helper único `Tests/AiTaskbarAppTests/LocalizableStrings.swift` nas 8 cópias, com controle positivo e negativo próprio (`LocalizableStringsHelperTests`) |
+| TEST-MAE-013 | Inline format ratchet (check 4) does not scan `NSString(format:)`, `String(format:locale:)`, `.init(format:)`, formats held in a `let`, multi-line literals, or `%x` fed a Swift `Int` | A regra 4 cobre `NSString(format:)`, `String.init(format:)`, `.init(format:)` inferido, `String(format:locale:)`, `localizedStringWithFormat` e literais `"""`, com plantas no self-test. Fora por decisão: formato em `let` (não é literal na chamada) e `%x` (32 bits de propósito para valores de largura fixa) |
 
 ### Aceites (won't-fix) — 10, todos ratificados, nenhum silencioso
 

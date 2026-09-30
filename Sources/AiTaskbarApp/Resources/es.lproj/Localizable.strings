@@ -217,7 +217,6 @@
 "service_status_minus_six_hours" = "−6h";
 "service_status_now" = "ahora";
 "service_status_refresh" = "Actualizar estado de los servicios";
-"service_status_close" = "Cerrar estado de los servicios";
 "service_status_loading" = "Actualizando estado público…";
 "service_status_never_updated" = "Esperando la primera actualización de estado…";
 "service_status_no_automatic_sources" = "No hay fuentes automáticas de estado disponibles";
@@ -253,7 +252,8 @@
 "service_status_open_incident" = "Abrir incidente";
 "service_status_open_page" = "Abrir página oficial de estado";
 "service_status_timeline_ax_fmt" = "Cronología de seis horas: %@";
-"service_status_legend" = "Verde operativo · Morado mantenimiento · Naranja degradado · Rojo interrupción · Gris desconocido";
+"service_status_legend_degraded" = "Degradado";
+"service_status_legend_outage" = "Interrupción";
 "service_status_scope_note" = "El estado oficial agregado puede variar por cuenta, producto o región.";
 
 "keychain_auth_not_persistent" = "macOS permitió el acceso, pero falló la verificación silenciosa. Inténtalo de nuevo y elige Permitir siempre, si aparece. Las políticas de un llavero administrado pueden impedir el permiso persistente.";

@@ -259,6 +259,13 @@ expect_reject_format 'positional %1$d'     'let s = String(format: "%1$d", n)'
 expect_reject_format '%hd'                 'let s = String(format: "%hd", n)'
 expect_reject_format 'argument on next line' $'let s = String(\n    format: "%d items", n)'
 expect_reject_format '%d after an escaped quote' 'let s = String(format: "\"%d\"", n)'
+expect_reject_format 'NSString(format:)'   'let s = NSString(format: "%d", n)'
+expect_reject_format 'String.init(format:)' 'let s = String.init(format: "%d", n)'
+expect_reject_format 'inferred .init(format:)' 'let s: String = .init(format: "%d", n)'
+expect_reject_format 'String(format:locale:)' 'let s = String(format: "%d", locale: .current, n)'
+expect_reject_format 'localizedStringWithFormat' 'let s = String.localizedStringWithFormat("%d items", n)'
+expect_reject_format 'NSString.localizedStringWithFormat' 'let s = NSString.localizedStringWithFormat("%i", n)'
+expect_reject_format 'multi-line literal' $'let s = String(format: """\n    %d items\n    """, n)'
 
 echo "[8/8] allowed inline String(format:) forms — the gate must pass"
 mkdir -p "$work/accept-format"
@@ -272,6 +279,14 @@ let e = String(format: "\\u%04X", c.value)
 let f = String(format: "%.0f%% used", util)
 let g = String(format: L10n.localizedString("x_fmt"), n)
 let h = String(format: "%@ and %%d", s)
+let i = NSString(format: "%ld", n)
+let j = String.localizedStringWithFormat("%ld items", n)
+let k: String = .init(format: "%02ld", n)
+let l = Date.init(timeIntervalSince1970: 0).formatted()
+let m = foo.init(format: "%d", n)
+let n2 = String(format: """
+    %ld items
+    """, n)
 SWIFT
 rc=0
 out=$(TESTS_DIR="$work/empty" WIRE_TYPES_DIR="$work/empty" SWIFT_FORMAT_DIR="$work/accept-format" "$CHECK" 2>&1) || rc=$?

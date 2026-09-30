@@ -30,7 +30,7 @@ public enum ServiceStatusPresentation {
         "service_status_help", "service_status_ax_label", "service_status_ax_value_fmt",
         "service_status_ax_hint", "service_status_title", "service_status_last_six_hours",
         "service_status_minus_six_hours", "service_status_now", "service_status_refresh",
-        "service_status_close", "service_status_loading", "service_status_never_updated",
+        "service_status_loading", "service_status_never_updated",
         "service_status_no_automatic_sources",
         "service_status_updated_fmt", "service_status_stale_fmt", "service_status_cold_error",
         "service_status_retry", "service_status_empty_full",
@@ -47,8 +47,18 @@ public enum ServiceStatusPresentation {
         "service_status_phase_unknown", "service_status_expand", "service_status_collapse",
         "service_status_components_fmt", "service_status_duration_fmt",
         "service_status_open_incident", "service_status_open_page",
-        "service_status_timeline_ax_fmt", "service_status_legend",
-        "service_status_scope_note",
+        "service_status_timeline_ax_fmt", "service_status_legend_degraded",
+        "service_status_legend_outage", "service_status_scope_note",
+    ]
+
+    /// The footer legend: one entry per colour the rows can show, in severity
+    /// order, with a short label (partial and major outage share red).
+    public static let legend: [(level: ServiceStatusLevel, key: String)] = [
+        (.operational, "service_status_level_operational"),
+        (.maintenance, "service_status_level_maintenance"),
+        (.degradedPerformance, "service_status_legend_degraded"),
+        (.majorOutage, "service_status_legend_outage"),
+        (.unknown, "service_status_level_unknown"),
     ]
 
     public static func symbol(for level: ServiceStatusLevel) -> String {

@@ -3,6 +3,7 @@ import AiTaskbarCore
 
 public struct StatusPanelView: View {
     @EnvironmentObject private var store: ServiceStatusStore
+    @EnvironmentObject private var usageStore: UsageStore
     @FocusState private var closeButtonFocused: Bool
     public let onClose: () -> Void
 
@@ -14,14 +15,23 @@ public struct StatusPanelView: View {
         VStack(spacing: 0) {
             header
             Divider()
+            VendorOrderSyncBar(isOn: $store.syncVendorOrder)
+            Divider()
             ScrollView {
+                let rows = store.orderedRows(homeOrder: homeOrder)
                 LazyVStack(spacing: 10) {
-                    ForEach(store.rows) { row in
-                        StatusVendorRowView(row: row)
-                            .environmentObject(store)
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        StatusVendorRowView(
+                            row: row,
+                            canMoveUp: index > 0,
+                            canMoveDown: index < rows.count - 1,
+                            onMove: { up in move(row.vendorId, up: up) }
+                        )
+                        .environmentObject(store)
                     }
                 }
                 .padding(12)
+                .animation(.easeInOut(duration: 0.15), value: rows.map(\.id))
             }
             Divider()
             footer
@@ -34,53 +44,77 @@ public struct StatusPanelView: View {
         )
         .focusSection()
         .onAppear { closeButtonFocused = true }
+        .onChange(of: store.syncVendorOrder) { synced in
+            // Turning sync off starts the independent order from the home one.
+            if !synced { store.adoptHomeOrder(homeOrder) }
+        }
         .onExitCommand(perform: onClose)
     }
 
+    private var homeOrder: [VendorId] { usageStore.sortedVendors.map(\.vendorId) }
+
+    /// Synced: moving here reorders the home screen too (same as Analytics).
+    private func move(_ id: VendorId, up: Bool) {
+        if store.syncVendorOrder {
+            up ? usageStore.moveVendorUp(id) : usageStore.moveVendorDown(id)
+        } else {
+            store.moveVendor(id, up: up, homeOrder: homeOrder)
+        }
+    }
+
+    /// Same layout as the Analytics header: feature icon, bold title,
+    /// one caption line with the freshness inline, refresh on the right.
+    /// "Back" lives in the footer.
     private var header: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: ServiceStatusPresentation.symbol(for: store.overallLevel))
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: ServiceStatusPresentation.headerSymbol)
                 .font(.title2)
-                .foregroundStyle(store.overallLevel.statusColor)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
+
             VStack(alignment: .leading, spacing: 2) {
                 L10n.text("service_status_title")
-                    .font(.headline)
-                L10n.text("service_status_last_six_hours")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(headerFreshness)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(.title3.weight(.bold))
+                HStack(spacing: 4) {
+                    L10n.text("service_status_last_six_hours")
+                        .foregroundStyle(.secondary)
+                    Text("•")
+                        .foregroundStyle(store.isLoading ? .secondary : .tertiary)
+                    if store.isLoading {
+                        Text(L10n.localizedString("refreshing_now"))
+                            .foregroundStyle(Color.accentColor)
+                    } else {
+                        Text(headerFreshness)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.caption)
+                .lineLimit(1)
             }
-            Spacer(minLength: 4)
+
+            Spacer()
+
             Button {
                 store.refreshAll(forceRefresh: true)
             } label: {
                 if store.isLoading {
-                    ProgressView().controlSize(.small)
+                    ProgressView()
+                        .controlSize(.small)
                 } else {
                     Image(systemName: "arrow.clockwise")
+                        .font(.body)
                 }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .disabled(store.isLoading)
             .help(L10n.localizedString("service_status_refresh"))
             .accessibilityLabel(L10n.localizedString("service_status_refresh"))
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.borderless)
-            .focused($closeButtonFocused)
-            .keyboardShortcut(.cancelAction)
-            .help(L10n.localizedString("service_status_close"))
-            .accessibilityLabel(L10n.localizedString("service_status_close"))
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private var headerFreshness: String {
-        if store.isLoading { return L10n.localizedString("service_status_loading") }
         if !store.hasAutomaticSources {
             return L10n.localizedString("service_status_no_automatic_sources")
         }
@@ -93,16 +127,47 @@ public struct StatusPanelView: View {
         )
     }
 
+    /// Same symbols and colours as the rows, so the legend reads as a key,
+    /// not a sentence. One line when it fits, two otherwise.
+    private var legend: some View {
+        let items = ServiceStatusPresentation.legend.map { entry in
+            HStack(spacing: 4) {
+                Image(systemName: ServiceStatusPresentation.symbol(for: entry.level))
+                    .foregroundStyle(entry.level.statusColor)
+                Text(L10n.localizedString(entry.key))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            .fixedSize()
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { ForEach(items.indices, id: \.self) { items[$0] } }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) { ForEach(0..<3, id: \.self) { items[$0] } }
+                HStack(spacing: 12) { ForEach(3..<items.count, id: \.self) { items[$0] } }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.secondary.opacity(0.08))
+        )
+        .accessibilityElement(children: .combine)
+    }
+
     private var footer: some View {
         VStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                L10n.text("service_status_legend")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                L10n.text("service_status_scope_note")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                legend
+                HStack(alignment: .top, spacing: 4) {
+                    Image(systemName: "info.circle")
+                    L10n.text("service_status_scope_note")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -111,6 +176,7 @@ public struct StatusPanelView: View {
                 Button(action: onClose) {
                     Label(L10n.localizedString("back"), systemImage: "chevron.backward")
                 }
+                .focused($closeButtonFocused)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .keyboardShortcut(.defaultAction)
@@ -133,12 +199,37 @@ public struct StatusPanelView: View {
 private struct StatusVendorRowView: View {
     @EnvironmentObject private var store: ServiceStatusStore
     let row: ServiceStatusStore.Row
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onMove: (_ up: Bool) -> Void
     @State private var isExpanded: Bool
 
-    init(row: ServiceStatusStore.Row) {
+    init(row: ServiceStatusStore.Row, canMoveUp: Bool, canMoveDown: Bool,
+         onMove: @escaping (_ up: Bool) -> Void) {
         self.row = row
+        self.canMoveUp = canMoveUp
+        self.canMoveDown = canMoveDown
+        self.onMove = onMove
         let level = row.state.displayStatus?.level ?? .unknown
         _isExpanded = State(initialValue: level != .operational)
+    }
+
+    /// Same ↑/↓ affordance as the home and Analytics cards; outside the
+    /// expand button so the two never nest.
+    private var reorderButtons: some View {
+        HStack(spacing: 2) {
+            Button { onMove(true) } label: { Image(systemName: "chevron.up.circle") }
+                .disabled(!canMoveUp)
+                .help(L10n.localizedString("move_vendor_up_help"))
+                .accessibilityLabel(L10n.localizedString("move_vendor_up_help"))
+            Button { onMove(false) } label: { Image(systemName: "chevron.down.circle") }
+                .disabled(!canMoveDown)
+                .help(L10n.localizedString("move_vendor_down_help"))
+                .accessibilityLabel(L10n.localizedString("move_vendor_down_help"))
+        }
+        .buttonStyle(.borderless)
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     private var status: VendorServiceStatus {
@@ -154,6 +245,7 @@ private struct StatusVendorRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
             Button {
                 isExpanded.toggle()
             } label: {
@@ -186,6 +278,8 @@ private struct StatusVendorRowView: View {
             .accessibilityHint(L10n.localizedString(
                 isExpanded ? "service_status_collapse" : "service_status_expand"
             ))
+            reorderButtons
+            }
 
             stateNotice
             StatusTimelineView(status: status, now: .now)

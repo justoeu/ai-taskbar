@@ -465,22 +465,34 @@ struct ServiceStatusAppTests {
 
     @Test("every status localization key exists in English, Brazilian Portuguese and Spanish")
     func localization_completeness() throws {
-        var repositoryRoot = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { repositoryRoot.deleteLastPathComponent() }
-        let resources = repositoryRoot
-            .appendingPathComponent("Sources/AiTaskbarApp/Resources")
 
-        for language in ["en", "pt-BR", "es"] {
-            let file = resources
-                .appendingPathComponent("\(language).lproj")
-                .appendingPathComponent("Localizable.strings")
-            let contents = try String(contentsOf: file, encoding: .utf8)
+        for language in LocalizableStrings.languages {
+            let contents = try LocalizableStrings.contents(language)
             for key in ServiceStatusPresentation.localizationKeys {
                 expectTrue(
-                    contents.contains("\"\(key)\" = "),
+                    LocalizableStrings.defines(key, in: contents),
                     "missing \(key) in \(language)"
                 )
             }
+        }
+    }
+}
+
+@Suite("Service status legend")
+struct ServiceStatusLegendTests {
+    @Test("one entry per colour the rows can show, in severity order")
+    func one_per_tone() {
+        let tones = ServiceStatusPresentation.legend.map { ServiceStatusPresentation.tone(for: $0.level) }
+        #expect(tones == [.positive, .maintenance, .warning, .danger, .secondary])
+        let all: [ServiceStatusLevel] = [.operational, .maintenance, .degradedPerformance,
+                                         .partialOutage, .majorOutage, .unknown]
+        #expect(Set(all.map { ServiceStatusPresentation.tone(for: $0) }) == Set(tones))
+    }
+
+    @Test("every legend label is a listed localization key")
+    func labels_listed() {
+        for entry in ServiceStatusPresentation.legend {
+            #expect(ServiceStatusPresentation.localizationKeys.contains(entry.key), "\(entry.key)")
         }
     }
 }
