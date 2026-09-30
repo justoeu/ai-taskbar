@@ -381,17 +381,22 @@
 "pin_limit_reached_ok" = "Entendido";
 
 // TypeSafe (Jev)
-"typesafe_key_ok_fmt" = "Chave de API válida · %ld modelo(s)";
-"typesafe_updated_fmt" = "Lista de modelos atualizada em %@";
-"typesafe_open_console" = "Ver uso no console";
-"typesafe_balance_fmt" = "Saldo: %@";
-"typesafe_spent_fmt" = "Gasto no ciclo: %@";
-"typesafe_spent_cycle_fmt" = "Gasto: %@ (%@)";
-"typesafe_plan_fmt" = "Plano: %@";
-"typesafe_cycle_ends_fmt" = "O ciclo de cobrança fecha em %ld dia(s)";
-"typesafe_credit_fmt" = "Crédito: %@ de %@, expira em %@";
-"typesafe_more_credits_fmt" = "+%ld crédito(s)";
 "typesafe_key_rejected" = "A TypeSafe recusou a chave de API. Confira em Ajustes.";
+"typesafe_balance" = "Saldo";
+"typesafe_spent_cycle" = "Gasto no ciclo";
+"typesafe_used_of_fmt" = "%@ usado de %@";
+"typesafe_expires_fmt" = "expira em %@";
+"typesafe_more_credits_fmt" = "+%ld crédito(s)";
+"typesafe_cycle_closes_fmt" = "fecha em %ld dia(s)";
+"typesafe_tokens" = "Tokens";
+"typesafe_today" = "Hoje";
+"typesafe_week" = "7 dias";
+"typesafe_input" = "Entrada";
+"typesafe_output" = "Saída";
+"typesafe_requests" = "Chamadas";
+"typesafe_key_models_fmt" = "Chave de API válida · %@";
+"typesafe_plan_payg" = "Pré-pago";
+"typesafe_plan_free" = "Gratuito";
 "typesafe_login_window_title" = "Entrar na TypeSafe";
 "typesafe_login_save_failed_fmt" = "Não foi possível salvar a sessão da TypeSafe: %@";
 "typesafe_console_connect_hint" = "Entre no console da TypeSafe para ver gasto, saldo e tokens aqui.";
@@ -401,8 +406,6 @@
 "typesafe_console_unavailable" = "O console da TypeSafe não está respondendo agora.";
 "typesafe_console_unavailable_last" = "O console da TypeSafe não está respondendo — mostrando os últimos números lidos.";
 "typesafe_console_expires_fmt" = "A sessão do console expira em %@.";
-"typesafe_usage_today_fmt" = "Hoje: %@ · %ld chamada(s)";
-"typesafe_usage_week_fmt" = "7 dias: %@ · %ld chamada(s)";
 "settings_typesafe_console" = "Console";
 "settings_typesafe_console_connected" = "Conectado";
 "settings_typesafe_console_connected_fmt" = "Conectado até %@";

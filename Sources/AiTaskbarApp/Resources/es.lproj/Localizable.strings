@@ -381,17 +381,22 @@
 "pin_limit_reached_ok" = "Entendido";
 
 // TypeSafe (Jev)
-"typesafe_key_ok_fmt" = "Clave de API válida · %ld modelo(s)";
-"typesafe_updated_fmt" = "Lista de modelos actualizada el %@";
-"typesafe_open_console" = "Ver uso en la consola";
-"typesafe_balance_fmt" = "Saldo: %@";
-"typesafe_spent_fmt" = "Gastado en el ciclo: %@";
-"typesafe_spent_cycle_fmt" = "Gastado: %@ (%@)";
-"typesafe_plan_fmt" = "Plan: %@";
-"typesafe_cycle_ends_fmt" = "El ciclo de facturación cierra en %ld día(s)";
-"typesafe_credit_fmt" = "Crédito: %@ de %@, vence el %@";
-"typesafe_more_credits_fmt" = "+%ld crédito(s) más";
 "typesafe_key_rejected" = "TypeSafe rechazó la clave de API. Revísala en Ajustes.";
+"typesafe_balance" = "Saldo";
+"typesafe_spent_cycle" = "Gasto del ciclo";
+"typesafe_used_of_fmt" = "%@ usado de %@";
+"typesafe_expires_fmt" = "caduca el %@";
+"typesafe_more_credits_fmt" = "+%ld crédito(s)";
+"typesafe_cycle_closes_fmt" = "cierra en %ld día(s)";
+"typesafe_tokens" = "Tokens";
+"typesafe_today" = "Hoy";
+"typesafe_week" = "7 días";
+"typesafe_input" = "Entrada";
+"typesafe_output" = "Salida";
+"typesafe_requests" = "Solicitudes";
+"typesafe_key_models_fmt" = "Clave de API válida · %@";
+"typesafe_plan_payg" = "Prepago";
+"typesafe_plan_free" = "Gratis";
 "typesafe_login_window_title" = "Iniciar sesión en TypeSafe";
 "typesafe_login_save_failed_fmt" = "No se pudo guardar la sesión de TypeSafe: %@";
 "typesafe_console_connect_hint" = "Inicia sesión en la consola de TypeSafe para ver gasto, saldo y tokens aquí.";
@@ -401,8 +406,6 @@
 "typesafe_console_unavailable" = "La consola de TypeSafe no responde ahora.";
 "typesafe_console_unavailable_last" = "La consola de TypeSafe no responde — se muestran los últimos números leídos.";
 "typesafe_console_expires_fmt" = "La sesión de la consola caduca el %@.";
-"typesafe_usage_today_fmt" = "Hoy: %@ · %ld solicitud(es)";
-"typesafe_usage_week_fmt" = "7 días: %@ · %ld solicitud(es)";
 "settings_typesafe_console" = "Consola";
 "settings_typesafe_console_connected" = "Conectado";
 "settings_typesafe_console_connected_fmt" = "Conectado hasta %@";

@@ -702,7 +702,7 @@ public struct VendorSectionView: View {
                 }
             }
         case .typesafe(let s):
-            TypeSafeCardView(snapshot: s)
+            TypeSafeCardView(snapshot: s, thresholds: thresholds)
         case .xai(let s):
             VStack(alignment: .leading, spacing: 2) {
                 if let prepaid = s.prepaidUSD {

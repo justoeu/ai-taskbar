@@ -382,17 +382,22 @@
 "pin_limit_reached_ok" = "Understood";
 
 // TypeSafe (Jev)
-"typesafe_key_ok_fmt" = "API key valid · %ld model(s)";
-"typesafe_updated_fmt" = "Model list updated %@";
-"typesafe_open_console" = "Open usage in the console";
-"typesafe_balance_fmt" = "Balance: %@";
-"typesafe_spent_fmt" = "Spent this cycle: %@";
-"typesafe_spent_cycle_fmt" = "Spent: %@ (%@)";
-"typesafe_plan_fmt" = "Plan: %@";
-"typesafe_cycle_ends_fmt" = "Billing cycle closes in %ld day(s)";
-"typesafe_credit_fmt" = "Credit: %@ of %@, expires %@";
-"typesafe_more_credits_fmt" = "+%ld more credit(s)";
 "typesafe_key_rejected" = "TypeSafe rejected the API key. Check it in Settings.";
+"typesafe_balance" = "Balance";
+"typesafe_spent_cycle" = "Spent this cycle";
+"typesafe_used_of_fmt" = "%@ used of %@";
+"typesafe_expires_fmt" = "expires %@";
+"typesafe_more_credits_fmt" = "+%ld more credit(s)";
+"typesafe_cycle_closes_fmt" = "closes in %ld day(s)";
+"typesafe_tokens" = "Tokens";
+"typesafe_today" = "Today";
+"typesafe_week" = "7 days";
+"typesafe_input" = "Input";
+"typesafe_output" = "Output";
+"typesafe_requests" = "Requests";
+"typesafe_key_models_fmt" = "API key valid · %@";
+"typesafe_plan_payg" = "Pay as you go";
+"typesafe_plan_free" = "Free";
 "typesafe_login_window_title" = "Sign in to TypeSafe";
 "typesafe_login_save_failed_fmt" = "Could not save the TypeSafe session: %@";
 "typesafe_console_connect_hint" = "Sign in to the TypeSafe console to see spend, balance and tokens here.";
@@ -402,8 +407,6 @@
 "typesafe_console_unavailable" = "The TypeSafe console is not responding right now.";
 "typesafe_console_unavailable_last" = "The TypeSafe console is not responding — showing the last numbers read.";
 "typesafe_console_expires_fmt" = "Console session expires %@.";
-"typesafe_usage_today_fmt" = "Today: %@ · %ld request(s)";
-"typesafe_usage_week_fmt" = "7 days: %@ · %ld request(s)";
 "settings_typesafe_console" = "Console";
 "settings_typesafe_console_connected" = "Connected";
 "settings_typesafe_console_connected_fmt" = "Connected until %@";
