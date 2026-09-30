@@ -19,7 +19,7 @@ public struct PopoverContentView: View {
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @EnvironmentObject var updates: UpdateChecker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Drives the small drop-in that accompanies the window fade.
+    /// Drives the opacity dissolve when the popover opens.
     @State private var hasAppeared = false
     @State private var overlay: Overlay?
     @FocusState private var statusButtonFocused: Bool
@@ -30,7 +30,12 @@ public struct PopoverContentView: View {
     }
 
     static let scrollTopID = "popover-scroll-top"
-    static let appearDuration: TimeInterval = 0.15
+    static let appearDuration: TimeInterval = 0.12
+
+    /// The first LLM card, or the top anchor when the list is empty.
+    private var firstCardID: AnyHashable {
+        store.sortedVendors.first.map { AnyHashable($0.vendorId) } ?? AnyHashable(Self.scrollTopID)
+    }
 
     public var body: some View {
         ZStack {
@@ -103,10 +108,15 @@ public struct PopoverContentView: View {
                             // focused LLM left it. No animation — the window
                             // is fading in already. Re-applied on the next
                             // runloop turn, after SwiftUI has laid out.
-                            let first: AnyHashable = store.sortedVendors.first.map { AnyHashable($0.vendorId) }
-                                ?? AnyHashable(Self.scrollTopID)
+                            let first = firstCardID
                             proxy.scrollTo(first, anchor: .top)
-                            DispatchQueue.main.async { proxy.scrollTo(first, anchor: .top) }
+                            // Re-applied after layout settles: a real click can
+                            // show the window before the ScrollView is sized.
+                            for delay in [0.05, 0.15] {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                                    proxy.scrollTo(first, anchor: .top)
+                                }
+                            }
                             return
                         }
                         overlay = nil
@@ -122,6 +132,10 @@ public struct PopoverContentView: View {
                     }
                     .onDisappear {
                         store.isPopoverPresented = false
+                        // Reset while hidden, so the next open from the main
+                        // icon already starts at the first LLM even if the
+                        // scroll on appear loses a race with layout.
+                        proxy.scrollTo(firstCardID, anchor: .top)
                         hasAppeared = false
                         PinnedStatusItemManager.shared.clearLastFocusedPinnedVendor()
                     }
@@ -129,11 +143,10 @@ public struct PopoverContentView: View {
                 Divider()
                 footerBar
             }
-            // Content-only fade + small drop on open. The window itself is
-            // not animated: fading the whole panel (and delaying the close to
-            // fade it out) read as the popover stalling.
+            // Opacity-only dissolve on open: nothing moves, so no layout pass
+            // competes with the animation. A window-level fade (with a delayed
+            // close) and a small drop were both tried and read as stuttering.
             .opacity(hasAppeared || reduceMotion ? 1 : 0)
-            .offset(y: hasAppeared || reduceMotion ? 0 : -4)
 
             .allowsHitTesting(overlay == nil && store.pinLimitAlert == nil)
             .disabled(overlay != nil || store.pinLimitAlert != nil)
