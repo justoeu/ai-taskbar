@@ -61,11 +61,8 @@ struct AboutViewTests {
 
     @Test("the description no longer hard-codes a vendor list")
     func description_has_no_vendor_names() throws {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
-        for language in ["en", "pt-BR", "es"] {
-            let file = root.appendingPathComponent("Sources/AiTaskbarApp/Resources/\(language).lproj/Localizable.strings")
-            let line = try String(contentsOf: file, encoding: .utf8)
+        for language in LocalizableStrings.languages {
+            let line = try LocalizableStrings.contents(language)
                 .split(separator: "\n").first { $0.hasPrefix("\"about_description\" = ") } ?? ""
             for name in ["Kimi", "OpenRouter", "Z.AI"] {
                 #expect(!line.contains(name), "\(language) still names \(name)")
