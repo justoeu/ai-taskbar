@@ -329,6 +329,56 @@ section("KimiConfig.validate") {
            "rejects garbage")
 }
 
+section("Wire types: TypeSafe (Jev) fixture") {
+    let parsed = try SharedCoders.decoder.decode(
+        TypeSafeModelsResponse.self,
+        from: Fixtures.data(Fixtures.typesafeModels200))
+    let s = parsed.toSnapshot()
+    expect(s.models.map(\.name) == ["jev-latest", "jev-preview"], "TypeSafe lists the two aliases")
+    expect(s.models.allSatisfy { $0.releaseDate != nil }, "TypeSafe microsecond release_date parses")
+    expect(s.billing == nil, "TypeSafe API key alone carries no billing")
+    let snap = VendorSnapshot.typesafe(s)
+    expect(snap.windows.isEmpty, "TypeSafe has no quota windows")
+    expect(snap.maxUtilization == 0, "TypeSafe never feeds the menu-bar percentage")
+    expect(!VendorId.typesafe.reportsUtilization, "TypeSafe cannot be pinned")
+    let err = try SharedCoders.decoder.decode(
+        TypeSafeErrorResponse.self,
+        from: Fixtures.data(Fixtures.typesafeMissingKey403))
+    expect(err.errorType == "authentication_error", "TypeSafe 403 error type decoded")
+}
+
+section("TypeSafeConfig.validate + default") {
+    expect(!TypeSafeConfig().enabled, "TypeSafe is disabled by default")
+    expect(TypeSafeConfig.validate("https://api.typesafe.ai") != nil, "accepts https://api.typesafe.ai")
+    expect(TypeSafeConfig.validate("http://api.typesafe.ai") == nil, "rejects http://")
+    expect(TypeSafeConfig.validate("https://evil.example.com") == nil, "rejects unknown host")
+    expect(TypeSafeConfig.validate("https://u:p@api.typesafe.ai") == nil, "rejects userinfo")
+    expect(TypeSafeConfig.validate("https://api.typesafe.ai:8443") == nil, "rejects non-443 port")
+}
+
+section("TypeSafe console (phase 2) fixtures") {
+    let billing = try TypeSafeConsoleParsing.billing(fromRSC: Fixtures.typesafeBillingRSC200)
+    expect(billing.balanceUSD == 30 && billing.spentUSD == 0, "TypeSafe billing balance/spent decoded")
+    expect(billing.credits.count == 1, "TypeSafe live credit kept")
+    let encoded = String(decoding: try SharedCoders.encoder.encode(billing), as: UTF8.self)
+    expect(!encoded.contains("user@example.com") && !encoded.contains("Visa"),
+           "TypeSafe billing keeps no personal data")
+    let hour = try SharedCoders.decoder.decode(TypeSafeUsageResponse.self, from: Fixtures.data(Fixtures.typesafeUsageHour200))
+    expect(hour.buckets.first?.inputTokens == 1521, "TypeSafe usage bucket tokens decoded")
+    expect(TypeSafeConsoleParsing.actionID(inChunk: Fixtures.typesafeBillingChunkJS) != nil,
+           "TypeSafe billing action id found in chunk")
+    expect(TypeSafeConsoleParsing.isLoginLanding(Fixtures.typesafeLoginLandingHTML),
+           "TypeSafe login landing recognized")
+    expect(TypeSafeConsoleParsing.chunkURLs(inPage: Fixtures.typesafeBillingPageHTML)
+        .allSatisfy { $0.host == "console.typesafe.ai" }, "TypeSafe chunks stay on the console host")
+    let session = TypeSafeConsoleSession.capture([
+        (name: "session", value: "a", expiresAt: nil), (name: "session_id", value: "b", expiresAt: nil),
+        (name: "organization_id", value: "c", expiresAt: nil), (name: "cf_clearance", value: "x", expiresAt: nil),
+    ])
+    expect(session?.cookieHeader == "session=a; session_id=b; organization_id=c",
+           "TypeSafe session keeps only the three login cookies")
+}
+
 section("DeepSeekConfig.validate") {
     expect(DeepSeekConfig.validate("https://api.deepseek.com") != nil,
            "accepts https://api.deepseek.com")

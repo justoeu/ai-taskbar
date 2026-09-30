@@ -136,7 +136,7 @@ public enum ServiceStatusPresentation {
     public static func expectedCoverage(for vendorId: VendorId) -> ServiceStatusCoverage {
         switch vendorId {
         case .anthropic, .openai, .kimi, .deepseek: return .full
-        case .openrouter, .xai: return .incidentsOnly
+        case .openrouter, .xai, .typesafe: return .incidentsOnly
         case .gemini, .zai: return .linkOnly
         }
     }

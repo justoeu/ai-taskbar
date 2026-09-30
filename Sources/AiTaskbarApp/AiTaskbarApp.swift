@@ -53,6 +53,9 @@ struct AiTaskbarApp: App {
             thresholds: env.config.thresholds,
             refreshIntervalSeconds: env.config.ui.refreshIntervalSeconds
         )
+        TypeSafeLoginController.shared.configure(
+            configLoader: env.configLoader, store: env.typeSafeSession,
+            onChange: { [weak store] in store?.refresh(vendor: .typesafe) })
         let enabledStatusIds = VendorOrder.ordered(
             entries: env.enabledVendorIds().map { ($0, false) },
             preferred: VendorOrder.load()

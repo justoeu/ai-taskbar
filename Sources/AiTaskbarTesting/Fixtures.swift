@@ -1123,5 +1123,148 @@ public enum Fixtures {
     </rss>
     """#
 
+    // MARK: - TypeSafe (Jev) — all verbatim, captured 2026-09-29
+
+    /// `GET https://api.typesafe.ai/v1/models` with a valid key. Aliases only;
+    /// microsecond `release_date`.
+    public static let typesafeModels200 = #"""
+    {"models":[{"name":"jev-latest","description":"The latest iteration of TypeSafe's System One Model: Jev","release_date":"2026-09-10T18:38:01.391457+00:00"},{"name":"jev-preview","description":"A preview version of `jev-latest`: should be better in most ways","release_date":"2026-09-10T18:39:06.057655+00:00"}]}
+    """#
+
+    /// Invalid key → HTTP 401.
+    public static let typesafeInvalidKey401 = #"""
+    {"detail":{"error_type":"authentication_error","message":"Cannot authenticate with the server. Please check your API key and try again."}}
+    """#
+
+    /// Missing key → HTTP 403.
+    public static let typesafeMissingKey403 = #"""
+    {"detail":{"error_type":"authentication_error","message":"Must supply an API key! Check your request and try again."}}
+    """#
+
+    /// Unknown route → HTTP 404 (routed before authentication).
+    public static let typesafeNotFound404 = #"""
+    {"detail":"Not Found"}
+    """#
+
+    /// TypeSafe console, billing server action (`POST /settings/billing`,
+    /// `text/x-component`). Captured 2026-09-29 and anonymized: the e-mail,
+    /// billing name, card and ids are placeholders, kept so tests prove the
+    /// personal fields are never decoded. The `0:` record precedes the result.
+    public static let typesafeBillingRSC200 = #"""
+0:{"a":"$@1","f":"","b":"build-0000"}
+1:{"ok":true,"data":{"billing":{"plan":"pay_as_you_go","spent":0,"freeCreditsRemaining":0,"balance":30,"purchased":30,"resetsInDays":2,"cycleLabel":"September 2026","paymentMethod":{"brand":"Visa","expMonth":1,"expYear":2030,"last4":"0000"},"autoPay":null,"credits":[{"id":"cred_00000000","amount":30,"remaining":30,"createdAt":"2026-09-29T20:03:11.935000Z","expiresAt":"2027-09-29T00:00:00Z","reason":"purchased_credits","payment":{"id":"redacted","invoiceUrl":"redacted","createdAt":"redacted","reason":"redacted","description":"redacted","amount":30,"status":"redacted"}}],"invoiceEmail":"user@example.com","billingAddress":{"name":"Example Org","line1":null,"line2":null,"city":null,"state":null,"postal_code":null,"country":"BR"},"billingAddressValid":true},"payments":[],"hasMore":false,"credits":"$1:data:billing:credits"}}
+"""#
+
+    /// `GET console.typesafe.ai/api/usage?granularity=hour`, anonymized
+    /// (key id and name are placeholders; `userEmail`/`userId` never decoded).
+    public static let typesafeUsageHour200 = #"""
+{"buckets":[{"day":"2026-09-29T22:00:00+00:00","apiKeyId":"key_00000000000000000000000000000000000","apiKeyName":"example-key","userId":null,"userEmail":"","requests":4,"inputTokens":1521,"outputTokens":163}]}
+"""#
+
+    /// `GET console.typesafe.ai/api/usage?granularity=day`, anonymized.
+    public static let typesafeUsageDay200 = #"""
+{"buckets":[{"day":"2026-09-29","apiKeyId":"key_00000000000000000000000000000000000","apiKeyName":"example-key","userId":null,"userEmail":"","requests":4,"inputTokens":1521,"outputTokens":163}]}
+"""#
+
+    /// Shape of `GET console.typesafe.ai/settings/billing` (synthetic, the
+    /// real page is ~100 KB): same-origin chunks, one off-host script.
+    public static let typesafeBillingPageHTML = #"""
+<!DOCTYPE html><html><head>
+<script src="/_next/static/chunks/webpack-0000.js" async=""></script>
+<script src="https://cdn.example.com/analytics.js"></script>
+<script src="/_next/static/chunks/app/(dashboard)/settings/billing/page-1111.js" async=""></script>
+<script src="/_next/static/chunks/webpack-0000.js" async=""></script>
+</head><body>self.__next_f.push([1,"[\"(dashboard)\",{\"children\":[\"settings\"]}]"])</body></html>
+"""#
+
+    /// A chunk that registers the billing server action (synthetic, same
+    /// pattern as the real bundle: id, then the export name within 150 chars).
+    public static let typesafeBillingChunkJS = #"""
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[1],{9:(e,t,r)=>{"use strict";let n=r(8),a=(0,r(7).createServerReference)("7f3a9c0e1b2d4f60718293a4b5c6d7e8f9012345ab",n.callServer,void 0,n.findSourceMapURL,"getBillingOverviewResult")}}]);
+"""#
+
+    /// What the console serves a signed-out session: the login route's RSC tree.
+    public static let typesafeLoginLandingHTML = #"""
+<!DOCTYPE html><html><body>self.__next_f.push([1,"2:[\"$\",\"$L3\",null,{\"tree\":[\"\",{\"children\":[\"(auth)\",{\"children\":[\"login\",{}]}]}]}]"])</body></html>
+"""#
+
+    /// `https://status.typesafe.ai/feed.rss`.
+    public static let typesafeStatusRSS200 = #"""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+      <channel>
+        <title>Status updates | Typesafe AI</title>
+        <description>Incidents and maintenance reported on status page for Typesafe AI</description>
+        <link>https://status.typesafe.ai/</link>
+        <language>en</language>
+        <atom:link rel="self" type="application/rss+xml" href="https://status.typesafe.ai/feed"/>
+        <item>
+          <title>Console is unavailable.</title>
+          <link>https://status.typesafe.ai/incident/1070098</link>
+          <pubDate>Tue, 29 Sep 2026 22:05:00 -0000</pubDate>
+          <guid isPermaLink="false">https://status.typesafe.ai/incident/1070098#550e18e738675a21321e027a4f8933195874f124031b281fab1a706539a6a76c</guid>
+          <category>Incident</category>
+          <description>The console may experience issues due to regularly applied maintenance.</description>
+        </item>
+        <item>
+          <title>Maintenance: Routine operational maintenance</title>
+          <link>https://status.typesafe.ai/maintenance/1077524</link>
+          <pubDate>Tue, 29 Sep 2026 15:32:44 -0000</pubDate>
+          <guid isPermaLink="false">https://status.typesafe.ai/incident/1077524#9f40b09b7a54ae645dd420b88c437543db8cbcfb434a4a2c65dc48b219c0dba3</guid>
+          <category>Maintenance</category>
+          <description>Maintenance completed</description>
+        </item>
+        <item>
+          <title>Maintenance: Routine operational maintenance</title>
+          <link>https://status.typesafe.ai/maintenance/1077524</link>
+          <pubDate>Tue, 29 Sep 2026 15:02:44 -0000</pubDate>
+          <guid isPermaLink="false">https://status.typesafe.ai/incident/1077524#30fcc5205c461218c5198f7e861db05b930afd441b52cacd9587907e08cad60a</guid>
+          <category>Maintenance</category>
+          <description>The console may experience issues due to regularly applied maintenance.</description>
+        </item>
+        <item>
+          <title>Degradation in API Traffic</title>
+          <link>https://status.typesafe.ai/incident/1076478</link>
+          <pubDate>Mon, 28 Sep 2026 16:07:00 -0000</pubDate>
+          <guid isPermaLink="false">https://status.typesafe.ai/incident/1076478#e8aaf1ab2e79fdff3f2f031a28ed251793a76bfd1aa531ba5a3c32b6c8fd53a7</guid>
+          <category>Incident</category>
+          <description>Elevated latency and error rates are resolved.</description>
+        </item>
+        <item>
+          <title>Elevated API latency</title>
+          <link>https://status.typesafe.ai/incident/1072768</link>
+          <pubDate>Thu, 24 Sep 2026 07:18:00 -0000</pubDate>
+          <guid isPermaLink="false">https://status.typesafe.ai/incident/1072768#1ff3dd2c5f955f4f8b43e6a1e4f28d4c1dece4a1224894c0f92d792a9553af08</guid>
+          <category>Incident</category>
+          <description>API latency issues are resolved.</description>
+        </item>
+        <item>
+          <title>Elevated API latency and connection issues</title>
+          <link>https://status.typesafe.ai/incident/1072436</link>
+          <pubDate>Wed, 23 Sep 2026 20:56:00 -0000</pubDate>
+          <guid isPermaLink="false">https://status.typesafe.ai/incident/1072436#462bbacf911ac38c16700836707f2171aa033fbd99c9cbc2d968caee9fcd11bd</guid>
+          <category>Incident</category>
+          <description>API latency degredation resolved.</description>
+        </item>
+        <item>
+          <title>API issues</title>
+          <link>https://status.typesafe.ai/incident/1070670</link>
+          <pubDate>Mon, 21 Sep 2026 23:40:00 -0000</pubDate>
+          <guid isPermaLink="false">https://status.typesafe.ai/incident/1070670#ccca3965b40d74cf2ca1e4d9b0724d6e67a0aab2d3eaf4482f72b06f13af5604</guid>
+          <category>Incident</category>
+          <description>We are seeing intermittent downtime and system instability. We are actively investigating.</description>
+        </item>
+        <item>
+          <title>Console is unavailable.</title>
+          <link>https://status.typesafe.ai/incident/1070098</link>
+          <pubDate>Mon, 21 Sep 2026 08:16:00 -0000</pubDate>
+          <guid isPermaLink="false">https://status.typesafe.ai/incident/1070098#0ffd6d4129087f5d7a63fa39081451e61c587fbfe70c158a719593a4d5a20274</guid>
+          <category>Incident</category>
+          <description>Issues with TypeSafe console and API are fully resolved.</description>
+        </item>
+      </channel>
+    </rss>
+    """#
+
     public static func data(_ s: String) -> Data { Data(s.utf8) }
 }

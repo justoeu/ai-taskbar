@@ -22,7 +22,7 @@ public struct MenuBarLabelView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 if Task.isCancelled { break }
-                let n = store.sortedVendors.count
+                let n = rotatingVendors.count
                 guard n > 0 else { continue }
                 rotateIndex = (rotateIndex + 1) % n
             }
@@ -61,7 +61,7 @@ public struct MenuBarLabelView: View {
 
     @ViewBuilder
     private var rotatingContent: some View {
-        let rotating = store.sortedVendors.isEmpty ? store.vendors : store.sortedVendors
+        let rotating = rotatingVendors
         if rotating.isEmpty {
             iconForMaxPercent
         } else {
@@ -82,6 +82,13 @@ public struct MenuBarLabelView: View {
         }
     }
 
+    /// Vendors the rotating label cycles through: only those that report a
+    /// utilization, so a provider without a quota never shows "0%".
+    private var rotatingVendors: [VendorViewModel] {
+        let base = store.sortedVendors.isEmpty ? store.vendors : store.sortedVendors
+        return base.filter(\.vendorId.reportsUtilization)
+    }
+
     private func shortLabel(for v: VendorId) -> String {
         switch v {
         case .anthropic:  return "Cl"
@@ -92,6 +99,7 @@ public struct MenuBarLabelView: View {
         case .gemini:     return "Gm"
         case .deepseek:   return "DS"
         case .xai:        return "xAI"
+        case .typesafe:   return "JEV"
         }
     }
 

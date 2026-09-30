@@ -49,9 +49,9 @@ struct VendorIdTests {
         }
     }
 
-    @Test("CaseIterable enumerates all eight vendors")
+    @Test("CaseIterable enumerates all nine vendors")
     func caseIterable_enumerates_all() {
-        #expect(VendorId.allCases.count == 8)
+        #expect(VendorId.allCases.count == 9)
     }
 
     @Test("Codable round-trip preserves rawValue")

@@ -76,6 +76,7 @@ public enum AnalyticsFormatters {
         case .openrouter: return Color(red: 0.85, green: 0.25, blue: 0.60) // Magenta
         case .kimi:       return Color(red: 0.95, green: 0.65, blue: 0.15) // Amber
         case .deepseek:   return Color(red: 0.40, green: 0.50, blue: 0.60) // Slate
+        case .typesafe:   return Color(red: 0.30, green: 0.75, blue: 0.35) // Green
         }
     }
 }

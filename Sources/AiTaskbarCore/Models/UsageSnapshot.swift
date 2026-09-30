@@ -11,6 +11,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
     case gemini(GeminiSnapshot)
     case deepseek(DeepSeekSnapshot)
     case xai(XAISnapshot)
+    case typesafe(TypeSafeSnapshot)
 
     public var vendorId: VendorId {
         switch self {
@@ -22,6 +23,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .gemini:     return .gemini
         case .deepseek:   return .deepseek
         case .xai:        return .xai
+        case .typesafe:   return .typesafe
         }
     }
 
@@ -35,6 +37,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .gemini(let s):     return s.planLabel
         case .deepseek(let s):   return s.planLabel
         case .xai(let s):        return s.planLabel
+        case .typesafe(let s):   return s.planLabel
         }
     }
 
@@ -62,6 +65,10 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             return [s.balance].compactMap { $0 }
         case .xai(let s):
             return [s.weekly, s.balance, s.monthly].compactMap { $0 }
+        case .typesafe:
+            // No quota or utilization exists on the wire: nothing to draw as a
+            // bar and nothing to feed the menu-bar percentage.
+            return []
         }
     }
 
@@ -89,7 +96,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             return (s.weekly?.utilizationPercent, s.daily?.utilizationPercent ?? maxUtilization)
         case .xai(let s):
             return (nil, s.weekly?.utilizationPercent ?? maxUtilization)
-        case .kimi, .deepseek:
+        case .kimi, .deepseek, .typesafe:
             return (nil, maxUtilization)
         }
     }
@@ -111,7 +118,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             return (s.daily, s.weekly)
         case .xai(let s):
             return (nil, s.weekly)
-        case .kimi, .deepseek:
+        case .kimi, .deepseek, .typesafe:
             return (nil, nil)
         }
     }
@@ -462,6 +469,208 @@ public struct DeepSeekSnapshot: Sendable, Equatable, Codable {
         self.toppedUpBalance = toppedUpBalance
         self.currency = currency
         self.isAvailable = isAvailable
+    }
+}
+
+/// TypeSafe AI (Jev). Jev is a "System One" decision model, not a chat LLM,
+/// and TypeSafe publishes no quota: there is no utilization to report, so
+/// `windows` is empty (see docs/SDD-typesafe-jev.md §4).
+///
+/// Phase 1 fills `models` from the API key's `GET /v1/models`. Phase 2 fills
+/// `billing` from the user's own console session; without one it stays nil.
+public struct TypeSafeSnapshot: Sendable, Equatable, Codable {
+    public let planLabel: String?
+    /// The names the key can call, in API order. The API lists aliases only
+    /// (`jev-latest`, `jev-preview`) and no version they resolve to.
+    public let models: [TypeSafeModel]
+    /// Console billing, when a console session is connected.
+    public let billing: TypeSafeBilling?
+    /// Console token usage, when a console session is connected.
+    public let usage: TypeSafeUsage?
+    /// Whether billing/usage come from a live console session.
+    public let console: TypeSafeConsoleState
+
+    public var modelCount: Int { models.count }
+    /// Newest `release_date` in the list — when the entries were last updated,
+    /// not the model's public launch date.
+    public var lastUpdated: Date? { models.compactMap(\.releaseDate).max() }
+
+    public init(planLabel: String? = nil, models: [TypeSafeModel] = [], billing: TypeSafeBilling? = nil,
+                usage: TypeSafeUsage? = nil, console: TypeSafeConsoleState = .notConnected) {
+        self.planLabel = planLabel
+        self.models = models
+        self.billing = billing
+        self.usage = usage
+        self.console = console
+    }
+
+    /// Same models, new console data.
+    public func with(billing: TypeSafeBilling?, usage: TypeSafeUsage?, console: TypeSafeConsoleState) -> TypeSafeSnapshot {
+        TypeSafeSnapshot(planLabel: planLabel, models: models, billing: billing, usage: usage, console: console)
+    }
+
+    enum CodingKeys: String, CodingKey { case planLabel, models, billing, usage, console }
+
+    // Tolerant decoder: a cached snapshot from an older build (no `billing`)
+    // must still decode. Update `CodingKeys` and this initializer together.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        planLabel = try c.decodeIfPresent(String.self, forKey: .planLabel)
+        models = try c.decodeIfPresent([TypeSafeModel].self, forKey: .models) ?? []
+        billing = try c.decodeIfPresent(TypeSafeBilling.self, forKey: .billing)
+        usage = try c.decodeIfPresent(TypeSafeUsage.self, forKey: .usage)
+        console = (try? c.decodeIfPresent(TypeSafeConsoleState.self, forKey: .console)) ?? .notConnected
+    }
+}
+
+/// Where TypeSafe's console data stands.
+public enum TypeSafeConsoleState: Sendable, Equatable, Codable {
+    /// No console session saved: only the API-key data is shown.
+    case notConnected
+    /// Live console data; `expiresAt` is when the session cookies expire.
+    case connected(expiresAt: Date?)
+    /// The session was refused or is past its expiry: sign in again.
+    case expired
+    /// The console failed transiently; `billing`/`usage` are the last known.
+    case unavailable(since: Date)
+}
+
+/// Token usage from the console's `/api/usage`, aggregated — no key ids, key
+/// names, e-mails or user ids are kept.
+public struct TypeSafeUsage: Sendable, Equatable, Codable {
+    public let todayInputTokens: Int
+    public let todayOutputTokens: Int
+    public let todayRequests: Int
+    public let weekInputTokens: Int
+    public let weekOutputTokens: Int
+    public let weekRequests: Int
+    /// Hourly series (oldest first), at most the last 48 hours.
+    public let hourly: [TypeSafeUsagePoint]
+    /// Daily series (oldest first) for the 7-day window. `start` is the
+    /// console's UTC day re-anchored at LOCAL midnight of the same date, so
+    /// charts label it with the day the console shows.
+    public let daily: [TypeSafeUsagePoint]
+
+    public init(todayInputTokens: Int, todayOutputTokens: Int, todayRequests: Int,
+                weekInputTokens: Int, weekOutputTokens: Int, weekRequests: Int,
+                hourly: [TypeSafeUsagePoint] = [], daily: [TypeSafeUsagePoint] = []) {
+        self.todayInputTokens = todayInputTokens
+        self.todayOutputTokens = todayOutputTokens
+        self.todayRequests = todayRequests
+        self.weekInputTokens = weekInputTokens
+        self.weekOutputTokens = weekOutputTokens
+        self.weekRequests = weekRequests
+        self.hourly = hourly
+        self.daily = daily
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case todayInputTokens, todayOutputTokens, todayRequests
+        case weekInputTokens, weekOutputTokens, weekRequests, hourly, daily
+    }
+
+    // Tolerant: a cache written before `daily` existed still decodes.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        todayInputTokens = try c.decode(Int.self, forKey: .todayInputTokens)
+        todayOutputTokens = try c.decode(Int.self, forKey: .todayOutputTokens)
+        todayRequests = try c.decode(Int.self, forKey: .todayRequests)
+        weekInputTokens = try c.decode(Int.self, forKey: .weekInputTokens)
+        weekOutputTokens = try c.decode(Int.self, forKey: .weekOutputTokens)
+        weekRequests = try c.decode(Int.self, forKey: .weekRequests)
+        hourly = try c.decodeIfPresent([TypeSafeUsagePoint].self, forKey: .hourly) ?? []
+        daily = try c.decodeIfPresent([TypeSafeUsagePoint].self, forKey: .daily) ?? []
+    }
+}
+
+public struct TypeSafeUsagePoint: Sendable, Equatable, Codable {
+    public let start: Date
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let requests: Int
+
+    public init(start: Date, inputTokens: Int, outputTokens: Int, requests: Int) {
+        self.start = start
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.requests = requests
+    }
+}
+
+public struct TypeSafeModel: Sendable, Equatable, Codable {
+    public let name: String
+    public let description: String?
+    public let releaseDate: Date?
+
+    public init(name: String, description: String? = nil, releaseDate: Date? = nil) {
+        self.name = name
+        self.description = description
+        self.releaseDate = releaseDate
+    }
+}
+
+/// Numbers from the console billing overview. Money, in USD, exactly as the
+/// console reports it; never recomputed from tokens. Deliberately holds no
+/// personal data (e-mail, address, payment method are never decoded).
+public struct TypeSafeBilling: Sendable, Equatable, Codable {
+    public let spentUSD: Double
+    public let balanceUSD: Double
+    public let purchasedUSD: Double?
+    public let freeCreditsRemainingUSD: Double?
+    /// Raw plan id, e.g. `pay_as_you_go`; the view renders a label.
+    public let plan: String?
+    /// Console's own cycle label, e.g. "September 2026".
+    public let cycleLabel: String?
+    /// Days until the billing cycle closes. NOT a quota reset.
+    public let cycleEndsInDays: Int?
+    public let credits: [TypeSafeCredit]
+
+    public init(spentUSD: Double, balanceUSD: Double, purchasedUSD: Double? = nil,
+                freeCreditsRemainingUSD: Double? = nil, plan: String? = nil,
+                cycleLabel: String? = nil, cycleEndsInDays: Int? = nil,
+                credits: [TypeSafeCredit] = []) {
+        self.spentUSD = spentUSD
+        self.balanceUSD = balanceUSD
+        self.purchasedUSD = purchasedUSD
+        self.freeCreditsRemainingUSD = freeCreditsRemainingUSD
+        self.plan = plan
+        self.cycleLabel = cycleLabel
+        self.cycleEndsInDays = cycleEndsInDays
+        self.credits = credits
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case spentUSD, balanceUSD, purchasedUSD, freeCreditsRemainingUSD, plan, cycleLabel
+        case cycleEndsInDays, credits
+    }
+
+    // Tolerant: a cached block without `credits` must not reject the whole
+    // snapshot (and with it the stale fallback).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        spentUSD = try c.decode(Double.self, forKey: .spentUSD)
+        balanceUSD = try c.decode(Double.self, forKey: .balanceUSD)
+        purchasedUSD = try c.decodeIfPresent(Double.self, forKey: .purchasedUSD)
+        freeCreditsRemainingUSD = try c.decodeIfPresent(Double.self, forKey: .freeCreditsRemainingUSD)
+        plan = try c.decodeIfPresent(String.self, forKey: .plan)
+        cycleLabel = try c.decodeIfPresent(String.self, forKey: .cycleLabel)
+        cycleEndsInDays = try c.decodeIfPresent(Int.self, forKey: .cycleEndsInDays)
+        credits = try c.decodeIfPresent([TypeSafeCredit].self, forKey: .credits) ?? []
+    }
+}
+
+public struct TypeSafeCredit: Sendable, Equatable, Codable {
+    public let amountUSD: Double
+    public let remainingUSD: Double
+    public let expiresAt: Date
+    /// e.g. `purchased_credits`.
+    public let reason: String?
+
+    public init(amountUSD: Double, remainingUSD: Double, expiresAt: Date, reason: String? = nil) {
+        self.amountUSD = amountUSD
+        self.remainingUSD = remainingUSD
+        self.expiresAt = expiresAt
+        self.reason = reason
     }
 }
 

@@ -7,7 +7,7 @@ public enum ServiceStatusProviderFactory {
         case .anthropic: return .anthropic
         case .openai: return .openAI
         case .kimi: return .kimi
-        case .zai, .openrouter, .gemini, .deepseek, .xai: return nil
+        case .zai, .openrouter, .gemini, .deepseek, .xai, .typesafe: return nil
         }
     }
 
@@ -15,6 +15,7 @@ public enum ServiceStatusProviderFactory {
         switch vendorId {
         case .openrouter: return .openRouter
         case .xai: return .xAI
+        case .typesafe: return .typeSafe
         case .anthropic, .openai, .zai, .kimi, .gemini, .deepseek: return nil
         }
     }

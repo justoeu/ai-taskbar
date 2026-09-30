@@ -58,6 +58,9 @@ public struct SettingsView: View {
                         header: { vendorHeader("DeepSeek", isEnabled: viewModel.draft.deepseek.enabled) })
                 Section(content: { vendorXAI },
                         header: { vendorHeader("xAI (Grok)", isEnabled: viewModel.draft.xai.enabled) })
+                Section(content: { vendorTypeSafe },
+                        header: { vendorHeader("Jev (TypeSafe)", isEnabled: viewModel.draft.typesafe.enabled) },
+                        footer: { Text(L10n.localizedString("settings_typesafe_footer")).font(.caption2).foregroundStyle(.secondary) })
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -698,6 +701,38 @@ public struct SettingsView: View {
         }
     }
 
+    // MARK: - Vendor: TypeSafe (Jev)
+
+    @ViewBuilder
+    private var vendorTypeSafe: some View {
+        vendorBody("Jev (TypeSafe)") {
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.typesafe.enabled },
+                        set: { viewModel.draft.typesafe.enabled = $0 }))
+            HelpTextField(label: L10n.localizedString("settings_api_key_env"),
+                          helpKey: "settings_api_key_env_help",
+                          text: Binding(
+                            get: { viewModel.draft.typesafe.apiKeyEnv },
+                            set: { viewModel.draft.typesafe.apiKeyEnv = $0 }))
+            SecureInlineField(label: L10n.localizedString("settings_api_key"),
+                              helpKey: "settings_api_key_help",
+                              value: Binding(
+                                get: { viewModel.draft.typesafe.apiKey ?? "" },
+                                set: { viewModel.draft.typesafe.apiKey = $0.isEmpty ? nil : $0 }))
+            Picker(L10n.localizedString("settings_base_url"),
+                   selection: Binding(
+                    get: { viewModel.draft.typesafe.baseURL },
+                    set: { viewModel.draft.typesafe.baseURL = $0 })) {
+                Text("api.typesafe.ai").tag(TypeSafeConfig.defaultBaseURL)
+            }
+            .pickerStyle(.menu)
+            .help(L10n.localizedString("settings_base_url_help"))
+            TypeSafeConsoleSettingsRow()
+        }
+    }
+
     // MARK: - Vendor: xAI
  
     @ViewBuilder
@@ -934,5 +969,48 @@ struct HelpTextField: View {
                 .frame(maxWidth: 220)
                 .font(.subheadline.monospaced())
         }
+    }
+}
+
+/// Console sign-in state for TypeSafe. Applies immediately (no Save): the
+/// login writes its own encrypted slot and the card refreshes.
+private struct TypeSafeConsoleSettingsRow: View {
+    @ObservedObject private var login = TypeSafeLoginController.shared
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = L10n.effectiveLocale
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+
+    var body: some View {
+        LabeledContent(L10n.localizedString("settings_typesafe_console")) {
+            HStack(spacing: 8) {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if login.session == nil {
+                    Button(L10n.localizedString("typesafe_console_sign_in")) { login.signIn() }
+                        .disabled(login.isSigningIn)
+                } else {
+                    Button(L10n.localizedString("settings_typesafe_console_sign_out")) { login.signOut() }
+                        .help(L10n.localizedString("settings_typesafe_console_sign_out_help"))
+                }
+            }
+        }
+    }
+
+    private var status: String {
+        guard let session = login.session else {
+            return L10n.localizedString("settings_typesafe_console_not_connected")
+        }
+        if session.isExpired(now: .now) { return L10n.localizedString("typesafe_console_expired") }
+        guard let expiresAt = session.expiresAt else {
+            return L10n.localizedString("settings_typesafe_console_connected")
+        }
+        return L10n.localizedString("settings_typesafe_console_connected_fmt",
+                                    Self.dateFormatter.string(from: expiresAt))
     }
 }

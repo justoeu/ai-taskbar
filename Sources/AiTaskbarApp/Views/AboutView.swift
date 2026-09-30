@@ -65,6 +65,43 @@ public struct AboutView: View {
         }
     }
 
+    /// Every supported LLM, straight from `VendorId`, so a new vendor shows
+    /// up here without anyone remembering to edit a sentence (the old
+    /// description still listed five of nine).
+    static var supportedVendors: [VendorId] { VendorId.allCases }
+
+    /// The facts under the vendor grid, with their icons (and a tooltip).
+    static let facts: [(key: String, symbol: String, helpKey: String?)] = [
+        ("about_macroscopic", "gauge", nil),
+        ("about_cost_source", "folder", "about_cost_source_help"),
+        ("about_credentials", "key", nil),
+        ("about_security", "lock.shield", nil),
+        ("about_network", "network", nil),
+        ("about_refresh_hint", "arrow.clockwise", nil),
+    ]
+
+    private var vendorGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading),
+                            GridItem(.flexible(), alignment: .leading)],
+                  alignment: .leading, spacing: 6) {
+            ForEach(Self.supportedVendors, id: \.self) { vendor in
+                HStack(spacing: 6) {
+                    VendorIconView(vendorId: vendor, size: 14)
+                        .foregroundStyle(AnalyticsFormatters.vendorColor(for: vendor))
+                        .frame(width: 14, height: 14)
+                    Text(vendor.displayName)
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.secondary.opacity(0.08))
+        )
+    }
+
     private var mainContent: some View {
         VStack(alignment: .center, spacing: 12) {
             Image(systemName: "gauge.with.dots.needle.67percent")
@@ -85,46 +122,42 @@ public struct AboutView: View {
 
             Divider().padding(.horizontal, 40)
 
-            VStack(alignment: .leading, spacing: 6) {
-                L10n.text("about_description")
-                    .font(.callout)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 10) {
+                    L10n.text("about_description")
+                        .font(.callout)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Label(L10n.localizedString("about_refresh_hint"), systemImage: "arrow.clockwise")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Label(L10n.localizedString("about_macroscopic"), systemImage: "gauge")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Label(L10n.localizedString("about_credentials"), systemImage: "key")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Label(L10n.localizedString("about_security"), systemImage: "lock.shield")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Label(L10n.localizedString("about_cost_source"), systemImage: "folder")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .help(L10n.localizedString("about_cost_source_help"))
-            }
-            .padding(.horizontal, 24)
+                    vendorGrid
 
-            Divider().padding(.horizontal, 40)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Self.facts, id: \.key) { fact in
+                            Label(L10n.localizedString(fact.key), systemImage: fact.symbol)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .help(fact.helpKey.map { L10n.localizedString($0) } ?? "")
+                        }
+                    }
 
-            VStack(spacing: 4) {
-                L10n.text("about_built_with")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                if let developer = Self.developerName {
-                    Label(L10n.localizedString("about_developer_fmt", developer),
-                          systemImage: "checkmark.seal")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    Divider().padding(.horizontal, 16)
+
+                    VStack(spacing: 4) {
+                        L10n.text("about_built_with")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        if let developer = Self.developerName {
+                            Label(L10n.localizedString("about_developer_fmt", developer),
+                                  systemImage: "checkmark.seal")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
                 }
+                .padding(.horizontal, 24)
             }
-
-            Spacer(minLength: 4)
 
             HStack(spacing: 12) {
                 Button(role: .destructive) {

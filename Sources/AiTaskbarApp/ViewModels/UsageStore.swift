@@ -120,6 +120,7 @@ public final class UsageStore: ObservableObject {
         self.preferredOrder = preferredOrder
         let savedPinned = (UserDefaults.standard.stringArray(forKey: Self.pinnedDefaultsKey) ?? [])
             .compactMap(VendorId.init(rawValue:))
+            .filter(\.reportsUtilization)
         self.pinnedVendorOrder = savedPinned
         self.pinnedVendorIds = Set(savedPinned)
         wireUpAggregates()
@@ -240,6 +241,10 @@ public final class UsageStore: ObservableObject {
             pinnedVendorOrder.removeAll(where: { $0 == id })
             persistPinned(defaults: defaults)
         } else {
+            // No utilization to draw (e.g. TypeSafe): a pinned badge would read
+            // "0%" forever. The toggle is disabled in the card; this guards
+            // every other caller too.
+            guard id.reportsUtilization else { return }
             let spaceCheck = pinSpaceCheck(pinnedVendorIds.count)
             guard spaceCheck.allowed else {
                 pinLimitAlert = PinLimitAlertInfo(

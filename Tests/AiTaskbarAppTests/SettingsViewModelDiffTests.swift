@@ -16,6 +16,9 @@ struct SettingsViewModelDiffTests {
         let field: String
         let mutate: @Sendable (inout AppConfig) -> Void
         let expected: ConfigChange
+        /// Set only when one field change deliberately emits more than one
+        /// change (saving a TypeSafe key also enables the provider).
+        var expectedAll: [ConfigChange]? = nil
         var testDescription: String { "\(section).\(field)" }
     }
 
@@ -118,6 +121,18 @@ struct SettingsViewModelDiffTests {
             expected: .secret(section: "deepseek", key: "api_key", plaintext: "k")),
         Row(section: "deepseek", field: "baseURL", mutate: { $0.deepseek.baseURL = "https://api.deepseek.com/v1" },
             expected: .string(section: "deepseek", key: "base_url", value: "https://api.deepseek.com/v1")),
+        // [typesafe] — disabled by default, so the enabled row turns it ON;
+        // saving a key also switches it on (SDD §4.3).
+        Row(section: "typesafe", field: "enabled", mutate: { $0.typesafe.enabled = true },
+            expected: .bool(section: "typesafe", key: "enabled", value: true)),
+        Row(section: "typesafe", field: "apiKeyEnv", mutate: { $0.typesafe.apiKeyEnv = "ENV_T" },
+            expected: .string(section: "typesafe", key: "api_key_env", value: "ENV_T")),
+        Row(section: "typesafe", field: "apiKey", mutate: { $0.typesafe.apiKey = "k" },
+            expected: .secret(section: "typesafe", key: "api_key", plaintext: "k"),
+            expectedAll: [.bool(section: "typesafe", key: "enabled", value: true),
+                          .secret(section: "typesafe", key: "api_key", plaintext: "k")]),
+        Row(section: "typesafe", field: "baseURL", mutate: { $0.typesafe.baseURL = "https://api.typesafe.ai/" },
+            expected: .string(section: "typesafe", key: "base_url", value: "https://api.typesafe.ai/")),
         // [xai]
         Row(section: "xai", field: "enabled", mutate: { $0.xai.enabled = false },
             expected: .bool(section: "xai", key: "enabled", value: false)),
@@ -147,7 +162,7 @@ struct SettingsViewModelDiffTests {
     func single_field_change(_ row: Row) {
         var changed = AppConfig()
         row.mutate(&changed)
-        #expect(SettingsViewModel.diff(from: AppConfig(), to: changed) == [row.expected])
+        #expect(SettingsViewModel.diff(from: AppConfig(), to: changed) == (row.expectedAll ?? [row.expected]))
     }
 
     @Test("every AppConfig section is covered by the rows")
@@ -156,13 +171,51 @@ struct SettingsViewModelDiffTests {
         #expect(Set(Self.rows.map(\.section)) == sections)
     }
 
+    /// Fields another writer owns: the in-app TypeSafe sign-in writes its
+    /// session itself (`TypeSafeLoginController`), so a Settings save built
+    /// from a draft loaded earlier must never overwrite or clear it.
+    static let notDiffed: [String: Set<String>] = [
+        "typesafe": ["consoleSession", "consoleSessionExpiresAt"],
+    ]
+
     @Test("every stored field of every section is covered by the rows")
     func every_field_covered() {
         for child in Mirror(reflecting: AppConfig()).children {
             guard let section = child.label else { continue }
             let fields = Set(Mirror(reflecting: child.value).children.compactMap(\.label))
+                .subtracting(Self.notDiffed[section] ?? [])
             let listed = Set(Self.rows.filter { $0.section == section }.map(\.field))
             #expect(listed == fields, "section [\(section)]")
         }
+    }
+
+    @Test("a Settings save never touches the TypeSafe console session")
+    func typesafe_session_not_diffed() {
+        var signedIn = AppConfig()
+        signedIn.typesafe.consoleSession = "session=a; session_id=b; organization_id=c"
+        signedIn.typesafe.consoleSessionExpiresAt = 1_790_000_000
+        #expect(SettingsViewModel.diff(from: AppConfig(), to: signedIn).isEmpty)
+        #expect(SettingsViewModel.diff(from: signedIn, to: AppConfig()).isEmpty)
+    }
+
+    @Test("saving a TypeSafe key enables it; clearing the key does not disable it")
+    func typesafe_key_save_enables() {
+        let off = TypeSafeConfig()
+        var withKey = off
+        withKey.apiKey = "ts-key"
+        #expect(SettingsViewModel.typeSafeAfterSave(old: off, new: withKey).enabled)
+
+        var blank = off
+        blank.apiKey = "   "
+        #expect(!SettingsViewModel.typeSafeAfterSave(old: off, new: blank).enabled)
+
+        var onWithKey = TypeSafeConfig(enabled: true, apiKey: "ts-key")
+        onWithKey.apiKey = nil
+        #expect(SettingsViewModel.typeSafeAfterSave(old: TypeSafeConfig(enabled: true, apiKey: "ts-key"),
+                                                    new: onWithKey).enabled)
+
+        // Unchanged key never flips a deliberately disabled provider back on.
+        let keptOff = TypeSafeConfig(enabled: false, apiKey: "ts-key")
+        #expect(!SettingsViewModel.typeSafeAfterSave(old: keptOff, new: keptOff).enabled)
     }
 }

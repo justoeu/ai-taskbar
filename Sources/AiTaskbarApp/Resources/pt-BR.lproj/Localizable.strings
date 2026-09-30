@@ -77,11 +77,12 @@
 "notif_title_fmt" = "%@ — %@ em %ld%%";
 
 // About panel
-"about_description" = "Acompanha o uso de LLMs do Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM) e Kimi (Moonshot) — direto da barra de menu.";
-"about_refresh_hint" = "O intervalo de atualização é configurável em config.toml";
-"about_macroscopic" = "% macroscópico = maior utilização entre os provedores ativos";
-"about_credentials" = "Credenciais lidas do Keychain + ~/.codex/auth.json";
-"about_security" = "Arquivos de cache + config são user-only (0o600)";
+"about_description" = "Acompanha uso, cotas e custo das suas LLMs direto da barra de menu:";
+"about_refresh_hint" = "O intervalo de atualização é configurável nos Ajustes ou no config.toml";
+"about_macroscopic" = "O % da barra de menu é a maior utilização entre os cards que você mantém abertos";
+"about_credentials" = "Credenciais: item do Claude Code no Keychain, ~/.codex/auth.json e chaves de API cifradas no config.toml";
+"about_security" = "Config, cache e histórico são user-only (0600)";
+"about_network" = "Sem telemetria: o app só fala com as APIs, consoles e páginas de status dos próprios provedores, e com o GitHub para atualizações";
 "about_built_with" = "Construído com SwiftUI · Licença MIT";
 // %@ = nome extraído do certificado Developer ID que assinou o binário.
 "about_developer_fmt" = "Desenvolvido por %@";
@@ -117,8 +118,8 @@
 "models_columns_header" = "hoje / últimos 7 dias";
 
 // About — cost data source
-"about_cost_source" = "Custo calculado localmente a partir de ~/.claude/projects e ~/.codex/logs_2.sqlite";
-"about_cost_source_help" = "O custo do Anthropic vem da análise das mensagens do assistente nos seus arquivos JSONL locais do Claude Code (~/.claude/projects/*/*.jsonl), multiplicando tokens de input/output/cache pela tabela pública de preços do Claude.\n\nO custo do OpenAI lê total_usage_tokens em ~/.codex/logs_2.sqlite e aplica a tabela de preços dos modelos Codex.\n\nNada é enviado pela rede — o cálculo acontece inteiramente no seu Mac. Planos por assinatura (Claude Max, ChatGPT Pro) cobram um valor fixo; o número exibido é quanto custaria via API equivalente.";
+"about_cost_source" = "Custo calculado localmente a partir de ~/.claude/projects, ~/.codex e opencode";
+"about_cost_source_help" = "Anthropic: mensagens do assistente nos arquivos JSONL locais do Claude Code (~/.claude/projects), cada resposta contada uma vez, com a tabela pública de preços do Claude (modo rápido incluído).\n\nOpenAI: rollouts das sessões do Codex (~/.codex/sessions) e ~/.codex/logs_2.sqlite, com a tabela de preços dos modelos Codex.\n\nopencode: o banco local (~/.local/share/opencode/opencode.db); os tokens aparecem no provedor que os cobrou.\n\nNada é enviado pela rede. Planos por assinatura (Claude Max, ChatGPT Pro) cobram um valor fixo; o número é quanto o mesmo uso custaria via API.";
 
 // MARK: - Settings UI
 "settings" = "Ajustes";
@@ -379,3 +380,38 @@
 "pin_limit_screen_message" = "Espaço insuficiente na barra de menus para fixar outro modelo sem cobrir os menus de aplicativos. Desafixe outro modelo antes de adicionar este.";
 "pin_limit_count_message" = "Você atingiu o limite máximo de 5 modelos fixados na barra de menus. Desafixe outro modelo antes de adicionar este.";
 "pin_limit_reached_ok" = "Entendido";
+
+// TypeSafe (Jev)
+"typesafe_key_rejected" = "A TypeSafe recusou a chave de API. Confira em Ajustes.";
+"typesafe_balance" = "Saldo";
+"typesafe_spent_cycle" = "Gasto no ciclo";
+"typesafe_used_of_fmt" = "%@ usado de %@";
+"typesafe_expires_fmt" = "expira em %@";
+"typesafe_more_credits_fmt" = "+%ld crédito(s)";
+"typesafe_cycle_closes_fmt" = "fecha em %ld dia(s)";
+"typesafe_tokens" = "Tokens";
+"typesafe_today" = "Hoje";
+"typesafe_week" = "7 dias";
+"typesafe_input" = "Entrada";
+"typesafe_output" = "Saída";
+"typesafe_requests" = "Chamadas";
+"typesafe_key_models_fmt" = "Chave de API válida · %@";
+"typesafe_plan_payg" = "Pré-pago";
+"typesafe_plan_free" = "Gratuito";
+"typesafe_login_window_title" = "Entrar na TypeSafe";
+"typesafe_login_save_failed_fmt" = "Não foi possível salvar a sessão da TypeSafe: %@";
+"typesafe_console_connect_hint" = "Entre no console da TypeSafe para ver gasto, saldo e tokens aqui.";
+"typesafe_console_sign_in" = "Entrar na TypeSafe…";
+"typesafe_console_sign_in_again" = "Entrar de novo…";
+"typesafe_console_expired" = "A sessão do console expirou — entre de novo.";
+"typesafe_console_unavailable" = "O console da TypeSafe não está respondendo agora.";
+"typesafe_console_unavailable_last" = "O console da TypeSafe não está respondendo — mostrando os últimos números lidos.";
+"typesafe_console_expires_fmt" = "A sessão do console expira em %@.";
+"settings_typesafe_console" = "Console";
+"settings_typesafe_console_connected" = "Conectado";
+"settings_typesafe_console_connected_fmt" = "Conectado até %@";
+"settings_typesafe_console_not_connected" = "Não conectado";
+"settings_typesafe_console_sign_out" = "Sair";
+"settings_typesafe_console_sign_out_help" = "Remove a sessão deste Mac. Para encerrá-la também na TypeSafe, saia pelo console.";
+"pin_unavailable_no_usage" = "Este provedor não informa uso para mostrar na barra de menus.";
+"settings_typesafe_footer" = "Desativado até você salvar uma chave de API (crie em console.typesafe.ai). A chave só lista modelos — nunca executa uma avaliação paga. Entre no console para ver gasto, saldo e tokens; o login é feito numa janela privada e só os cookies da sessão são guardados, cifrados.";

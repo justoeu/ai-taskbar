@@ -1,7 +1,8 @@
 # Project: ai-taskbar
 
 Native macOS menu-bar app monitoring LLM usage across Anthropic, OpenAI/Codex,
-OpenRouter, Z.AI, and Kimi/Moonshot. Swift Package Manager, SwiftUI
+OpenRouter, Z.AI, Kimi/Moonshot, Gemini, DeepSeek, xAI and TypeSafe (Jev).
+Swift Package Manager, SwiftUI
 `MenuBarExtra`, targets macOS 13+.
 
 ## Validation policy (MANDATORY)
@@ -448,6 +449,77 @@ price, so a model with no `fastModeMultiplier` bills a fast-tagged request at
 standard rates; do not give it one. As of 2026-09-28 no local transcript
 carried `"speed":"fast"` (all 109k were `"standard"`); the `"fast"` value
 follows the API's `speed: "fast"` request parameter.
+
+### TypeSafe (Jev) — no usage API, never run an evaluation
+
+Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
+
+- The public API has **one** free call the app may make: `GET /v1/models`
+  (Bearer key). It lists aliases only (`jev-latest`, `jev-preview`), never the
+  version they resolve to. **Never call `POST /v1/systemone`** from the app —
+  every evaluation bills input tokens and shows up in the user's own usage.
+  `TypeSafeProviderTests` fails if any request leaves `/v1/models`.
+- There is no usage/billing endpoint for API keys (`/v1/usage`, `/v1/billing`,
+  `/v1/credits` are 404, routed before auth). Spend, balance and tokens come
+  from the **console session** (SDD §16), read by `TypeSafeConsoleClient`:
+  - **Login is in-app, never copy-paste.** `TypeSafeLoginController` opens
+    `console.typesafe.ai/login` in a `WKWebView` with a `.nonPersistent()`
+    store (system browsers' cookies are never read) and, once the URL is a
+    console page outside `/login`, copies ONLY `session`, `session_id`,
+    `organization_id` (`TypeSafeConsoleSession.capture`), and only from
+    `console.typesafe.ai` / `.typesafe.ai` (not other subdomains). Values
+    must be printable ASCII without separators; a stored header is
+    re-validated on load, and an expiry of 0 means "none". Sign out removes
+    the local copy only (the console session lives on TypeSafe's side).
+    Never ask the user to copy a cookie or open DevTools/a terminal.
+  - Stored encrypted as `console_session` (+ `console_session_expires_at`)
+    via `ConfigLoader.applyChanges`, and handed to the provider through
+    `TypeSafeSessionStore` so a sign-in applies without a relaunch. Settings
+    diff does not touch these keys.
+  - **Honest client only:** the app's own User-Agent, cookie-less ephemeral
+    session, host `console.typesafe.ai` only, every redirect refused. Never
+    spoof a browser UA or reuse `cf_clearance`/`__cf_bm`; a Cloudflare
+    interstitial reads as "unavailable", not as "signed out".
+  - Billing = the page's own read-only server action (`getBillingOverviewResult`,
+    id discovered from same-origin chunks, cached 12 h, rediscovered once on
+    `x-nextjs-action-not-found`). A failed discovery is remembered for 1 h, and
+    one discovery is capped at 16 MiB of chunks / 30 s. Usage =
+    `GET /api/usage?granularity=hour|day`; billing and both usage reads run
+    concurrently. The 7-day window is `CostWindow`'s local days.
+  - **PII is never decoded:** only `spent`, `balance`, `purchased`,
+    `freeCreditsRemaining`, `plan`, `cycleLabel`, `resetsInDays` and per credit
+    `amount`/`remaining`/`expiresAt`/`reason`; per bucket only the period and
+    three counters. The cache holds the interpreted `TypeSafeSnapshot`. Money
+    comes only from `billing.spent`; never recompute it from tokens.
+  - 401/403/3xx/login page → `.expired` (no numbers); 408/429/5xx, transport,
+    format drift → `.unavailable` with the last good numbers from memory. A
+    console failure never fails the card — the key/models part still renders.
+  - **Analytics:** tokens/requests reach the Analytics card through
+    `VendorAnalyticsSummary.activity` (`AnalyticsAggregator.activity`), never
+    through `CostEstimate` — there is no dollar figure for the window. Day =
+    today's hours, Week = the 7 console days (UTC dates re-anchored at local
+    midnight), Month = nil (the console series is 7 days). Activity also
+    suppresses the "no recent usage" empty state.
+  - The card renders with empty `windows` (`VendorSectionView.rendersSnapshot`):
+    for a vendor that never reports utilization, empty windows are not schema
+    drift. Its sparkline and pin toggle are hidden.
+- 403 = missing key, 401 = invalid key; `TypeSafeProvider.normalize` folds an
+  `authentication_error` 403 into 401 so the card reads "key refused".
+- No utilization exists: `windows` is empty and `VendorId.reportsUtilization`
+  is false, so TypeSafe can't be pinned and is skipped by the rotating label.
+  Don't invent a percentage from balance or spend.
+- **Disabled by default, structurally** (`TypeSafeConfig.enabled = false`, the
+  snippet writes `enabled = false`). Saving a non-empty key in Settings enables
+  it in the same write (`SettingsViewModel.typeSafeAfterSave`); clearing the key
+  does not disable it.
+- Its status feed has one item per **update**. Like every RSS vendor it
+  needs a case in `RSSStatusSource.validateDescriptor` AND `identityToken`
+  (`"typesafe"`), or every real fetch is rejected — `TypeSafeStatusFetchTests`
+  runs the production fetch path, which the parse-only tests did not. `RSSStatusDescriptor.typeSafe`
+  sets `groupsUpdatesByIncidentLink` (newest update decides, updates after
+  `now` ignored) and `staleUnresolvedAfter = 48 h` (an incident whose resolving
+  update was never published — "API issues", 21/09 — would read as degraded
+  forever). Other RSS descriptors keep per-item behavior.
 
 ### Pinned menu-bar items — measured macOS 26 behavior, not assumptions
 

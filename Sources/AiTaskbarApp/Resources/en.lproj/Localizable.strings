@@ -78,11 +78,12 @@
 "notif_title_fmt" = "%@ — %@ at %ld%%";
 
 // About panel
-"about_description" = "Tracks LLM usage across Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM), and Kimi (Moonshot) — all from your menu bar.";
-"about_refresh_hint" = "Refresh cycle is configurable in config.toml";
-"about_macroscopic" = "Macroscopic % = highest utilization across enabled providers";
-"about_credentials" = "Credentials read from Keychain + ~/.codex/auth.json";
-"about_security" = "All cache + config files are user-only (0o600)";
+"about_description" = "Tracks usage, quotas and cost of your LLMs straight from the menu bar:";
+"about_refresh_hint" = "Refresh interval is configurable in Settings or config.toml";
+"about_macroscopic" = "The menu-bar % is the highest utilization among the cards you keep open";
+"about_credentials" = "Credentials: Claude Code's Keychain item, ~/.codex/auth.json and API keys encrypted in config.toml";
+"about_security" = "Config, cache and history files are user-only (0600)";
+"about_network" = "No telemetry: the app only talks to the providers' own APIs, consoles and status pages, and GitHub for updates";
 "about_built_with" = "Built with SwiftUI · MIT-licensed";
 // %@ = name extracted from the Developer ID certificate that signed the binary.
 "about_developer_fmt" = "Developed by %@";
@@ -118,8 +119,8 @@
 "models_columns_header" = "today / last 7 days";
 
 // About — cost data source
-"about_cost_source" = "Cost computed locally from ~/.claude/projects & ~/.codex/logs_2.sqlite";
-"about_cost_source_help" = "Anthropic cost is derived by parsing assistant messages in your local Claude Code session JSONL files (~/.claude/projects/*/*.jsonl), then multiplying input/output/cache tokens by the published Claude pricing.\n\nOpenAI cost reads total_usage_tokens from ~/.codex/logs_2.sqlite and applies the Codex model pricing.\n\nNothing is sent to any network — the calculation happens entirely on your Mac. Subscription plans (Claude Max, ChatGPT Pro) charge a flat fee; the number shown is what an API equivalent of the same usage would cost.";
+"about_cost_source" = "Cost is computed locally from ~/.claude/projects, ~/.codex and opencode";
+"about_cost_source_help" = "Anthropic: assistant messages in Claude Code's local JSONL files (~/.claude/projects), each response counted once, priced with Claude's public table (fast mode included).\n\nOpenAI: Codex session rollouts (~/.codex/sessions) and ~/.codex/logs_2.sqlite, priced with the Codex model table.\n\nopencode: its local database (~/.local/share/opencode/opencode.db); its tokens are shown under the vendor that billed them.\n\nNothing is sent over the network. Subscription plans (Claude Max, ChatGPT Pro) charge a flat fee; the figure is what the same usage would cost through the API.";
 
 // MARK: - Settings UI
 "settings" = "Settings";
@@ -380,3 +381,38 @@
 "pin_limit_screen_message" = "Not enough space in the menu bar to pin another model without covering application menus. Unpin another model first.";
 "pin_limit_count_message" = "You have reached the maximum limit of 5 pinned models in the menu bar. Unpin another model first.";
 "pin_limit_reached_ok" = "Understood";
+
+// TypeSafe (Jev)
+"typesafe_key_rejected" = "TypeSafe rejected the API key. Check it in Settings.";
+"typesafe_balance" = "Balance";
+"typesafe_spent_cycle" = "Spent this cycle";
+"typesafe_used_of_fmt" = "%@ used of %@";
+"typesafe_expires_fmt" = "expires %@";
+"typesafe_more_credits_fmt" = "+%ld more credit(s)";
+"typesafe_cycle_closes_fmt" = "closes in %ld day(s)";
+"typesafe_tokens" = "Tokens";
+"typesafe_today" = "Today";
+"typesafe_week" = "7 days";
+"typesafe_input" = "Input";
+"typesafe_output" = "Output";
+"typesafe_requests" = "Requests";
+"typesafe_key_models_fmt" = "API key valid · %@";
+"typesafe_plan_payg" = "Pay as you go";
+"typesafe_plan_free" = "Free";
+"typesafe_login_window_title" = "Sign in to TypeSafe";
+"typesafe_login_save_failed_fmt" = "Could not save the TypeSafe session: %@";
+"typesafe_console_connect_hint" = "Sign in to the TypeSafe console to see spend, balance and tokens here.";
+"typesafe_console_sign_in" = "Sign in to TypeSafe…";
+"typesafe_console_sign_in_again" = "Sign in again…";
+"typesafe_console_expired" = "Console session expired — sign in again.";
+"typesafe_console_unavailable" = "The TypeSafe console is not responding right now.";
+"typesafe_console_unavailable_last" = "The TypeSafe console is not responding — showing the last numbers read.";
+"typesafe_console_expires_fmt" = "Console session expires %@.";
+"settings_typesafe_console" = "Console";
+"settings_typesafe_console_connected" = "Connected";
+"settings_typesafe_console_connected_fmt" = "Connected until %@";
+"settings_typesafe_console_not_connected" = "Not connected";
+"settings_typesafe_console_sign_out" = "Sign out";
+"settings_typesafe_console_sign_out_help" = "Removes the session from this Mac. To end it on TypeSafe too, sign out in the console.";
+"pin_unavailable_no_usage" = "This provider reports no usage to show in the menu bar.";
+"settings_typesafe_footer" = "Off until you save an API key (create one at console.typesafe.ai). The key only lists models — it never runs a paid evaluation. Sign in to the console to add spend, balance and tokens; the login happens in a private window and only its session cookies are kept, encrypted.";

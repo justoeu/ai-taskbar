@@ -7,11 +7,15 @@ public final class AppEnvironment {
     public let http: HTTPClient
     public var configLoader: ConfigLoader
     public let config: AppConfig
+    /// The TypeSafe console session, shared by the provider and the in-app
+    /// login so a sign-in applies without a relaunch.
+    public let typeSafeSession: TypeSafeSessionStore
 
     public init(http: HTTPClient, configLoader: ConfigLoader, config: AppConfig) {
         self.http = http
         self.configLoader = configLoader
         self.config = config
+        self.typeSafeSession = TypeSafeSessionStore(TypeSafeConsoleSession(config: config.typesafe))
     }
 
     public static func live() -> AppEnvironment {
@@ -160,6 +164,15 @@ public final class AppEnvironment {
                 AppLog.lifecycle.error("xai init failed: \(String(describing: error), privacy: .public)")
             }
         }
+        if config.typesafe.enabled {
+            do {
+                let p = try TypeSafeProvider(config: config.typesafe, http: http, cacheTTL: ttl,
+                                             sessionStore: typeSafeSession)
+                out.append(p)
+            } catch {
+                AppLog.lifecycle.error("typesafe init failed: \(String(describing: error), privacy: .public)")
+            }
+        }
         return out
     }
 
@@ -176,6 +189,7 @@ public final class AppEnvironment {
         if config.gemini.enabled { ids.append(.gemini) }
         if config.deepseek.enabled { ids.append(.deepseek) }
         if config.xai.enabled { ids.append(.xai) }
+        if config.typesafe.enabled { ids.append(.typesafe) }
         return ids
     }
 
