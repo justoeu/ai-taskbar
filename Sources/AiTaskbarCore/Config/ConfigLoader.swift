@@ -129,6 +129,7 @@ public struct ConfigLoader: Sendable {
         try seal(&config.deepseek.apiKey)
         try seal(&config.xai.apiKey)
         try seal(&config.typesafe.apiKey)
+        try seal(&config.typesafe.consoleSession)
     }
 
     /// Surgical write path: applies a batch of changes to the existing file
@@ -251,6 +252,14 @@ public struct ConfigLoader: Sendable {
             } else {
                 AppLog.config.warning("typesafe.api_key encrypted but undecryptable — clearing")
                 config.typesafe.apiKey = nil
+            }
+        }
+        if let enc = config.typesafe.consoleSession, SecretBox.isEncrypted(enc) {
+            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
+                config.typesafe.consoleSession = pt
+            } else {
+                AppLog.config.warning("typesafe.console_session encrypted but undecryptable — clearing")
+                config.typesafe.consoleSession = nil
             }
         }
     }

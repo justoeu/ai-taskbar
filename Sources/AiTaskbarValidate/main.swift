@@ -356,6 +356,29 @@ section("TypeSafeConfig.validate + default") {
     expect(TypeSafeConfig.validate("https://api.typesafe.ai:8443") == nil, "rejects non-443 port")
 }
 
+section("TypeSafe console (phase 2) fixtures") {
+    let billing = try TypeSafeConsoleParsing.billing(fromRSC: Fixtures.typesafeBillingRSC200)
+    expect(billing.balanceUSD == 30 && billing.spentUSD == 0, "TypeSafe billing balance/spent decoded")
+    expect(billing.credits.count == 1, "TypeSafe live credit kept")
+    let encoded = String(decoding: try SharedCoders.encoder.encode(billing), as: UTF8.self)
+    expect(!encoded.contains("user@example.com") && !encoded.contains("Visa"),
+           "TypeSafe billing keeps no personal data")
+    let hour = try SharedCoders.decoder.decode(TypeSafeUsageResponse.self, from: Fixtures.data(Fixtures.typesafeUsageHour200))
+    expect(hour.buckets.first?.inputTokens == 1521, "TypeSafe usage bucket tokens decoded")
+    expect(TypeSafeConsoleParsing.actionID(inChunk: Fixtures.typesafeBillingChunkJS) != nil,
+           "TypeSafe billing action id found in chunk")
+    expect(TypeSafeConsoleParsing.isLoginLanding(Fixtures.typesafeLoginLandingHTML),
+           "TypeSafe login landing recognized")
+    expect(TypeSafeConsoleParsing.chunkURLs(inPage: Fixtures.typesafeBillingPageHTML)
+        .allSatisfy { $0.host == "console.typesafe.ai" }, "TypeSafe chunks stay on the console host")
+    let session = TypeSafeConsoleSession.capture([
+        (name: "session", value: "a", expiresAt: nil), (name: "session_id", value: "b", expiresAt: nil),
+        (name: "organization_id", value: "c", expiresAt: nil), (name: "cf_clearance", value: "x", expiresAt: nil),
+    ])
+    expect(session?.cookieHeader == "session=a; session_id=b; organization_id=c",
+           "TypeSafe session keeps only the three login cookies")
+}
+
 section("DeepSeekConfig.validate") {
     expect(DeepSeekConfig.validate("https://api.deepseek.com") != nil,
            "accepts https://api.deepseek.com")

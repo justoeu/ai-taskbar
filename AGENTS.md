@@ -460,8 +460,33 @@ Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
   every evaluation bills input tokens and shows up in the user's own usage.
   `TypeSafeProviderTests` fails if any request leaves `/v1/models`.
 - There is no usage/billing endpoint for API keys (`/v1/usage`, `/v1/billing`,
-  `/v1/credits` are 404, routed before auth). Console usage/billing exist but
-  need the user's console session; that is SDD phase 2, not in the app yet.
+  `/v1/credits` are 404, routed before auth). Spend, balance and tokens come
+  from the **console session** (SDD §16), read by `TypeSafeConsoleClient`:
+  - **Login is in-app, never copy-paste.** `TypeSafeLoginController` opens
+    `console.typesafe.ai/login` in a `WKWebView` with a `.nonPersistent()`
+    store (system browsers' cookies are never read) and, once the URL is a
+    console page outside `/login`, copies ONLY `session`, `session_id`,
+    `organization_id` (`TypeSafeConsoleSession.capture`). Never ask the user
+    to copy a cookie or open DevTools/a terminal.
+  - Stored encrypted as `console_session` (+ `console_session_expires_at`)
+    via `ConfigLoader.applyChanges`, and handed to the provider through
+    `TypeSafeSessionStore` so a sign-in applies without a relaunch. Settings
+    diff does not touch these keys.
+  - **Honest client only:** the app's own User-Agent, cookie-less ephemeral
+    session, host `console.typesafe.ai` only, every redirect refused. Never
+    spoof a browser UA or reuse `cf_clearance`/`__cf_bm`; a Cloudflare
+    interstitial reads as "unavailable", not as "signed out".
+  - Billing = the page's own read-only server action (`getBillingOverviewResult`,
+    id discovered from same-origin chunks, cached 12 h, rediscovered once on
+    `x-nextjs-action-not-found`). Usage = `GET /api/usage?granularity=hour|day`.
+  - **PII is never decoded:** only `spent`, `balance`, `purchased`,
+    `freeCreditsRemaining`, `plan`, `cycleLabel`, `resetsInDays` and per credit
+    `amount`/`remaining`/`expiresAt`/`reason`; per bucket only the period and
+    three counters. The cache holds the interpreted `TypeSafeSnapshot`. Money
+    comes only from `billing.spent`; never recompute it from tokens.
+  - 401/403/3xx/login page → `.expired` (no numbers); 408/429/5xx, transport,
+    format drift → `.unavailable` with the last good numbers from memory. A
+    console failure never fails the card — the key/models part still renders.
 - 403 = missing key, 401 = invalid key; `TypeSafeProvider.normalize` folds an
   `authentication_error` 403 into 401 so the card reads "key refused".
 - No utilization exists: `windows` is empty and `VendorId.reportsUtilization`

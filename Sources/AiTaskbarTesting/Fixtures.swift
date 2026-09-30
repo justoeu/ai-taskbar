@@ -1146,6 +1146,48 @@ public enum Fixtures {
     {"detail":"Not Found"}
     """#
 
+    /// TypeSafe console, billing server action (`POST /settings/billing`,
+    /// `text/x-component`). Captured 2026-09-29 and anonymized: the e-mail,
+    /// billing name, card and ids are placeholders, kept so tests prove the
+    /// personal fields are never decoded. The `0:` record precedes the result.
+    public static let typesafeBillingRSC200 = #"""
+0:{"a":"$@1","f":"","b":"build-0000"}
+1:{"ok":true,"data":{"billing":{"plan":"pay_as_you_go","spent":0,"freeCreditsRemaining":0,"balance":30,"purchased":30,"resetsInDays":2,"cycleLabel":"September 2026","paymentMethod":{"brand":"Visa","expMonth":1,"expYear":2030,"last4":"0000"},"autoPay":null,"credits":[{"id":"cred_00000000","amount":30,"remaining":30,"createdAt":"2026-09-29T20:03:11.935000Z","expiresAt":"2027-09-29T00:00:00Z","reason":"purchased_credits","payment":{"id":"redacted","invoiceUrl":"redacted","createdAt":"redacted","reason":"redacted","description":"redacted","amount":30,"status":"redacted"}}],"invoiceEmail":"user@example.com","billingAddress":{"name":"Example Org","line1":null,"line2":null,"city":null,"state":null,"postal_code":null,"country":"BR"},"billingAddressValid":true},"payments":[],"hasMore":false,"credits":"$1:data:billing:credits"}}
+"""#
+
+    /// `GET console.typesafe.ai/api/usage?granularity=hour`, anonymized
+    /// (key id and name are placeholders; `userEmail`/`userId` never decoded).
+    public static let typesafeUsageHour200 = #"""
+{"buckets":[{"day":"2026-09-29T22:00:00+00:00","apiKeyId":"key_00000000000000000000000000000000000","apiKeyName":"example-key","userId":null,"userEmail":"","requests":4,"inputTokens":1521,"outputTokens":163}]}
+"""#
+
+    /// `GET console.typesafe.ai/api/usage?granularity=day`, anonymized.
+    public static let typesafeUsageDay200 = #"""
+{"buckets":[{"day":"2026-09-29","apiKeyId":"key_00000000000000000000000000000000000","apiKeyName":"example-key","userId":null,"userEmail":"","requests":4,"inputTokens":1521,"outputTokens":163}]}
+"""#
+
+    /// Shape of `GET console.typesafe.ai/settings/billing` (synthetic, the
+    /// real page is ~100 KB): same-origin chunks, one off-host script.
+    public static let typesafeBillingPageHTML = #"""
+<!DOCTYPE html><html><head>
+<script src="/_next/static/chunks/webpack-0000.js" async=""></script>
+<script src="https://cdn.example.com/analytics.js"></script>
+<script src="/_next/static/chunks/app/(dashboard)/settings/billing/page-1111.js" async=""></script>
+<script src="/_next/static/chunks/webpack-0000.js" async=""></script>
+</head><body>self.__next_f.push([1,"[\"(dashboard)\",{\"children\":[\"settings\"]}]"])</body></html>
+"""#
+
+    /// A chunk that registers the billing server action (synthetic, same
+    /// pattern as the real bundle: id, then the export name within 150 chars).
+    public static let typesafeBillingChunkJS = #"""
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[1],{9:(e,t,r)=>{"use strict";let n=r(8),a=(0,r(7).createServerReference)("7f3a9c0e1b2d4f60718293a4b5c6d7e8f9012345ab",n.callServer,void 0,n.findSourceMapURL,"getBillingOverviewResult")}}]);
+"""#
+
+    /// What the console serves a signed-out session: the login route's RSC tree.
+    public static let typesafeLoginLandingHTML = #"""
+<!DOCTYPE html><html><body>self.__next_f.push([1,"2:[\"$\",\"$L3\",null,{\"tree\":[\"\",{\"children\":[\"(auth)\",{\"children\":[\"login\",{}]}]}]}]"])</body></html>
+"""#
+
     /// `https://status.typesafe.ai/feed.rss`.
     public static let typesafeStatusRSS200 = #"""
     <?xml version="1.0" encoding="UTF-8"?>

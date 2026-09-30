@@ -384,7 +384,6 @@
 // TypeSafe (Jev)
 "typesafe_key_ok_fmt" = "API key valid · %ld model(s)";
 "typesafe_updated_fmt" = "Model list updated %@";
-"typesafe_no_usage_api" = "TypeSafe has no usage API for API keys. Usage is shown in the TypeSafe console.";
 "typesafe_open_console" = "Open usage in the console";
 "typesafe_balance_fmt" = "Balance: %@";
 "typesafe_spent_fmt" = "Spent this cycle: %@";
@@ -394,5 +393,21 @@
 "typesafe_credit_fmt" = "Credit: %@ of %@, expires %@";
 "typesafe_more_credits_fmt" = "+%ld more credit(s)";
 "typesafe_key_rejected" = "TypeSafe rejected the API key. Check it in Settings.";
+"typesafe_login_window_title" = "Sign in to TypeSafe";
+"typesafe_login_save_failed_fmt" = "Could not save the TypeSafe session: %@";
+"typesafe_console_connect_hint" = "Sign in to the TypeSafe console to see spend, balance and tokens here.";
+"typesafe_console_sign_in" = "Sign in to TypeSafe…";
+"typesafe_console_sign_in_again" = "Sign in again…";
+"typesafe_console_expired" = "Console session expired — sign in again.";
+"typesafe_console_unavailable" = "The TypeSafe console is not responding right now.";
+"typesafe_console_unavailable_last" = "The TypeSafe console is not responding — showing the last numbers read.";
+"typesafe_console_expires_fmt" = "Console session expires %@.";
+"typesafe_usage_today_fmt" = "Today: %@ · %ld request(s)";
+"typesafe_usage_week_fmt" = "7 days: %@ · %ld request(s)";
+"settings_typesafe_console" = "Console";
+"settings_typesafe_console_connected" = "Connected";
+"settings_typesafe_console_connected_fmt" = "Connected until %@";
+"settings_typesafe_console_not_connected" = "Not connected";
+"settings_typesafe_console_sign_out" = "Sign out";
 "pin_unavailable_no_usage" = "This provider reports no usage to show in the menu bar.";
-"settings_typesafe_footer" = "Off until you save an API key (create one at console.typesafe.ai). The key only lists models — it never runs a paid evaluation.";
+"settings_typesafe_footer" = "Off until you save an API key (create one at console.typesafe.ai). The key only lists models — it never runs a paid evaluation. Sign in to the console to add spend, balance and tokens; the login happens in a private window and only its session cookies are kept, encrypted.";

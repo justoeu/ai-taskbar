@@ -171,14 +171,31 @@ struct SettingsViewModelDiffTests {
         #expect(Set(Self.rows.map(\.section)) == sections)
     }
 
+    /// Fields another writer owns: the in-app TypeSafe sign-in writes its
+    /// session itself (`TypeSafeLoginController`), so a Settings save built
+    /// from a draft loaded earlier must never overwrite or clear it.
+    static let notDiffed: [String: Set<String>] = [
+        "typesafe": ["consoleSession", "consoleSessionExpiresAt"],
+    ]
+
     @Test("every stored field of every section is covered by the rows")
     func every_field_covered() {
         for child in Mirror(reflecting: AppConfig()).children {
             guard let section = child.label else { continue }
             let fields = Set(Mirror(reflecting: child.value).children.compactMap(\.label))
+                .subtracting(Self.notDiffed[section] ?? [])
             let listed = Set(Self.rows.filter { $0.section == section }.map(\.field))
             #expect(listed == fields, "section [\(section)]")
         }
+    }
+
+    @Test("a Settings save never touches the TypeSafe console session")
+    func typesafe_session_not_diffed() {
+        var signedIn = AppConfig()
+        signedIn.typesafe.consoleSession = "session=a; session_id=b; organization_id=c"
+        signedIn.typesafe.consoleSessionExpiresAt = 1_790_000_000
+        #expect(SettingsViewModel.diff(from: AppConfig(), to: signedIn).isEmpty)
+        #expect(SettingsViewModel.diff(from: signedIn, to: AppConfig()).isEmpty)
     }
 
     @Test("saving a TypeSafe key enables it; clearing the key does not disable it")

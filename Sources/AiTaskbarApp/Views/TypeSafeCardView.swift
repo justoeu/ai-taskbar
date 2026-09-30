@@ -7,6 +7,7 @@ import AiTaskbarCore
 /// console's own billing numbers — never a percentage or a reset.
 struct TypeSafeCardView: View {
     let snapshot: TypeSafeSnapshot
+    @ObservedObject private var login = TypeSafeLoginController.shared
 
     static let consoleUsageURL = URL(string: "https://console.typesafe.ai/usage")!
 
@@ -50,19 +51,15 @@ struct TypeSafeCardView: View {
                     .foregroundStyle(.tertiary)
             }
 
+            consoleNotice
             if let billing = snapshot.billing {
                 billingRows(billing)
-            } else {
-                HStack(alignment: .top, spacing: 5) {
-                    Image(systemName: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(L10n.localizedString("typesafe_no_usage_api"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.top, 2)
+            }
+            if let usage = snapshot.usage {
+                usageRows(usage)
+            }
+            if let error = login.lastError {
+                notice(error, systemImage: "exclamationmark.triangle", tint: .orange)
             }
 
             Button {
@@ -73,6 +70,75 @@ struct TypeSafeCardView: View {
             }
             .buttonStyle(.link)
         }
+    }
+
+    /// What the console part can show right now, and the one action for it.
+    @ViewBuilder
+    private var consoleNotice: some View {
+        switch snapshot.console {
+        case .notConnected:
+            notice(L10n.localizedString("typesafe_console_connect_hint"), systemImage: "info.circle")
+            signInButton("typesafe_console_sign_in")
+        case .expired:
+            notice(L10n.localizedString("typesafe_console_expired"), systemImage: "exclamationmark.triangle",
+                   tint: .orange)
+            signInButton("typesafe_console_sign_in_again")
+        case .unavailable:
+            notice(L10n.localizedString(snapshot.billing == nil && snapshot.usage == nil
+                                        ? "typesafe_console_unavailable"
+                                        : "typesafe_console_unavailable_last"),
+                   systemImage: "icloud.slash")
+        case .connected(let expiresAt):
+            if let expiresAt, TypeSafeConsoleSession.isExpiringSoon(expiresAt: expiresAt, now: .now) {
+                notice(L10n.localizedString("typesafe_console_expires_fmt",
+                                            Self.dateFormatter.string(from: expiresAt)),
+                       systemImage: "clock.badge.exclamationmark", tint: .orange)
+                signInButton("typesafe_console_sign_in_again")
+            }
+        }
+    }
+
+    private func notice(_ text: String, systemImage: String, tint: Color = .secondary) -> some View {
+        HStack(alignment: .top, spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .foregroundStyle(tint)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 2)
+    }
+
+    private func signInButton(_ key: String) -> some View {
+        Button {
+            login.signIn()
+        } label: {
+            Label(L10n.localizedString(key), systemImage: "person.crop.circle.badge.checkmark")
+                .font(.caption)
+        }
+        .buttonStyle(.link)
+        .disabled(login.isSigningIn)
+    }
+
+    @ViewBuilder
+    private func usageRows(_ u: TypeSafeUsage) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(L10n.localizedString("typesafe_usage_today_fmt",
+                                       Self.tokens(u.todayInputTokens, u.todayOutputTokens), u.todayRequests),
+                  systemImage: "number")
+            Label(L10n.localizedString("typesafe_usage_week_fmt",
+                                       Self.tokens(u.weekInputTokens, u.weekOutputTokens), u.weekRequests),
+                  systemImage: "calendar")
+        }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+    }
+
+    /// "1.5k in · 163 out", same units as the cost footer.
+    static func tokens(_ input: Int, _ output: Int) -> String {
+        CostFooterView.compactTokens(ModelUsage(inputTokens: input, outputTokens: output))
     }
 
     @ViewBuilder

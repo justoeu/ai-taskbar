@@ -1,6 +1,6 @@
 # SDD — integração TypeSafe AI (Jev)
 
-**Status:** fase 1 e fase 2 validadas (spikes 16.6 e 16.6b); pronto para aprovação
+**Status:** fase 1 e fase 2 implementadas (2026-09-30). Fase 2: `TypeSafeLoginController`, `TypeSafeConsoleClient`, `TypeSafeConsoleWireTypes`, `TypeSafeConsoleSession`/`TypeSafeSessionStore`. 429 é tratado como indisponível sem nova tentativa imediata (o próximo ciclo tenta de novo), no lugar do `Retry-After` de até 10 s de §16.5
 **Data:** 2026-09-29
 **Branch prevista:** `feat/typesafe-jev`
 **Base:** `main` depois do merge da PR do deep-audit (os pontos de integração

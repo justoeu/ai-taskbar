@@ -471,6 +471,7 @@ public struct KimiConfig: Codable, Sendable, Equatable {
     }
 }
 
+
 public struct OpenRouterConfig: Codable, Sendable, Equatable {
     public var enabled: Bool = true
     public var apiKeyEnv: String = "OPENROUTER_API_KEY"
@@ -756,6 +757,13 @@ public struct TypeSafeConfig: Codable, Sendable, Equatable {
     /// Only `https://api.typesafe.ai` is accepted: a user-controlled URL would
     /// send the API key to whoever runs that host.
     public var baseURL: String = TypeSafeConfig.defaultBaseURL
+    /// Phase 2: the user's own console session — ONLY the three login cookies
+    /// (`session`, `session_id`, `organization_id`) as a `Cookie` header value,
+    /// written by the in-app login and encrypted at rest like `api_key`.
+    /// Never the Cloudflare clearance or analytics cookies.
+    public var consoleSession: String?
+    /// When those cookies expire (Unix seconds). Measured lifetime: 14 days.
+    public var consoleSessionExpiresAt: Double?
 
     public static let allowedHosts: Set<String> = ["api.typesafe.ai"]
     public static let defaultBaseURL = "https://api.typesafe.ai"
@@ -763,11 +771,15 @@ public struct TypeSafeConfig: Codable, Sendable, Equatable {
     public init(enabled: Bool = false,
                 apiKeyEnv: String = "TYPESAFE_API_KEY",
                 apiKey: String? = nil,
-                baseURL: String = defaultBaseURL) {
+                baseURL: String = defaultBaseURL,
+                consoleSession: String? = nil,
+                consoleSessionExpiresAt: Double? = nil) {
         self.enabled = enabled
         self.apiKeyEnv = apiKeyEnv
         self.apiKey = apiKey
         self.baseURL = Self.validate(baseURL) ?? Self.defaultBaseURL
+        self.consoleSession = consoleSession
+        self.consoleSessionExpiresAt = consoleSessionExpiresAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -782,6 +794,9 @@ public struct TypeSafeConfig: Codable, Sendable, Equatable {
             AppLog.config.warning("TypeSafeConfig.base_url \(raw, privacy: .public) rejected (must be https:// to an allowed TypeSafe host) — falling back to default")
             baseURL = Self.defaultBaseURL
         }
+        let session = try c.decodeIfPresent(String.self, forKey: .consoleSession)
+        consoleSession = (session?.isEmpty ?? true) ? nil : session
+        consoleSessionExpiresAt = c.flexibleDoubleIfPresent(forKey: .consoleSessionExpiresAt)
     }
 
     /// `raw` when it is `https://` to an allow-listed host, with no userinfo,
@@ -804,5 +819,7 @@ public struct TypeSafeConfig: Codable, Sendable, Equatable {
         case apiKeyEnv = "api_key_env"
         case apiKey = "api_key"
         case baseURL = "base_url"
+        case consoleSession = "console_session"
+        case consoleSessionExpiresAt = "console_session_expires_at"
     }
 }

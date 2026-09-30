@@ -729,6 +729,7 @@ public struct SettingsView: View {
             }
             .pickerStyle(.menu)
             .help(L10n.localizedString("settings_base_url_help"))
+            TypeSafeConsoleSettingsRow()
         }
     }
 
@@ -968,5 +969,47 @@ struct HelpTextField: View {
                 .frame(maxWidth: 220)
                 .font(.subheadline.monospaced())
         }
+    }
+}
+
+/// Console sign-in state for TypeSafe. Applies immediately (no Save): the
+/// login writes its own encrypted slot and the card refreshes.
+private struct TypeSafeConsoleSettingsRow: View {
+    @ObservedObject private var login = TypeSafeLoginController.shared
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = L10n.effectiveLocale
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+
+    var body: some View {
+        LabeledContent(L10n.localizedString("settings_typesafe_console")) {
+            HStack(spacing: 8) {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if login.session == nil {
+                    Button(L10n.localizedString("typesafe_console_sign_in")) { login.signIn() }
+                        .disabled(login.isSigningIn)
+                } else {
+                    Button(L10n.localizedString("settings_typesafe_console_sign_out")) { login.signOut() }
+                }
+            }
+        }
+    }
+
+    private var status: String {
+        guard let session = login.session else {
+            return L10n.localizedString("settings_typesafe_console_not_connected")
+        }
+        if session.isExpired(now: .now) { return L10n.localizedString("typesafe_console_expired") }
+        guard let expiresAt = session.expiresAt else {
+            return L10n.localizedString("settings_typesafe_console_connected")
+        }
+        return L10n.localizedString("settings_typesafe_console_connected_fmt",
+                                    Self.dateFormatter.string(from: expiresAt))
     }
 }

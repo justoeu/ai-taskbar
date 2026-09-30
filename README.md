@@ -104,7 +104,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 | **Kimi (Moonshot)** | API key | Add `api_key = "sk-..."` to `[kimi]` in config |
 | **DeepSeek** | API key | Add `api_key = "sk-..."` to `[deepseek]` in config |
 | **Gemini** | Antigravity CLI (`agy`) or API key | **Requires local CLI:** Run `agy` to authenticate (required for live quota/usage monitoring). Fallback: API key in `[gemini]` for heartbeat only. |
-| **Jev (TypeSafe)** | API key | Settings → Jev (TypeSafe) → paste the key (create it at [console.typesafe.ai](https://console.typesafe.ai)). Off until a key is saved. See [TypeSafe](#typesafe-jev--api-key-no-usage-api). |
+| **Jev (TypeSafe)** | API key | Settings → Jev (TypeSafe) → paste the key (create it at [console.typesafe.ai](https://console.typesafe.ai)). Off until a key is saved. Optional: **Sign in to TypeSafe…** on the card or in Settings adds spend, balance and tokens. See [TypeSafe](#typesafe-jev--api-key-plus-optional-console-sign-in). |
 | **xAI (Grok)** | Grok CLI (`~/.grok/auth.json`) or Management API | **Requires local CLI:** Run `grok login` (required for SuperGrok quota & balance). Fallback: Management key + `team_id` in `[xai]` for team API billing. |
 
 > ⚠️ **macOS env vars footgun:** GUI apps launched from Finder do **not** inherit your shell environment. If you set `OPENROUTER_API_KEY=...` in `~/.zshrc`, the menu bar app **won't see it**. Three workarounds:
@@ -297,12 +297,13 @@ AI Taskbar supports two modes for xAI:
 
 ---
 
-### TypeSafe (Jev) — API key, no usage API
+### TypeSafe (Jev) — API key, plus optional console sign-in
 
 [Jev](https://docs.typesafe.ai) is TypeSafe AI's "System One" model: it returns typed decisions (choice, score, yes/no probability), not chat text. The card is **off until you save an API key** in Settings → Jev (TypeSafe).
 
 - **What the card shows:** whether the key is accepted and which models it can call (`jev-latest`, `jev-preview`), from `GET /v1/models` — a call that costs nothing. The app never runs an evaluation (`/v1/systemone`), because every evaluation bills tokens and would appear in your own usage.
-- **No usage, tokens or spend yet:** TypeSafe's public API has no usage or billing endpoint for API keys; those numbers live in the [TypeSafe console](https://console.typesafe.ai/usage), and the card links there.
+- **Spend, balance and tokens need a console sign-in:** TypeSafe's public API has no usage or billing endpoint for API keys; those numbers live in the [TypeSafe console](https://console.typesafe.ai/usage). Click **Sign in to TypeSafe…** on the card (or Settings → Jev (TypeSafe) → Console): the console's own login page opens in a private in-app window, you sign in as usual (Google, e-mail), and the window closes by itself. The card then shows the cycle spend and balance the console reports, live credits with their expiry, and today's / last 7 days' tokens and requests. Nothing to copy, no browser or terminal involved.
+- **What is kept:** only the three login cookies (`session`, `session_id`, `organization_id`), encrypted in `config.toml` (0600), sent only to `console.typesafe.ai`, never logged or cached. The window uses a non-persistent store, so your browsers' cookies are never read. Personal data the console returns (e-mail, billing address, payment method, key names) is never decoded. The session lasts ~14 days; the card warns two days before and offers **Sign in again**. **Sign out** in Settings deletes it.
 - **No menu-bar percentage:** there is no quota to measure, so the provider can't be pinned and never moves the menu-bar gauge.
 - **Status:** incidents from [status.typesafe.ai](https://status.typesafe.ai). Its feed publishes one item per update, so updates are merged per incident, and an unresolved incident with no update for 48 h is treated as abandoned rather than ongoing.
 - **Pricing (for reference, not used by the app):** US$ 0.042 per million input tokens, output free ([docs.typesafe.ai/models](https://docs.typesafe.ai/models), checked 2026-09-29).
@@ -557,6 +558,8 @@ enabled = false                 # switched on when you save a key in Settings
 api_key_env = "TYPESAFE_API_KEY"
 # api_key = "..."               # stored encrypted
 # base_url = "https://api.typesafe.ai"   # only this host is accepted
+# console_session / console_session_expires_at are written by
+# "Sign in to TypeSafe…" (encrypted); do not edit them by hand.
 
 [xai]
 enabled = true

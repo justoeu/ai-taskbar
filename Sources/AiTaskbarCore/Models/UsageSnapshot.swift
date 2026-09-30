@@ -485,19 +485,31 @@ public struct TypeSafeSnapshot: Sendable, Equatable, Codable {
     public let models: [TypeSafeModel]
     /// Console billing, when a console session is connected.
     public let billing: TypeSafeBilling?
+    /// Console token usage, when a console session is connected.
+    public let usage: TypeSafeUsage?
+    /// Whether billing/usage come from a live console session.
+    public let console: TypeSafeConsoleState
 
     public var modelCount: Int { models.count }
     /// Newest `release_date` in the list — when the entries were last updated,
     /// not the model's public launch date.
     public var lastUpdated: Date? { models.compactMap(\.releaseDate).max() }
 
-    public init(planLabel: String? = nil, models: [TypeSafeModel] = [], billing: TypeSafeBilling? = nil) {
+    public init(planLabel: String? = nil, models: [TypeSafeModel] = [], billing: TypeSafeBilling? = nil,
+                usage: TypeSafeUsage? = nil, console: TypeSafeConsoleState = .notConnected) {
         self.planLabel = planLabel
         self.models = models
         self.billing = billing
+        self.usage = usage
+        self.console = console
     }
 
-    enum CodingKeys: String, CodingKey { case planLabel, models, billing }
+    /// Same models, new console data.
+    public func with(billing: TypeSafeBilling?, usage: TypeSafeUsage?, console: TypeSafeConsoleState) -> TypeSafeSnapshot {
+        TypeSafeSnapshot(planLabel: planLabel, models: models, billing: billing, usage: usage, console: console)
+    }
+
+    enum CodingKeys: String, CodingKey { case planLabel, models, billing, usage, console }
 
     // Tolerant decoder: a cached snapshot from an older build (no `billing`)
     // must still decode. Update `CodingKeys` and this initializer together.
@@ -506,6 +518,59 @@ public struct TypeSafeSnapshot: Sendable, Equatable, Codable {
         planLabel = try c.decodeIfPresent(String.self, forKey: .planLabel)
         models = try c.decodeIfPresent([TypeSafeModel].self, forKey: .models) ?? []
         billing = try c.decodeIfPresent(TypeSafeBilling.self, forKey: .billing)
+        usage = try c.decodeIfPresent(TypeSafeUsage.self, forKey: .usage)
+        console = (try? c.decodeIfPresent(TypeSafeConsoleState.self, forKey: .console)) ?? .notConnected
+    }
+}
+
+/// Where TypeSafe's console data stands.
+public enum TypeSafeConsoleState: Sendable, Equatable, Codable {
+    /// No console session saved: only the API-key data is shown.
+    case notConnected
+    /// Live console data; `expiresAt` is when the session cookies expire.
+    case connected(expiresAt: Date?)
+    /// The session was refused or is past its expiry: sign in again.
+    case expired
+    /// The console failed transiently; `billing`/`usage` are the last known.
+    case unavailable(since: Date)
+}
+
+/// Token usage from the console's `/api/usage`, aggregated — no key ids, key
+/// names, e-mails or user ids are kept.
+public struct TypeSafeUsage: Sendable, Equatable, Codable {
+    public let todayInputTokens: Int
+    public let todayOutputTokens: Int
+    public let todayRequests: Int
+    public let weekInputTokens: Int
+    public let weekOutputTokens: Int
+    public let weekRequests: Int
+    /// Hourly series (oldest first), for the sparkline.
+    public let hourly: [TypeSafeUsagePoint]
+
+    public init(todayInputTokens: Int, todayOutputTokens: Int, todayRequests: Int,
+                weekInputTokens: Int, weekOutputTokens: Int, weekRequests: Int,
+                hourly: [TypeSafeUsagePoint] = []) {
+        self.todayInputTokens = todayInputTokens
+        self.todayOutputTokens = todayOutputTokens
+        self.todayRequests = todayRequests
+        self.weekInputTokens = weekInputTokens
+        self.weekOutputTokens = weekOutputTokens
+        self.weekRequests = weekRequests
+        self.hourly = hourly
+    }
+}
+
+public struct TypeSafeUsagePoint: Sendable, Equatable, Codable {
+    public let start: Date
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let requests: Int
+
+    public init(start: Date, inputTokens: Int, outputTokens: Int, requests: Int) {
+        self.start = start
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.requests = requests
     }
 }
 
