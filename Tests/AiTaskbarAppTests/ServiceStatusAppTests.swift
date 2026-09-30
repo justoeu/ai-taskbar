@@ -465,19 +465,12 @@ struct ServiceStatusAppTests {
 
     @Test("every status localization key exists in English, Brazilian Portuguese and Spanish")
     func localization_completeness() throws {
-        var repositoryRoot = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { repositoryRoot.deleteLastPathComponent() }
-        let resources = repositoryRoot
-            .appendingPathComponent("Sources/AiTaskbarApp/Resources")
 
-        for language in ["en", "pt-BR", "es"] {
-            let file = resources
-                .appendingPathComponent("\(language).lproj")
-                .appendingPathComponent("Localizable.strings")
-            let contents = try String(contentsOf: file, encoding: .utf8)
+        for language in LocalizableStrings.languages {
+            let contents = try LocalizableStrings.contents(language)
             for key in ServiceStatusPresentation.localizationKeys {
                 expectTrue(
-                    contents.contains("\"\(key)\" = "),
+                    LocalizableStrings.defines(key, in: contents),
                     "missing \(key) in \(language)"
                 )
             }

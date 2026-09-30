@@ -7,10 +7,6 @@ import AiTaskbarCore
 struct UpdateBannerTests {
     @Test("Update banner localization keys exist in every supported language")
     func localization_keys_exist() throws {
-        var repositoryRoot = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { repositoryRoot.deleteLastPathComponent() }
-        let resources = repositoryRoot
-            .appendingPathComponent("Sources/AiTaskbarApp/Resources")
         let keys = [
             "update_banner_available_fmt",
             "update_banner_button",
@@ -20,33 +16,24 @@ struct UpdateBannerTests {
             "update_banner_dismiss"
         ]
 
-        for language in ["en", "pt-BR", "es"] {
-            let file = resources
-                .appendingPathComponent("\(language).lproj")
-                .appendingPathComponent("Localizable.strings")
-            let contents = try String(contentsOf: file, encoding: .utf8)
+        for language in LocalizableStrings.languages {
+            let contents = try LocalizableStrings.contents(language)
             for key in keys {
                 expectTrue(
-                    contents.contains("\"\(key)\" = "),
+                    LocalizableStrings.defines(key, in: contents),
                     "missing \(key) in \(language)"
                 )
             }
         }
     }
 
-    private static var repositoryRoot: URL {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
-        return root
-    }
+    private static var repositoryRoot: URL { LocalizableStrings.repositoryRoot }
 
     @Test("the empty-release-list message is localized in every supported language")
     func no_release_key_exists() throws {
-        for language in ["en", "pt-BR", "es"] {
-            let file = Self.repositoryRoot
-                .appendingPathComponent("Sources/AiTaskbarApp/Resources/\(language).lproj/Localizable.strings")
-            let contents = try String(contentsOf: file, encoding: .utf8)
-            expectTrue(contents.contains("\"updates_no_release\" = "), "missing in \(language)")
+        for language in LocalizableStrings.languages {
+            let contents = try LocalizableStrings.contents(language)
+            expectTrue(LocalizableStrings.defines("updates_no_release", in: contents), "missing in \(language)")
         }
     }
 

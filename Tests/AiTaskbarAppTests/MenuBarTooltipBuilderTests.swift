@@ -8,8 +8,6 @@ import Testing
 struct MenuBarTooltipBuilderTests {
     @Test("all tooltip localization keys exist across all languages")
     func localization_keys_exist() throws {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
         let keys = [
             "tooltip_daily_reset_fmt",
             "tooltip_weekly_reset_fmt",
@@ -17,11 +15,10 @@ struct MenuBarTooltipBuilderTests {
             "tooltip_weekly_reset_waiting",
             "time_less_than_minute"
         ]
-        for language in ["en", "pt-BR", "es"] {
-            let file = root.appendingPathComponent("Sources/AiTaskbarApp/Resources/\(language).lproj/Localizable.strings")
-            let contents = try String(contentsOf: file, encoding: .utf8)
+        for language in LocalizableStrings.languages {
+            let contents = try LocalizableStrings.contents(language)
             for key in keys {
-                expectTrue(contents.contains("\"\(key)\" = "), "missing \(key) in \(language)")
+                expectTrue(LocalizableStrings.defines(key, in: contents), "missing \(key) in \(language)")
             }
         }
     }

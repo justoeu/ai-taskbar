@@ -144,8 +144,9 @@ fi
 # 5_000_000_000 threshold printed 705032704. Integer conversions must carry a
 # 64-bit length modifier (`%ld`, `%1$ld`, `%lld`, `%qd`, `%zd`, `%jd`, `%td`);
 # a bare or `h`/`hh` `%d`/`%i`/`%u`/`%o`/`%x`/`%X` fails (TEST-MAE-012: the
-# unsigned conversions read 32 bits of the vararg just the same). If an argument is ever genuinely Int32,
-# widen it to Int at the call site rather than special-casing the gate.
+# unsigned conversions read 32 bits of the vararg just the same). If an
+# argument is ever genuinely Int32, widen it to Int at the call site rather
+# than special-casing the gate.
 # A key may be defined only once per file (BUG-MAE-016: "done" was defined
 # twice with two different pt-BR words, and which one showed depended on the
 # parser keeping the last duplicate).
@@ -232,18 +233,25 @@ fi
 # `\\u%04X` scalars, the quarantine timestamp), where 32 bits is the correct
 # width. Only the literal argument is inspected; formats looked up through
 # L10n are covered by check 3. Line comments are ignored.
+# Every literal-format entry point is scanned, not only `String(format:)`
+# (TEST-MAE-013): `NSString(format:)`, `String.init(format:)`, a bare
+# `.init(format:)` where the type is inferred, `String(format:locale:)` (the
+# literal is still the first argument) and `localizedStringWithFormat`, with
+# a one-line or a multi-line (`"""`) literal. A format held in a `let` is not
+# a literal at the call site and is not tracked; unsigned `%x` stays 32-bit on
+# purpose (see above).
 swift_dir="${SWIFT_FORMAT_DIR:-Sources}"
 if ! bad_inline=$(find "$swift_dir" -name '*.swift' -type f -print0 | sort -z \
     | xargs -0 perl -0777 -ne '
         my $src = $_;
         $src =~ s{^([ \t]*)//[^\n]*}{$1}mg;
-        while ($src =~ /\bString\s*\(\s*format\s*:\s*"((?:[^"\\\n]|\\.)*)"/g) {
-            my ($fmt, $at) = ($1, $-[0]);
+        while ($src =~ /(?:\b(?:NS)?String(?:\s*\.\s*init)?\s*\(\s*format\s*:|(?<![\w.])\.init\s*\(\s*format\s*:|\b(?:NS)?String\s*\.\s*localizedStringWithFormat\s*\()\s*(?:"""\n(.*?)"""|"((?:[^"\\\n]|\\.)*)")/gs) {
+            my ($fmt, $at) = ($1 // $2, $-[0]);
             my $line = 1 + (substr($src, 0, $at) =~ tr/\n//);
             while ($fmt =~ /%(?:\d+\$)?[-+#0\x27]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(hh|h|ll|l|q|z|t|j|L)?([diouxXeEfFgGaAcCsSp@%])/g) {
                 my ($spec, $len, $conv) = ($&, $1 // "", $2);
                 if ($conv =~ /^[di]$/ && $len !~ /^(?:l|ll|q|z|t|j)$/) {
-                    print "$ARGV:$line: String(format: \"$fmt\") uses $spec — use an l-modified form (%l$conv) for a Swift Int\n";
+                    print "$ARGV:$line: format literal \"$fmt\" uses $spec — use an l-modified form (%l$conv) for a Swift Int\n";
                 }
             }
         }
