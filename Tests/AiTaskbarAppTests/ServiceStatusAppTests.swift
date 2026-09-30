@@ -477,3 +477,22 @@ struct ServiceStatusAppTests {
         }
     }
 }
+
+@Suite("Service status legend")
+struct ServiceStatusLegendTests {
+    @Test("one entry per colour the rows can show, in severity order")
+    func one_per_tone() {
+        let tones = ServiceStatusPresentation.legend.map { ServiceStatusPresentation.tone(for: $0.level) }
+        #expect(tones == [.positive, .maintenance, .warning, .danger, .secondary])
+        let all: [ServiceStatusLevel] = [.operational, .maintenance, .degradedPerformance,
+                                         .partialOutage, .majorOutage, .unknown]
+        #expect(Set(all.map { ServiceStatusPresentation.tone(for: $0) }) == Set(tones))
+    }
+
+    @Test("every legend label is a listed localization key")
+    func labels_listed() {
+        for entry in ServiceStatusPresentation.legend {
+            #expect(ServiceStatusPresentation.localizationKeys.contains(entry.key), "\(entry.key)")
+        }
+    }
+}

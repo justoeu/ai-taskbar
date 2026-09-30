@@ -75,6 +75,51 @@ public final class ServiceStatusStore: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var lastCompletedRefreshAt: Date?
 
+    static let syncOrderDefaultsKey = "status_sync_vendor_order"
+    static let statusOrderDefaultsKey = "status_vendor_order"
+    private let defaults: UserDefaults
+
+    /// When true (default), the status panel follows the home screen's
+    /// vendor order — same switch the Analytics screen has.
+    @Published public var syncVendorOrder: Bool {
+        didSet { defaults.set(syncVendorOrder, forKey: Self.syncOrderDefaultsKey) }
+    }
+
+    /// Independent order used when `syncVendorOrder` is false.
+    @Published public private(set) var statusOrder: [VendorId] {
+        didSet { defaults.set(statusOrder.map(\.rawValue), forKey: Self.statusOrderDefaultsKey) }
+    }
+
+    /// Rows in display order: the home screen's (`homeOrder`) when synced,
+    /// otherwise the panel's own, with unknown rows appended in home order.
+    public func orderedRows(homeOrder: [VendorId]) -> [Row] {
+        let base = syncVendorOrder ? homeOrder : statusOrderAligned(with: homeOrder)
+        let rank = Dictionary(base.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        return rows.enumerated().sorted { a, b in
+            let ra = rank[a.element.vendorId] ?? Int.max
+            let rb = rank[b.element.vendorId] ?? Int.max
+            return ra != rb ? ra < rb : a.offset < b.offset
+        }.map(\.element)
+    }
+
+    private func statusOrderAligned(with homeOrder: [VendorId]) -> [VendorId] {
+        var out = statusOrder
+        for v in homeOrder + rows.map(\.vendorId) where !out.contains(v) { out.append(v) }
+        return out
+    }
+
+    public func moveVendor(_ id: VendorId, up: Bool, homeOrder: [VendorId]) {
+        let visible = orderedRows(homeOrder: homeOrder).map(\.vendorId)
+        let next = VendorOrder.moved(id, up: up, order: statusOrder, visible: visible)
+        if next != statusOrder { statusOrder = next }   // a no-op press writes nothing
+    }
+
+    /// Adopts the home order as the panel's own, so turning sync off starts
+    /// from what the user was looking at.
+    public func adoptHomeOrder(_ homeOrder: [VendorId]) {
+        statusOrder = orderedRows(homeOrder: homeOrder).map(\.vendorId)
+    }
+
     private let providersById: [VendorId: any ServiceStatusProvider]
     public var hasAutomaticSources: Bool { !providersById.isEmpty }
     private var epoch = 0
@@ -82,8 +127,13 @@ public final class ServiceStatusStore: ObservableObject {
 
     public init(
         vendorIds: [VendorId],
-        providers: [any ServiceStatusProvider]
+        providers: [any ServiceStatusProvider],
+        defaults: UserDefaults = .standard
     ) {
+        self.defaults = defaults
+        self.syncVendorOrder = defaults.object(forKey: Self.syncOrderDefaultsKey) as? Bool ?? true
+        self.statusOrder = (defaults.stringArray(forKey: Self.statusOrderDefaultsKey) ?? [])
+            .compactMap(VendorId.init(rawValue:))
         var seen = Set<VendorId>()
         let orderedIds = vendorIds.filter { vendorId in
             vendorId.statusPageURL != nil && seen.insert(vendorId).inserted

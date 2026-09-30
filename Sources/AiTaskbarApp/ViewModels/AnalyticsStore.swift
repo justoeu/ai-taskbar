@@ -296,22 +296,16 @@ public final class AnalyticsStore: ObservableObject {
     }
 
     public func moveVendorUp(_ id: VendorId, enabled: [VendorId]) {
-        var current = analyticsOrder.filter { enabled.contains($0) }
-        for e in enabled where !current.contains(e) {
-            current.append(e)
-        }
-        guard let idx = current.firstIndex(of: id), idx > 0 else { return }
-        current.swapAt(idx, idx - 1)
-        self.analyticsOrder = current
+        move(id, up: true, enabled: enabled)
     }
 
     public func moveVendorDown(_ id: VendorId, enabled: [VendorId]) {
-        var current = analyticsOrder.filter { enabled.contains($0) }
-        for e in enabled where !current.contains(e) {
-            current.append(e)
-        }
-        guard let idx = current.firstIndex(of: id), idx < current.count - 1 else { return }
-        current.swapAt(idx, idx + 1)
-        self.analyticsOrder = current
+        move(id, up: false, enabled: enabled)
+    }
+
+    /// A no-op press (either end) writes nothing to UserDefaults.
+    private func move(_ id: VendorId, up: Bool, enabled: [VendorId]) {
+        let next = VendorOrder.moved(id, up: up, order: analyticsOrder, visible: enabled)
+        if next != analyticsOrder { analyticsOrder = next }
     }
 }

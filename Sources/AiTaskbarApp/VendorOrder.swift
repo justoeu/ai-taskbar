@@ -25,6 +25,24 @@ public enum VendorOrder {
         defaults.removeObject(forKey: defaultsKey)
     }
 
+    /// One ↑/↓ step within an independent ordering (Analytics, Status).
+    /// `order` is the persisted list, `visible` the vendors currently shown in
+    /// display order; visible vendors missing from `order` are appended in
+    /// their visible order. The step swaps `id` with its visible neighbour;
+    /// hidden vendors keep their slots, so a re-enabled vendor comes back
+    /// where it was. A step that moves nothing (either end, unknown id)
+    /// returns `order` unchanged, so callers can skip the write.
+    public static func moved(_ id: VendorId, up: Bool, order: [VendorId], visible: [VendorId]) -> [VendorId] {
+        var full = order
+        for v in visible where !full.contains(v) { full.append(v) }
+        let slots = full.indices.filter { visible.contains(full[$0]) }
+        guard let k = slots.firstIndex(where: { full[$0] == id }) else { return order }
+        let target = up ? k - 1 : k + 1
+        guard slots.indices.contains(target) else { return order }
+        full.swapAt(slots[k], slots[target])
+        return full
+    }
+
     /// Pure ordering of currently available vendor IDs.
     public static func ordered(
         entries: [(id: VendorId, unconfigured: Bool)],

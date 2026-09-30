@@ -19,12 +19,22 @@ public struct PopoverContentView: View {
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @EnvironmentObject var updates: UpdateChecker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the opacity dissolve when the popover opens.
+    @State private var hasAppeared = false
     @State private var overlay: Overlay?
     @FocusState private var statusButtonFocused: Bool
     public var onQuit: () -> Void
 
     public init(onQuit: @escaping () -> Void = {}) {
         self.onQuit = onQuit
+    }
+
+    static let scrollTopID = "popover-scroll-top"
+    static let appearDuration: TimeInterval = 0.12
+
+    /// The first LLM card, or the top anchor when the list is empty.
+    private var firstCardID: AnyHashable {
+        store.sortedVendors.first.map { AnyHashable($0.vendorId) } ?? AnyHashable(Self.scrollTopID)
     }
 
     public var body: some View {
@@ -49,6 +59,8 @@ public struct PopoverContentView: View {
                 }
                 ScrollViewReader { proxy in
                     ScrollView {
+                        // Fallback anchor when the list is empty.
+                        Color.clear.frame(height: 0).id(Self.scrollTopID)
                         VStack(alignment: .leading, spacing: 12) {
                             if store.sortedVendors.isEmpty {
                                 emptyState
@@ -86,28 +98,55 @@ public struct PopoverContentView: View {
                     }
                     .onAppear {
                         store.isPopoverPresented = true
-                        if let focused = store.consumeFocusedVendor() {
-                            overlay = nil
-                            if let vm = store.vendorVM(focused), !vm.isExpanded {
-                                vm.isExpanded = true
-                            }
-                            if focused != store.sortedVendors.first?.vendorId {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        proxy.scrollTo(focused, anchor: .top)
-                                    }
+                        hasAppeared = false
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: Self.appearDuration)) {
+                            hasAppeared = true
+                        }
+                        guard let focused = store.consumeFocusedVendor() else {
+                            // Opened from the main icon: always anchor on the
+                            // FIRST LLM of the list, never where the last
+                            // focused LLM left it. No animation — the window
+                            // is fading in already. Re-applied on the next
+                            // runloop turn, after SwiftUI has laid out.
+                            let first = firstCardID
+                            proxy.scrollTo(first, anchor: .top)
+                            // Re-applied after layout settles: a real click can
+                            // show the window before the ScrollView is sized.
+                            for delay in [0.05, 0.15] {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                                    proxy.scrollTo(first, anchor: .top)
                                 }
+                            }
+                            return
+                        }
+                        overlay = nil
+                        if let vm = store.vendorVM(focused), !vm.isExpanded {
+                            vm.isExpanded = true
+                        }
+                        let target = AnyHashable(focused)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                proxy.scrollTo(target, anchor: .top)
                             }
                         }
                     }
                     .onDisappear {
                         store.isPopoverPresented = false
+                        // Reset while hidden, so the next open from the main
+                        // icon already starts at the first LLM even if the
+                        // scroll on appear loses a race with layout.
+                        proxy.scrollTo(firstCardID, anchor: .top)
+                        hasAppeared = false
                         PinnedStatusItemManager.shared.clearLastFocusedPinnedVendor()
                     }
                 }
                 Divider()
                 footerBar
             }
+            // Opacity-only dissolve on open: nothing moves, so no layout pass
+            // competes with the animation. A window-level fade (with a delayed
+            // close) and a small drop were both tried and read as stuttering.
+            .opacity(hasAppeared || reduceMotion ? 1 : 0)
 
             .allowsHitTesting(overlay == nil && store.pinLimitAlert == nil)
             .disabled(overlay != nil || store.pinLimitAlert != nil)
@@ -278,7 +317,7 @@ public struct PopoverContentView: View {
                     analyticsStore.targetVendor = nil
                     overlay = .analytics
                 } label: {
-                    Image(systemName: "chart.pie.fill")
+                    Image(systemName: AnalyticsView.headerSymbol)
                 }
                 .buttonStyle(.borderless)
                 .help(L10n.localizedString("analytics_toolbar_button"))

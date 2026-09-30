@@ -217,7 +217,6 @@
 "service_status_minus_six_hours" = "−6h";
 "service_status_now" = "now";
 "service_status_refresh" = "Refresh service status";
-"service_status_close" = "Close service status";
 "service_status_loading" = "Refreshing public status…";
 "service_status_never_updated" = "Waiting for first status refresh…";
 "service_status_no_automatic_sources" = "No automatic status sources available";
@@ -253,7 +252,8 @@
 "service_status_open_incident" = "Open incident";
 "service_status_open_page" = "Open official status page";
 "service_status_timeline_ax_fmt" = "Six-hour timeline: %@";
-"service_status_legend" = "Green operational · Purple maintenance · Orange degraded · Red outage · Gray unknown";
+"service_status_legend_degraded" = "Degraded";
+"service_status_legend_outage" = "Outage";
 "service_status_scope_note" = "Official aggregate status may differ by account, product, or region.";
 
 "keychain_auth_not_persistent" = "macOS allowed access, but silent verification failed. Try again and choose Always Allow if offered. Managed Keychain policies may prevent persistent access.";
