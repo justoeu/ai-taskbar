@@ -3,6 +3,7 @@ import AiTaskbarCore
 
 public struct StatusPanelView: View {
     @EnvironmentObject private var store: ServiceStatusStore
+    @EnvironmentObject private var usageStore: UsageStore
     @FocusState private var closeButtonFocused: Bool
     public let onClose: () -> Void
 
@@ -14,14 +15,23 @@ public struct StatusPanelView: View {
         VStack(spacing: 0) {
             header
             Divider()
+            VendorOrderSyncBar(isOn: $store.syncVendorOrder)
+            Divider()
             ScrollView {
+                let rows = store.orderedRows(homeOrder: homeOrder)
                 LazyVStack(spacing: 10) {
-                    ForEach(store.rows) { row in
-                        StatusVendorRowView(row: row)
-                            .environmentObject(store)
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        StatusVendorRowView(
+                            row: row,
+                            canMoveUp: index > 0,
+                            canMoveDown: index < rows.count - 1,
+                            onMove: { up in move(row.vendorId, up: up) }
+                        )
+                        .environmentObject(store)
                     }
                 }
                 .padding(12)
+                .animation(.easeInOut(duration: 0.15), value: rows.map(\.id))
             }
             Divider()
             footer
@@ -34,7 +44,22 @@ public struct StatusPanelView: View {
         )
         .focusSection()
         .onAppear { closeButtonFocused = true }
+        .onChange(of: store.syncVendorOrder) { synced in
+            // Turning sync off starts the independent order from the home one.
+            if !synced { store.adoptHomeOrder(homeOrder) }
+        }
         .onExitCommand(perform: onClose)
+    }
+
+    private var homeOrder: [VendorId] { usageStore.sortedVendors.map(\.vendorId) }
+
+    /// Synced: moving here reorders the home screen too (same as Analytics).
+    private func move(_ id: VendorId, up: Bool) {
+        if store.syncVendorOrder {
+            up ? usageStore.moveVendorUp(id) : usageStore.moveVendorDown(id)
+        } else {
+            store.moveVendor(id, up: up, homeOrder: homeOrder)
+        }
     }
 
     private var header: some View {
@@ -133,12 +158,37 @@ public struct StatusPanelView: View {
 private struct StatusVendorRowView: View {
     @EnvironmentObject private var store: ServiceStatusStore
     let row: ServiceStatusStore.Row
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onMove: (_ up: Bool) -> Void
     @State private var isExpanded: Bool
 
-    init(row: ServiceStatusStore.Row) {
+    init(row: ServiceStatusStore.Row, canMoveUp: Bool, canMoveDown: Bool,
+         onMove: @escaping (_ up: Bool) -> Void) {
         self.row = row
+        self.canMoveUp = canMoveUp
+        self.canMoveDown = canMoveDown
+        self.onMove = onMove
         let level = row.state.displayStatus?.level ?? .unknown
         _isExpanded = State(initialValue: level != .operational)
+    }
+
+    /// Same ↑/↓ affordance as the home and Analytics cards; outside the
+    /// expand button so the two never nest.
+    private var reorderButtons: some View {
+        HStack(spacing: 2) {
+            Button { onMove(true) } label: { Image(systemName: "chevron.up.circle") }
+                .disabled(!canMoveUp)
+                .help(L10n.localizedString("move_vendor_up_help"))
+                .accessibilityLabel(L10n.localizedString("move_vendor_up_help"))
+            Button { onMove(false) } label: { Image(systemName: "chevron.down.circle") }
+                .disabled(!canMoveDown)
+                .help(L10n.localizedString("move_vendor_down_help"))
+                .accessibilityLabel(L10n.localizedString("move_vendor_down_help"))
+        }
+        .buttonStyle(.borderless)
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     private var status: VendorServiceStatus {
@@ -154,6 +204,7 @@ private struct StatusVendorRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
             Button {
                 isExpanded.toggle()
             } label: {
@@ -186,6 +237,8 @@ private struct StatusVendorRowView: View {
             .accessibilityHint(L10n.localizedString(
                 isExpanded ? "service_status_collapse" : "service_status_expand"
             ))
+            reorderButtons
+            }
 
             stateNotice
             StatusTimelineView(status: status, now: .now)

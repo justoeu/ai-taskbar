@@ -25,6 +25,20 @@ public enum VendorOrder {
         defaults.removeObject(forKey: defaultsKey)
     }
 
+    /// One ↑/↓ step within an independent ordering (Analytics, Status).
+    /// `order` is the persisted list, `visible` the vendors currently shown in
+    /// display order; visible vendors missing from `order` are appended in
+    /// their visible order first. No-op at either end.
+    public static func moved(_ id: VendorId, up: Bool, order: [VendorId], visible: [VendorId]) -> [VendorId] {
+        var current = order.filter { visible.contains($0) }
+        for v in visible where !current.contains(v) { current.append(v) }
+        guard let idx = current.firstIndex(of: id) else { return current }
+        let target = up ? idx - 1 : idx + 1
+        guard current.indices.contains(target) else { return current }
+        current.swapAt(idx, target)
+        return current
+    }
+
     /// Pure ordering of currently available vendor IDs.
     public static func ordered(
         entries: [(id: VendorId, unconfigured: Bool)],

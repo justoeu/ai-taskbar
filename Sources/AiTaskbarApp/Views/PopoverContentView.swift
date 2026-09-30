@@ -19,6 +19,8 @@ public struct PopoverContentView: View {
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @EnvironmentObject var updates: UpdateChecker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the small drop-in that accompanies the window fade.
+    @State private var hasAppeared = false
     @State private var overlay: Overlay?
     @FocusState private var statusButtonFocused: Bool
     public var onQuit: () -> Void
@@ -26,6 +28,9 @@ public struct PopoverContentView: View {
     public init(onQuit: @escaping () -> Void = {}) {
         self.onQuit = onQuit
     }
+
+    static let scrollTopID = "popover-scroll-top"
+    static let appearDuration: TimeInterval = 0.15
 
     public var body: some View {
         ZStack {
@@ -49,6 +54,8 @@ public struct PopoverContentView: View {
                 }
                 ScrollViewReader { proxy in
                     ScrollView {
+                        // Fallback anchor when the list is empty.
+                        Color.clear.frame(height: 0).id(Self.scrollTopID)
                         VStack(alignment: .leading, spacing: 12) {
                             if store.sortedVendors.isEmpty {
                                 emptyState
@@ -86,28 +93,47 @@ public struct PopoverContentView: View {
                     }
                     .onAppear {
                         store.isPopoverPresented = true
-                        if let focused = store.consumeFocusedVendor() {
-                            overlay = nil
-                            if let vm = store.vendorVM(focused), !vm.isExpanded {
-                                vm.isExpanded = true
-                            }
-                            if focused != store.sortedVendors.first?.vendorId {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        proxy.scrollTo(focused, anchor: .top)
-                                    }
-                                }
+                        hasAppeared = false
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: Self.appearDuration)) {
+                            hasAppeared = true
+                        }
+                        guard let focused = store.consumeFocusedVendor() else {
+                            // Opened from the main icon: always anchor on the
+                            // FIRST LLM of the list, never where the last
+                            // focused LLM left it. No animation — the window
+                            // is fading in already. Re-applied on the next
+                            // runloop turn, after SwiftUI has laid out.
+                            let first: AnyHashable = store.sortedVendors.first.map { AnyHashable($0.vendorId) }
+                                ?? AnyHashable(Self.scrollTopID)
+                            proxy.scrollTo(first, anchor: .top)
+                            DispatchQueue.main.async { proxy.scrollTo(first, anchor: .top) }
+                            return
+                        }
+                        overlay = nil
+                        if let vm = store.vendorVM(focused), !vm.isExpanded {
+                            vm.isExpanded = true
+                        }
+                        let target = AnyHashable(focused)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                proxy.scrollTo(target, anchor: .top)
                             }
                         }
                     }
                     .onDisappear {
                         store.isPopoverPresented = false
+                        hasAppeared = false
                         PinnedStatusItemManager.shared.clearLastFocusedPinnedVendor()
                     }
                 }
                 Divider()
                 footerBar
             }
+            // Content-only fade + small drop on open. The window itself is
+            // not animated: fading the whole panel (and delaying the close to
+            // fade it out) read as the popover stalling.
+            .opacity(hasAppeared || reduceMotion ? 1 : 0)
+            .offset(y: hasAppeared || reduceMotion ? 0 : -4)
 
             .allowsHitTesting(overlay == nil && store.pinLimitAlert == nil)
             .disabled(overlay != nil || store.pinLimitAlert != nil)

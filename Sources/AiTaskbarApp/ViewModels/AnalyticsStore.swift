@@ -296,22 +296,10 @@ public final class AnalyticsStore: ObservableObject {
     }
 
     public func moveVendorUp(_ id: VendorId, enabled: [VendorId]) {
-        var current = analyticsOrder.filter { enabled.contains($0) }
-        for e in enabled where !current.contains(e) {
-            current.append(e)
-        }
-        guard let idx = current.firstIndex(of: id), idx > 0 else { return }
-        current.swapAt(idx, idx - 1)
-        self.analyticsOrder = current
+        analyticsOrder = VendorOrder.moved(id, up: true, order: analyticsOrder, visible: enabled)
     }
 
     public func moveVendorDown(_ id: VendorId, enabled: [VendorId]) {
-        var current = analyticsOrder.filter { enabled.contains($0) }
-        for e in enabled where !current.contains(e) {
-            current.append(e)
-        }
-        guard let idx = current.firstIndex(of: id), idx < current.count - 1 else { return }
-        current.swapAt(idx, idx + 1)
-        self.analyticsOrder = current
+        analyticsOrder = VendorOrder.moved(id, up: false, order: analyticsOrder, visible: enabled)
     }
 }

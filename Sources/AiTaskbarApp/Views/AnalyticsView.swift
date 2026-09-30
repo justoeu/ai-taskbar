@@ -10,7 +10,6 @@ public struct AnalyticsView: View {
 
     @State private var hoveredUsageVendor: String? = nil
     @State private var hoveredCostVendor: String? = nil
-    @State private var showSyncHelp: Bool = false
 
     public init(onClose: @escaping () -> Void) {
         self.onClose = onClose
@@ -65,44 +64,7 @@ public struct AnalyticsView: View {
     }()
 
     private var syncOrderBar: some View {
-        HStack(spacing: 8) {
-            Toggle(isOn: $analyticsStore.syncVendorOrder) {
-                Text(L10n.localizedString("sync_vendor_order"))
-                    .font(.callout.weight(.medium))
-            }
-            .toggleStyle(.checkbox)
-
-            Button {
-                showSyncHelp.toggle()
-            } label: {
-                Image(systemName: "questionmark.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help(L10n.localizedString("sync_vendor_order_help"))
-            .popover(isPresented: $showSyncHelp, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .foregroundStyle(Color.accentColor)
-                        Text(L10n.localizedString("sync_vendor_order"))
-                            .font(.headline)
-                    }
-                    Text(L10n.localizedString("sync_vendor_order_help"))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(14)
-                .frame(width: 280)
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.03))
+        VendorOrderSyncBar(isOn: $analyticsStore.syncVendorOrder)
     }
 
     private var header: some View {
