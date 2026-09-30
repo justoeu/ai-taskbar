@@ -56,11 +56,15 @@ public struct VendorSectionView: View {
             header(state: state)
             if effectiveExpanded {
                 content(state: state)
-                if !vm.history.isEmpty {
+                // A vendor with no utilization (TypeSafe) has no % to plot or
+                // pin: a flat 0% line and a disabled toggle only mislead.
+                if vm.vendorId.reportsUtilization, !vm.history.isEmpty {
                     SparklineView(samples: vm.history, thresholds: thresholds)
                 }
                 CostFooterView(vendorId: vm.vendorId, cost: cost)
-                pinToMenuBarSlice
+                if vm.vendorId.reportsUtilization {
+                    pinToMenuBarSlice
+                }
                 if onOpenAnalytics != nil {
                     moreDetailsButton
                 }
@@ -332,7 +336,7 @@ public struct VendorSectionView: View {
                     reloginAffordance
                 }
                 if let snap = state.outcome?.snapshot {
-                    if snap.windows.isEmpty {
+                    if !Self.rendersSnapshot(snap, vendorId: vm.vendorId) {
                         L10n.text("no_usage_windows")
                             .font(.subheadline)
                             .foregroundStyle(.orange)
@@ -364,7 +368,7 @@ public struct VendorSectionView: View {
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
-                if let snap = fallback?.snapshot, !snap.windows.isEmpty {
+                if let snap = fallback?.snapshot, Self.rendersSnapshot(snap, vendorId: vm.vendorId) {
                     Divider()
                     L10n.text("showing_cached_data")
                         .font(.subheadline)
@@ -545,6 +549,13 @@ public struct VendorSectionView: View {
         }
         // If the view goes away, cancel the reset (harmless either way).
         _ = pendingReset
+    }
+
+    /// Whether a snapshot has something to draw. Empty windows mean schema
+    /// drift for a vendor that reports utilization; for one that never does
+    /// (TypeSafe), its whole card lives in `extras`, so it always renders.
+    nonisolated static func rendersSnapshot(_ snap: VendorSnapshot, vendorId: VendorId) -> Bool {
+        !snap.windows.isEmpty || !vendorId.reportsUtilization
     }
 
     @ViewBuilder

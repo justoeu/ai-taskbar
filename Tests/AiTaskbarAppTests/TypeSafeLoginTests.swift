@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import AiTaskbarApp
+@testable import AiTaskbarCore
 
 @Suite("TypeSafe in-app login")
 struct TypeSafeLoginTests {
@@ -41,5 +42,21 @@ struct TypeSafeLoginTests {
     @Test("the login page is the console's own")
     func login_url() {
         #expect(TypeSafeLoginController.loginURL.absoluteString == "https://console.typesafe.ai/login")
+    }
+}
+
+@Suite("TypeSafe card rendering")
+struct TypeSafeCardRenderingTests {
+    @Test("a TypeSafe snapshot renders its card even with no windows")
+    func typesafe_renders_without_windows() {
+        let snap = VendorSnapshot.typesafe(TypeSafeSnapshot(models: [TypeSafeModel(name: "jev-latest")]))
+        #expect(snap.windows.isEmpty)
+        #expect(VendorSectionView.rendersSnapshot(snap, vendorId: .typesafe))
+    }
+
+    @Test("empty windows still read as schema drift for utilization vendors")
+    func utilization_vendor_empty_windows_warns() {
+        let snap = VendorSnapshot.typesafe(TypeSafeSnapshot())
+        #expect(!VendorSectionView.rendersSnapshot(snap, vendorId: .anthropic))
     }
 }
