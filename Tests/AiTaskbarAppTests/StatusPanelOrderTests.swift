@@ -11,15 +11,25 @@ struct VendorOrderMovedTests {
     func moves_and_appends() {
         #expect(VendorOrder.moved(.openai, up: true, order: [], visible: visible) == [.openai, .anthropic, .xai])
         #expect(VendorOrder.moved(.openai, up: false, order: [], visible: visible) == [.anthropic, .xai, .openai])
-        #expect(VendorOrder.moved(.xai, up: true, order: [.xai], visible: visible) == [.xai, .anthropic, .openai])
+        // A partial stored order is completed with the missing visible vendors.
+        #expect(VendorOrder.moved(.anthropic, up: true, order: [.xai], visible: visible) == [.anthropic, .xai, .openai])
     }
 
-    @Test("no-op at the ends, and drops vendors that are not visible")
-    func ends_and_hidden() {
-        #expect(VendorOrder.moved(.anthropic, up: true, order: visible, visible: visible) == visible)
+    @Test("a step that moves nothing returns the stored order untouched")
+    func no_op_returns_order() {
+        let stored: [VendorId] = [.kimi, .anthropic, .openai]
+        #expect(VendorOrder.moved(.anthropic, up: true, order: stored, visible: visible) == stored)
+        #expect(VendorOrder.moved(.zai, up: true, order: stored, visible: visible) == stored)
         #expect(VendorOrder.moved(.xai, up: false, order: visible, visible: visible) == visible)
+    }
+
+    @Test("hidden vendors keep their slots; the step skips over them")
+    func hidden_keep_slots() {
+        // kimi is disabled (hidden) between anthropic and openai.
+        #expect(VendorOrder.moved(.openai, up: true, order: [.anthropic, .kimi, .openai, .xai], visible: visible)
+                == [.openai, .kimi, .anthropic, .xai])
         #expect(VendorOrder.moved(.anthropic, up: false, order: [.kimi, .anthropic, .openai, .xai], visible: visible)
-                == [.openai, .anthropic, .xai])
+                == [.kimi, .openai, .anthropic, .xai])
     }
 }
 

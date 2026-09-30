@@ -110,7 +110,8 @@ public final class ServiceStatusStore: ObservableObject {
 
     public func moveVendor(_ id: VendorId, up: Bool, homeOrder: [VendorId]) {
         let visible = orderedRows(homeOrder: homeOrder).map(\.vendorId)
-        statusOrder = VendorOrder.moved(id, up: up, order: statusOrder, visible: visible)
+        let next = VendorOrder.moved(id, up: up, order: statusOrder, visible: visible)
+        if next != statusOrder { statusOrder = next }   // a no-op press writes nothing
     }
 
     /// Adopts the home order as the panel's own, so turning sync off starts
