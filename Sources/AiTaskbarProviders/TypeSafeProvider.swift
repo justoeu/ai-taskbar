@@ -118,8 +118,9 @@ public final class TypeSafeProvider: UsageProvider, @unchecked Sendable {
             return models.with(billing: nil, usage: nil, console: .expired)
         }
         do {
-            let billing = try await console.fetchBilling(cookie: session.cookieHeader)
-            let usage = try await console.fetchUsage(cookie: session.cookieHeader, calendar: calendar)
+            async let billingRead = console.fetchBilling(cookie: session.cookieHeader)
+            async let usageRead = console.fetchUsage(cookie: session.cookieHeader, calendar: calendar)
+            let (billing, usage) = try await (billingRead, usageRead)
             setLastConsole((billing, usage))
             return models.with(billing: billing, usage: usage, console: .connected(expiresAt: session.expiresAt))
         } catch TypeSafeConsoleError.sessionExpired {

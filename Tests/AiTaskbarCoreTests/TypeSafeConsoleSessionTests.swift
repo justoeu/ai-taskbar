@@ -30,7 +30,7 @@ struct TypeSafeConsoleSessionTests {
         ]
         expectTrue(TypeSafeConsoleSession.capture(full) != nil)
         expectTrue(TypeSafeConsoleSession.capture(Array(full.prefix(2))) == nil)
-        for bad in ["", "x; y=1", "x\r\nHost: evil", "a,b", "a b"] {
+        for bad in ["", "x; y=1", "x\r\nHost: evil", "a,b", "a b", "a\tb", "ação", "a\u{7F}"] {
             var cookies = full
             cookies[0] = (name: "session", value: bad, expiresAt: nil)
             expectTrue(TypeSafeConsoleSession.capture(cookies) == nil)
@@ -54,10 +54,35 @@ struct TypeSafeConsoleSessionTests {
     func from_config() throws {
         expectTrue(TypeSafeConsoleSession(config: TypeSafeConfig()) == nil)
         expectTrue(TypeSafeConsoleSession(config: TypeSafeConfig(consoleSession: "")) == nil)
-        let s = try #require(TypeSafeConsoleSession(config: TypeSafeConfig(consoleSession: "session=a",
+        let header = "session=a; session_id=b; organization_id=c"
+        let s = try #require(TypeSafeConsoleSession(config: TypeSafeConfig(consoleSession: header,
                                                                            consoleSessionExpiresAt: 1_790_000_000)))
-        #expect(s.cookieHeader == "session=a")
+        #expect(s.cookieHeader == header)
         expectTrue(s.expiresAt == t0)
+    }
+
+    @Test("an expiry of 0 means none, so a session without one is not read as expired")
+    func zero_expiry_is_none() throws {
+        let header = "session=a; session_id=b; organization_id=c"
+        for raw in [0.0, -5.0] {
+            let s = try #require(TypeSafeConsoleSession(config: TypeSafeConfig(consoleSession: header,
+                                                                               consoleSessionExpiresAt: raw)))
+            expectTrue(s.expiresAt == nil)
+            #expect(!s.isExpired(now: t0))
+        }
+    }
+
+    @Test("a stored header must be exactly the three login cookies", arguments: [
+        "session=a",
+        "session=a; session_id=b; organization_id=c; cf_clearance=x",
+        "session_id=b; session=a; organization_id=c",
+        "session=a; session_id=; organization_id=c",
+        "session=a\r\nHost: evil; session_id=b; organization_id=c",
+        "session=a\tb; session_id=b; organization_id=c",
+        "session=á; session_id=b; organization_id=c",
+    ])
+    func rejects_tampered_header(_ header: String) {
+        expectTrue(TypeSafeConsoleSession(config: TypeSafeConfig(consoleSession: header)) == nil)
     }
 
     @Test("the store hands out whatever was set last")
@@ -82,6 +107,22 @@ struct TypeSafeConsoleSessionTests {
         expectTrue(empty.consoleSessionExpiresAt == nil)
     }
 
+    @Test("a cached billing block without credits still decodes")
+    func billing_without_credits() throws {
+        let b = try SharedCoders.decoder.decode(TypeSafeBilling.self,
+                                                from: Data(#"{"spentUSD":1,"balanceUSD":2}"#.utf8))
+        #expect(b.credits.isEmpty)
+        #expect(b.balanceUSD == 2)
+    }
+
+    @Test("saturating add sticks at the bounds instead of wrapping")
+    func saturating_add() {
+        #expect(Int.max.addingSaturating(1) == Int.max)
+        #expect(Int.min.addingSaturating(-1) == Int.min)
+        #expect(40.addingSaturating(2) == 42)
+        #expect((-3).addingSaturating(1) == -2)
+    }
+
     @Test("the session is encrypted on disk, decrypted on load, and cleared on sign-out")
     func persisted_encrypted() throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -92,7 +133,8 @@ struct TypeSafeConsoleSessionTests {
         let loader = ConfigLoader(path: path)
         _ = try loader.load()
         try loader.applyChanges([
-            .secret(section: "typesafe", key: "console_session", plaintext: "session=SECRET-MARKER; session_id=b"),
+            .secret(section: "typesafe", key: "console_session",
+                    plaintext: "session=SECRET-MARKER; session_id=b; organization_id=c"),
             .double(section: "typesafe", key: "console_session_expires_at", value: 1_790_000_000),
         ])
         let onDisk = try String(contentsOf: path, encoding: .utf8)
@@ -100,7 +142,7 @@ struct TypeSafeConsoleSessionTests {
         let perms = try FileManager.default.attributesOfItem(atPath: path.path)[.posixPermissions] as? Int
         #expect(perms == 0o600)
         let loaded = try loader.load()
-        #expect(loaded.typesafe.consoleSession == "session=SECRET-MARKER; session_id=b")
+        #expect(loaded.typesafe.consoleSession == "session=SECRET-MARKER; session_id=b; organization_id=c")
         expectTrue(loaded.typesafe.consoleSessionExpiresAt == 1_790_000_000)
 
         try loader.applyChanges([

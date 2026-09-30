@@ -235,6 +235,7 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         switch descriptor.vendorId {
         case .openrouter: expected = .openRouter
         case .xai: expected = .xAI
+        case .typesafe: expected = .typeSafe
         default: expected = nil
         }
         let expectedHost = expected?.statusPageURL.host?.lowercased()
@@ -288,8 +289,15 @@ public struct RSSStatusSource: ServiceStatusSource, Sendable {
         }
     }
 
+    /// A word the vendor's own channel `<title>` carries. Every RSS vendor
+    /// needs a case here AND in `validateDescriptor`, or its feed is rejected
+    /// on every fetch (TypeSafe was, until an end-to-end test covered it).
     private var identityToken: String {
-        descriptor.vendorId == .xai ? "xai" : "openrouter"
+        switch descriptor.vendorId {
+        case .xai: return "xai"
+        case .typesafe: return "typesafe"   // "Status updates | Typesafe AI"
+        default: return "openrouter"
+        }
     }
 
     private func feedLinkMatchesExpectedHost(_ raw: String?) -> Bool {

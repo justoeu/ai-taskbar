@@ -18,11 +18,26 @@ public struct TypeSafeConsoleSession: Sendable, Equatable {
         self.expiresAt = expiresAt
     }
 
-    /// From the persisted config fields; nil when not connected.
+    /// From the persisted config fields; nil when not connected or when the
+    /// stored header is not exactly the three login cookies (a hand-edited
+    /// file cannot smuggle another header or cookie). An expiry of 0 or less
+    /// is "none": sign-out and cookies without an expiry both write 0.
     public init?(config: TypeSafeConfig) {
-        guard let header = config.consoleSession, !header.isEmpty else { return nil }
-        self.init(cookieHeader: header,
-                  expiresAt: config.consoleSessionExpiresAt.map { Date(timeIntervalSince1970: $0) })
+        guard let header = config.consoleSession, Self.isValidHeader(header) else { return nil }
+        let expiry = config.consoleSessionExpiresAt.flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+        self.init(cookieHeader: header, expiresAt: expiry)
+    }
+
+    /// `session=…; session_id=…; organization_id=…`, header-safe values.
+    static func isValidHeader(_ header: String) -> Bool {
+        let pairs = header.components(separatedBy: "; ")
+        guard pairs.count == loginCookieNames.count else { return false }
+        for (pair, name) in zip(pairs, loginCookieNames) {
+            guard pair.hasPrefix(name + "=") else { return false }
+            let value = String(pair.dropFirst(name.count + 1))
+            guard !value.isEmpty, isHeaderSafe(value) else { return false }
+        }
+        return true
     }
 
     /// Builds the session from captured cookies, keeping only the login ones.
@@ -56,8 +71,12 @@ public struct TypeSafeConsoleSession: Sendable, Equatable {
     }
 
     /// A cookie value that would split or inject a header is refused.
+    /// Printable ASCII only, no separators: control characters, tabs and
+    /// non-ASCII are refused along with `;`, `,` and spaces.
     static func isHeaderSafe(_ v: String) -> Bool {
-        !v.contains { $0 == ";" || $0 == "\r" || $0 == "\n" || $0 == "," || $0 == " " }
+        v.unicodeScalars.allSatisfy { s in
+            s.value > 0x20 && s.value < 0x7F && s != ";" && s != ","
+        }
     }
 }
 

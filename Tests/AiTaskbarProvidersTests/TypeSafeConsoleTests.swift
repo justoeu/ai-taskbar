@@ -123,6 +123,37 @@ struct TypeSafeConsoleParsingTests {
         #expect(u.daily.first?.start == ISO8601Parsing.parse("2026-09-23T00:00:00Z"))
     }
 
+    @Test("the 7-day window is local days: an evening in UTC-3 drops UTC-tomorrow's label")
+    func aggregate_week_local_days() {
+        var saoPaulo = Calendar(identifier: .gregorian)
+        saoPaulo.timeZone = TimeZone(secondsFromGMT: -3 * 3600)!
+        // 22:30 on 30/09 in UTC-3 is already 01/10 in UTC.
+        let now = ISO8601Parsing.parse("2026-10-01T01:30:00Z")!
+        let day = [
+            TypeSafeUsageBucket(day: "2026-10-01", requests: 50, inputTokens: 50, outputTokens: 50),
+            TypeSafeUsageBucket(day: "2026-09-30", requests: 3, inputTokens: 30, outputTokens: 3),
+            TypeSafeUsageBucket(day: "2026-09-24", requests: 1, inputTokens: 10, outputTokens: 1),
+            TypeSafeUsageBucket(day: "2026-09-23", requests: 90, inputTokens: 90, outputTokens: 90),
+        ]
+        let u = TypeSafeUsageMath.aggregate(hour: [], day: day, now: now, calendar: saoPaulo)
+        #expect(u.weekRequests == 4)
+        #expect(u.daily.map(\.requests) == [1, 3])
+        // The header total is exactly the sum of the chart's series.
+        #expect(u.daily.reduce(0) { $0 + $1.requests } == u.weekRequests)
+        #expect(u.daily.reduce(0) { $0 + $1.inputTokens } == u.weekInputTokens)
+    }
+
+    @Test("absurd counts saturate instead of wrapping negative")
+    func aggregate_saturates() {
+        let big = TypeSafeUsageBucket(day: "2026-09-29T22:00:00+00:00", requests: Int.max,
+                                      inputTokens: Int.max, outputTokens: 1)
+        let u = TypeSafeUsageMath.aggregate(hour: [big, big], day: [], now: ISO8601Parsing.parse("2026-09-29T23:00:00Z")!,
+                                            calendar: utc)
+        #expect(u.todayRequests == Int.max)
+        #expect(u.todayInputTokens == Int.max)
+        #expect(u.hourly.first?.requests == Int.max)
+    }
+
     @Test("aggregate keeps at most 48 hourly points")
     func aggregate_caps_series() {
         let base = ISO8601Parsing.parse("2026-09-20T00:00:00Z")!
@@ -312,6 +343,22 @@ struct TypeSafeConsoleProviderTests {
         let s = try snapshot(try await provider(session: Self.validSession).fetchUsage(forceRefresh: true))
         expectTrue(s.billing?.balanceUSD == 30)
         #expect(consoleRequests().filter { $0.url?.path == "/settings/billing" && $0.httpMethod == "GET" }.count == 2)
+    }
+
+    @Test("a failed discovery is remembered: the next refresh does not re-download the chunks")
+    func discovery_failure_backs_off() async throws {
+        defer { StubURLProtocol.reset(); try? FileManager.default.removeItem(at: tmpCacheDir) }
+        let base = Self.console()
+        StubURLProtocol.handler = { req in
+            if req.url?.path.hasSuffix(".js") == true { return .init(data: Data("no action here".utf8)) }
+            return base(req)
+        }
+        let p = provider(session: Self.validSession)
+        #expect(try snapshot(try await p.fetchUsage(forceRefresh: true)).console == .unavailable(since: Self.now))
+        let chunksAfterFirst = consoleRequests().filter { $0.url!.path.hasSuffix(".js") }.count
+        #expect(chunksAfterFirst == 2)
+        #expect(try snapshot(try await p.fetchUsage(forceRefresh: true)).console == .unavailable(since: Self.now))
+        #expect(consoleRequests().filter { $0.url!.path.hasSuffix(".js") }.count == chunksAfterFirst)
     }
 
     @Test("a stale action that stays missing reads as unavailable")

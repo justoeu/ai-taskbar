@@ -229,12 +229,17 @@ struct TypeSafeCardView: View {
 
     /// Exact below 100k ("1.521"), compact above ("250k", "2,7M") — a token
     /// count is read at a glance, and a rounded "2k" hid real small numbers.
+    private static let compactFormatters: [NumberFormatter] = [0, 1].map { decimals in
+        let f = NumberFormatter()
+        f.locale = L10n.effectiveLocale
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = decimals
+        return f
+    }
+
     static func count(_ n: Int) -> String {
         func scaled(_ divisor: Double, _ suffix: String, decimals: Int) -> String {
-            let f = NumberFormatter()
-            f.locale = L10n.effectiveLocale
-            f.numberStyle = .decimal
-            f.maximumFractionDigits = decimals
+            let f = compactFormatters[decimals]
             return (f.string(from: NSNumber(value: Double(n) / divisor)) ?? "\(n)") + suffix
         }
         switch n {
@@ -247,16 +252,24 @@ struct TypeSafeCardView: View {
 
     /// The console labels the cycle in English ("September 2026"); render it
     /// in the app language. Anything else passes through unchanged.
+    private static let cycleParser: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MMMM yyyy"
+        return f
+    }()
+
+    private static let cycleFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = L10n.effectiveLocale
+        f.setLocalizedDateFormatFromTemplate("MMMMyyyy")
+        return f
+    }()
+
     static func cycleName(_ raw: String?) -> String? {
         guard let raw = raw?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
-        let parse = DateFormatter()
-        parse.locale = Locale(identifier: "en_US_POSIX")
-        parse.dateFormat = "MMMM yyyy"
-        guard let date = parse.date(from: raw) else { return raw }
-        let out = DateFormatter()
-        out.locale = L10n.effectiveLocale
-        out.setLocalizedDateFormatFromTemplate("MMMMyyyy")
-        return out.string(from: date)
+        guard let date = cycleParser.date(from: raw) else { return raw }
+        return cycleFormatter.string(from: date)
     }
 
     /// Known plan ids are localized; others become "Title Case".

@@ -996,6 +996,7 @@ private struct TypeSafeConsoleSettingsRow: View {
                         .disabled(login.isSigningIn)
                 } else {
                     Button(L10n.localizedString("settings_typesafe_console_sign_out")) { login.signOut() }
+                        .help(L10n.localizedString("settings_typesafe_console_sign_out_help"))
                 }
             }
         }

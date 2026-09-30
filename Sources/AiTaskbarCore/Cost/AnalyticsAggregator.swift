@@ -72,8 +72,8 @@ public enum AnalyticsAggregator {
                 let inSlot = points.filter { calendar.isDate($0.start, equalTo: slot, toGranularity: unit) }
                 return VendorActivity.Point(
                     start: slot,
-                    tokens: inSlot.reduce(0) { $0 &+ $1.inputTokens &+ $1.outputTokens },
-                    requests: inSlot.reduce(0) { $0 &+ $1.requests })
+                    tokens: inSlot.reduce(0) { $0.addingSaturating($1.inputTokens).addingSaturating($1.outputTokens) },
+                    requests: inSlot.reduce(0) { $0.addingSaturating($1.requests) })
             }
         }
         let today = calendar.startOfDay(for: now)

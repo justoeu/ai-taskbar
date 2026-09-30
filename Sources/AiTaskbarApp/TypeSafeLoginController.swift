@@ -31,6 +31,7 @@ final class TypeSafeLoginController: NSObject, ObservableObject, NSWindowDelegat
     private var webView: WKWebView?
     private var poll: Timer?
     private var startedAt = Date()
+    private var isReadingCookies = false
 
     func configure(configLoader: ConfigLoader, store: TypeSafeSessionStore, onChange: @escaping () -> Void) {
         self.configLoader = configLoader
@@ -82,16 +83,21 @@ final class TypeSafeLoginController: NSObject, ObservableObject, NSWindowDelegat
         }
         // Only once the console itself is showing: pre-login pages may carry
         // anonymous cookies with the same names.
-        guard Self.isSignedInPage(web.url) else { return }
-        web.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
-            MainActor.assumeIsolated {
-                guard let self, self.webView === web else { return }
-                let own = cookies.filter { Self.isTypeSafeDomain($0.domain) }
-                    .map { (name: $0.name, value: $0.value, expiresAt: $0.expiresDate) }
-                guard let captured = TypeSafeConsoleSession.capture(own) else { return }
-                self.persist(captured)
-                self.finish()
-            }
+        guard Self.isSignedInPage(web.url), !isReadingCookies else { return }
+        isReadingCookies = true
+        let store = web.configuration.websiteDataStore.httpCookieStore
+        // Async read on the main actor: no assumption about which thread the
+        // completion-handler form calls back on.
+        Task { @MainActor [weak self] in
+            let cookies = await store.allCookies()
+            guard let self else { return }
+            self.isReadingCookies = false
+            guard self.webView === web else { return }
+            let own = cookies.filter { Self.isTypeSafeDomain($0.domain) }
+                .map { (name: $0.name, value: $0.value, expiresAt: $0.expiresDate) }
+            guard let captured = TypeSafeConsoleSession.capture(own) else { return }
+            self.persist(captured)
+            self.finish()
         }
     }
 
@@ -101,9 +107,12 @@ final class TypeSafeLoginController: NSObject, ObservableObject, NSWindowDelegat
         return !path.hasPrefix("/login") && !path.hasPrefix("/signup") && !path.hasPrefix("/auth")
     }
 
+    /// The console's own host, or the parent domain it may scope cookies to.
+    /// Other subdomains (login, docs, …) are not trusted to set the session:
+    /// a taken-over subdomain could otherwise plant `.typesafe.ai` cookies.
     nonisolated static func isTypeSafeDomain(_ domain: String) -> Bool {
-        let d = domain.hasPrefix(".") ? String(domain.dropFirst()) : domain
-        return d == "typesafe.ai" || d.hasSuffix(".typesafe.ai")
+        let d = (domain.hasPrefix(".") ? String(domain.dropFirst()) : domain).lowercased()
+        return d == "console.typesafe.ai" || d == "typesafe.ai"
     }
 
     private func persist(_ new: TypeSafeConsoleSession?) {
@@ -136,13 +145,12 @@ final class TypeSafeLoginController: NSObject, ObservableObject, NSWindowDelegat
         win?.close()
     }
 
-    nonisolated func windowWillClose(_ notification: Notification) {
-        MainActor.assumeIsolated {
-            poll?.invalidate()
-            poll = nil
-            window = nil
-            webView = nil
-            isSigningIn = false
-        }
+    func windowWillClose(_ notification: Notification) {
+        poll?.invalidate()
+        poll = nil
+        window = nil
+        webView = nil
+        isSigningIn = false
+        isReadingCookies = false
     }
 }

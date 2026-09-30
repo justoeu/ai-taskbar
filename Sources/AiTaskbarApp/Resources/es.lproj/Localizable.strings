@@ -412,5 +412,6 @@
 "settings_typesafe_console_connected_fmt" = "Conectado hasta %@";
 "settings_typesafe_console_not_connected" = "No conectado";
 "settings_typesafe_console_sign_out" = "Cerrar sesión";
+"settings_typesafe_console_sign_out_help" = "Quita la sesión de este Mac. Para cerrarla también en TypeSafe, cierra sesión en la consola.";
 "pin_unavailable_no_usage" = "Este proveedor no informa uso para mostrar en la barra de menús.";
 "settings_typesafe_footer" = "Desactivado hasta que guardes una clave de API (créala en console.typesafe.ai). La clave solo lista modelos — nunca ejecuta una evaluación de pago. Inicia sesión en la consola para ver gasto, saldo y tokens; el inicio de sesión ocurre en una ventana privada y solo se guardan sus cookies de sesión, cifradas.";

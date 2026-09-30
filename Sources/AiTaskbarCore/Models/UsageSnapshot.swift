@@ -638,6 +638,25 @@ public struct TypeSafeBilling: Sendable, Equatable, Codable {
         self.cycleEndsInDays = cycleEndsInDays
         self.credits = credits
     }
+
+    enum CodingKeys: String, CodingKey {
+        case spentUSD, balanceUSD, purchasedUSD, freeCreditsRemainingUSD, plan, cycleLabel
+        case cycleEndsInDays, credits
+    }
+
+    // Tolerant: a cached block without `credits` must not reject the whole
+    // snapshot (and with it the stale fallback).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        spentUSD = try c.decode(Double.self, forKey: .spentUSD)
+        balanceUSD = try c.decode(Double.self, forKey: .balanceUSD)
+        purchasedUSD = try c.decodeIfPresent(Double.self, forKey: .purchasedUSD)
+        freeCreditsRemainingUSD = try c.decodeIfPresent(Double.self, forKey: .freeCreditsRemainingUSD)
+        plan = try c.decodeIfPresent(String.self, forKey: .plan)
+        cycleLabel = try c.decodeIfPresent(String.self, forKey: .cycleLabel)
+        cycleEndsInDays = try c.decodeIfPresent(Int.self, forKey: .cycleEndsInDays)
+        credits = try c.decodeIfPresent([TypeSafeCredit].self, forKey: .credits) ?? []
+    }
 }
 
 public struct TypeSafeCredit: Sendable, Equatable, Codable {

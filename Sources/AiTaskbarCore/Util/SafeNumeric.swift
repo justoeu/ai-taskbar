@@ -38,6 +38,14 @@ public extension FixedWidthInteger {
     init?(checkedTruncating value: Double) {
         self.init(exactly: value.rounded(.towardZero))
     }
+
+    /// Sum that sticks at `.max` / `.min` instead of wrapping: a counter
+    /// summed from vendor data must never turn negative. Never traps.
+    func addingSaturating(_ other: Self) -> Self {
+        let (sum, overflow) = addingReportingOverflow(other)
+        guard overflow else { return sum }
+        return other > 0 ? .max : .min
+    }
 }
 
 /// The single sanitization point for utilization percentages, applied where

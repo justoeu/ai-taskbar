@@ -466,8 +466,12 @@ Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
     `console.typesafe.ai/login` in a `WKWebView` with a `.nonPersistent()`
     store (system browsers' cookies are never read) and, once the URL is a
     console page outside `/login`, copies ONLY `session`, `session_id`,
-    `organization_id` (`TypeSafeConsoleSession.capture`). Never ask the user
-    to copy a cookie or open DevTools/a terminal.
+    `organization_id` (`TypeSafeConsoleSession.capture`), and only from
+    `console.typesafe.ai` / `.typesafe.ai` (not other subdomains). Values
+    must be printable ASCII without separators; a stored header is
+    re-validated on load, and an expiry of 0 means "none". Sign out removes
+    the local copy only (the console session lives on TypeSafe's side).
+    Never ask the user to copy a cookie or open DevTools/a terminal.
   - Stored encrypted as `console_session` (+ `console_session_expires_at`)
     via `ConfigLoader.applyChanges`, and handed to the provider through
     `TypeSafeSessionStore` so a sign-in applies without a relaunch. Settings
@@ -478,7 +482,10 @@ Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
     interstitial reads as "unavailable", not as "signed out".
   - Billing = the page's own read-only server action (`getBillingOverviewResult`,
     id discovered from same-origin chunks, cached 12 h, rediscovered once on
-    `x-nextjs-action-not-found`). Usage = `GET /api/usage?granularity=hour|day`.
+    `x-nextjs-action-not-found`). A failed discovery is remembered for 1 h, and
+    one discovery is capped at 16 MiB of chunks / 30 s. Usage =
+    `GET /api/usage?granularity=hour|day`; billing and both usage reads run
+    concurrently. The 7-day window is `CostWindow`'s local days.
   - **PII is never decoded:** only `spent`, `balance`, `purchased`,
     `freeCreditsRemaining`, `plan`, `cycleLabel`, `resetsInDays` and per credit
     `amount`/`remaining`/`expiresAt`/`reason`; per bucket only the period and
@@ -505,7 +512,10 @@ Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
   snippet writes `enabled = false`). Saving a non-empty key in Settings enables
   it in the same write (`SettingsViewModel.typeSafeAfterSave`); clearing the key
   does not disable it.
-- Its status feed has one item per **update**. `RSSStatusDescriptor.typeSafe`
+- Its status feed has one item per **update**. Like every RSS vendor it
+  needs a case in `RSSStatusSource.validateDescriptor` AND `identityToken`
+  (`"typesafe"`), or every real fetch is rejected — `TypeSafeStatusFetchTests`
+  runs the production fetch path, which the parse-only tests did not. `RSSStatusDescriptor.typeSafe`
   sets `groupsUpdatesByIncidentLink` (newest update decides, updates after
   `now` ignored) and `staleUnresolvedAfter = 48 h` (an incident whose resolving
   update was never published — "API issues", 21/09 — would read as degraded

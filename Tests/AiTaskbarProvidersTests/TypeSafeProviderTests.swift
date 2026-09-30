@@ -216,3 +216,30 @@ struct TypeSafeStatusFeedTests {
         expectTrue(ServiceStatusProviderFactory.descriptor(for: .typesafe) == nil)
     }
 }
+
+/// The production path: `CachedServiceStatusProvider` → `fetchPayload`, which
+/// validates the descriptor and the channel identity before parsing. The
+/// tests above call `makeStatus` directly and could not see that both checks
+/// rejected TypeSafe on every fetch.
+@Suite("TypeSafe status feed, fetched", .serialized)
+struct TypeSafeStatusFetchTests {
+    @Test("the TypeSafe feed is fetched, validated and parsed end to end")
+    func fetched_end_to_end() async throws {
+        StubURLProtocol.reset()
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-typesafe-status-\(UUID().uuidString)")
+        try Paths.ensureDir(dir)
+        defer { StubURLProtocol.reset(); try? FileManager.default.removeItem(at: dir) }
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.typesafeStatusRSS200)) }
+        let provider = CachedServiceStatusProvider(
+            source: RSSStatusSource(descriptor: .typeSafe),
+            cache: DiskCache(vendor: .typesafe, baseDir: dir, ttl: 300, maxStale: ServiceStatusWindow.duration),
+            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]))
+        let outcome = try await provider.fetchStatus(forceRefresh: true,
+                                                     now: ISO8601Parsing.parse("2026-09-29T22:30:00Z")!)
+        #expect(outcome.snapshot.vendorId == .typesafe)
+        #expect(outcome.snapshot.level == .maintenance)
+        #expect(StubURLProtocol.captured.count == 1)
+        #expect(StubURLProtocol.captured.first?.url == RSSStatusDescriptor.typeSafe.feedURL)
+    }
+}

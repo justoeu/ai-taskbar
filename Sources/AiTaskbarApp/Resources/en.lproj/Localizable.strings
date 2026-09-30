@@ -413,5 +413,6 @@
 "settings_typesafe_console_connected_fmt" = "Connected until %@";
 "settings_typesafe_console_not_connected" = "Not connected";
 "settings_typesafe_console_sign_out" = "Sign out";
+"settings_typesafe_console_sign_out_help" = "Removes the session from this Mac. To end it on TypeSafe too, sign out in the console.";
 "pin_unavailable_no_usage" = "This provider reports no usage to show in the menu bar.";
 "settings_typesafe_footer" = "Off until you save an API key (create one at console.typesafe.ai). The key only lists models — it never runs a paid evaluation. Sign in to the console to add spend, balance and tokens; the login happens in a private window and only its session cookies are kept, encrypted.";

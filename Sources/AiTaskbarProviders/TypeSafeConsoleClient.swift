@@ -20,6 +20,13 @@ public enum TypeSafeConsoleError: Error, Equatable {
 ///   pages make to render themselves; nothing that changes the account.
 public final class TypeSafeConsoleClient: @unchecked Sendable {
     public static let actionIDTTL: TimeInterval = 12 * 60 * 60
+    /// After a failed discovery, don't re-download the chunks for this long:
+    /// a console deploy that moved the action would otherwise cost the page
+    /// plus up to 60 chunks on every refresh.
+    public static let discoveryFailureBackoff: TimeInterval = 60 * 60
+    /// Total chunk bytes one discovery may download, and its overall budget.
+    static let discoveryMaxBytes = 16 * 1024 * 1024
+    static let discoveryDeadline: TimeInterval = 30
     static let pageBytes = 4 * 1024 * 1024
     static let chunkBytes = 4 * 1024 * 1024
     static let resultBytes = 1024 * 1024
@@ -29,6 +36,7 @@ public final class TypeSafeConsoleClient: @unchecked Sendable {
     private let now: @Sendable () -> Date
     private let lock = NSLock()
     private var cachedAction: (id: String, at: Date)?
+    private var discoveryFailedAt: Date?
 
     public init(http: HTTPClient,
                 userAgent: String = TypeSafeConsoleClient.defaultUserAgent,
@@ -79,31 +87,49 @@ public final class TypeSafeConsoleClient: @unchecked Sendable {
 
     func actionID(cookie: String, forceDiscovery: Bool) async throws -> String {
         if !forceDiscovery, let cached = cachedActionID() { return cached }
+        if let failed = discoveryFailure(), now().timeIntervalSince(failed) < Self.discoveryFailureBackoff {
+            throw TypeSafeConsoleError.unavailable("billing action id not found (backing off)")
+        }
         let (pageData, pageResp) = try await send(
             request(Self.billingURL, cookie: cookie, accept: "text/html", timeout: 6), maxBytes: Self.pageBytes)
         let html = String(decoding: pageData, as: UTF8.self)
         try classify(pageResp, body: html)
         if TypeSafeConsoleParsing.isLoginLanding(html) { throw TypeSafeConsoleError.sessionExpired }
+        let started = Date()
+        var downloaded = 0
         for url in TypeSafeConsoleParsing.chunkURLs(inPage: html) {
+            try Task.checkCancellation()
+            guard downloaded < Self.discoveryMaxBytes,
+                  Date().timeIntervalSince(started) < Self.discoveryDeadline else { break }
             // Chunks are public static assets: no cookie.
             var req = URLRequest(url: url, timeoutInterval: 4)
             req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-            guard let (data, resp) = try? await send(req, maxBytes: Self.chunkBytes),
-                  resp.statusCode == 200 else { continue }
+            let data: Data
+            do {
+                let (body, resp) = try await send(req, maxBytes: Self.chunkBytes)
+                guard resp.statusCode == 200 else { continue }
+                data = body
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue   // one missing chunk is not fatal; the next may hold the id
+            }
+            downloaded += data.count
             if let id = TypeSafeConsoleParsing.actionID(inChunk: String(decoding: data, as: UTF8.self)) {
                 storeActionID(id)
                 return id
             }
         }
+        recordDiscoveryFailure()
         throw TypeSafeConsoleError.unavailable("billing action id not found")
     }
 
     // MARK: usage
 
     public func fetchUsage(cookie: String, calendar: Calendar = .current) async throws -> TypeSafeUsage {
-        let hour = try await usageBuckets("hour", cookie: cookie)
-        let day = try await usageBuckets("day", cookie: cookie)
-        return TypeSafeUsageMath.aggregate(hour: hour, day: day, now: now(), calendar: calendar)
+        async let hour = usageBuckets("hour", cookie: cookie)
+        async let day = usageBuckets("day", cookie: cookie)
+        return TypeSafeUsageMath.aggregate(hour: try await hour, day: try await day, now: now(), calendar: calendar)
     }
 
     private func usageBuckets(_ granularity: String, cookie: String) async throws -> [TypeSafeUsageBucket] {
@@ -166,7 +192,17 @@ public final class TypeSafeConsoleClient: @unchecked Sendable {
 
     private func storeActionID(_ id: String) {
         let at = now()
-        lock.lock(); cachedAction = (id, at); lock.unlock()
+        lock.lock(); cachedAction = (id, at); discoveryFailedAt = nil; lock.unlock()
+    }
+
+    private func discoveryFailure() -> Date? {
+        lock.lock(); defer { lock.unlock() }
+        return discoveryFailedAt
+    }
+
+    private func recordDiscoveryFailure() {
+        let at = now()
+        lock.lock(); discoveryFailedAt = at; lock.unlock()
     }
 
     private func clearActionID() {

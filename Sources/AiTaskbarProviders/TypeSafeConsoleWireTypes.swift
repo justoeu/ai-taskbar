@@ -210,48 +210,60 @@ public enum TypeSafeUsageMath {
 
     public static func aggregate(hour: [TypeSafeUsageBucket], day: [TypeSafeUsageBucket],
                                  now: Date, calendar: Calendar = .current) -> TypeSafeUsage {
-        var byHour: [Date: (Int, Int, Int)] = [:]
+        typealias Counts = (input: Int, output: Int, requests: Int)
+        func add(_ a: Counts, _ b: TypeSafeUsageBucket) -> Counts {
+            (a.input.addingSaturating(b.inputTokens), a.output.addingSaturating(b.outputTokens),
+             a.requests.addingSaturating(b.requests))
+        }
+        func series(_ grouped: [Date: Counts]) -> [TypeSafeUsagePoint] {
+            grouped.keys.sorted().map {
+                TypeSafeUsagePoint(start: $0, inputTokens: grouped[$0]!.input,
+                                   outputTokens: grouped[$0]!.output, requests: grouped[$0]!.requests)
+            }
+        }
+        func total(_ points: [TypeSafeUsagePoint]) -> Counts {
+            points.reduce((0, 0, 0)) {
+                ($0.input.addingSaturating($1.inputTokens), $0.output.addingSaturating($1.outputTokens),
+                 $0.requests.addingSaturating($1.requests))
+            }
+        }
+
+        var byHour: [Date: Counts] = [:]
         for b in hour {
             guard let start = ISO8601Parsing.parse(b.day) else { continue }
-            let acc = byHour[start] ?? (0, 0, 0)
-            byHour[start] = (acc.0 &+ b.inputTokens, acc.1 &+ b.outputTokens, acc.2 &+ b.requests)
+            byHour[start] = add(byHour[start] ?? (0, 0, 0), b)
         }
-        let points = byHour.keys.sorted().map {
-            TypeSafeUsagePoint(start: $0, inputTokens: byHour[$0]!.0, outputTokens: byHour[$0]!.1,
-                               requests: byHour[$0]!.2)
-        }
-        // Today = the user's local calendar day, from the hourly series.
-        let todayStart = calendar.startOfDay(for: now)
-        let todayEnd = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? now
-        let today = points.filter { $0.start >= todayStart && $0.start < todayEnd }
+        let hourly = series(byHour)
 
-        // 7 days = today and the six before it, from the daily series. The
-        // console labels days in UTC.
+        // Both windows are the app's own local calendar days (`CostWindow`),
+        // like every other figure: today since local midnight; today plus the
+        // six previous local days.
+        let window = CostWindow(now: now, calendar: calendar)
+        let todayEnd = calendar.date(byAdding: .day, value: 1, to: window.startOfToday) ?? now
+        let today = hourly.filter { $0.start >= window.startOfToday && $0.start < todayEnd }
+
+        // The console labels days by date; that date is anchored at LOCAL
+        // midnight, the day the console shows, and must fall in the window.
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = TimeZone(identifier: "UTC")!
-        let weekStart = utc.date(byAdding: .day, value: -6, to: utc.startOfDay(for: now)) ?? now
-        var byDay: [Date: (Int, Int, Int)] = [:]
-        let week = day.filter { b in
-            guard let d = dayDate(b.day, calendar: utc), d >= weekStart, d <= now else { return false }
-            // Same calendar date, local midnight: the day the console shows.
+        var byDay: [Date: Counts] = [:]
+        for b in day {
+            guard let d = dayDate(b.day, calendar: utc) else { continue }
             let parts = utc.dateComponents([.year, .month, .day], from: d)
-            let local = calendar.date(from: parts) ?? d
-            let acc = byDay[local] ?? (0, 0, 0)
-            byDay[local] = (acc.0 &+ b.inputTokens, acc.1 &+ b.outputTokens, acc.2 &+ b.requests)
-            return true
+            guard let local = calendar.date(from: parts),
+                  local >= window.startOfLast7Days, local < todayEnd else { continue }
+            byDay[local] = add(byDay[local] ?? (0, 0, 0), b)
         }
-        let daily = byDay.keys.sorted().map {
-            TypeSafeUsagePoint(start: $0, inputTokens: byDay[$0]!.0, outputTokens: byDay[$0]!.1,
-                               requests: byDay[$0]!.2)
-        }
+        let daily = series(byDay)
+
+        let todayTotal = total(today)
+        let weekTotal = total(daily)
         return TypeSafeUsage(
-            todayInputTokens: today.reduce(0) { $0 &+ $1.inputTokens },
-            todayOutputTokens: today.reduce(0) { $0 &+ $1.outputTokens },
-            todayRequests: today.reduce(0) { $0 &+ $1.requests },
-            weekInputTokens: week.reduce(0) { $0 &+ $1.inputTokens },
-            weekOutputTokens: week.reduce(0) { $0 &+ $1.outputTokens },
-            weekRequests: week.reduce(0) { $0 &+ $1.requests },
-            hourly: Array(points.suffix(hourlyLimit)),
+            todayInputTokens: todayTotal.input, todayOutputTokens: todayTotal.output,
+            todayRequests: todayTotal.requests,
+            weekInputTokens: weekTotal.input, weekOutputTokens: weekTotal.output,
+            weekRequests: weekTotal.requests,
+            hourly: Array(hourly.suffix(hourlyLimit)),
             daily: daily)
     }
 
