@@ -62,52 +62,59 @@ public struct StatusPanelView: View {
         }
     }
 
+    /// Same layout as the Analytics header: feature icon, bold title,
+    /// one caption line with the freshness inline, refresh on the right.
+    /// "Back" lives in the footer.
     private var header: some View {
-        HStack(alignment: .top, spacing: 10) {
-            // The feature's icon (same as the popover button), tinted by the
-            // overall level so the page still reads healthy/degraded at a glance.
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: ServiceStatusPresentation.headerSymbol)
                 .font(.title2)
-                .foregroundStyle(store.overallLevel.statusColor)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
+
             VStack(alignment: .leading, spacing: 2) {
                 L10n.text("service_status_title")
-                    .font(.headline)
-                L10n.text("service_status_last_six_hours")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(headerFreshness)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(.title3.weight(.bold))
+                HStack(spacing: 4) {
+                    L10n.text("service_status_last_six_hours")
+                        .foregroundStyle(.secondary)
+                    Text("•")
+                        .foregroundStyle(store.isLoading ? .secondary : .tertiary)
+                    if store.isLoading {
+                        Text(L10n.localizedString("refreshing_now"))
+                            .foregroundStyle(Color.accentColor)
+                    } else {
+                        Text(headerFreshness)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.caption)
+                .lineLimit(1)
             }
-            Spacer(minLength: 4)
+
+            Spacer()
+
             Button {
                 store.refreshAll(forceRefresh: true)
             } label: {
                 if store.isLoading {
-                    ProgressView().controlSize(.small)
+                    ProgressView()
+                        .controlSize(.small)
                 } else {
                     Image(systemName: "arrow.clockwise")
+                        .font(.body)
                 }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .disabled(store.isLoading)
             .help(L10n.localizedString("service_status_refresh"))
             .accessibilityLabel(L10n.localizedString("service_status_refresh"))
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.borderless)
-            .focused($closeButtonFocused)
-            .keyboardShortcut(.cancelAction)
-            .help(L10n.localizedString("service_status_close"))
-            .accessibilityLabel(L10n.localizedString("service_status_close"))
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private var headerFreshness: String {
-        if store.isLoading { return L10n.localizedString("service_status_loading") }
         if !store.hasAutomaticSources {
             return L10n.localizedString("service_status_no_automatic_sources")
         }
@@ -120,16 +127,47 @@ public struct StatusPanelView: View {
         )
     }
 
+    /// Same symbols and colours as the rows, so the legend reads as a key,
+    /// not a sentence. One line when it fits, two otherwise.
+    private var legend: some View {
+        let items = ServiceStatusPresentation.legend.map { entry in
+            HStack(spacing: 4) {
+                Image(systemName: ServiceStatusPresentation.symbol(for: entry.level))
+                    .foregroundStyle(entry.level.statusColor)
+                Text(L10n.localizedString(entry.key))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            .fixedSize()
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { ForEach(items.indices, id: \.self) { items[$0] } }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) { ForEach(0..<3, id: \.self) { items[$0] } }
+                HStack(spacing: 12) { ForEach(3..<items.count, id: \.self) { items[$0] } }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.secondary.opacity(0.08))
+        )
+        .accessibilityElement(children: .combine)
+    }
+
     private var footer: some View {
         VStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                L10n.text("service_status_legend")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                L10n.text("service_status_scope_note")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                legend
+                HStack(alignment: .top, spacing: 4) {
+                    Image(systemName: "info.circle")
+                    L10n.text("service_status_scope_note")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -138,6 +176,7 @@ public struct StatusPanelView: View {
                 Button(action: onClose) {
                     Label(L10n.localizedString("back"), systemImage: "chevron.backward")
                 }
+                .focused($closeButtonFocused)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .keyboardShortcut(.defaultAction)
