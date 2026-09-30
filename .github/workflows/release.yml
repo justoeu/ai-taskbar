@@ -117,9 +117,12 @@ jobs:
             echo "## Changes"
             echo
             # Group by type. The sed strips the `type(scope): ` prefix per
-            # bullet so the rendered list reads as plain English. Skip
-            # chore(release)/[skip release] commits — those are auto-generated
-            # by the bump workflow and add no information.
+            # bullet so the rendered list reads as plain English. Skip only
+            # the bump workflow's own `chore(release): vX` commits. Other
+            # `[skip release]` commits are real work that ships in this tag —
+            # the marker means "don't cut a version for this push", so a
+            # squash-merged PR carrying it (v0.24.0's #34 and #36) must still
+            # be listed; the marker text is stripped from the bullet.
             for TYPE in feat feature fix perf refactor; do
               HEADER=""
               case $TYPE in
@@ -130,8 +133,8 @@ jobs:
               esac
               COMMITS=$(git log --pretty=format:'%s' --no-merges "$RANGE" \
                         | grep -iE "^${TYPE}(\(|:)" \
-                        | grep -vE '\[skip release\]|chore\(release\)' \
-                        | sed -E "s/^[^:]*:\s*//")
+                        | grep -vE '^chore\(release\)' \
+                        | sed -E "s/^[^:]*:[[:space:]]*//; s/ ?\[skip release\]//")
               if [ -n "$COMMITS" ]; then
                 echo "### $HEADER"
                 echo
@@ -143,9 +146,9 @@ jobs:
             # a single "Maintenance" group so the changelog isn't noisy.
             MAINT=$(git log --pretty=format:'%s' --no-merges "$RANGE" \
                     | grep -viE '^(feat|feature|fix|perf|refactor)(\(|:)' \
-                    | grep -vE '\[skip release\]|chore\(release\)' \
+                    | grep -vE '^chore\(release\)' \
                     | head -n 20 \
-                    | sed -E "s/^[^:]*:\s*//")
+                    | sed -E "s/^[^:]*:[[:space:]]*//; s/ ?\[skip release\]//")
             if [ -n "$MAINT" ]; then
               echo "### 🧰 Maintenance"
               echo
@@ -162,10 +165,12 @@ jobs:
       - name: Generate release notes
         id: notes
         run: |
+          # From VendorId.displayName, never a hand-kept list.
+          VENDORS=$(scripts/vendor-list.sh)
           cat > /tmp/release_notes.md <<EOF
           ## AI Taskbar ${{ steps.version.outputs.tag }}
 
-          macOS menu-bar tracker for LLM usage (Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI, Kimi/Moonshot).
+          macOS menu-bar tracker for LLM usage: ${VENDORS}.
 
           ### Install
           1. Download the DMG that matches your Mac:
@@ -176,7 +181,7 @@ jobs:
 
           ### What you get
           - macOS 13 (Ventura) or newer
-          - Read-only access to your existing Claude / Codex / Z.AI / Kimi / OpenRouter credentials
+          - Read-only access to your existing Claude Code / Codex CLI credentials; API keys for the other vendors, stored encrypted
           - All cache + config locked to \`0o600\` (user-only)
 
           EOF
