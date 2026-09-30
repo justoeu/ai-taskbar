@@ -487,6 +487,15 @@ Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
   - 401/403/3xx/login page → `.expired` (no numbers); 408/429/5xx, transport,
     format drift → `.unavailable` with the last good numbers from memory. A
     console failure never fails the card — the key/models part still renders.
+  - **Analytics:** tokens/requests reach the Analytics card through
+    `VendorAnalyticsSummary.activity` (`AnalyticsAggregator.activity`), never
+    through `CostEstimate` — there is no dollar figure for the window. Day =
+    today's hours, Week = the 7 console days (UTC dates re-anchored at local
+    midnight), Month = nil (the console series is 7 days). Activity also
+    suppresses the "no recent usage" empty state.
+  - The card renders with empty `windows` (`VendorSectionView.rendersSnapshot`):
+    for a vendor that never reports utilization, empty windows are not schema
+    drift. Its sparkline and pin toggle are hidden.
 - 403 = missing key, 401 = invalid key; `TypeSafeProvider.normalize` folds an
   `authentication_error` 403 into 401 so the card reads "key refused".
 - No utilization exists: `windows` is empty and `VendorId.reportsUtilization`

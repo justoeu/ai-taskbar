@@ -118,6 +118,9 @@ struct TypeSafeConsoleParsingTests {
         #expect(u.weekRequests == 8)
         // Same-hour buckets (two API keys) merge; sorted oldest first.
         #expect(u.hourly.map(\.requests) == [9, 2, 5])
+        // Daily: only the 7-day window, per date, oldest first.
+        #expect(u.daily.map(\.requests) == [1, 7])
+        #expect(u.daily.first?.start == ISO8601Parsing.parse("2026-09-23T00:00:00Z"))
     }
 
     @Test("aggregate keeps at most 48 hourly points")

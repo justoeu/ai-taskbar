@@ -544,12 +544,16 @@ public struct TypeSafeUsage: Sendable, Equatable, Codable {
     public let weekInputTokens: Int
     public let weekOutputTokens: Int
     public let weekRequests: Int
-    /// Hourly series (oldest first), for the sparkline.
+    /// Hourly series (oldest first), at most the last 48 hours.
     public let hourly: [TypeSafeUsagePoint]
+    /// Daily series (oldest first) for the 7-day window. `start` is the
+    /// console's UTC day re-anchored at LOCAL midnight of the same date, so
+    /// charts label it with the day the console shows.
+    public let daily: [TypeSafeUsagePoint]
 
     public init(todayInputTokens: Int, todayOutputTokens: Int, todayRequests: Int,
                 weekInputTokens: Int, weekOutputTokens: Int, weekRequests: Int,
-                hourly: [TypeSafeUsagePoint] = []) {
+                hourly: [TypeSafeUsagePoint] = [], daily: [TypeSafeUsagePoint] = []) {
         self.todayInputTokens = todayInputTokens
         self.todayOutputTokens = todayOutputTokens
         self.todayRequests = todayRequests
@@ -557,6 +561,25 @@ public struct TypeSafeUsage: Sendable, Equatable, Codable {
         self.weekOutputTokens = weekOutputTokens
         self.weekRequests = weekRequests
         self.hourly = hourly
+        self.daily = daily
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case todayInputTokens, todayOutputTokens, todayRequests
+        case weekInputTokens, weekOutputTokens, weekRequests, hourly, daily
+    }
+
+    // Tolerant: a cache written before `daily` existed still decodes.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        todayInputTokens = try c.decode(Int.self, forKey: .todayInputTokens)
+        todayOutputTokens = try c.decode(Int.self, forKey: .todayOutputTokens)
+        todayRequests = try c.decode(Int.self, forKey: .todayRequests)
+        weekInputTokens = try c.decode(Int.self, forKey: .weekInputTokens)
+        weekOutputTokens = try c.decode(Int.self, forKey: .weekOutputTokens)
+        weekRequests = try c.decode(Int.self, forKey: .weekRequests)
+        hourly = try c.decodeIfPresent([TypeSafeUsagePoint].self, forKey: .hourly) ?? []
+        daily = try c.decodeIfPresent([TypeSafeUsagePoint].self, forKey: .daily) ?? []
     }
 }
 

@@ -230,9 +230,19 @@ public enum TypeSafeUsageMath {
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = TimeZone(identifier: "UTC")!
         let weekStart = utc.date(byAdding: .day, value: -6, to: utc.startOfDay(for: now)) ?? now
+        var byDay: [Date: (Int, Int, Int)] = [:]
         let week = day.filter { b in
-            guard let d = dayDate(b.day, calendar: utc) else { return false }
-            return d >= weekStart && d <= now
+            guard let d = dayDate(b.day, calendar: utc), d >= weekStart, d <= now else { return false }
+            // Same calendar date, local midnight: the day the console shows.
+            let parts = utc.dateComponents([.year, .month, .day], from: d)
+            let local = calendar.date(from: parts) ?? d
+            let acc = byDay[local] ?? (0, 0, 0)
+            byDay[local] = (acc.0 &+ b.inputTokens, acc.1 &+ b.outputTokens, acc.2 &+ b.requests)
+            return true
+        }
+        let daily = byDay.keys.sorted().map {
+            TypeSafeUsagePoint(start: $0, inputTokens: byDay[$0]!.0, outputTokens: byDay[$0]!.1,
+                               requests: byDay[$0]!.2)
         }
         return TypeSafeUsage(
             todayInputTokens: today.reduce(0) { $0 &+ $1.inputTokens },
@@ -241,7 +251,8 @@ public enum TypeSafeUsageMath {
             weekInputTokens: week.reduce(0) { $0 &+ $1.inputTokens },
             weekOutputTokens: week.reduce(0) { $0 &+ $1.outputTokens },
             weekRequests: week.reduce(0) { $0 &+ $1.requests },
-            hourly: Array(points.suffix(hourlyLimit)))
+            hourly: Array(points.suffix(hourlyLimit)),
+            daily: daily)
     }
 
     static func dayDate(_ s: String, calendar: Calendar) -> Date? {

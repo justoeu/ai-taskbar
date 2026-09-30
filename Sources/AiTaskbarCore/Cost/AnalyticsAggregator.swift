@@ -60,6 +60,39 @@ public enum AnalyticsAggregator {
             ?? date.addingTimeInterval(Double(days) * 86_400)
     }
 
+    /// Tokens and requests for the timeframe from a snapshot that carries
+    /// them — today TypeSafe's console usage only. Month is nil: the console
+    /// series covers seven days, and a 7-day figure under a 30-day label
+    /// would understate it.
+    public static func activity(from snapshot: VendorSnapshot, timeframe: AnalyticsTimeframe,
+                                now: Date, calendar: Calendar) -> VendorActivity? {
+        guard case .typesafe(let s) = snapshot, let u = s.usage else { return nil }
+        func fill(_ points: [TypeSafeUsagePoint], slots: [Date], unit: Calendar.Component) -> [VendorActivity.Point] {
+            slots.map { slot in
+                let inSlot = points.filter { calendar.isDate($0.start, equalTo: slot, toGranularity: unit) }
+                return VendorActivity.Point(
+                    start: slot,
+                    tokens: inSlot.reduce(0) { $0 &+ $1.inputTokens &+ $1.outputTokens },
+                    requests: inSlot.reduce(0) { $0 &+ $1.requests })
+            }
+        }
+        let today = calendar.startOfDay(for: now)
+        switch timeframe {
+        case .daily:
+            let hours = (0..<24).compactMap { calendar.date(byAdding: .hour, value: $0, to: today) }
+            return VendorActivity(inputTokens: u.todayInputTokens, outputTokens: u.todayOutputTokens,
+                                  requests: u.todayRequests, granularity: .hour,
+                                  series: fill(u.hourly, slots: hours, unit: .hour))
+        case .weekly:
+            let days = (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
+            return VendorActivity(inputTokens: u.weekInputTokens, outputTokens: u.weekOutputTokens,
+                                  requests: u.weekRequests, granularity: .day,
+                                  series: fill(u.daily, slots: days, unit: .day))
+        case .monthly:
+            return nil
+        }
+    }
+
     public static func aggregate(
         timeframe: AnalyticsTimeframe,
         compareWithPrevious: Bool,
@@ -167,7 +200,8 @@ public enum AnalyticsAggregator {
                 costByModel: modelBreakdown,
                 usageHistory: history,
                 deltaPreviousPeriodPercent: deltaPercent,
-                lifetimeCostUSD: snapshot?.lifetimeCostUSD
+                lifetimeCostUSD: snapshot?.lifetimeCostUSD,
+                activity: snapshot.flatMap { activity(from: $0, timeframe: timeframe, now: now, calendar: calendar) }
             )
             vendorSummaries.append(summary)
         }

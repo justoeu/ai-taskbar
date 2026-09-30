@@ -42,6 +42,9 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
     public let usageHistory: [UsageHistoryStore.Sample]
     public let deltaPreviousPeriodPercent: Double?
     public let lifetimeCostUSD: Double?
+    /// Tokens and requests in the timeframe, from a vendor that reports them
+    /// (TypeSafe's console). Nil when no such source covers the timeframe.
+    public let activity: VendorActivity?
 
     public init(vendor: VendorId,
                 planLabel: String? = nil,
@@ -54,7 +57,8 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
                 costByModel: [String: Double] = [:],
                 usageHistory: [UsageHistoryStore.Sample] = [],
                 deltaPreviousPeriodPercent: Double? = nil,
-                lifetimeCostUSD: Double? = nil) {
+                lifetimeCostUSD: Double? = nil,
+                activity: VendorActivity? = nil) {
         self.vendor = vendor
         self.planLabel = planLabel
         self.totalCostUSD = totalCostUSD
@@ -67,6 +71,7 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
         self.usageHistory = usageHistory
         self.deltaPreviousPeriodPercent = deltaPreviousPeriodPercent
         self.lifetimeCostUSD = lifetimeCostUSD
+        self.activity = activity
     }
 
     /// True when the card may say "no recent usage": nothing in the
@@ -82,6 +87,7 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
             && (lifetimeCostUSD ?? 0) == 0
             && totalCostUSD <= 0.0001
             && totalUsagePercent <= 0.0001
+            && !(activity?.hasActivity ?? false)
     }
 }
 
@@ -128,4 +134,40 @@ public struct GlobalAnalyticsSnapshot: Sendable, Equatable {
         self.computedAt = computedAt
         self.isCostAvailable = isCostAvailable
     }
+}
+
+/// Token and request counts for one analytics timeframe, with a zero-filled
+/// series (hours of today for Day, the 7 days for Week) for the bar chart.
+public struct VendorActivity: Sendable, Equatable {
+    public enum Granularity: Sendable, Equatable { case hour, day }
+
+    public struct Point: Sendable, Equatable, Identifiable {
+        public var id: Date { start }
+        public let start: Date
+        public let tokens: Int
+        public let requests: Int
+
+        public init(start: Date, tokens: Int, requests: Int) {
+            self.start = start
+            self.tokens = tokens
+            self.requests = requests
+        }
+    }
+
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let requests: Int
+    public let granularity: Granularity
+    public let series: [Point]
+
+    public init(inputTokens: Int, outputTokens: Int, requests: Int,
+                granularity: Granularity, series: [Point]) {
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.requests = requests
+        self.granularity = granularity
+        self.series = series
+    }
+
+    public var hasActivity: Bool { requests > 0 || inputTokens > 0 || outputTokens > 0 }
 }

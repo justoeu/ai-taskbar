@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Charts
 import AiTaskbarCore
 
 public struct VendorAnalyticsCardView: View {
@@ -220,6 +221,11 @@ public struct VendorAnalyticsCardView: View {
                         }
                     }
 
+                    // Tokens and requests (TypeSafe's console)
+                    if let activity = summary.activity, activity.hasActivity {
+                        activitySection(activity)
+                    }
+
                     // Model Breakdown
                     if !summary.costByModel.isEmpty {
                         VStack(spacing: 7) {
@@ -292,6 +298,61 @@ public struct VendorAnalyticsCardView: View {
 }
 
 extension VendorAnalyticsCardView {
+    @ViewBuilder
+    private func activitySection(_ a: VendorActivity) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                activityTile("typesafe_input", a.inputTokens)
+                activityTile("typesafe_output", a.outputTokens)
+                activityTile("typesafe_requests", a.requests)
+            }
+            Chart(a.series) { p in
+                BarMark(x: .value("t", p.start, unit: a.granularity == .hour ? .hour : .day),
+                        y: .value("tokens", p.tokens))
+                    .foregroundStyle(vendorColor.opacity(0.85))
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let n = value.as(Int.self) { Text(TypeSafeCardView.count(n)) }
+                    }
+                }
+            }
+            .chartXAxis {
+                if a.granularity == .hour {
+                    AxisMarks(values: .stride(by: .hour, count: 6)) { _ in
+                        AxisValueLabel(format: .dateTime.hour())
+                    }
+                } else {
+                    AxisMarks(values: .stride(by: .day)) { _ in
+                        AxisValueLabel(format: .dateTime.weekday(.abbreviated))
+                    }
+                }
+            }
+            .frame(height: 90)
+            .accessibilityLabel(L10n.localizedString("typesafe_tokens"))
+        }
+        .padding(.top, 2)
+    }
+
+    private func activityTile(_ key: String, _ value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(L10n.localizedString(key))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(TypeSafeCardView.count(value))
+                .font(.callout.monospacedDigit().weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.secondary.opacity(0.08))
+        )
+    }
+
     /// "N sessions" where a session counter exists, else "N models", else
     /// nil. One formatter for both counts (DUP-MAE-002).
     static func countLabel(sessions: Int, models: Int) -> String? {
