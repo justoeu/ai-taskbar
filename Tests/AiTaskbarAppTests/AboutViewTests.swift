@@ -35,8 +35,9 @@ struct AboutViewTests {
             "quit_confirm_message",
             "quit_confirm_button",
             "cancel",
-            "back"
-        ]
+            "back",
+            "about_description"
+        ] + AboutView.facts.map(\.key) + AboutView.facts.compactMap(\.helpKey)
 
         for language in ["en", "pt-BR", "es"] {
             let file = root.appendingPathComponent("Sources/AiTaskbarApp/Resources/\(language).lproj/Localizable.strings")
@@ -53,5 +54,25 @@ struct AboutViewTests {
         let view = AboutView(onDone: { doneCalled = true })
         view.onDone()
         expectTrue(doneCalled)
+    }
+
+    @Test("the About vendor grid lists every supported LLM")
+    func vendor_grid_is_complete() {
+        #expect(AboutView.supportedVendors == VendorId.allCases)
+        #expect(AboutView.supportedVendors.contains(.typesafe))
+    }
+
+    @Test("the description no longer hard-codes a vendor list")
+    func description_has_no_vendor_names() throws {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<3 { root.deleteLastPathComponent() }
+        for language in ["en", "pt-BR", "es"] {
+            let file = root.appendingPathComponent("Sources/AiTaskbarApp/Resources/\(language).lproj/Localizable.strings")
+            let line = try String(contentsOf: file, encoding: .utf8)
+                .split(separator: "\n").first { $0.hasPrefix("\"about_description\" = ") } ?? ""
+            for name in ["Kimi", "OpenRouter", "Z.AI"] {
+                #expect(!line.contains(name), "\(language) still names \(name)")
+            }
+        }
     }
 }

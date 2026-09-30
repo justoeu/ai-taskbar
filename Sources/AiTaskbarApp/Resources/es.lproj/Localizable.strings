@@ -77,11 +77,12 @@
 "notif_title_fmt" = "%@ — %@ al %ld%%";
 
 // About panel
-"about_description" = "Monitorea el uso de LLM de Anthropic Claude, OpenAI Codex/ChatGPT, OpenRouter, Z.AI (GLM) y Kimi (Moonshot) — desde la barra de menú.";
-"about_refresh_hint" = "El intervalo de actualización es configurable en config.toml";
-"about_macroscopic" = "% macroscópico = mayor utilización entre los proveedores activos";
-"about_credentials" = "Credenciales leídas del Keychain + ~/.codex/auth.json";
-"about_security" = "Archivos de caché + config son user-only (0o600)";
+"about_description" = "Sigue uso, cuotas y costo de tus LLMs desde la barra de menús:";
+"about_refresh_hint" = "El intervalo de actualización se configura en Ajustes o en config.toml";
+"about_macroscopic" = "El % de la barra de menús es la mayor utilización entre las tarjetas que mantienes abiertas";
+"about_credentials" = "Credenciales: el ítem de Claude Code en el Llavero, ~/.codex/auth.json y claves de API cifradas en config.toml";
+"about_security" = "Config, caché e historial son solo del usuario (0600)";
+"about_network" = "Sin telemetría: la app solo habla con las APIs, consolas y páginas de estado de los propios proveedores, y con GitHub para actualizaciones";
 "about_built_with" = "Construido con SwiftUI · Licencia MIT";
 // %@ = nombre extraído del certificado Developer ID que firmó el binario.
 "about_developer_fmt" = "Desarrollado por %@";
@@ -117,8 +118,8 @@
 "models_columns_header" = "hoy / últimos 7 días";
 
 // About — cost data source
-"about_cost_source" = "Coste calculado localmente desde ~/.claude/projects y ~/.codex/logs_2.sqlite";
-"about_cost_source_help" = "El coste de Anthropic se deriva analizando mensajes del asistente en tus archivos JSONL locales de Claude Code (~/.claude/projects/*/*.jsonl), multiplicando tokens de input/output/cache por la tabla pública de precios de Claude.\n\nEl coste de OpenAI lee total_usage_tokens en ~/.codex/logs_2.sqlite y aplica la tabla de precios de los modelos Codex.\n\nNada se envía por red — el cálculo ocurre íntegramente en tu Mac. Los planes por suscripción (Claude Max, ChatGPT Pro) cobran una tarifa plana; el número mostrado es lo que costaría vía API equivalente.";
+"about_cost_source" = "El costo se calcula localmente a partir de ~/.claude/projects, ~/.codex y opencode";
+"about_cost_source_help" = "Anthropic: mensajes del asistente en los archivos JSONL locales de Claude Code (~/.claude/projects), cada respuesta contada una vez, con la tabla pública de precios de Claude (modo rápido incluido).\n\nOpenAI: rollouts de las sesiones de Codex (~/.codex/sessions) y ~/.codex/logs_2.sqlite, con la tabla de precios de los modelos Codex.\n\nopencode: su base local (~/.local/share/opencode/opencode.db); sus tokens aparecen en el proveedor que los cobró.\n\nNada se envía por la red. Los planes por suscripción (Claude Max, ChatGPT Pro) cobran una tarifa fija; la cifra es lo que costaría el mismo uso vía API.";
 
 // MARK: - Settings UI
 "settings" = "Ajustes";
