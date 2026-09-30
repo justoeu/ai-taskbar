@@ -67,17 +67,17 @@ public struct AnalyticsView: View {
         VendorOrderSyncBar(isOn: $analyticsStore.syncVendorOrder)
     }
 
+    /// Also the popover toolbar button's icon.
+    static let headerSymbol = "chart.pie.fill"
+
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            Button {
-                close()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.body.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            .focused($closeButtonFocused)
-            .accessibilityLabel(L10n.localizedString("back"))
+            // The feature's own icon (same as the popover button that opens
+            // it), like the Service Status page; "Back" lives in the footer.
+            Image(systemName: Self.headerSymbol)
+                .font(.title2)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 L10n.text("analytics_title")
@@ -410,6 +410,7 @@ public struct AnalyticsView: View {
             } label: {
                 Label(L10n.localizedString("back"), systemImage: "chevron.backward")
             }
+            .focused($closeButtonFocused)
             .buttonStyle(.bordered)
             .controlSize(.small)
             .keyboardShortcut(.defaultAction)

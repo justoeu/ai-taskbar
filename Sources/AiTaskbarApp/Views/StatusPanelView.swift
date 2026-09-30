@@ -64,7 +64,9 @@ public struct StatusPanelView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: ServiceStatusPresentation.symbol(for: store.overallLevel))
+            // The feature's icon (same as the popover button), tinted by the
+            // overall level so the page still reads healthy/degraded at a glance.
+            Image(systemName: ServiceStatusPresentation.headerSymbol)
                 .font(.title2)
                 .foregroundStyle(store.overallLevel.statusColor)
                 .accessibilityHidden(true)

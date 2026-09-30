@@ -317,7 +317,7 @@ public struct PopoverContentView: View {
                     analyticsStore.targetVendor = nil
                     overlay = .analytics
                 } label: {
-                    Image(systemName: "chart.pie.fill")
+                    Image(systemName: AnalyticsView.headerSymbol)
                 }
                 .buttonStyle(.borderless)
                 .help(L10n.localizedString("analytics_toolbar_button"))
