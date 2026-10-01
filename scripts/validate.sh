@@ -103,6 +103,22 @@ if ! cmp -s CLAUDE.md AGENTS.md; then
 fi
 ok "CLAUDE.md ≡ AGENTS.md"
 
+# Release notes name the vendors from VendorId.displayName via
+# scripts/vendor-list.sh (a hand-kept list said five of nine). The script must
+# cover every case, and must fail — not print a short list — when a case has
+# no readable display name: checked on the real file and on a planted copy.
+if ! vendor_list=$(scripts/vendor-list.sh); then
+    fail "scripts/vendor-list.sh could not read VendorId.displayName"
+fi
+vendor_plant=$(mktemp)
+grep -v 'case .typesafe:   return' Sources/AiTaskbarCore/Models/VendorId.swift > "$vendor_plant"
+if scripts/vendor-list.sh "$vendor_plant" >/dev/null 2>&1; then
+    rm -f "$vendor_plant"
+    fail "scripts/vendor-list.sh accepted a displayName switch missing a case"
+fi
+rm -f "$vendor_plant"
+ok "release-notes vendor list: $vendor_list"
+
 # Vacuous-#expect ratchet + trapping Double->Int ratchet for *WireTypes.swift +
 # 64-bit %ld / unique-key / en-pt-BR-es parity ratchet for Localizable.strings +
 # 64-bit %ld ratchet for inline String(format: "...") literals in Sources/.
