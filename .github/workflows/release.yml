@@ -134,7 +134,7 @@ jobs:
               COMMITS=$(git log --pretty=format:'%s' --no-merges "$RANGE" \
                         | grep -iE "^${TYPE}(\(|:)" \
                         | grep -vE '^chore\(release\)' \
-                        | sed -E "s/^[^:]*:[[:space:]]*//; s/ ?\[skip release\]//")
+                        | sed -E "s/^[^:]*:[[:space:]]*//; s/ ?\[skip release\]//g")
               if [ -n "$COMMITS" ]; then
                 echo "### $HEADER"
                 echo
@@ -148,7 +148,7 @@ jobs:
                     | grep -viE '^(feat|feature|fix|perf|refactor)(\(|:)' \
                     | grep -vE '^chore\(release\)' \
                     | head -n 20 \
-                    | sed -E "s/^[^:]*:[[:space:]]*//; s/ ?\[skip release\]//")
+                    | sed -E "s/^[^:]*:[[:space:]]*//; s/ ?\[skip release\]//g")
             if [ -n "$MAINT" ]; then
               echo "### 🧰 Maintenance"
               echo
