@@ -103,23 +103,26 @@ public struct VendorIconView: View {
 public struct VendorBrandIcon: View {
     public let vendorId: VendorId
     public let size: CGFloat
-    public let isActive: Bool
+    public let isEnabled: Bool
 
-    public init(vendorId: VendorId, size: CGFloat = 14, isActive: Bool = true) {
+    public init(vendorId: VendorId, size: CGFloat = 14, isEnabled: Bool = true) {
         self.vendorId = vendorId
         self.size = size
-        self.isActive = isActive
+        self.isEnabled = isEnabled
     }
 
     public var body: some View {
         VendorIconView(vendorId: vendorId, size: size)
-            .foregroundStyle(Self.tint(for: vendorId, isActive: isActive))
+            .foregroundStyle(Self.tint(for: vendorId, isEnabled: isEnabled))
             .frame(width: size, height: size)
             .accessibilityHidden(true)
     }
 
-    /// Brand colour when active, the secondary grey otherwise.
-    static func tint(for vendorId: VendorId, isActive: Bool) -> Color {
-        isActive ? AnalyticsFormatters.vendorColor(for: vendorId) : Color.secondary.opacity(0.6)
+    /// The one grey for every vendor that is off or unconfigured.
+    static let disabledTint = Color.secondary.opacity(0.6)
+
+    /// Brand colour when enabled, `disabledTint` otherwise.
+    static func tint(for vendorId: VendorId, isEnabled: Bool) -> Color {
+        isEnabled ? AnalyticsFormatters.vendorColor(for: vendorId) : disabledTint
     }
 }

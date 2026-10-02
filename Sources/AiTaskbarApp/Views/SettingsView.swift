@@ -416,7 +416,7 @@ public struct SettingsView: View {
             Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
                 .font(.subheadline)
                 .foregroundStyle(isEnabled ? Color.green : Color.secondary.opacity(0.4))
-            VendorBrandIcon(vendorId: vendor, size: 14, isActive: isEnabled)
+            VendorBrandIcon(vendorId: vendor, size: 14, isEnabled: isEnabled)
             Text(name)
                 .font(.subheadline.weight(isEnabled ? .semibold : .regular))
                 .foregroundStyle(isEnabled ? Color.primary : Color.secondary)

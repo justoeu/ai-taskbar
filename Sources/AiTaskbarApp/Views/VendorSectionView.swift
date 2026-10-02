@@ -125,7 +125,7 @@ public struct VendorSectionView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            VendorBrandIcon(vendorId: vm.vendorId, size: 14, isActive: !isDisabled)
+                            VendorBrandIcon(vendorId: vm.vendorId, size: 14, isEnabled: !isDisabled)
 
                             Text(vm.vendorId.displayName)
                                 .font(.headline)

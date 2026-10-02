@@ -6,12 +6,18 @@ import AiTaskbarCore
 @MainActor
 @Suite("Vendor brand icon")
 struct VendorBrandIconTests {
-    @Test("active vendors use their brand colour, inactive ones grey")
-    func tint() {
+    @Test("enabled vendors use their own brand colour")
+    func enabled_tint() {
+        #expect(VendorBrandIcon.tint(for: .anthropic, isEnabled: true) == .orange)
+        #expect(VendorBrandIcon.tint(for: .typesafe, isEnabled: true)
+                == Color(red: 0.30, green: 0.75, blue: 0.35))
+    }
+
+    @Test("every disabled vendor gets the same grey, never a brand colour")
+    func disabled_tint() {
         for vendor in VendorId.allCases {
-            #expect(VendorBrandIcon.tint(for: vendor, isActive: true) == AnalyticsFormatters.vendorColor(for: vendor),
-                    "\(vendor)")
-            #expect(VendorBrandIcon.tint(for: vendor, isActive: false) != AnalyticsFormatters.vendorColor(for: vendor),
+            #expect(VendorBrandIcon.tint(for: vendor, isEnabled: false) == Color.secondary.opacity(0.6), "\(vendor)")
+            #expect(VendorBrandIcon.tint(for: vendor, isEnabled: false) != AnalyticsFormatters.vendorColor(for: vendor),
                     "\(vendor)")
         }
     }
