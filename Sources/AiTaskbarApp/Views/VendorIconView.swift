@@ -95,3 +95,31 @@ public struct VendorIconView: View {
         }
     }
 }
+
+/// The vendor's icon in its brand colour — the one look every page uses
+/// (popover cards, Service Status, Analytics, Settings, About). A vendor that
+/// is off or unconfigured is drawn grey, so colour also reads as "active".
+/// The menu-bar items stay monochrome on purpose (macOS status-item style).
+public struct VendorBrandIcon: View {
+    public let vendorId: VendorId
+    public let size: CGFloat
+    public let isActive: Bool
+
+    public init(vendorId: VendorId, size: CGFloat = 14, isActive: Bool = true) {
+        self.vendorId = vendorId
+        self.size = size
+        self.isActive = isActive
+    }
+
+    public var body: some View {
+        VendorIconView(vendorId: vendorId, size: size)
+            .foregroundStyle(Self.tint(for: vendorId, isActive: isActive))
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+
+    /// Brand colour when active, the secondary grey otherwise.
+    static func tint(for vendorId: VendorId, isActive: Bool) -> Color {
+        isActive ? AnalyticsFormatters.vendorColor(for: vendorId) : Color.secondary.opacity(0.6)
+    }
+}

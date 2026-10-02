@@ -77,9 +77,7 @@ public struct VendorAnalyticsCardView: View {
                             .foregroundStyle(.secondary)
                             .frame(width: 12)
 
-                        VendorIconView(vendorId: summary.vendor, size: 16)
-                            .foregroundStyle(vendorColor)
-                            .frame(width: 16, height: 16)
+                        VendorBrandIcon(vendorId: summary.vendor, size: 16)
 
                         Text(summary.vendor.displayName)
                             .font(.headline)
