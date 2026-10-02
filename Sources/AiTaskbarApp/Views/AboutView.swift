@@ -86,9 +86,7 @@ public struct AboutView: View {
                   alignment: .leading, spacing: 6) {
             ForEach(Self.supportedVendors, id: \.self) { vendor in
                 HStack(spacing: 6) {
-                    VendorIconView(vendorId: vendor, size: 14)
-                        .foregroundStyle(AnalyticsFormatters.vendorColor(for: vendor))
-                        .frame(width: 14, height: 14)
+                    VendorBrandIcon(vendorId: vendor, size: 14)
                     Text(vendor.displayName)
                         .font(.caption)
                         .lineLimit(1)

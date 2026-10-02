@@ -42,24 +42,24 @@ public struct SettingsView: View {
                 // a Form+Section on macOS 13 silently breaks expand/collapse.
                 // The header line on each Section acts as the affordance.
                 Section(content: { vendorAnthropic },
-                        header: { vendorHeader("Anthropic", isEnabled: viewModel.draft.anthropic.enabled) },
+                        header: { vendorHeader("Anthropic", isEnabled: viewModel.draft.anthropic.enabled, vendor: .anthropic) },
                         footer: { Text(L10n.localizedString("settings_vendor_footer")).font(.caption2).foregroundStyle(.secondary) })
                 Section(content: { vendorOpenAI },
-                        header: { vendorHeader("OpenAI / Codex", isEnabled: viewModel.draft.openai.enabled) })
+                        header: { vendorHeader("OpenAI / Codex", isEnabled: viewModel.draft.openai.enabled, vendor: .openai) })
                 Section(content: { vendorZAI },
-                        header: { vendorHeader("Z.AI", isEnabled: viewModel.draft.zai.enabled) })
+                        header: { vendorHeader("Z.AI", isEnabled: viewModel.draft.zai.enabled, vendor: .zai) })
                 Section(content: { vendorOpenRouter },
-                        header: { vendorHeader("OpenRouter", isEnabled: viewModel.draft.openrouter.enabled) })
+                        header: { vendorHeader("OpenRouter", isEnabled: viewModel.draft.openrouter.enabled, vendor: .openrouter) })
                 Section(content: { vendorKimi },
-                        header: { vendorHeader("Kimi (Moonshot)", isEnabled: viewModel.draft.kimi.enabled) })
+                        header: { vendorHeader("Kimi (Moonshot)", isEnabled: viewModel.draft.kimi.enabled, vendor: .kimi) })
                 Section(content: { vendorGemini },
-                        header: { vendorHeader("Gemini", isEnabled: viewModel.draft.gemini.enabled) })
+                        header: { vendorHeader("Gemini", isEnabled: viewModel.draft.gemini.enabled, vendor: .gemini) })
                 Section(content: { vendorDeepSeek },
-                        header: { vendorHeader("DeepSeek", isEnabled: viewModel.draft.deepseek.enabled) })
+                        header: { vendorHeader("DeepSeek", isEnabled: viewModel.draft.deepseek.enabled, vendor: .deepseek) })
                 Section(content: { vendorXAI },
-                        header: { vendorHeader("xAI (Grok)", isEnabled: viewModel.draft.xai.enabled) })
+                        header: { vendorHeader("xAI (Grok)", isEnabled: viewModel.draft.xai.enabled, vendor: .xai) })
                 Section(content: { vendorTypeSafe },
-                        header: { vendorHeader("Jev (TypeSafe)", isEnabled: viewModel.draft.typesafe.enabled) },
+                        header: { vendorHeader("Jev (TypeSafe)", isEnabled: viewModel.draft.typesafe.enabled, vendor: .typesafe) },
                         footer: { Text(L10n.localizedString("settings_typesafe_footer")).font(.caption2).foregroundStyle(.secondary) })
             }
             .formStyle(.grouped)
@@ -411,11 +411,12 @@ public struct SettingsView: View {
     /// track locally — the body content reads the same flag to show/hide.
     /// Shows a green checkmark when enabled, a neutral circle when disabled,
     /// and differentiates font weight and foreground style.
-    private func vendorHeader(_ name: String, isEnabled: Bool) -> some View {
+    private func vendorHeader(_ name: String, isEnabled: Bool, vendor: VendorId) -> some View {
         HStack(spacing: 8) {
             Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
                 .font(.subheadline)
                 .foregroundStyle(isEnabled ? Color.green : Color.secondary.opacity(0.4))
+            VendorBrandIcon(vendorId: vendor, size: 14, isEnabled: isEnabled)
             Text(name)
                 .font(.subheadline.weight(isEnabled ? .semibold : .regular))
                 .foregroundStyle(isEnabled ? Color.primary : Color.secondary)

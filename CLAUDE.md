@@ -646,6 +646,10 @@ that came out of fixing that:
   skipped: the next tick supersedes (cancels) it, so a hung vendor recovers
   without a manual refresh. The age is measured on `RefreshScheduler`'s
   injected clock, which tests advance with the scripted sleeper.
+- **Vendor icons:** every in-app page draws a vendor with `VendorBrandIcon`
+  (brand colour from `AnalyticsFormatters.vendorColor`, grey when the vendor
+  is off). Don't tint `VendorIconView` by hand per screen. The menu-bar items
+  are the one exception and stay monochrome (macOS status-item style).
 - **`AiTaskbarValidate`** — runtime test runner, see "Validation policy".
 - **`AiTaskbarTesting`** — fixtures + StubURLProtocol, shared by tests +
   validate.

@@ -253,9 +253,12 @@ private struct StatusVendorRowView: View {
                     Image(systemName: ServiceStatusPresentation.symbol(for: status.level))
                         .foregroundStyle(status.level.statusColor)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(row.vendorId.displayName)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
+                        HStack(spacing: 5) {
+                            VendorBrandIcon(vendorId: row.vendorId, size: 12)
+                            Text(row.vendorId.displayName)
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                        }
                         Text(L10n.localizedString(displayLevelKey))
                         .font(.caption)
                         .foregroundStyle(status.level.statusColor)
