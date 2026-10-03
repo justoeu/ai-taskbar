@@ -60,8 +60,10 @@ public struct AboutView: View {
                 onDone()
             }
         }
+        .onChange(of: showQuitConfirmation) { PopoverKeyMonitor.shared.aboutConfirmationShown = $0 }
         .onDisappear {
             showQuitConfirmation = false
+            PopoverKeyMonitor.shared.aboutConfirmationShown = false
         }
     }
 

@@ -517,6 +517,15 @@ public final class PinnedStatusItemManager: ObservableObject {
         }
     }
 
+    /// Closes the open popover (Esc). Goes through the main status button,
+    /// the same toggle a click uses: closing the MenuBarExtra window directly
+    /// leaves its internal state "open", and the next click then does nothing.
+    public func closeMainPopover() {
+        guard store?.isPopoverPresented == true else { return }
+        lastFocusedPinnedVendor = nil
+        triggerStatusBarButton(MainStatusItemHolder.shared.mainButton ?? findMainStatusBarButton())
+    }
+
     private func triggerStatusBarButton(_ button: NSStatusBarButton?) {
         guard let button else { return }
         if let target = button.target, let action = button.action {
