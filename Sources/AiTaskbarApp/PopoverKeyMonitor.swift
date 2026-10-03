@@ -25,17 +25,20 @@ final class PopoverKeyMonitor {
     nonisolated static let escapeKeyCode: UInt16 = 53
 
     weak var window: NSWindow?
-    var pinLimitAlertShown = false
+    /// Read live, not copied: `store.pinLimitAlert` can stay set across a
+    /// close, and macOS 13's `onChange` does not report the initial value.
+    weak var store: UsageStore?
     var aboutConfirmationShown = false
     private var monitor: Any?
 
-    var modalShown: Bool { pinLimitAlertShown || aboutConfirmationShown }
+    var modalShown: Bool { store?.pinLimitAlert != nil || aboutConfirmationShown }
 
     func start() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Local monitors run on the main thread; only Sendable values
-            // cross into the main-actor check.
+            // AppKit calls local monitors on the main thread, but the closure
+            // type does not say so; assumeIsolated states it, and only
+            // Sendable values are copied in, so nothing non-Sendable crosses.
             let keyCode = event.keyCode
             let modifiers = event.modifierFlags
             let windowNumber = event.windowNumber

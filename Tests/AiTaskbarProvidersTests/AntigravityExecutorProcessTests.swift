@@ -117,14 +117,22 @@ struct AntigravityExecutorProcessTests {
     func sigterm_ignored_escalates_to_sigkill() async throws {
         let fake = try FakeAgy(body: "trap '' TERM\nwhile :; do sleep 0.05; done")
         defer { fake.cleanUp() }
-        let (box, _) = start(ProcessAntigravityExecutor(customPath: fake.script, timeout: 0.5))
-        let outcome = await result(of: box, within: 6)
+        // The deadline must leave the shell time to start and install its
+        // trap: at 0.5 s a loaded machine killed it before it wrote its pid
+        // (~1 run in 5), so the SIGTERM-ignored path was never exercised.
+        let (box, _) = start(ProcessAntigravityExecutor(customPath: fake.script, timeout: 2))
+        var waited = 0
+        while fake.pid == nil && waited < 75 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+            waited += 1
+        }
+        let pid = try #require(fake.pid)
+        let outcome = await result(of: box, within: 8)
         var timedOut = false
         if case .failure(let error)? = outcome {
             timedOut = (error as? AppError) == .guidance(.antigravityTimedOut)
         }
         #expect(timedOut, "outcome: \(String(describing: outcome))")
-        let pid = try #require(fake.pid)
         #expect(isGone(pid))
     }
 

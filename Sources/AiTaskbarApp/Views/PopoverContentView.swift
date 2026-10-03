@@ -102,6 +102,7 @@ public struct PopoverContentView: View {
                         // menu-bar window, so keys (Esc) would go to the
                         // previous app. Activate, then listen for Esc.
                         NSApp.activate(ignoringOtherApps: true)
+                        PopoverKeyMonitor.shared.store = store
                         PopoverKeyMonitor.shared.start()
                         hasAppeared = false
                         withAnimation(reduceMotion ? nil : .easeOut(duration: Self.appearDuration)) {
@@ -264,7 +265,6 @@ public struct PopoverContentView: View {
             }
         }
         .background(PopoverWindowReader { PopoverKeyMonitor.shared.window = $0 })
-        .onChange(of: store.pinLimitAlert != nil) { PopoverKeyMonitor.shared.pinLimitAlertShown = $0 }
     }
 
     private var headerBar: some View {
