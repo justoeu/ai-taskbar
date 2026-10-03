@@ -346,11 +346,27 @@ final class RefreshSchedulerTests {
         scheduler.stop()
     }
 
-    @Test("same-day relaunch sleeps the computed delay (not 86400) and checks at the new day")
+    @Test("same-day relaunch checks at launch: a release published since the last check shows up")
+    func update_loop_checks_on_same_day_relaunch() async {
+        let now = UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00")
+        let checker = dailyChecker(lastCheck: "2026-09-29T08:00:00-03:00", clock: { now })
+        let updateSleeper = ScriptedSleeper(returningSleeps: 0)
+        let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
+
+        scheduler.start()
+        await updateSleeper.waitForSleeps(1)
+        #expect(checker.status == .checking)
+        // The launch check is recorded at 10:00, so the daily loop then
+        // sleeps to the next local midnight.
+        #expect(updateSleeper.durations == [TimeInterval(14 * 3_600)])
+        scheduler.stop()
+    }
+
+    @Test("a relaunch within 5 minutes of the last check does not check, then checks at the new day")
     func update_loop_sleeps_until_next_day() async {
         let base = UpdateCheckDueTests.at("2026-09-29T10:00:00-03:00")
         let updateSleeper = ScriptedSleeper(returningSleeps: 1)
-        let checker = dailyChecker(lastCheck: "2026-09-29T08:00:00-03:00",
+        let checker = dailyChecker(lastCheck: "2026-09-29T09:58:00-03:00",
                                    clock: { [updateSleeper] in base.addingTimeInterval(updateSleeper.elapsed) })
         let scheduler = updateScheduler(checker, updateSleeper: updateSleeper)
 

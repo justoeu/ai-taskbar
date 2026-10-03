@@ -138,4 +138,19 @@ struct UpdateCheckDueTests {
         #expect(checker.status == .checking)
         expectTrue(checker.lastCheckDate == now)
     }
+
+    // MARK: launch rule
+
+    @Test("every launch checks unless the last check was under 5 minutes ago")
+    func launch_check_due() {
+        let now = Self.at("2026-09-29T10:00:00-03:00")
+        #expect(UpdateChecker.isLaunchCheckDue(lastCheck: nil, now: now))
+        #expect(UpdateChecker.isLaunchCheckDue(lastCheck: now.addingTimeInterval(-2 * 3_600), now: now))
+        #expect(UpdateChecker.isLaunchCheckDue(lastCheck: now.addingTimeInterval(-UpdateChecker.launchMinimumInterval), now: now))
+        #expect(!UpdateChecker.isLaunchCheckDue(lastCheck: now.addingTimeInterval(-60), now: now))
+        #expect(!UpdateChecker.isLaunchCheckDue(lastCheck: now, now: now))
+        // A future last check (clock skew) re-syncs at launch.
+        #expect(UpdateChecker.isLaunchCheckDue(lastCheck: now.addingTimeInterval(3_600), now: now))
+        #expect(UpdateChecker.launchMinimumInterval == 300)
+    }
 }

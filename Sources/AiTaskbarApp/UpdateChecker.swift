@@ -59,6 +59,10 @@ public final class UpdateChecker: ObservableObject {
     nonisolated public static let cadenceInterval: TimeInterval = 86_400 // 24 hours
     /// Shortest sleep between update-loop rounds (UPDATE-SCHED-001).
     nonisolated public static let minimumRetryDelay: TimeInterval = 60
+    /// A launch checks again unless the last check was this recent: quitting
+    /// and reopening several times must not burn the unauthenticated GitHub
+    /// API budget (60 requests/hour).
+    nonisolated public static let launchMinimumInterval: TimeInterval = 5 * 60
     nonisolated public static let lastCheckKey: String = "ai_taskbar_last_update_check_at"
     nonisolated public static let dismissedTagKey: String = "ai_taskbar_dismissed_update_tag"
 
@@ -127,6 +131,18 @@ public final class UpdateChecker: ObservableObject {
             || !calendar.isDate(lastCheck, inSameDayAs: now)
     }
 
+    /// At launch: every relaunch checks (a release published since the last
+    /// check shows up when the user reopens the app), unless the last check
+    /// was under `launchMinimumInterval` ago. A last check in the future
+    /// (clock skew) checks too, which re-syncs the stored date. Drafts are
+    /// never seen: `/releases/latest` returns published releases only, and the
+    /// prerelease path filters drafts out of the list.
+    nonisolated public static func isLaunchCheckDue(lastCheck: Date?, now: Date) -> Bool {
+        guard let lastCheck else { return true }
+        guard lastCheck <= now else { return true }
+        return now.timeIntervalSince(lastCheck) >= launchMinimumInterval
+    }
+
     /// 0 when due; otherwise the time until the start of the local day after
     /// the last check or 24 h after it, whichever comes first, kept within
     /// `minimumRetryDelay...cadenceInterval` so a skewed clock re-evaluates
@@ -173,6 +189,14 @@ public final class UpdateChecker: ObservableObject {
         case .idle, .checking, .upToDate, .failed:
             break
         }
+    }
+
+    /// The launch check (see `isLaunchCheckDue`); the running app keeps the
+    /// once-per-day rule in `checkIfNeeded`.
+    public func checkAtLaunch() {
+        guard config.enabled, !status.isBusy,
+              Self.isLaunchCheckDue(lastCheck: lastCheckDate, now: now()) else { return }
+        check()
     }
 
     public func checkIfNeeded(force: Bool = false) {
