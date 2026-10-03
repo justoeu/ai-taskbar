@@ -646,6 +646,14 @@ that came out of fixing that:
   skipped: the next tick supersedes (cancels) it, so a hung vendor recovers
   without a manual refresh. The age is measured on `RefreshScheduler`'s
   injected clock, which tests advance with the scripted sleeper.
+- **Esc closes the popover from any screen** (`PopoverKeyMonitor`): a local
+  key monitor, scoped to the popover's own window, because on the home screen
+  no control holds focus and `onExitCommand` never fired. Opening the popover
+  activates the app (an accessory app isn't, so keys went to the previous
+  app). An open modal (pin-limit alert, About's quit confirmation) gets Esc
+  first. Closing goes through the main status button
+  (`closeMainPopover`), never `window.close()`, which desyncs MenuBarExtra.
+  Reopening always lands on the home screen (`overlay` reset on disappear).
 - **Vendor icons:** every in-app page draws a vendor with `VendorBrandIcon`
   (brand colour from `AnalyticsFormatters.vendorColor`, grey when the vendor
   is off). Don't tint `VendorIconView` by hand per screen. The menu-bar items

@@ -98,6 +98,12 @@ public struct PopoverContentView: View {
                     }
                     .onAppear {
                         store.isPopoverPresented = true
+                        // An accessory app is not activated by opening its
+                        // menu-bar window, so keys (Esc) would go to the
+                        // previous app. Activate, then listen for Esc.
+                        NSApp.activate(ignoringOtherApps: true)
+                        PopoverKeyMonitor.shared.store = store
+                        PopoverKeyMonitor.shared.start()
                         hasAppeared = false
                         withAnimation(reduceMotion ? nil : .easeOut(duration: Self.appearDuration)) {
                             hasAppeared = true
@@ -132,6 +138,12 @@ public struct PopoverContentView: View {
                     }
                     .onDisappear {
                         store.isPopoverPresented = false
+                        PopoverKeyMonitor.shared.stop()
+                        // Reopening always starts on the home screen, never on
+                        // the About / Analytics / Status / Settings page it
+                        // was closed from.
+                        overlay = nil
+                        analyticsStore.targetVendor = nil
                         // Reset while hidden, so the next open from the main
                         // icon already starts at the first LLM even if the
                         // scroll on appear loses a race with layout.
@@ -240,6 +252,9 @@ public struct PopoverContentView: View {
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: overlay)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: store.pinLimitAlert != nil)
+        // Esc normally never reaches this: PopoverKeyMonitor closes the
+        // popover first. It passes Esc through only while a modal is up, and
+        // then this dismisses the pin-limit alert (About handles its own).
         .onExitCommand {
             if store.pinLimitAlert != nil {
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
@@ -249,6 +264,7 @@ public struct PopoverContentView: View {
                 overlay = nil
             }
         }
+        .background(PopoverWindowReader { PopoverKeyMonitor.shared.window = $0 })
     }
 
     private var headerBar: some View {
