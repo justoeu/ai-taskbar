@@ -141,16 +141,43 @@ struct UpdateCheckDueTests {
 
     // MARK: launch rule
 
-    @Test("every launch checks unless the last check was under 5 minutes ago")
-    func launch_check_due() {
-        let now = Self.at("2026-09-29T10:00:00-03:00")
-        #expect(UpdateChecker.isLaunchCheckDue(lastCheck: nil, now: now))
-        #expect(UpdateChecker.isLaunchCheckDue(lastCheck: now.addingTimeInterval(-2 * 3_600), now: now))
-        #expect(UpdateChecker.isLaunchCheckDue(lastCheck: now.addingTimeInterval(-UpdateChecker.launchMinimumInterval), now: now))
-        #expect(!UpdateChecker.isLaunchCheckDue(lastCheck: now.addingTimeInterval(-60), now: now))
-        #expect(!UpdateChecker.isLaunchCheckDue(lastCheck: now, now: now))
-        // A future last check (clock skew) re-syncs at launch.
-        #expect(UpdateChecker.isLaunchCheckDue(lastCheck: now.addingTimeInterval(3_600), now: now))
-        #expect(UpdateChecker.launchMinimumInterval == 300)
+    private static let launchNow = at("2026-09-29T10:00:00-03:00")
+    private func launchDue(lastCheckAgo seconds: TimeInterval?, pending: String? = nil,
+                           current: String = "0.25.0") -> Bool {
+        UpdateChecker.isLaunchCheckDue(lastCheck: seconds.map { Self.launchNow.addingTimeInterval(-$0) },
+                                       now: Self.launchNow, pendingUpdateTag: pending, currentVersion: current)
+    }
+
+    @Test("the launch floor is 5 minutes")
+    func launch_floor_constant() { #expect(UpdateChecker.launchMinimumInterval == 300) }
+
+    @Test("a launch with no previous check checks")
+    func launch_no_previous() { #expect(launchDue(lastCheckAgo: nil)) }
+
+    @Test("a launch hours after the last check checks")
+    func launch_hours_later() { #expect(launchDue(lastCheckAgo: 2 * 3_600)) }
+
+    @Test("a launch exactly 5 minutes after checks")
+    func launch_at_floor() { #expect(launchDue(lastCheckAgo: 300)) }
+
+    @Test("a launch at 301 s checks")
+    func launch_just_over() { #expect(launchDue(lastCheckAgo: 301)) }
+
+    @Test("a launch at 299 s does not check")
+    func launch_just_under() { #expect(!launchDue(lastCheckAgo: 299)) }
+
+    @Test("a launch at the same instant does not check")
+    func launch_same_instant() { #expect(!launchDue(lastCheckAgo: 0)) }
+
+    @Test("a future last check (clock skew) checks at launch")
+    func launch_future_last_check() { #expect(launchDue(lastCheckAgo: -3_600)) }
+
+    @Test("a pending newer update rechecks inside the floor")
+    func launch_pending_update() { #expect(launchDue(lastCheckAgo: 60, pending: "v0.26.0")) }
+
+    @Test("a pending tag that is not newer (already installed) keeps the floor")
+    func launch_pending_installed() {
+        #expect(!launchDue(lastCheckAgo: 60, pending: "v0.26.0", current: "0.26.0"))
+        #expect(!launchDue(lastCheckAgo: 60, pending: "v0.25.0", current: "0.26.0"))
     }
 }

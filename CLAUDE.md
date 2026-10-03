@@ -288,7 +288,9 @@ cleanly on `[skip release]` heads.
   `isLaunchCheckDue`) skips only when the last check is under
   `launchMinimumInterval` (5 min) old — relaunch bursts must stay within the
   unauthenticated GitHub API budget (60/h); a future last check (clock skew)
-  checks. Drafts are never offered: `/releases/latest` returns published
+  checks, and so does a pending update (`pendingUpdateTagKey`, the TAG only —
+  never URLs or checksums — of a newer release the last check found), so a
+  quick relaunch never drops the banner until the next day. Drafts are never offered: `/releases/latest` returns published
   releases only and the prerelease path filters drafts.
   `UpdateChecker.isCheckDue` (no previous check, an earlier LOCAL day, or
   >= 24 h) and `delayUntilNextCheck` (next local midnight or +24 h, whichever
