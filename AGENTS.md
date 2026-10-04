@@ -283,8 +283,15 @@ cleanly on `[skip release]` heads.
   returns a prerelease, so `include_prereleases = true` reads
   `/releases?per_page=20` and picks the newest non-draft by `Semver` (SemVer
   2.0 prerelease precedence; `beta10` > `beta9`).
-- The automatic update check runs **once per calendar day** — at launch if it
-  has not checked today, and at the start of each new day while running.
+- The automatic update check runs **at every launch** and **once per calendar
+  day while running**. The launch check (`checkAtLaunch` /
+  `isLaunchCheckDue`) skips only when the last check is under
+  `launchMinimumInterval` (5 min) old — relaunch bursts must stay within the
+  unauthenticated GitHub API budget (60/h); a future last check (clock skew)
+  checks, and so does a pending update (`pendingUpdateTagKey`, the TAG only —
+  never URLs or checksums — of a newer release the last check found), so a
+  quick relaunch never drops the banner until the next day. Drafts are never offered: `/releases/latest` returns published
+  releases only and the prerelease path filters drafts.
   `UpdateChecker.isCheckDue` (no previous check, an earlier LOCAL day, or
   >= 24 h) and `delayUntilNextCheck` (next local midnight or +24 h, whichever
   first, clamped to 60 s...24 h) are pure over an injected `Calendar` + clock;

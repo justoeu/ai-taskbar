@@ -131,6 +131,23 @@ final class UpdateCheckerFetchTests {
 
     // MARK: BP-REP-003 — bounded reads
 
+    @Test("a found update records its tag; an up-to-date check clears it")
+    func pending_update_tag_round_trip() async {
+        let defaults = UserDefaults(suiteName: defaultsSuite)!
+        RouteProtocol.set([Self.latestKey: .init(body: Data(Self.releaseJSON(tag: "v9.9.9").utf8)),
+                           Self.checksumsKey: .init(body: Self.checksumsBody())])
+        let checker = makeChecker()
+        checker.check()
+        #expect(available(await settle(checker)) != nil)
+        #expect(defaults.string(forKey: UpdateChecker.pendingUpdateTagKey) == "v9.9.9")
+
+        RouteProtocol.set([Self.latestKey: .init(body: Data(Self.releaseJSON(tag: "v1.0.0").utf8))])
+        let upToDate = makeChecker()
+        upToDate.check()
+        _ = await settle(upToDate)
+        #expect(defaults.string(forKey: UpdateChecker.pendingUpdateTagKey) == nil)
+    }
+
     @Test("a releases API body over the cap fails instead of being buffered")
     func oversized_release_json_fails() async {
         var body = Data(Self.releaseJSON(tag: "v9.9.9", withAssets: false).utf8)

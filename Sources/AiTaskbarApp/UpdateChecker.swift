@@ -59,8 +59,16 @@ public final class UpdateChecker: ObservableObject {
     nonisolated public static let cadenceInterval: TimeInterval = 86_400 // 24 hours
     /// Shortest sleep between update-loop rounds (UPDATE-SCHED-001).
     nonisolated public static let minimumRetryDelay: TimeInterval = 60
+    /// A launch checks again unless the last check was this recent: quitting
+    /// and reopening several times must not burn the unauthenticated GitHub
+    /// API budget (60 requests/hour).
+    nonisolated public static let launchMinimumInterval: TimeInterval = 5 * 60
     nonisolated public static let lastCheckKey: String = "ai_taskbar_last_update_check_at"
     nonisolated public static let dismissedTagKey: String = "ai_taskbar_dismissed_update_tag"
+    /// Tag of the newer release the last check found (cleared when up to
+    /// date). Only the tag is kept — never URLs or checksums — so a relaunch
+    /// inside the 5-minute floor rechecks instead of losing the banner.
+    nonisolated public static let pendingUpdateTagKey: String = "ai_taskbar_pending_update_tag"
 
     @Published public private(set) var status: Status = .idle
     @Published public private(set) var dismissedTag: String?
@@ -127,6 +135,25 @@ public final class UpdateChecker: ObservableObject {
             || !calendar.isDate(lastCheck, inSameDayAs: now)
     }
 
+    /// At launch: every relaunch checks (a release published since the last
+    /// check shows up when the user reopens the app), unless the last check
+    /// was under `launchMinimumInterval` ago. A last check in the future
+    /// (clock skew) checks too, which re-syncs the stored date. Drafts are
+    /// never seen: `/releases/latest` returns published releases only, and the
+    /// prerelease path filters drafts out of the list.
+    ///
+    /// A known pending update (a newer tag found by the last check) also
+    /// rechecks inside the floor: a fresh process starts with no banner, and
+    /// waiting for the floor would hide it until the next day.
+    nonisolated public static func isLaunchCheckDue(lastCheck: Date?, now: Date,
+                                                    pendingUpdateTag: String? = nil,
+                                                    currentVersion: String = "") -> Bool {
+        if let pendingUpdateTag, Semver.isNewer(pendingUpdateTag, than: currentVersion) { return true }
+        guard let lastCheck else { return true }
+        guard lastCheck <= now else { return true }
+        return now.timeIntervalSince(lastCheck) >= launchMinimumInterval
+    }
+
     /// 0 when due; otherwise the time until the start of the local day after
     /// the last check or 24 h after it, whichever comes first, kept within
     /// `minimumRetryDelay...cadenceInterval` so a skewed clock re-evaluates
@@ -175,12 +202,21 @@ public final class UpdateChecker: ObservableObject {
         }
     }
 
+    /// The launch check (see `isLaunchCheckDue`); the running app keeps the
+    /// once-per-day rule in `checkIfNeeded`.
+    public func checkAtLaunch() {
+        checkWhen(Self.isLaunchCheckDue(lastCheck: lastCheckDate, now: now(),
+                                        pendingUpdateTag: userDefaults.string(forKey: Self.pendingUpdateTagKey),
+                                        currentVersion: currentVersion))
+    }
+
     public func checkIfNeeded(force: Bool = false) {
-        guard config.enabled else { return }
-        if status.isBusy { return }
-        if !force, !Self.isCheckDue(lastCheck: lastCheckDate, now: now(), calendar: calendar) {
-            return
-        }
+        checkWhen(force || Self.isCheckDue(lastCheck: lastCheckDate, now: now(), calendar: calendar))
+    }
+
+    /// Shared guards for the launch and the daily rule.
+    private func checkWhen(_ due: Bool) {
+        guard config.enabled, !status.isBusy, due else { return }
         check()
     }
 
@@ -206,8 +242,10 @@ public final class UpdateChecker: ObservableObject {
                 let release = try await self.fetchLatest()
                 if Semver.isNewer(release.tag, than: self.currentVersion) {
                     self.status = .updateAvailable(latest: release)
+                    self.userDefaults.set(release.tag, forKey: Self.pendingUpdateTagKey)
                 } else {
                     self.status = .upToDate(currentVersion: self.currentVersion)
+                    self.userDefaults.removeObject(forKey: Self.pendingUpdateTagKey)
                 }
             } catch {
                 self.status = .failed(message: error.localizedDescription)

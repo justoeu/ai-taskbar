@@ -188,13 +188,14 @@ public final class RefreshScheduler: ObservableObject {
         guard updateCheckLoop == nil, let updates, updates.config.enabled else { return }
         let sleeper = self.updateSleeper
         updateCheckLoop = Task { @MainActor [weak self] in
-            // Once per local calendar day (UPDATE-SCHED-001): check at launch
-            // when due, then sleep until the next local day (or 24 h), which
-            // is recomputed from the stored last-check date after every round,
-            // so a manual check from About moves the next one too. The
-            // instance delay carries the 60 s floor that keeps a busy check
-            // from spinning.
-            self?.updates?.checkIfNeeded()
+            // Every launch checks (at most once per 5 min, so a burst of
+            // relaunches stays within the GitHub API budget); while running,
+            // once per local calendar day (UPDATE-SCHED-001): sleep until the
+            // next local day (or 24 h), recomputed from the stored last-check
+            // date after every round, so a manual check from About moves the
+            // next one too. The instance delay carries the 60 s floor that
+            // keeps a busy check from spinning.
+            self?.updates?.checkAtLaunch()
             while !Task.isCancelled {
                 guard let delay = self?.updates?.delayUntilNextCheck() else { break }
                 await sleeper(delay)
