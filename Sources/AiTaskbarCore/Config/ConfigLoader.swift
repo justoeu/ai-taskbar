@@ -97,6 +97,28 @@ public struct ConfigLoader: Sendable {
         return config
     }
 
+    /// Copies the current `config.toml` to `config.toml.bak-<yyyyMMdd-HHmmss>`
+    /// next to it, user-only (0600) at write time, before a destructive
+    /// rewrite such as "Restore defaults". Returns nil when there is no file
+    /// yet. The copy keeps every inline secret exactly as stored.
+    @discardableResult
+    public func backupCurrentFile(now: Date = Date()) throws -> URL? {
+        guard FileManager.default.fileExists(atPath: path.path) else { return nil }
+        let data: Data
+        do {
+            data = try Data(contentsOf: path)
+        } catch {
+            throw AppError.io("read config.toml for backup: \(error)")
+        }
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyyMMdd-HHmmss"
+        let backup = path.deletingLastPathComponent()
+            .appendingPathComponent(path.lastPathComponent + ".bak-" + stamp.string(from: now))
+        try AtomicFileWrite.write(data, to: backup, permissions: 0o600)
+        return backup
+    }
+
     public func save(_ config: AppConfig) throws {
         do {
             // Re-encrypt any plaintext api_key fields before TOML encode so

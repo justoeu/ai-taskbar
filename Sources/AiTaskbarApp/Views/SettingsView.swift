@@ -84,45 +84,60 @@ public struct SettingsView: View {
         }
         .animation(.easeInOut(duration: 0.15), value: activeHelpKey)
         .onAppear { syncPinHostsText() }
-        .alert(L10n.localizedString("settings_save_failed"),
-               isPresented: .init(get: { viewModel.saveError != nil },
-                                  set: { if !$0 { viewModel.saveError = nil } })) {
-            Button(L10n.localizedString("done")) { viewModel.saveError = nil }
-        } message: {
-            Text(viewModel.saveError ?? "")
+        // In-window confirmations (`ConfirmationCenter`), never native
+        // alert windows: those closed the menu-bar popover mid-click.
+        .onChange(of: viewModel.saveError) { error in
+            guard let error else { return }
+            ConfirmationCenter.shared.present(ConfirmationRequest(
+                title: L10n.localizedString("settings_save_failed"), message: error,
+                symbol: "exclamationmark.triangle.fill", tint: .orange,
+                confirmTitle: L10n.localizedString("done"),
+                onConfirm: { viewModel.saveError = nil },
+                onCancel: { viewModel.saveError = nil }))
         }
-        .confirmationDialog(
-            L10n.localizedString("settings_oauth_confirm_title"),
-            isPresented: .init(get: { showOAuthConfirmVendor != nil },
-                               set: { if !$0 { showOAuthConfirmVendor = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button(L10n.localizedString("settings_oauth_confirm_understand"),
-                   role: .destructive) {
-                showOAuthConfirmVendor = nil
-            }
-            Button(L10n.localizedString("cancel"), role: .cancel) {
-                if let v = showOAuthConfirmVendor {
-                    if v == "anthropic" { viewModel.draft.anthropic.manageOAuthRefresh = false }
-                    if v == "openai"    { viewModel.draft.openai.manageOAuthRefresh = false }
-                }
-                showOAuthConfirmVendor = nil
-            }
-        } message: {
-            Text(L10n.localizedString("settings_oauth_confirm_body"))
+        .onChange(of: showOAuthConfirmVendor) { vendor in
+            guard let vendor else { return }
+            ConfirmationCenter.shared.present(ConfirmationRequest(
+                title: L10n.localizedString("settings_oauth_confirm_title"),
+                message: L10n.localizedString("settings_oauth_confirm_body"),
+                symbol: "exclamationmark.shield.fill", tint: .orange,
+                confirmTitle: L10n.localizedString("settings_oauth_confirm_understand"),
+                isDestructive: true,
+                cancelTitle: L10n.localizedString("cancel"),
+                onConfirm: { showOAuthConfirmVendor = nil },
+                onCancel: {
+                    if vendor == "anthropic" { viewModel.draft.anthropic.manageOAuthRefresh = false }
+                    if vendor == "openai" { viewModel.draft.openai.manageOAuthRefresh = false }
+                    showOAuthConfirmVendor = nil
+                }))
         }
-        .confirmationDialog(
-            L10n.localizedString("settings_reset_confirm_title"),
-            isPresented: $showResetConfirm,
-            titleVisibility: .visible
-        ) {
-            Button(L10n.localizedString("settings_reset"), role: .destructive) {
-                try? viewModel.resetToDefaults()
-                syncPinHostsText()
-            }
-            Button(L10n.localizedString("cancel"), role: .cancel) {}
-        } message: {
-            Text(L10n.localizedString("settings_reset_confirm_body"))
+        .onChange(of: showResetConfirm) { show in
+            guard show else { return }
+            ConfirmationCenter.shared.present(ConfirmationRequest(
+                title: L10n.localizedString("settings_reset_confirm_title"),
+                message: L10n.localizedString("settings_reset_confirm_body"),
+                symbol: "arrow.uturn.backward.circle.fill", tint: .red,
+                confirmTitle: L10n.localizedString("settings_reset"),
+                isDestructive: true,
+                cancelTitle: L10n.localizedString("cancel"),
+                onConfirm: {
+                    showResetConfirm = false
+                    do {
+                        try viewModel.resetToDefaults()
+                        syncPinHostsText()
+                        if let backup = viewModel.lastResetBackup {
+                            ConfirmationCenter.shared.present(ConfirmationRequest(
+                                title: L10n.localizedString("settings_reset_done_title"),
+                                message: L10n.localizedString("settings_reset_done_fmt", backup.lastPathComponent),
+                                symbol: "checkmark.circle.fill", tint: .green,
+                                confirmTitle: L10n.localizedString("done")))
+                        }
+                    } catch {
+                        // Not swallowed: a failed reset write must be seen.
+                        viewModel.saveError = error.localizedDescription
+                    }
+                },
+                onCancel: { showResetConfirm = false }))
         }
     }
 

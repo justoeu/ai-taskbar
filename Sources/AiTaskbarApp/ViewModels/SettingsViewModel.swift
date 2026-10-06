@@ -84,8 +84,15 @@ public final class SettingsViewModel: ObservableObject {
     /// Full-reset path: blows away the user's `config.toml` and writes a
     /// clean default-encoded version. Comments are lost (acceptable on a
     /// destructive reset). Requires confirmation in the UI before calling.
+    /// Where "Restore defaults" saved the previous file (nil before any).
+    @Published public private(set) var lastResetBackup: URL?
+
+    /// Rewrites config.toml from defaults — but only after a dated 0600 copy
+    /// of the current file exists: the rewrite drops every inline API key and
+    /// the TypeSafe session, and before this nothing could bring them back.
     public func resetToDefaults() throws {
         do {
+            lastResetBackup = try configLoader.backupCurrentFile()
             try configLoader.save(AppConfig())
             saveError = nil
             didSaveSuccessfully = true

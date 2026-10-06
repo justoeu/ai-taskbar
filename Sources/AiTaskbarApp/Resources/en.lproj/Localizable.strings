@@ -174,7 +174,9 @@
 "settings_base_url" = "Base URL";
 "settings_save_failed" = "Save failed";
 "settings_reset_confirm_title" = "Reset all settings to defaults?";
-"settings_reset_confirm_body" = "Rewrites config.toml from scratch with default values. Any comments you wrote in the file will be lost.";
+"settings_reset_confirm_body" = "This deletes every API key, the TypeSafe console session and all preferences saved in config.toml, and rewrites it with defaults. A copy of the current file is saved first, next to it.";
+"settings_reset_done_fmt" = "The previous file was saved as %@ in the app folder. Your API keys are in that copy.";
+"settings_reset_done_title" = "Settings restored to defaults";
 "settings_reset" = "Reset";
 "settings_reset_to_defaults" = "Reset to defaults…";
 "settings_show" = "Show";

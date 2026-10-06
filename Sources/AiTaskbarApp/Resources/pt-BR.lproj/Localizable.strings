@@ -173,7 +173,9 @@
 "settings_base_url" = "URL base";
 "settings_save_failed" = "Falha ao salvar";
 "settings_reset_confirm_title" = "Restaurar todos os ajustes para o padrão?";
-"settings_reset_confirm_body" = "Reescreve o config.toml do zero com valores padrão. Quaisquer comentários que você escreveu no arquivo serão perdidos.";
+"settings_reset_confirm_body" = "Isso apaga todas as chaves de API, a sessão do console da TypeSafe e as preferências salvas no config.toml, e o reescreve com os valores padrão. Antes, uma cópia do arquivo atual é salva ao lado dele.";
+"settings_reset_done_fmt" = "O arquivo anterior foi salvo como %@ na pasta do app. Suas chaves de API estão nessa cópia.";
+"settings_reset_done_title" = "Ajustes restaurados para o padrão";
 "settings_reset" = "Restaurar";
 "settings_reset_to_defaults" = "Restaurar padrões…";
 "settings_show" = "Mostrar";
