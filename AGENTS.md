@@ -661,6 +661,14 @@ that came out of fixing that:
   first. Closing goes through the main status button
   (`closeMainPopover`), never `window.close()`, which desyncs MenuBarExtra.
   Reopening always lands on the home screen (`overlay` reset on disappear).
+- **No native `.alert` / `.confirmationDialog` in the app.** They open a
+  separate window; the MenuBarExtra window loses key to it and closes, so the
+  click never lands and the dialog's presented state survives into the next
+  open (the OpenAI reset looked stuck: "Confirm" closed the popover, reopening
+  showed the same dialog). Present a `ConfirmationRequest` through
+  `ConfirmationCenter`; the popover draws it in-window above every page, Esc
+  cancels it first, and closing the popover cancels it. `NoNativeDialogsTests`
+  fails on any `.alert(` / `.confirmationDialog(` under `Sources/AiTaskbarApp`.
 - **Vendor icons:** every in-app page draws a vendor with `VendorBrandIcon`
   (brand colour from `AnalyticsFormatters.vendorColor`, grey when the vendor
   is off). Don't tint `VendorIconView` by hand per screen. The menu-bar items

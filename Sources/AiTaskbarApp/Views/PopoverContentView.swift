@@ -22,6 +22,7 @@ public struct PopoverContentView: View {
     /// Drives the opacity dissolve when the popover opens.
     @State private var hasAppeared = false
     @State private var overlay: Overlay?
+    @ObservedObject private var confirmations = ConfirmationCenter.shared
     @FocusState private var statusButtonFocused: Bool
     public var onQuit: () -> Void
 
@@ -139,6 +140,9 @@ public struct PopoverContentView: View {
                     .onDisappear {
                         store.isPopoverPresented = false
                         PopoverKeyMonitor.shared.stop()
+                        // A confirmation left open would come back on the next
+                        // open looking stuck; closing the popover cancels it.
+                        ConfirmationCenter.shared.cancel()
                         // Reopening always starts on the home screen, never on
                         // the About / Analytics / Status / Settings page it
                         // was closed from.
@@ -249,14 +253,25 @@ public struct PopoverContentView: View {
                 .transition(overlayTransition)
                 .zIndex(200)
             }
+
+            // In-window confirmations (OpenAI reset, Settings): above every
+            // page, never a native alert window.
+            if let request = confirmations.request {
+                ConfirmationOverlay(request: request, center: confirmations)
+                    .transition(.opacity)
+                    .zIndex(300)
+            }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: overlay)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: store.pinLimitAlert != nil)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: confirmations.request?.id)
         // Esc normally never reaches this: PopoverKeyMonitor closes the
         // popover first. It passes Esc through only while a modal is up, and
         // then this dismisses the pin-limit alert (About handles its own).
         .onExitCommand {
-            if store.pinLimitAlert != nil {
+            if confirmations.request != nil {
+                confirmations.cancel()
+            } else if store.pinLimitAlert != nil {
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
                     store.pinLimitAlert = nil
                 }

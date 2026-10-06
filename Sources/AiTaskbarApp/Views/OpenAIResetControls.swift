@@ -24,18 +24,27 @@ struct OpenAIResetControls: View {
                 }
             }
             .task { await reset.restorePending() }
-            .alert(L10n.localizedString("reset_confirm_title"), isPresented: $reset.isConfirming) {
-                Button(L10n.localizedString("reset_confirm_button")) {
-                    Task {
-                        if await reset.consume(path: path) { vm.refresh(forceRefresh: true) }
-                    }
-                }
-                Button(L10n.localizedString("reset_cancel"), role: .cancel) { reset.cancelConfirmation() }
-            } message: {
-                if let offer = reset.offer {
-                    Text(L10n.localizedString("reset_confirm_message", offer.accountLabel, offer.availableCount))
-                }
+            // In-window, not `.alert`: a native alert window closed the
+            // popover and the click never reached "Confirm".
+            .onChange(of: reset.isConfirming) { confirming in
+                guard confirming else { return }
+                ConfirmationCenter.shared.present(Self.confirmation(reset: reset, vm: vm, path: path))
             }
         }
+    }
+
+    static func confirmation(reset: OpenAIResetController, vm: VendorViewModel, path: URL) -> ConfirmationRequest {
+        ConfirmationRequest(
+            title: L10n.localizedString("reset_confirm_title"),
+            message: reset.offer.map {
+                L10n.localizedString("reset_confirm_message", $0.accountLabel, $0.availableCount)
+            } ?? "",
+            symbol: "arrow.counterclockwise.circle.fill",
+            confirmTitle: L10n.localizedString("reset_confirm_button"),
+            cancelTitle: L10n.localizedString("reset_cancel"),
+            onConfirm: {
+                Task { if await reset.consume(path: path) { vm.refresh(forceRefresh: true) } }
+            },
+            onCancel: { reset.cancelConfirmation() })
     }
 }

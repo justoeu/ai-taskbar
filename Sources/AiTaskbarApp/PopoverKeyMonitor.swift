@@ -31,7 +31,9 @@ final class PopoverKeyMonitor {
     var aboutConfirmationShown = false
     private var monitor: Any?
 
-    var modalShown: Bool { store?.pinLimitAlert != nil || aboutConfirmationShown }
+    var modalShown: Bool {
+        store?.pinLimitAlert != nil || aboutConfirmationShown || ConfirmationCenter.shared.request != nil
+    }
 
     func start() {
         guard monitor == nil else { return }
