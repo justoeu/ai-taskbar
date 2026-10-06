@@ -691,6 +691,19 @@ that came out of fixing that:
   or is stored on a `Sendable` type. Use `JSONValue` (in `AiTaskbarCore/Util/`).
 - **All files containing secrets must be `0o600`** at write time, not via
   a post-hoc chmod. Use `AtomicFileWrite.write(_, to:, permissions: 0o600)`.
+- **Inline secrets are machine-bound `enc:v2:`** (`SecretBox`): AES-GCM,
+  key = HKDF-SHA256(app constant, salt, info = `MachineIdentity.current`, the
+  `IOPlatformUUID`). The constant is public, so the UUID is the only secret
+  part; `enc:v1:` (constant only) is still read, and written only when no UUID
+  can be read. Every secret field lives in the one `ConfigLoader.secretFields`
+  table, which `save`, `load` and `upgradeSecretsIfNeeded` walk — a new secret
+  field goes there, never into a copy-pasted block. `AppEnvironment.live()`
+  runs the upgrade once per launch (backup first; plaintext and v1 → v2) and
+  logs a failure instead of swallowing it. An undecryptable value (another
+  Mac, tampering) is cleared on load so the card asks for the key again; the
+  upgrade leaves it on disk untouched. Not the Keychain, by the user's
+  decision (2026-10-05): it prompts, and a lost item loses every key. Tests
+  inject `ConfigLoader.machineID`.
 - **All new vendor base_url fields must be host-allowlisted** (see
   `KimiConfig.validate`). User-controlled URLs are an exfil vector.
 - **Providers must call `try Task.checkCancellation()`** at fetch entry,

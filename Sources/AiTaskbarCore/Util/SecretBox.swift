@@ -1,39 +1,40 @@
 import Foundation
 import CryptoKit
 
-/// At-rest obfuscation for inline secrets written to `config.toml` via the
-/// Settings UI (currently the `api_key` field of the four non-shared-CLI
-/// vendors: ZAI, OpenRouter, Kimi, Gemini).
+/// At-rest encryption for inline secrets written to `config.toml` (every
+/// vendor `api_key` and the TypeSafe console session).
 ///
-/// **Threat model — read this before assuming this is real encryption.**
+/// **Threat model — read this before assuming more than it gives.**
 ///
-/// The symmetric key is derived from a constant baked into the binary. Anyone
-/// with the `.app` can extract it in seconds via `strings` or Hopper. This
-/// scheme protects only against:
+/// `enc:v2:` (current): AES-GCM with a key derived by HKDF-SHA256 from a
+/// constant in the binary AND this Mac's hardware UUID (`MachineIdentity`).
+/// The source is public, so the constant is not a secret; the UUID is what
+/// makes the file useless elsewhere:
 ///
-///   - Casual reading of `config.toml` itself (e.g. the user screen-shares
-///     the file, or pastes it into a chat by mistake).
-///   - Backup exfiltration by an attacker who has the file but NOT the app.
+///   - Protects: the file or a backup of it leaving this Mac (shared screen,
+///     chat paste, cloud/Time Machine disk read on another machine).
+///   - Does NOT protect: malware running as the user on this Mac (it can read
+///     the same UUID), or a logic-board swap / new Mac (keys must be re-entered
+///     there — preferences are unaffected).
 ///
-/// It does NOT protect against:
+/// `enc:v1:` (legacy): key from the constant alone — obfuscation only. Still
+/// decrypted, never written while the UUID is readable; `ConfigLoader.
+/// upgradeSecretsIfNeeded` rewrites v1 and plaintext values as v2 at launch.
 ///
-///   - Malware running as the user (it can call `SecretBox.decrypt` or just
-///     read the key out of the binary).
-///   - Anyone with both the config file AND the app binary.
+/// Keychain was considered and declined (2026-10-05): this Mac's login
+/// keychain lost items unexplained, and losing the key would lose every
+/// secret; the UUID cannot be "lost" short of new hardware.
 ///
-/// Honest comparison vs. the previous status quo (plaintext at `0o600`):
-/// strictly better in the two scenarios above; equivalent everywhere else.
-/// Migrating to Keychain (`SecItemAdd`) is the real fix and remains on the
-/// roadmap — see `KeychainCredentialReader` for the pattern that already
-/// protects Anthropic + Codex credentials.
-///
-/// Format: `enc:v1:` + base64( nonce(12B) || ciphertext || tag(16B) ).
+/// Format: prefix + base64( nonce(12B) || ciphertext || tag(16B) ).
 /// Nonce is randomized per encrypt call → encrypting the same plaintext
 /// twice produces different ciphertexts (correct AES-GCM usage).
 public enum SecretBox {
     /// Wire-format prefix. Bumped only on cryptographic scheme changes
     /// (e.g. migrating from AES-GCM to ChaCha20-Poly1305).
     public static let prefix = "enc:v1:"
+    /// Machine-bound format (see the type doc).
+    public static let prefixV2 = "enc:v2:"
+    private static let saltV2 = Data("ai-taskbar.secretbox.v2".utf8)
 
     /// Hardcoded app-specific passphrase. SHA-256'd into a 256-bit
     /// `SymmetricKey`. NOT a secret in any meaningful sense — see the threat
@@ -48,16 +49,31 @@ public enum SecretBox {
         return SymmetricKey(data: digest)
     }()
 
+    /// The v2 key for one machine: HKDF-SHA256 over the binary constant,
+    /// salted, with the hardware UUID as `info`.
+    static func machineKey(_ machineID: String) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(inputKeyMaterial: key, salt: saltV2,
+                               info: Data(machineID.utf8), outputByteCount: 32)
+    }
+
     /// Encrypts `plaintext` and returns the wire-format string suitable for
-    /// writing into a TOML `api_key = "..."` slot. Non-deterministic.
-    public static func encrypt(_ plaintext: String) throws -> String {
+    /// writing into a TOML `api_key = "..."` slot. Non-deterministic. Writes
+    /// `enc:v2:` bound to `machineID`; only when no machine id can be read
+    /// does it fall back to `enc:v1:` (still better than plaintext).
+    public static func encrypt(_ plaintext: String,
+                               machineID: String? = MachineIdentity.current) throws -> String {
+        let usedKey = machineID.map(machineKey) ?? key
+        let usedPrefix = machineID == nil ? prefix : prefixV2
+        if machineID == nil {
+            AppLog.config.warning("SecretBox: no hardware UUID — writing legacy enc:v1:")
+        }
         do {
-            let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: key)
+            let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: usedKey)
             // `.combine` is nonce || ciphertext || tag in one contiguous blob.
             guard let combined = sealed.combined else {
                 throw AppError.other("SecretBox: AES-GCM refused to combine (unexpected)")
             }
-            return prefix + combined.base64EncodedString()
+            return usedPrefix + combined.base64EncodedString()
         } catch let err as AppError {
             throw err
         } catch {
@@ -70,15 +86,29 @@ public enum SecretBox {
     /// Returns `nil` if `encoded` isn't a SecretBox payload (i.e. plaintext
     /// value still in an old config) — callers use that to keep reading
     /// legacy plaintext transparently.
-    public static func decryptIfPresent(_ encoded: String) throws -> String? {
-        guard encoded.hasPrefix(prefix) else { return nil }
-        let payload = String(encoded.dropFirst(prefix.count))
+    public static func decryptIfPresent(_ encoded: String,
+                                        machineID: String? = MachineIdentity.current) throws -> String? {
+        let usedKey: SymmetricKey
+        let payload: String
+        if encoded.hasPrefix(prefixV2) {
+            guard let machineID else {
+                throw AppError.other("SecretBox: enc:v2: value but no hardware UUID to derive its key")
+            }
+            usedKey = machineKey(machineID)
+            payload = String(encoded.dropFirst(prefixV2.count))
+        } else if encoded.hasPrefix(prefix) {
+            usedKey = key
+            payload = String(encoded.dropFirst(prefix.count))
+        } else {
+            return nil
+        }
         guard let combined = Data(base64Encoded: payload) else {
             throw AppError.other("SecretBox: malformed base64 in encrypted value")
         }
         do {
             let sealed = try AES.GCM.SealedBox(combined: combined)
-            let plaintext = try AES.GCM.open(sealed, using: key)
+            // A v2 value from another Mac fails here (GCM tag mismatch).
+            let plaintext = try AES.GCM.open(sealed, using: usedKey)
             return String(data: plaintext, encoding: .utf8)
         } catch {
             throw AppError.other("SecretBox.decrypt: \(error)")
@@ -89,6 +119,12 @@ public enum SecretBox {
     /// `ConfigLoader.load()` to decide whether to decrypt before handing the
     /// value to the TOML decoder.
     public static func isEncrypted(_ value: String) -> Bool {
-        value.hasPrefix(prefix)
+        value.hasPrefix(prefix) || value.hasPrefix(prefixV2)
+    }
+
+    /// True when `value` is already in the format `encrypt` would write now
+    /// (v2 when a machine id exists). Plaintext and v1 need an upgrade.
+    public static func isCurrentFormat(_ value: String, machineID: String? = MachineIdentity.current) -> Bool {
+        machineID == nil ? isEncrypted(value) : value.hasPrefix(prefixV2)
     }
 }

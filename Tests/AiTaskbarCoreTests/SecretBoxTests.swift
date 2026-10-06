@@ -3,15 +3,54 @@ import Foundation
 import CryptoKit
 @testable import AiTaskbarCore
 
-@Suite("SecretBox — AES-GCM at-rest obfuscation")
+@Suite("SecretBox — AES-GCM at-rest encryption")
 struct SecretBoxTests {
+    static let macA = "11111111-2222-3333-4444-555555555555"
+    static let macB = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+
     @Test("round-trip restores the original plaintext")
     func round_trip_restores_plaintext() throws {
         let pt = "sk-or-v1-abc-123-456-789"
         let enc = try SecretBox.encrypt(pt)
-        #expect(enc.hasPrefix(SecretBox.prefix))
         let back = try SecretBox.decryptIfPresent(enc)
         #expect(back == pt)
+    }
+
+    @Test("with a machine id, encrypt writes enc:v2 and only that machine reads it")
+    func v2_is_machine_bound() throws {
+        let enc = try SecretBox.encrypt("sk-bound", machineID: Self.macA)
+        #expect(enc.hasPrefix(SecretBox.prefixV2))
+        #expect(try SecretBox.decryptIfPresent(enc, machineID: Self.macA) == "sk-bound")
+        #expect(throws: AppError.self) {
+            _ = try SecretBox.decryptIfPresent(enc, machineID: Self.macB)
+        }
+        #expect(throws: AppError.self) {
+            _ = try SecretBox.decryptIfPresent(enc, machineID: nil)
+        }
+    }
+
+    @Test("without a machine id, encrypt falls back to enc:v1, readable anywhere")
+    func v1_fallback_without_machine_id() throws {
+        let enc = try SecretBox.encrypt("sk-legacy", machineID: nil)
+        #expect(enc.hasPrefix(SecretBox.prefix))
+        #expect(try SecretBox.decryptIfPresent(enc, machineID: Self.macA) == "sk-legacy")
+        #expect(try SecretBox.decryptIfPresent(enc, machineID: nil) == "sk-legacy")
+    }
+
+    @Test("isCurrentFormat: v2 is current with a machine id; any encryption without one")
+    func is_current_format() {
+        #expect(SecretBox.isCurrentFormat("enc:v2:AAA", machineID: Self.macA))
+        #expect(!SecretBox.isCurrentFormat("enc:v1:AAA", machineID: Self.macA))
+        #expect(!SecretBox.isCurrentFormat("plain", machineID: Self.macA))
+        #expect(SecretBox.isCurrentFormat("enc:v1:AAA", machineID: nil))
+        #expect(!SecretBox.isCurrentFormat("plain", machineID: nil))
+    }
+
+    @Test("the real hardware UUID is readable and stable on this Mac")
+    func machine_identity_reads_uuid() throws {
+        let id = try #require(MachineIdentity.current)
+        #expect(id.count == 36)
+        #expect(MachineIdentity.hardwareUUID() == id)
     }
 
     @Test("encrypt is non-deterministic — same plaintext yields different ciphertext")
@@ -31,9 +70,11 @@ struct SecretBoxTests {
         #expect(try SecretBox.decryptIfPresent("") == nil)
     }
 
-    @Test("isEncrypted identifies only enc:v1: payloads")
+    @Test("isEncrypted identifies only enc:v1: / enc:v2: payloads")
     func is_encrypted_prefix_check() {
         #expect(SecretBox.isEncrypted("enc:v1:AAA"))
+        #expect(SecretBox.isEncrypted("enc:v2:AAA"))
+        #expect(!SecretBox.isEncrypted("enc:v3:AAA"))
         #expect(!SecretBox.isEncrypted("sk-plaintext"))
         #expect(!SecretBox.isEncrypted(""))
         #expect(!SecretBox.isEncrypted("ENC:V1:AAA"))  // case-sensitive

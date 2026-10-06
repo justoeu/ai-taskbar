@@ -54,6 +54,10 @@ public struct ConfigLoader: Sendable {
     /// through the app itself. Defaults to no-op.
     public var onAfterSave: @Sendable () -> Void = {}
 
+    /// Hardware UUID the `enc:v2:` secrets are bound to. Injectable so tests
+    /// can play "this Mac" and "another Mac" (see `SecretBox`).
+    public var machineID: String? = MachineIdentity.current
+
     /// Use when you have an explicit path (tests, fallback). Statically
     /// non-throwing — separating from the default-path init avoids the
     /// previous `try!` smell in `AppEnvironment.live()`'s fallback branch.
@@ -90,11 +94,56 @@ public struct ConfigLoader: Sendable {
         } catch {
             throw AppError.toml("parse \(path.path): \(error)")
         }
-        // Transparently decrypt any `enc:v1:`-prefixed `api_key` values the
-        // Settings UI wrote. Plaintext values pass through unchanged — keeps
-        // backward compatibility with configs written before this UI existed.
-        Self.decryptSecrets(in: &config)
+        // Transparently decrypt `enc:v2:` / `enc:v1:` secrets. Plaintext
+        // values pass through unchanged (upgraded by `upgradeSecretsIfNeeded`).
+        Self.decryptSecrets(in: &config, machineID: machineID)
         return config
+    }
+
+    /// The decoded file with every secret exactly as stored (no decryption).
+    private func loadStored() throws -> AppConfig? {
+        guard FileManager.default.fileExists(atPath: path.path) else { return nil }
+        let raw: String
+        do {
+            raw = try String(contentsOf: path, encoding: .utf8)
+        } catch {
+            throw AppError.io("read config.toml: \(error)")
+        }
+        do {
+            return try TOMLDecoder().decode(AppConfig.self, from: raw)
+        } catch {
+            throw AppError.toml("parse \(path.path): \(error)")
+        }
+    }
+
+    /// Rewrites every inline secret still stored as plaintext or legacy
+    /// `enc:v1:` in the current format (`enc:v2:`, bound to `machineID`),
+    /// after backing the file up. A value that cannot be decrypted (an
+    /// `enc:v2:` from another Mac) is left untouched — `load()` already
+    /// treats it as absent, so the card asks for the key again. Returns how
+    /// many secrets were rewritten; 0 means the file was not touched.
+    @discardableResult
+    public func upgradeSecretsIfNeeded(now: Date = Date()) throws -> Int {
+        guard machineID != nil, let stored = try loadStored() else { return 0 }
+        var changes: [ConfigChange] = []
+        for field in Self.secretFields {
+            guard let value = stored[keyPath: field.path], !value.isEmpty,
+                  !SecretBox.isCurrentFormat(value, machineID: machineID) else { continue }
+            let plaintext: String
+            if SecretBox.isEncrypted(value) {
+                guard let decrypted = try? SecretBox.decryptIfPresent(value, machineID: machineID) else {
+                    continue
+                }
+                plaintext = decrypted
+            } else {
+                plaintext = value
+            }
+            changes.append(.secret(section: field.section, key: field.key, plaintext: plaintext))
+        }
+        guard !changes.isEmpty else { return 0 }
+        try backupCurrentFile(now: now)
+        try applyChanges(changes)
+        return changes.count
     }
 
     /// Copies the current `config.toml` to `config.toml.bak-<yyyyMMdd-HHmmss>`
@@ -124,7 +173,7 @@ public struct ConfigLoader: Sendable {
             // Re-encrypt any plaintext api_key fields before TOML encode so
             // load()→save() cannot strip enc:v1: (ARCH-ATL-002 / CQ-FOR-003).
             var toWrite = config
-            try Self.encryptSecretsForDisk(in: &toWrite)
+            try Self.encryptSecretsForDisk(in: &toWrite, machineID: machineID)
             let encoder = TOMLEncoder()
             let s = try encoder.encode(toWrite)
             // config.toml may contain inline `api_key = "..."` — lock it down
@@ -138,20 +187,33 @@ public struct ConfigLoader: Sendable {
         }
     }
 
-    /// Encrypts non-empty vendor api_key fields that are not already `enc:v1:`.
-    private static func encryptSecretsForDisk(in config: inout AppConfig) throws {
-        func seal(_ key: inout String?) throws {
-            guard let plain = key, !plain.isEmpty, !SecretBox.isEncrypted(plain) else { return }
-            key = try SecretBox.encrypt(plain)
+    /// Every inline secret in the schema: its TOML location and its field.
+    /// The one list `save`, `load` and `upgradeSecretsIfNeeded` walk — a new
+    /// secret field added here is sealed, unsealed and upgraded everywhere.
+    struct SecretField: Sendable {
+        let section: String
+        let key: String
+        let path: WritableKeyPath<AppConfig, String?> & Sendable
+    }
+
+    static let secretFields: [SecretField] = [
+        SecretField(section: "zai", key: "api_key", path: \.zai.apiKey),
+        SecretField(section: "openrouter", key: "api_key", path: \.openrouter.apiKey),
+        SecretField(section: "kimi", key: "api_key", path: \.kimi.apiKey),
+        SecretField(section: "gemini", key: "api_key", path: \.gemini.apiKey),
+        SecretField(section: "deepseek", key: "api_key", path: \.deepseek.apiKey),
+        SecretField(section: "xai", key: "api_key", path: \.xai.apiKey),
+        SecretField(section: "typesafe", key: "api_key", path: \.typesafe.apiKey),
+        SecretField(section: "typesafe", key: "console_session", path: \.typesafe.consoleSession),
+    ]
+
+    /// Encrypts non-empty secret fields that are not already encrypted.
+    private static func encryptSecretsForDisk(in config: inout AppConfig, machineID: String?) throws {
+        for field in secretFields {
+            guard let plain = config[keyPath: field.path], !plain.isEmpty,
+                  !SecretBox.isEncrypted(plain) else { continue }
+            config[keyPath: field.path] = try SecretBox.encrypt(plain, machineID: machineID)
         }
-        try seal(&config.zai.apiKey)
-        try seal(&config.openrouter.apiKey)
-        try seal(&config.kimi.apiKey)
-        try seal(&config.gemini.apiKey)
-        try seal(&config.deepseek.apiKey)
-        try seal(&config.xai.apiKey)
-        try seal(&config.typesafe.apiKey)
-        try seal(&config.typesafe.consoleSession)
     }
 
     /// Surgical write path: applies a batch of changes to the existing file
@@ -161,7 +223,7 @@ public struct ConfigLoader: Sendable {
     /// doesn't exist yet, bootstraps it from the default-snippet table.
     ///
     /// `secret` changes are auto-encrypted via `SecretBox` (so the on-disk
-    /// value is `enc:v1:...`, not plaintext). Other types are written as
+    /// value is `enc:v2:...`, not plaintext). Other types are written as
     /// plain TOML literals.
     public func applyChanges(_ changes: [ConfigChange]) throws {
         var content: String
@@ -196,7 +258,7 @@ public struct ConfigLoader: Sendable {
             case .stringArray(_, _, let v):  encoded = .stringArray(v)
             case .doubleArray(_, _, let v):  encoded = .doubleArray(v)
             case .secret(_, _, let plaintext?):
-                let enc = try SecretBox.encrypt(plaintext)
+                let enc = try SecretBox.encrypt(plaintext, machineID: machineID)
                 encoded = .encrypted(enc)
             case .secret(_, _, nil):
                 // Clear secret = empty string slot.
@@ -214,74 +276,19 @@ public struct ConfigLoader: Sendable {
         onAfterSave()
     }
 
-    /// Walks the four vendor configs that support inline `api_key`, replacing
-    /// any `enc:v1:`-prefixed value with its decrypted plaintext. Plaintext
-    /// values pass through unchanged. Tampered ciphertext is logged + the
-    /// key cleared (rather than taking down the whole config load) so a
-    /// single corrupted line doesn't lock the user out.
-    private static func decryptSecrets(in config: inout AppConfig) {
-        if let enc = config.zai.apiKey, SecretBox.isEncrypted(enc) {
-            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
-                config.zai.apiKey = pt
+    /// Replaces every encrypted secret with its plaintext. Plaintext values
+    /// pass through unchanged. A value that cannot be decrypted — tampered,
+    /// or an `enc:v2:` sealed on another Mac — is logged and cleared rather
+    /// than failing the whole load, so the card asks for that key again.
+    private static func decryptSecrets(in config: inout AppConfig, machineID: String?) {
+        for field in secretFields {
+            guard let enc = config[keyPath: field.path], SecretBox.isEncrypted(enc) else { continue }
+            if let pt = try? SecretBox.decryptIfPresent(enc, machineID: machineID) {
+                config[keyPath: field.path] = pt
             } else {
-                AppLog.config.warning("zai.api_key encrypted but undecryptable — clearing")
-                config.zai.apiKey = nil
-            }
-        }
-        if let enc = config.openrouter.apiKey, SecretBox.isEncrypted(enc) {
-            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
-                config.openrouter.apiKey = pt
-            } else {
-                AppLog.config.warning("openrouter.api_key encrypted but undecryptable — clearing")
-                config.openrouter.apiKey = nil
-            }
-        }
-        if let enc = config.kimi.apiKey, SecretBox.isEncrypted(enc) {
-            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
-                config.kimi.apiKey = pt
-            } else {
-                AppLog.config.warning("kimi.api_key encrypted but undecryptable — clearing")
-                config.kimi.apiKey = nil
-            }
-        }
-        if let enc = config.gemini.apiKey, SecretBox.isEncrypted(enc) {
-            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
-                config.gemini.apiKey = pt
-            } else {
-                AppLog.config.warning("gemini.api_key encrypted but undecryptable — clearing")
-                config.gemini.apiKey = nil
-            }
-        }
-        if let enc = config.deepseek.apiKey, SecretBox.isEncrypted(enc) {
-            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
-                config.deepseek.apiKey = pt
-            } else {
-                AppLog.config.warning("deepseek.api_key encrypted but undecryptable — clearing")
-                config.deepseek.apiKey = nil
-            }
-        }
-        if let enc = config.xai.apiKey, SecretBox.isEncrypted(enc) {
-            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
-                config.xai.apiKey = pt
-            } else {
-                AppLog.config.warning("xai.api_key encrypted but undecryptable — clearing")
-                config.xai.apiKey = nil
-            }
-        }
-        if let enc = config.typesafe.apiKey, SecretBox.isEncrypted(enc) {
-            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
-                config.typesafe.apiKey = pt
-            } else {
-                AppLog.config.warning("typesafe.api_key encrypted but undecryptable — clearing")
-                config.typesafe.apiKey = nil
-            }
-        }
-        if let enc = config.typesafe.consoleSession, SecretBox.isEncrypted(enc) {
-            if let pt = try? SecretBox.decryptIfPresent(enc) ?? nil {
-                config.typesafe.consoleSession = pt
-            } else {
-                AppLog.config.warning("typesafe.console_session encrypted but undecryptable — clearing")
-                config.typesafe.consoleSession = nil
+                AppLog.config.warning(
+                    "\(field.section, privacy: .public).\(field.key, privacy: .public) encrypted but undecryptable (another Mac or tampered) — clearing")
+                config[keyPath: field.path] = nil
             }
         }
     }

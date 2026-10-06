@@ -43,4 +43,38 @@ struct ConfigTopUpTests {
         let contents = try String(contentsOf: file, encoding: .utf8)
         #expect(contents.contains("[anthropic]"))
     }
+
+    @Test("launch secret upgrade re-encrypts a plaintext key and reports nothing")
+    func secret_upgrade_succeeds() throws {
+        let dir = try Self.tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("config.toml")
+        try Data("[zai]\napi_key = \"zai-plain-launch\"\n".utf8).write(to: file)
+        var loader = ConfigLoader(path: file)
+        loader.machineID = "11111111-2222-3333-4444-555555555555"
+
+        var reported = 0
+        AppEnvironment.upgradeStoredSecrets(loader, onFailure: { _ in reported += 1 })
+        #expect(reported == 0)
+        let contents = try String(contentsOf: file, encoding: .utf8)
+        #expect(!contents.contains("zai-plain-launch"))
+        #expect(contents.contains(SecretBox.prefixV2))
+    }
+
+    @Test("a refused secret upgrade (symlinked config.toml) is reported")
+    func secret_upgrade_failure_is_reported() throws {
+        let dir = try Self.tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let target = dir.appendingPathComponent("dotfiles-config.toml")
+        try Data("[zai]\napi_key = \"zai-plain-link\"\n".utf8).write(to: target)
+        let link = dir.appendingPathComponent("config.toml")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        var loader = ConfigLoader(path: link)
+        loader.machineID = "11111111-2222-3333-4444-555555555555"
+
+        var reported = 0
+        AppEnvironment.upgradeStoredSecrets(loader, onFailure: { _ in reported += 1 })
+        #expect(reported == 1)
+        #expect(try String(contentsOf: target, encoding: .utf8).contains("zai-plain-link"))
+    }
 }
