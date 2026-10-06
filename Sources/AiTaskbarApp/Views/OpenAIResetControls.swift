@@ -41,6 +41,8 @@ struct OpenAIResetControls: View {
             } ?? "",
             symbol: "arrow.counterclockwise.circle.fill",
             confirmTitle: L10n.localizedString("reset_confirm_button"),
+            // Spends a reset credit: click-only, never the Return key.
+            isDestructive: true,
             cancelTitle: L10n.localizedString("reset_cancel"),
             onConfirm: {
                 Task { if await reset.consume(path: path) { vm.refresh(forceRefresh: true) } }

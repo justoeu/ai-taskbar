@@ -28,7 +28,11 @@ final class ConfirmationCenter: ObservableObject {
 
     @Published private(set) var request: ConfirmationRequest?
 
+    /// A new request never silently replaces an open one: the old one is
+    /// cancelled first, so its state (an OpenAI `isConfirming`, an
+    /// unconfirmed OAuth opt-in) is rolled back instead of left stuck.
     func present(_ request: ConfirmationRequest) {
+        cancel()
         self.request = request
     }
 
@@ -50,6 +54,26 @@ final class ConfirmationCenter: ObservableObject {
 struct ConfirmationOverlay: View {
     let request: ConfirmationRequest
     @ObservedObject var center: ConfirmationCenter
+
+    /// Return confirms only a harmless action. A destructive one (restore
+    /// defaults, spending an OpenAI reset) needs a click on the red button,
+    /// so a stray or held Return cannot fire it.
+    @ViewBuilder
+    private var confirmButton: some View {
+        let button = Button(role: request.isDestructive ? .destructive : nil) { center.confirm() } label: {
+            Text(request.confirmTitle).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(request.isDestructive ? .red : .accentColor)
+        .controlSize(.regular)
+        if Self.returnConfirms(request) {
+            button.keyboardShortcut(.defaultAction)
+        } else {
+            button
+        }
+    }
+
+    static func returnConfirms(_ request: ConfirmationRequest) -> Bool { !request.isDestructive }
 
     var body: some View {
         ZStack {
@@ -85,13 +109,7 @@ struct ConfirmationOverlay: View {
                         .controlSize(.regular)
                         .keyboardShortcut(.cancelAction)
                     }
-                    Button(role: request.isDestructive ? .destructive : nil) { center.confirm() } label: {
-                        Text(request.confirmTitle).frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(request.isDestructive ? .red : .accentColor)
-                    .controlSize(.regular)
-                    .keyboardShortcut(.defaultAction)
+                    confirmButton
                 }
             }
             .padding(20)

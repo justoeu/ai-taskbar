@@ -164,9 +164,11 @@ public struct PopoverContentView: View {
             // close) and a small drop were both tried and read as stuttering.
             .opacity(hasAppeared || reduceMotion ? 1 : 0)
 
-            .allowsHitTesting(overlay == nil && store.pinLimitAlert == nil)
-            .disabled(overlay != nil || store.pinLimitAlert != nil)
-            .accessibilityHidden(overlay != nil || store.pinLimitAlert != nil)
+            // Home is inert under any page or modal — keyboard (Tab) and
+            // VoiceOver included, not only the mouse the backdrop blocks.
+            .allowsHitTesting(overlay == nil && store.pinLimitAlert == nil && confirmations.request == nil)
+            .disabled(overlay != nil || store.pinLimitAlert != nil || confirmations.request != nil)
+            .accessibilityHidden(overlay != nil || store.pinLimitAlert != nil || confirmations.request != nil)
 
             if let overlay {
                 Color.black.opacity(0.45)

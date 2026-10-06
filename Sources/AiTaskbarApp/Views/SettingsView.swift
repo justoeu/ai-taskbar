@@ -125,9 +125,16 @@ public struct SettingsView: View {
                     do {
                         try viewModel.resetToDefaults()
                         syncPinHostsText()
+                        if let backup = viewModel.lastResetBackup {
+                            ConfirmationCenter.shared.present(ConfirmationRequest(
+                                title: L10n.localizedString("settings_reset_done_title"),
+                                message: L10n.localizedString("settings_reset_done_fmt", backup.lastPathComponent),
+                                symbol: "checkmark.circle.fill", tint: .green,
+                                confirmTitle: L10n.localizedString("done")))
+                        }
                     } catch {
                         // Not swallowed: a failed reset write must be seen.
-                        viewModel.saveError = String(describing: error)
+                        viewModel.saveError = error.localizedDescription
                     }
                 },
                 onCancel: { showResetConfirm = false }))
