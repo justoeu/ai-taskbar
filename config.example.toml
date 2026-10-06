@@ -6,9 +6,9 @@
 # through it: the append is skipped (logged) and Settings cannot save.
 # Inline secrets (api_key, console_session) are stored as "enc:v2:..." —
 # encrypted with a key bound to THIS Mac's hardware UUID. A plaintext value you
-# type here is re-encrypted on the next launch (a config.toml.bak-<date> copy is
-# written first). Copied to another Mac, those keys cannot be read and must be
-# entered again there.
+# type here is re-encrypted on the next launch (no backup copy is kept — it
+# would hold the plaintext). Copied to another Mac, those keys cannot be read
+# and must be entered again there.
 
 [ui]
 # primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi | gemini | deepseek | xai

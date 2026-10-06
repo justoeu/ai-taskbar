@@ -693,13 +693,17 @@ that came out of fixing that:
   a post-hoc chmod. Use `AtomicFileWrite.write(_, to:, permissions: 0o600)`.
 - **Inline secrets are machine-bound `enc:v2:`** (`SecretBox`): AES-GCM,
   key = HKDF-SHA256(app constant, salt, info = `MachineIdentity.current`, the
-  `IOPlatformUUID`). The constant is public, so the UUID is the only secret
-  part; `enc:v1:` (constant only) is still read, and written only when no UUID
-  can be read. Every secret field lives in the one `ConfigLoader.secretFields`
+  `IOPlatformUUID`). The constant is public and the UUID is readable by any
+  local process (and sits in Time Machine metadata), so this protects the file
+  on its own, not a full disk image; say so, never claim more. `enc:v1:`
+  (constant only) is still read, and written only when no UUID can be read. Every secret field lives in the one `ConfigLoader.secretFields`
   table, which `save`, `load` and `upgradeSecretsIfNeeded` walk — a new secret
   field goes there, never into a copy-pasted block. `AppEnvironment.live()`
-  runs the upgrade once per launch (backup first; plaintext and v1 → v2) and
-  logs a failure instead of swallowing it. An undecryptable value (another
+  runs the upgrade once per launch (plaintext and v1 → v2) and logs a failure
+  instead of swallowing it. **The upgrade writes no backup file** — a copy of
+  the original keeps the plaintext on disk forever (review finding on #44);
+  it holds the original bytes in memory, re-loads after the rewrite and puts
+  them back unless the decoded config is identical. An undecryptable value (another
   Mac, tampering) is cleared on load so the card asks for the key again; the
   upgrade leaves it on disk untouched. Not the Keychain, by the user's
   decision (2026-10-05): it prompts, and a lost item loses every key. Tests

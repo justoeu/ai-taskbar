@@ -117,13 +117,22 @@ public struct ConfigLoader: Sendable {
     }
 
     /// Rewrites every inline secret still stored as plaintext or legacy
-    /// `enc:v1:` in the current format (`enc:v2:`, bound to `machineID`),
-    /// after backing the file up. A value that cannot be decrypted (an
-    /// `enc:v2:` from another Mac) is left untouched — `load()` already
-    /// treats it as absent, so the card asks for the key again. Returns how
-    /// many secrets were rewritten; 0 means the file was not touched.
+    /// `enc:v1:` in the current format (`enc:v2:`, bound to `machineID`).
+    ///
+    /// **No backup file is written**: a copy of the original would keep the
+    /// plaintext / v1 values on disk forever (and in Time Machine), which is
+    /// exactly what this upgrade removes. Safety comes from the original
+    /// bytes held in memory instead: after the rewrite the file is re-loaded,
+    /// and unless it decodes to the very same configuration the original is
+    /// written back and the call throws.
+    ///
+    /// Already-`enc:v2:` values — including another Mac's, which `load()`
+    /// treats as absent so the card asks again — are not touched. A legacy
+    /// value that does not decrypt (tampered `enc:v1:`) is skipped and left
+    /// on disk; `load()` logs and clears it in memory. Returns how many
+    /// secrets were rewritten; 0 means the file was not touched.
     @discardableResult
-    public func upgradeSecretsIfNeeded(now: Date = Date()) throws -> Int {
+    public func upgradeSecretsIfNeeded() throws -> Int {
         guard machineID != nil, let stored = try loadStored() else { return 0 }
         var changes: [ConfigChange] = []
         for field in Self.secretFields {
@@ -132,6 +141,8 @@ public struct ConfigLoader: Sendable {
             let plaintext: String
             if SecretBox.isEncrypted(value) {
                 guard let decrypted = try? SecretBox.decryptIfPresent(value, machineID: machineID) else {
+                    AppLog.config.warning(
+                        "\(field.section, privacy: .public).\(field.key, privacy: .public) legacy value undecryptable — left as is")
                     continue
                 }
                 plaintext = decrypted
@@ -141,9 +152,32 @@ public struct ConfigLoader: Sendable {
             changes.append(.secret(section: field.section, key: field.key, plaintext: plaintext))
         }
         guard !changes.isEmpty else { return 0 }
-        try backupCurrentFile(now: now)
+
+        let original: Data
+        do {
+            original = try Data(contentsOf: path)
+        } catch {
+            throw AppError.io("read config.toml for secret upgrade: \(error)")
+        }
+        let expected = try load()
         try applyChanges(changes)
+        let reloaded: AppConfig
+        do {
+            reloaded = try load()
+        } catch {
+            try rollBack(to: original)
+            throw error
+        }
+        guard reloaded == expected else {
+            try rollBack(to: original)
+            throw AppError.other("secret upgrade changed the decoded config — original restored")
+        }
         return changes.count
+    }
+
+    private func rollBack(to original: Data) throws {
+        try AtomicFileWrite.write(original, to: path, permissions: 0o600)
+        onAfterSave()
     }
 
     /// Copies the current `config.toml` to `config.toml.bak-<yyyyMMdd-HHmmss>`
@@ -171,7 +205,7 @@ public struct ConfigLoader: Sendable {
     public func save(_ config: AppConfig) throws {
         do {
             // Re-encrypt any plaintext api_key fields before TOML encode so
-            // load()→save() cannot strip enc:v1: (ARCH-ATL-002 / CQ-FOR-003).
+            // load()→save() cannot strip encryption (ARCH-ATL-002 / CQ-FOR-003).
             var toWrite = config
             try Self.encryptSecretsForDisk(in: &toWrite, machineID: machineID)
             let encoder = TOMLEncoder()

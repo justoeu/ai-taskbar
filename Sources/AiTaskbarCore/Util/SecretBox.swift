@@ -8,18 +8,21 @@ import CryptoKit
 ///
 /// `enc:v2:` (current): AES-GCM with a key derived by HKDF-SHA256 from a
 /// constant in the binary AND this Mac's hardware UUID (`MachineIdentity`).
-/// The source is public, so the constant is not a secret; the UUID is what
-/// makes the file useless elsewhere:
+/// The source is public, so the constant is not a secret, and the UUID is not
+/// one either — any local process, `ioreg`, System Information exports and
+/// Time Machine metadata expose it. What binding to it buys:
 ///
-///   - Protects: the file or a backup of it leaving this Mac (shared screen,
-///     chat paste, cloud/Time Machine disk read on another machine).
-///   - Does NOT protect: malware running as the user on this Mac (it can read
-///     the same UUID), or a logic-board swap / new Mac (keys must be re-entered
-///     there — preferences are unaffected).
+///   - Protects: the file ON ITS OWN leaving this Mac (pasted, shared on
+///     screen, attached, copied elsewhere without the machine's context).
+///   - Does NOT protect: malware running as the user here, or anyone holding
+///     a full disk image / Time Machine backup of this Mac (it carries the
+///     UUID). On a logic-board swap / new Mac keys must be re-entered there —
+///     preferences are unaffected.
 ///
 /// `enc:v1:` (legacy): key from the constant alone — obfuscation only. Still
 /// decrypted, never written while the UUID is readable; `ConfigLoader.
-/// upgradeSecretsIfNeeded` rewrites v1 and plaintext values as v2 at launch.
+/// upgradeSecretsIfNeeded` rewrites v1 and plaintext values as v2 at launch
+/// (without a backup file, which would keep them on disk).
 ///
 /// Keychain was considered and declined (2026-10-05): this Mac's login
 /// keychain lost items unexplained, and losing the key would lose every
@@ -29,8 +32,8 @@ import CryptoKit
 /// Nonce is randomized per encrypt call → encrypting the same plaintext
 /// twice produces different ciphertexts (correct AES-GCM usage).
 public enum SecretBox {
-    /// Wire-format prefix. Bumped only on cryptographic scheme changes
-    /// (e.g. migrating from AES-GCM to ChaCha20-Poly1305).
+    /// Legacy wire-format prefix (key from the constant alone). Still read;
+    /// written only when no hardware UUID can be read.
     public static let prefix = "enc:v1:"
     /// Machine-bound format (see the type doc).
     public static let prefixV2 = "enc:v2:"

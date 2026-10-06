@@ -294,10 +294,44 @@ struct ConfigLoaderSecretTests {
         #expect(cfg.openrouter.apiKey == "sk-or-legacy")
         #expect(cfg.typesafe.consoleSession == "ts-session-plain")
 
-        let made = try backups(in: tmp)
-        #expect(made.count == 1)
-        let backup = tmp.appendingPathComponent(made[0])
-        #expect(try Data(contentsOf: backup) == original)
+        // No backup: a copy of the original would keep the plaintext on disk.
+        #expect(try backups(in: tmp).isEmpty)
+        let everyFile = try FileManager.default.contentsOfDirectory(atPath: tmp.path)
+        #expect(everyFile == ["config.toml"])
+        #expect(try Data(contentsOf: loader.path) != original)
+    }
+
+    @Test("upgrade leaves a tampered enc:v1 on disk and still upgrades the rest")
+    func upgrade_skips_tampered_v1() throws {
+        let foreign = try SecretBox.encrypt("sk-foreign", machineID: Self.otherMac)
+        let (loader, tmp) = try seeded("""
+        [zai]
+        api_key = "enc:v1:not-valid-ciphertext=="
+
+        [deepseek]
+        api_key = "\(foreign)"
+
+        [xai]
+        api_key = "xai-plain"
+        """)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        #expect(try loader.upgradeSecretsIfNeeded() == 1)
+        let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
+        #expect(onDisk.contains("enc:v1:not-valid-ciphertext=="))
+        #expect(onDisk.contains(foreign))
+        #expect(!onDisk.contains("xai-plain"))
+        #expect(try loader.load().xai.apiKey == "xai-plain")
+    }
+
+    @Test("upgrade without a machine id leaves enc:v1 alone")
+    func upgrade_keeps_v1_without_machine_id() throws {
+        let v1 = try SecretBox.encrypt("sk-v1", machineID: nil)
+        let (seededLoader, tmp) = try seeded("[kimi]\napi_key = \"\(v1)\"\n")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        var loader = seededLoader
+        loader.machineID = nil
+        #expect(try loader.upgradeSecretsIfNeeded() == 0)
+        #expect(try String(contentsOf: loader.path, encoding: .utf8).contains(v1))
     }
 
     @Test("upgrade is a no-op when every secret is already enc:v2")
@@ -364,5 +398,6 @@ struct ConfigLoaderSecretTests {
             #expect(loaded[keyPath: field.path] == "secret-\(i)")
         }
         #expect(ConfigLoader.secretFields.count == 8)
+        #expect(onDisk.components(separatedBy: SecretBox.prefixV2).count - 1 == 8)
     }
 }

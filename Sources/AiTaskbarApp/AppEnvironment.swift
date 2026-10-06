@@ -74,7 +74,8 @@ public final class AppEnvironment {
     }
 
     /// Rewrites plaintext / legacy `enc:v1:` secrets as machine-bound
-    /// `enc:v2:` (backup first, see `ConfigLoader.upgradeSecretsIfNeeded`).
+    /// `enc:v2:` (verified, rolled back on mismatch, no backup file — see
+    /// `ConfigLoader.upgradeSecretsIfNeeded`).
     /// The in-memory config already holds the plaintext, so nothing reloads.
     /// Best-effort like the top-up, but logged — never silent. Returns the
     /// failure for tests.
