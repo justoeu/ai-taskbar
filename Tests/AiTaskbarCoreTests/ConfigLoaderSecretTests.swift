@@ -276,7 +276,7 @@ struct ConfigLoaderSecretTests {
         #expect(cfg.openrouter.apiKey == nil)
     }
 
-    @Test("upgrade rewrites plaintext and enc:v1 secrets as enc:v2, after a backup")
+    @Test("upgrade rewrites plaintext and enc:v1 secrets as enc:v2, without a backup")
     func upgrade_plaintext_and_v1() throws {
         let v1 = try SecretBox.encrypt("sk-or-legacy", field: "openrouter.api_key", machineID: nil)
         #expect(v1.hasPrefix(SecretBox.prefix))

@@ -62,17 +62,26 @@ sleep 1
 # reads or REWRITES the real config.toml. On 2026-10-10 a work-in-progress
 # branch build launched here migrated the maintainer's inline secrets to an
 # unreleased enc:v2 format the installed app could not read.
+# NOT isolated (fine for a 3 s read-mostly run, but don't assume more): the
+# login Keychain, the HOME env var inherited by child CLIs, and the network.
 smoke_home=$(mktemp -d "${TMPDIR:-/tmp}/ai-taskbar-smoke.XXXXXX")
+smoke_pid=""
+smoke_cleanup() {
+    [ -n "$smoke_pid" ] && kill "$smoke_pid" 2>/dev/null || true
+    [ -n "$smoke_pid" ] && wait "$smoke_pid" 2>/dev/null || true
+    rm -rf "$smoke_home"
+}
+trap smoke_cleanup EXIT
 CFFIXED_USER_HOME="$smoke_home" build/AiTaskbar.app/Contents/MacOS/ai-taskbar &
 smoke_pid=$!
 sleep 3
 if kill -0 "$smoke_pid" 2>/dev/null; then
     ok "app launched and stayed alive 3s (isolated home)"
-    kill "$smoke_pid" 2>/dev/null || true
-    wait "$smoke_pid" 2>/dev/null || true
-    rm -rf "$smoke_home"
+    smoke_cleanup
+    trap - EXIT
 else
-    rm -rf "$smoke_home"
+    smoke_cleanup
+    trap - EXIT
     fail "app died within 3s — check Console.app for crash"
 fi
 

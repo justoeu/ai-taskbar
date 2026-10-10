@@ -120,9 +120,11 @@ public struct ConfigLoader: Sendable {
     /// Rewrites every inline secret still stored as plaintext or legacy
     /// `enc:v1:` in the current format (`enc:v2:`, bound to `machineID`).
     ///
-    /// **No backup file is written**: a copy of the original would keep the
-    /// plaintext / v1 values on disk forever (and in Time Machine), which is
-    /// exactly what this upgrade removes. Safety comes from the original
+    /// **No backup file is written**: a copy of the original would add one
+    /// more long-lived copy of the plaintext / v1 values (and carry it into
+    /// Time Machine). The upgrade cannot purge copies that already exist —
+    /// earlier Time Machine backups, APFS snapshots, freed disk blocks — it
+    /// only avoids making a new one. Safety comes from the original
     /// bytes held in memory instead: after the rewrite the file is re-loaded,
     /// and unless it decodes to the very same configuration the original is
     /// written back and the call throws.
@@ -141,9 +143,17 @@ public struct ConfigLoader: Sendable {
                   !SecretBox.isCurrentFormat(value, machineID: machineID) else { continue }
             let plaintext: String
             if SecretBox.isEncrypted(value) {
-                guard let decrypted = try? SecretBox.decryptIfPresent(value, field: field.id, machineID: machineID) else {
+                let decrypted: String?
+                do {
+                    decrypted = try SecretBox.decryptIfPresent(value, field: field.id, machineID: machineID)
+                } catch {
+                    // The error carries only the CryptoKit / format reason, never the value.
                     AppLog.config.warning(
-                        "\(field.section, privacy: .public).\(field.key, privacy: .public) legacy value undecryptable — left as is")
+                        "\(field.id, privacy: .public) legacy value undecryptable — left as is: \(String(describing: error), privacy: .public)")
+                    continue
+                }
+                guard let decrypted else {
+                    AppLog.config.warning("\(field.id, privacy: .public) legacy value is not UTF-8 — left as is")
                     continue
                 }
                 plaintext = decrypted
@@ -230,7 +240,11 @@ public struct ConfigLoader: Sendable {
         let key: String
         let path: WritableKeyPath<AppConfig, String?> & Sendable
         /// `"section.key"` — what a v2 value is bound to (`SecretBox`).
-        var id: String { "\(section).\(key)" }
+        var id: String { Self.id(section: section, key: key) }
+        /// The one place the binding id is spelled. `applyChanges` uses it
+        /// too: a write and a load that disagreed on it would seal values
+        /// that never open again.
+        static func id(section: String, key: String) -> String { "\(section).\(key)" }
     }
 
     static let secretFields: [SecretField] = [
@@ -295,7 +309,8 @@ public struct ConfigLoader: Sendable {
             case .stringArray(_, _, let v):  encoded = .stringArray(v)
             case .doubleArray(_, _, let v):  encoded = .doubleArray(v)
             case .secret(let section, let key, let plaintext?):
-                let enc = try SecretBox.encrypt(plaintext, field: "\(section).\(key)", machineID: machineID)
+                let enc = try SecretBox.encrypt(plaintext, field: SecretField.id(section: section, key: key),
+                                             machineID: machineID)
                 encoded = .encrypted(enc)
             case .secret(_, _, nil):
                 // Clear secret = empty string slot.
@@ -315,16 +330,23 @@ public struct ConfigLoader: Sendable {
 
     /// Replaces every encrypted secret with its plaintext. Plaintext values
     /// pass through unchanged. A value that cannot be decrypted — tampered,
-    /// or an `enc:v2:` sealed on another Mac — is logged and cleared rather
-    /// than failing the whole load, so the card asks for that key again.
+    /// or an `enc:v2:` sealed on another Mac or for another field — is logged
+    /// and cleared rather than failing the whole load, so the card asks for
+    /// that key again.
     private static func decryptSecrets(in config: inout AppConfig, machineID: String?) {
         for field in secretFields {
             guard let enc = config[keyPath: field.path], SecretBox.isEncrypted(enc) else { continue }
-            if let pt = try? SecretBox.decryptIfPresent(enc, field: field.id, machineID: machineID) {
-                config[keyPath: field.path] = pt
-            } else {
+            do {
+                if let pt = try SecretBox.decryptIfPresent(enc, field: field.id, machineID: machineID) {
+                    config[keyPath: field.path] = pt
+                } else {
+                    AppLog.config.warning("\(field.id, privacy: .public) decrypted to non-UTF-8 — clearing")
+                    config[keyPath: field.path] = nil
+                }
+            } catch {
+                // The error carries only the CryptoKit / format reason, never the value.
                 AppLog.config.warning(
-                    "\(field.section, privacy: .public).\(field.key, privacy: .public) encrypted but undecryptable (another Mac or tampered) — clearing")
+                    "\(field.id, privacy: .public) encrypted but undecryptable (another Mac, another field or tampered) — clearing: \(String(describing: error), privacy: .public)")
                 config[keyPath: field.path] = nil
             }
         }
