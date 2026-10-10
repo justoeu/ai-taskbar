@@ -245,6 +245,19 @@ public enum ClaudeSessionScanner {
         }
     }
 
+    /// The model's prompt-length threshold, or nil when it has no long tier.
+    /// Memoized per scan (nil included, via `updateValue`, so a model with no
+    /// tier is not re-looked-up): `PricingTable.lookup` is a linear prefix
+    /// scan and `scanLines` calls this for every assistant line.
+    private static func longContextThreshold(for model: String,
+                                             cache: inout [String: Int?]) -> Int? {
+        if let cached = cache[model] { return cached }
+        let threshold = PricingTable.lookup(model, table: PricingTable.anthropic)?
+            .longContextThresholdTokens
+        cache.updateValue(threshold, forKey: model)
+        return threshold
+    }
+
     /// Lines carrying both ids go to `keyed` (deduped); lines missing either
     /// id have nothing to dedup on and are added to the totals directly.
     private static func scanLines(
@@ -256,6 +269,7 @@ public enum ClaudeSessionScanner {
         keyed: inout [String: ScanMemo.KeyedUsage],
         unparseableTimestamps: inout Int
     ) {
+        var longContextThresholds: [String: Int?] = [:]
         var offset = data.startIndex
         let end = data.endIndex
         while offset < end {
@@ -303,12 +317,29 @@ public enum ClaudeSessionScanner {
             let output = max(0, usage.output_tokens ?? 0)
             let cacheRead = max(0, usage.cache_read_input_tokens ?? 0)
             let isFast = usage.speed == "fast"
+            // Prompt-length pricing (Haiku 5.5): a request whose prompt —
+            // input, cache reads AND cache writes — is over the threshold
+            // pays the higher rates on every category, output included.
+            // Each request is priced on its own, so this is decided per line.
+            let isLong: Bool
+            if let threshold = longContextThreshold(for: model, cache: &longContextThresholds) {
+                let prompt = CostAggregator.saturatingAdd(
+                    CostAggregator.saturatingAdd(input, cacheRead), cacheCreateTotal)
+                isLong = prompt > threshold
+            } else {
+                isLong = false
+            }
             let modelUsage = ModelUsage(
                 inputTokens: input,
                 outputTokens: output,
                 cacheReadTokens: cacheRead,
                 cacheCreateTokens: cacheCreate5m,
                 cacheCreate1hTokens: cacheCreate1h,
+                longContextInputTokens: isLong ? input : 0,
+                longContextOutputTokens: isLong ? output : 0,
+                longContextCacheReadTokens: isLong ? cacheRead : 0,
+                longContextCacheCreateTokens: isLong ? cacheCreate5m : 0,
+                longContextCacheCreate1hTokens: isLong ? cacheCreate1h : 0,
                 fastInputTokens: isFast ? input : 0,
                 fastOutputTokens: isFast ? output : 0,
                 fastCacheReadTokens: isFast ? cacheRead : 0,

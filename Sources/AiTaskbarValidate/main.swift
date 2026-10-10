@@ -1085,6 +1085,17 @@ section("PricingTable lookup") {
     expect(opus55?.fastModeMultiplier == 2, "Opus 5.5 fast mode is 2x ($8/$40)")
     expect(sonnet55?.fastModeMultiplier == nil, "Sonnet 5.5 has no fast mode")
     expect(sonnet55?.cacheReadPer1M == 0.1, "Sonnet 5.5 cache-read price ($0.10/MTok, 0.05x)")
+    let haiku55 = PricingTable.lookup("claude-haiku-5-5", table: PricingTable.anthropic)
+    expect(haiku55?.inputPer1M == 0.1, "Haiku 5.5 input price ($0.10/MTok)")
+    expect(haiku55?.outputPer1M == 0.5, "Haiku 5.5 output price ($0.50/MTok)")
+    expect(haiku55?.cacheReadPer1M == 0.01, "Haiku 5.5 cache-read price ($0.01/MTok)")
+    expect(haiku55?.longContextThresholdTokens == 100_000, "Haiku 5.5 prompt-length tier at 100K")
+    expect(haiku55?.longContextOutputMultiplier == 5, "Haiku 5.5 long tier is 5x, output included")
+    let haiku55Dot = PricingTable.lookup("claude-haiku-5.5", table: PricingTable.anthropic)
+    expect(haiku55Dot?.inputPer1M == 0.1, "Haiku 5.5 dotted format input price ($0.10/MTok)")
+    let gemini4 = PricingTable.lookup("gemini-4-argon", table: PricingTable.gemini)
+    expect(gemini4?.inputPer1M == 2, "Gemini 4 provisional introductory input price ($2/MTok)")
+    expect(gemini4?.outputPer1M == 10, "Gemini 4 provisional introductory output price ($10/MTok)")
     var fastOpus = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000)
     fastOpus.fastInputTokens = 1_000_000
     fastOpus.fastOutputTokens = 1_000_000

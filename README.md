@@ -381,8 +381,12 @@ Daily and 7-day costs are computed **locally** from the CLI transcripts (`~/.cla
 | Opus 5 · Opus 4.8 | $5 | $25 | $6.25 / $10 | $0.50 | $10 / $50 |
 | Sonnet 5.5 | $2 | $10 | $2.50 / $4 | $0.10 | — |
 | Sonnet 5 | $2 | $10 | $2.50 / $4 | $0.20 | — |
+| Haiku 5.5 (prompt ≤ 100K) | $0.10 | $0.50 | $0.125 / $0.20 | $0.01 | — |
+| Haiku 5.5 (prompt > 100K) | $0.50 | $2.50 | $0.625 / $1 | $0.05 | — |
 
-Prices per million tokens. **Fast mode** keeps the same model id, so it is detected per request from the transcript's `usage.speed` and billed at 2x on every token category, cache included. Models without fast mode (Opus 4.7 rejects it, Opus 4.6 runs it at standard price) are billed at standard rates. A model missing from the table still appears in the breakdown, marked as not yet priced, rather than disappearing.
+Prices per million tokens. **Fast mode** keeps the same model id, so it is detected per request from the transcript's `usage.speed` and billed at 2x on every token category, cache included. Models without fast mode (Opus 4.7 rejects it, Opus 4.6 runs it at standard price) are billed at standard rates. **Haiku 5.5** is priced by prompt length: a request whose prompt (input + cache reads + cache writes) is over 100,000 tokens is billed entirely at the higher row, output included. A model missing from the table still appears in the breakdown, marked as not yet priced, rather than disappearing.
+
+**Gemini 4 (Argon)** is priced provisionally under a `gemini-4` prefix at its announced introductory rate ($2 / $10, cached input $0.10): as of 2026-10-10 it has no public model ID and is not on Google's official price list.
 
 ---
 

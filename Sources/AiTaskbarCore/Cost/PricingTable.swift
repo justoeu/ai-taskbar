@@ -113,6 +113,23 @@ public enum PricingTable {
         // Sonnet 4.x
         "claude-sonnet-4-6":     ModelPricing(input: 3,  output: 15, cacheRead: 0.3, cacheCreate: 3.75, cacheCreate1h: 6),
         "claude-sonnet-4":       ModelPricing(input: 3,  output: 15, cacheRead: 0.3, cacheCreate: 3.75, cacheCreate1h: 6),
+        // Haiku 5.5 — $0.10 in / $0.50 out, cache hits at the usual 0.1x
+        // ($0.01). Unlike every other current Claude model it is priced by
+        // prompt length: a request whose prompt (input + cache reads + cache
+        // writes) is OVER 100,000 tokens pays 5x on every category, output
+        // included ($0.50 / $2.50 / $0.05 / $0.625 / $1). Verified against
+        // platform.claude.com/docs/en/about-claude/pricing on 2026-10-10.
+        // `ClaudeSessionScanner` tags such requests per line. It shares no
+        // prefix with `claude-haiku-4-5`, so without these keys every
+        // Haiku 5.5 turn would surface as unpriced.
+        "claude-haiku-5-5":      ModelPricing(input: 0.1, output: 0.5, cacheRead: 0.01, cacheCreate: 0.125, cacheCreate1h: 0.2,
+                                              longContextThreshold: 100_000,
+                                              longContextInputMultiplier: 5,
+                                              longContextOutputMultiplier: 5),
+        "claude-haiku-5.5":      ModelPricing(input: 0.1, output: 0.5, cacheRead: 0.01, cacheCreate: 0.125, cacheCreate1h: 0.2,
+                                              longContextThreshold: 100_000,
+                                              longContextInputMultiplier: 5,
+                                              longContextOutputMultiplier: 5),
         // Haiku 4.5
         "claude-haiku-4-5":      ModelPricing(input: 1,  output: 5,  cacheRead: 0.1, cacheCreate: 1.25, cacheCreate1h: 2),
     ]
@@ -196,6 +213,15 @@ public enum PricingTable {
     /// Google Gemini family. Consumed by Opencode and local scanners.
     /// Prices in USD per 1M tokens based on Google Cloud official pricing.
     public static let gemini: [String: ModelPricing] = [
+        // Gemini 4 (Argon) — PROVISIONAL, NOT verified on the official price
+        // list. Announced 2026-09-30 with restricted access (Fairwind program)
+        // and, as of 2026-10-10, absent from ai.google.dev/gemini-api/docs/pricing
+        // and /models, so there is no public model ID. A `gemini-4` prefix
+        // catches whatever ID ships (`gemini-4-argon`, `gemini-4-pro`, ...).
+        // Priced at the announced INTRODUCTORY rate ($2 in / $10 out, cached
+        // input 95% off = $0.10). Google said it doubles to $4/$20 when the
+        // introductory window ends — re-check and add explicit keys then.
+        "gemini-4":           ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),
         // Gemini 3.x
         "gemini-3.8-flash":   ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
         "gemini-3-flash":     ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
