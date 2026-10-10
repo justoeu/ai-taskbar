@@ -1084,6 +1084,7 @@ section("PricingTable lookup") {
     expect(sonnet55?.outputPer1M == 10, "Sonnet 5.5 output price ($10/MTok)")
     expect(opus55?.fastModeMultiplier == 2, "Opus 5.5 fast mode is 2x ($8/$40)")
     expect(sonnet55?.fastModeMultiplier == nil, "Sonnet 5.5 has no fast mode")
+    expect(sonnet55?.cacheReadPer1M == 0.1, "Sonnet 5.5 cache-read price ($0.10/MTok, 0.05x)")
     var fastOpus = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000)
     fastOpus.fastInputTokens = 1_000_000
     fastOpus.fastOutputTokens = 1_000_000

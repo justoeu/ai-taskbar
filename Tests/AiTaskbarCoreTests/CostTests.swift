@@ -289,12 +289,14 @@ struct CostTests {
             let m = PricingTable.lookup(id, table: PricingTable.anthropic)
             #expect(m?.inputPer1M == 2.0)
             #expect(m?.outputPer1M == 10.0)
-            #expect(m?.cacheReadPer1M == 0.2)
+            // 0.05x base, like Opus 5.5 — not Sonnet 5's $0.20.
+            #expect(m?.cacheReadPer1M == 0.1)
             #expect(m?.cacheCreatePer1M == 2.5)
             #expect(m?.cacheCreate1hPer1M == 4.0)
         }
         // Resolved by its own key, not by the Sonnet 5 prefix.
         #expect(PricingTable.anthropic["claude-sonnet-5-5"] != nil)
+        #expect(PricingTable.lookup("claude-sonnet-5", table: PricingTable.anthropic)?.cacheReadPer1M == 0.2)
     }
 
     @Test("GLM Flash models have expected pricing tiers")

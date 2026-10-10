@@ -104,8 +104,12 @@ public enum PricingTable {
         // Sonnet 5.5 — same $2/$10 tier as Sonnet 5 (same source, same date).
         // Listed explicitly rather than left to the `claude-sonnet-5` prefix,
         // so a future Sonnet 5 repricing cannot silently reprice 5.5 too.
-        "claude-sonnet-5-5":     ModelPricing(input: 2,  output: 10, cacheRead: 0.2, cacheCreate: 2.5, cacheCreate1h: 4),
-        "claude-sonnet-5.5":     ModelPricing(input: 2,  output: 10, cacheRead: 0.2, cacheCreate: 2.5, cacheCreate1h: 4),
+        // Cache hits are 0.05x base ($0.10), like Opus 5.5 — NOT Sonnet 5's
+        // $0.20. Verified against platform.claude.com/docs/en/about-claude/pricing
+        // on 2026-10-10; it had been entered at $0.20, overstating every
+        // Sonnet 5.5 cache read by 2x.
+        "claude-sonnet-5-5":     ModelPricing(input: 2,  output: 10, cacheRead: 0.1, cacheCreate: 2.5, cacheCreate1h: 4),
+        "claude-sonnet-5.5":     ModelPricing(input: 2,  output: 10, cacheRead: 0.1, cacheCreate: 2.5, cacheCreate1h: 4),
         // Sonnet 4.x
         "claude-sonnet-4-6":     ModelPricing(input: 3,  output: 15, cacheRead: 0.3, cacheCreate: 3.75, cacheCreate1h: 6),
         "claude-sonnet-4":       ModelPricing(input: 3,  output: 15, cacheRead: 0.3, cacheCreate: 3.75, cacheCreate1h: 6),
