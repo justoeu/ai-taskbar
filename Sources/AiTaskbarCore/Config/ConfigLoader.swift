@@ -54,9 +54,10 @@ public struct ConfigLoader: Sendable {
     /// through the app itself. Defaults to no-op.
     public var onAfterSave: @Sendable () -> Void = {}
 
-    /// Hardware UUID the `enc:v2:` secrets are bound to. Injectable so tests
-    /// can play "this Mac" and "another Mac" (see `SecretBox`).
-    public var machineID: String? = MachineIdentity.current
+    /// Hardware UUID the `enc:v2:` secrets are bound to. Internal, not
+    /// public: tests inject it (via `@testable`) to play "this Mac" and
+    /// "another Mac" (see `SecretBox`); app code cannot swap it.
+    var machineID: String? = MachineIdentity.current
 
     /// Use when you have an explicit path (tests, fallback). Statically
     /// non-throwing — separating from the default-path init avoids the
@@ -140,7 +141,7 @@ public struct ConfigLoader: Sendable {
                   !SecretBox.isCurrentFormat(value, machineID: machineID) else { continue }
             let plaintext: String
             if SecretBox.isEncrypted(value) {
-                guard let decrypted = try? SecretBox.decryptIfPresent(value, machineID: machineID) else {
+                guard let decrypted = try? SecretBox.decryptIfPresent(value, field: field.id, machineID: machineID) else {
                     AppLog.config.warning(
                         "\(field.section, privacy: .public).\(field.key, privacy: .public) legacy value undecryptable — left as is")
                     continue
@@ -228,6 +229,8 @@ public struct ConfigLoader: Sendable {
         let section: String
         let key: String
         let path: WritableKeyPath<AppConfig, String?> & Sendable
+        /// `"section.key"` — what a v2 value is bound to (`SecretBox`).
+        var id: String { "\(section).\(key)" }
     }
 
     static let secretFields: [SecretField] = [
@@ -246,7 +249,7 @@ public struct ConfigLoader: Sendable {
         for field in secretFields {
             guard let plain = config[keyPath: field.path], !plain.isEmpty,
                   !SecretBox.isEncrypted(plain) else { continue }
-            config[keyPath: field.path] = try SecretBox.encrypt(plain, machineID: machineID)
+            config[keyPath: field.path] = try SecretBox.encrypt(plain, field: field.id, machineID: machineID)
         }
     }
 
@@ -291,8 +294,8 @@ public struct ConfigLoader: Sendable {
                 encoded = .string("")
             case .stringArray(_, _, let v):  encoded = .stringArray(v)
             case .doubleArray(_, _, let v):  encoded = .doubleArray(v)
-            case .secret(_, _, let plaintext?):
-                let enc = try SecretBox.encrypt(plaintext, machineID: machineID)
+            case .secret(let section, let key, let plaintext?):
+                let enc = try SecretBox.encrypt(plaintext, field: "\(section).\(key)", machineID: machineID)
                 encoded = .encrypted(enc)
             case .secret(_, _, nil):
                 // Clear secret = empty string slot.
@@ -317,7 +320,7 @@ public struct ConfigLoader: Sendable {
     private static func decryptSecrets(in config: inout AppConfig, machineID: String?) {
         for field in secretFields {
             guard let enc = config[keyPath: field.path], SecretBox.isEncrypted(enc) else { continue }
-            if let pt = try? SecretBox.decryptIfPresent(enc, machineID: machineID) {
+            if let pt = try? SecretBox.decryptIfPresent(enc, field: field.id, machineID: machineID) {
                 config[keyPath: field.path] = pt
             } else {
                 AppLog.config.warning(

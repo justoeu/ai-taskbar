@@ -56,13 +56,23 @@ sleep 1
 # the registered/running installed copy — the dev binary never launches and
 # the aliveness check reads as a false "app died". Direct exec still loads
 # the full SwiftUI MenuBarExtra runtime, which is what this step proves.
-build/AiTaskbar.app/Contents/MacOS/ai-taskbar &
+#
+# Isolated home: CFFIXED_USER_HOME points Foundation's home, Application
+# Support and preferences at a throwaway dir, so the build under test never
+# reads or REWRITES the real config.toml. On 2026-10-10 a work-in-progress
+# branch build launched here migrated the maintainer's inline secrets to an
+# unreleased enc:v2 format the installed app could not read.
+smoke_home=$(mktemp -d "${TMPDIR:-/tmp}/ai-taskbar-smoke.XXXXXX")
+CFFIXED_USER_HOME="$smoke_home" build/AiTaskbar.app/Contents/MacOS/ai-taskbar &
 smoke_pid=$!
 sleep 3
 if kill -0 "$smoke_pid" 2>/dev/null; then
-    ok "app launched and stayed alive 3s"
+    ok "app launched and stayed alive 3s (isolated home)"
     kill "$smoke_pid" 2>/dev/null || true
+    wait "$smoke_pid" 2>/dev/null || true
+    rm -rf "$smoke_home"
 else
+    rm -rf "$smoke_home"
     fail "app died within 3s — check Console.app for crash"
 fi
 

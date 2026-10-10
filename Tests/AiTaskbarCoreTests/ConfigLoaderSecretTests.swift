@@ -260,9 +260,25 @@ struct ConfigLoaderSecretTests {
         #expect(try elsewhere.load().zai.apiKey == nil)
     }
 
+    @Test("a v2 secret copied into another field loads as absent there")
+    func v2_moved_between_fields_does_not_open() throws {
+        let zaiValue = try SecretBox.encrypt("sk-zai", field: "zai.api_key", machineID: Self.thisMac)
+        let (loader, tmp) = try seeded("""
+        [zai]
+        api_key = "\(zaiValue)"
+
+        [openrouter]
+        api_key = "\(zaiValue)"
+        """)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cfg = try loader.load()
+        #expect(cfg.zai.apiKey == "sk-zai")
+        #expect(cfg.openrouter.apiKey == nil)
+    }
+
     @Test("upgrade rewrites plaintext and enc:v1 secrets as enc:v2, after a backup")
     func upgrade_plaintext_and_v1() throws {
-        let v1 = try SecretBox.encrypt("sk-or-legacy", machineID: nil)
+        let v1 = try SecretBox.encrypt("sk-or-legacy", field: "openrouter.api_key", machineID: nil)
         #expect(v1.hasPrefix(SecretBox.prefix))
         let (loader, tmp) = try seeded("""
         # keep me
@@ -303,7 +319,7 @@ struct ConfigLoaderSecretTests {
 
     @Test("upgrade leaves a tampered enc:v1 on disk and still upgrades the rest")
     func upgrade_skips_tampered_v1() throws {
-        let foreign = try SecretBox.encrypt("sk-foreign", machineID: Self.otherMac)
+        let foreign = try SecretBox.encrypt("sk-foreign", field: "deepseek.api_key", machineID: Self.otherMac)
         let (loader, tmp) = try seeded("""
         [zai]
         api_key = "enc:v1:not-valid-ciphertext=="
@@ -325,7 +341,7 @@ struct ConfigLoaderSecretTests {
 
     @Test("upgrade without a machine id leaves enc:v1 alone")
     func upgrade_keeps_v1_without_machine_id() throws {
-        let v1 = try SecretBox.encrypt("sk-v1", machineID: nil)
+        let v1 = try SecretBox.encrypt("sk-v1", field: "kimi.api_key", machineID: nil)
         let (seededLoader, tmp) = try seeded("[kimi]\napi_key = \"\(v1)\"\n")
         defer { try? FileManager.default.removeItem(at: tmp) }
         var loader = seededLoader
@@ -350,7 +366,7 @@ struct ConfigLoaderSecretTests {
 
     @Test("upgrade leaves another Mac's enc:v2 untouched")
     func upgrade_skips_foreign_v2() throws {
-        let foreign = try SecretBox.encrypt("sk-foreign", machineID: Self.otherMac)
+        let foreign = try SecretBox.encrypt("sk-foreign", field: "deepseek.api_key", machineID: Self.otherMac)
         let (loader, tmp) = try seeded("[deepseek]\napi_key = \"\(foreign)\"\n")
         defer { try? FileManager.default.removeItem(at: tmp) }
         #expect(try loader.upgradeSecretsIfNeeded() == 0)

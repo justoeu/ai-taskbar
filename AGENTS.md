@@ -692,8 +692,11 @@ that came out of fixing that:
 - **All files containing secrets must be `0o600`** at write time, not via
   a post-hoc chmod. Use `AtomicFileWrite.write(_, to:, permissions: 0o600)`.
 - **Inline secrets are machine-bound `enc:v2:`** (`SecretBox`): AES-GCM,
-  key = HKDF-SHA256(app constant, salt, info = `MachineIdentity.current`, the
-  `IOPlatformUUID`). The constant is public and the UUID is readable by any
+  key = HKDF-SHA256(IKM = `MachineIdentity.current`, the `IOPlatformUUID`;
+  fixed salt; fixed info label), and each value is bound to its field
+  (`"section.key"`) as GCM AAD, so a value moved to another slot fails to
+  open. The golden vector in `SecretBoxTests` freezes the format: changing
+  derivation or binding needs a v3 prefix. Salt and label are public and the UUID is readable by any
   local process (and sits in Time Machine metadata), so this protects the file
   on its own, not a full disk image; say so, never claim more. `enc:v1:`
   (constant only) is still read, and written only when no UUID can be read. Every secret field lives in the one `ConfigLoader.secretFields`

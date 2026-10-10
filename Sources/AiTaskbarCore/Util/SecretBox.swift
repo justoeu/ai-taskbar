@@ -6,11 +6,12 @@ import CryptoKit
 ///
 /// **Threat model — read this before assuming more than it gives.**
 ///
-/// `enc:v2:` (current): AES-GCM with a key derived by HKDF-SHA256 from a
-/// constant in the binary AND this Mac's hardware UUID (`MachineIdentity`).
-/// The source is public, so the constant is not a secret, and the UUID is not
-/// one either — any local process, `ioreg`, System Information exports and
-/// Time Machine metadata expose it. What binding to it buys:
+/// `enc:v2:` (current): AES-GCM with a key derived by HKDF-SHA256 from this
+/// Mac's hardware UUID (`MachineIdentity`) under a fixed public salt and
+/// label, each value also bound to its config field. The source is public,
+/// so salt and label are not secrets, and the UUID is not one either — any
+/// local process, `ioreg`, System Information exports and Time Machine
+/// metadata expose it. What binding to it buys:
 ///
 ///   - Protects: the file ON ITS OWN leaving this Mac (pasted, shared on
 ///     screen, attached, copied elsewhere without the machine's context).
@@ -31,6 +32,12 @@ import CryptoKit
 /// Format: prefix + base64( nonce(12B) || ciphertext || tag(16B) ).
 /// Nonce is randomized per encrypt call → encrypting the same plaintext
 /// twice produces different ciphertexts (correct AES-GCM usage).
+///
+/// v2 key and binding: HKDF-SHA256 with the hardware UUID as the input key
+/// material, a fixed salt and a fixed `info` label. Each v2 value is also
+/// bound to the config field it lives in (`"section.key"`) as AES-GCM
+/// additional authenticated data, so a value moved into another field fails
+/// the tag check instead of opening there. v1 has no field binding.
 public enum SecretBox {
     /// Legacy wire-format prefix (key from the constant alone). Still read;
     /// written only when no hardware UUID can be read.
@@ -38,6 +45,7 @@ public enum SecretBox {
     /// Machine-bound format (see the type doc).
     public static let prefixV2 = "enc:v2:"
     private static let saltV2 = Data("ai-taskbar.secretbox.v2".utf8)
+    private static let infoV2 = Data("ai-taskbar.secretbox.v2/config-secret-key".utf8)
 
     /// Hardcoded app-specific passphrase. SHA-256'd into a 256-bit
     /// `SymmetricKey`. NOT a secret in any meaningful sense — see the threat
@@ -52,31 +60,36 @@ public enum SecretBox {
         return SymmetricKey(data: digest)
     }()
 
-    /// The v2 key for one machine: HKDF-SHA256 over the binary constant,
-    /// salted, with the hardware UUID as `info`.
+    /// The v2 key for one machine: HKDF-SHA256 with the hardware UUID as the
+    /// input key material (the machine-specific part), a fixed salt and a
+    /// fixed `info` label.
     static func machineKey(_ machineID: String) -> SymmetricKey {
-        HKDF<SHA256>.deriveKey(inputKeyMaterial: key, salt: saltV2,
-                               info: Data(machineID.utf8), outputByteCount: 32)
+        HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: Data(machineID.utf8)),
+                               salt: saltV2, info: infoV2, outputByteCount: 32)
     }
 
-    /// Encrypts `plaintext` and returns the wire-format string suitable for
-    /// writing into a TOML `api_key = "..."` slot. Non-deterministic. Writes
-    /// `enc:v2:` bound to `machineID`; only when no machine id can be read
-    /// does it fall back to `enc:v1:` (still better than plaintext).
+    /// Additional authenticated data binding a v2 value to its field.
+    private static func fieldBinding(_ field: String) -> Data {
+        Data("ai-taskbar.config-field:\(field)".utf8)
+    }
+
+    /// Encrypts `plaintext` for the config field `field` (`"section.key"`,
+    /// e.g. `"zai.api_key"`) and returns the wire-format string suitable for
+    /// writing into that TOML slot. Non-deterministic. Writes `enc:v2:` bound
+    /// to `machineID` and `field`; only when no machine id can be read does it
+    /// fall back to `enc:v1:` (still better than plaintext, no field binding).
     public static func encrypt(_ plaintext: String,
+                               field: String,
                                machineID: String? = MachineIdentity.current) throws -> String {
-        let usedKey = machineID.map(machineKey) ?? key
-        let usedPrefix = machineID == nil ? prefix : prefixV2
-        if machineID == nil {
-            AppLog.config.warning("SecretBox: no hardware UUID — writing legacy enc:v1:")
-        }
         do {
-            let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: usedKey)
-            // `.combine` is nonce || ciphertext || tag in one contiguous blob.
-            guard let combined = sealed.combined else {
-                throw AppError.other("SecretBox: AES-GCM refused to combine (unexpected)")
+            if let machineID {
+                let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: machineKey(machineID),
+                                              authenticating: fieldBinding(field))
+                return prefixV2 + (try combined(sealed))
             }
-            return usedPrefix + combined.base64EncodedString()
+            AppLog.config.warning("SecretBox: no hardware UUID — writing legacy enc:v1:")
+            let sealed = try AES.GCM.seal(Data(plaintext.utf8), using: key)
+            return prefix + (try combined(sealed))
         } catch let err as AppError {
             throw err
         } catch {
@@ -84,24 +97,37 @@ public enum SecretBox {
         }
     }
 
-    /// Decrypts a wire-format string back to plaintext. Throws on any
-    /// tampering or malformed input — GCM authentication tag catches both.
-    /// Returns `nil` if `encoded` isn't a SecretBox payload (i.e. plaintext
-    /// value still in an old config) — callers use that to keep reading
-    /// legacy plaintext transparently.
+    /// `.combined` is nonce || ciphertext || tag in one contiguous blob.
+    private static func combined(_ sealed: AES.GCM.SealedBox) throws -> String {
+        guard let combined = sealed.combined else {
+            throw AppError.other("SecretBox: AES-GCM refused to combine (unexpected)")
+        }
+        return combined.base64EncodedString()
+    }
+
+    /// Decrypts a wire-format string read from the config field `field` back
+    /// to plaintext. Throws on any tampering or malformed input — the GCM tag
+    /// catches both, and for v2 also a value sealed for another field or
+    /// another Mac. Returns `nil` if `encoded` isn't a SecretBox payload
+    /// (i.e. plaintext value still in an old config) — callers use that to
+    /// keep reading legacy plaintext transparently.
     public static func decryptIfPresent(_ encoded: String,
+                                        field: String,
                                         machineID: String? = MachineIdentity.current) throws -> String? {
         let usedKey: SymmetricKey
         let payload: String
+        let aad: Data?
         if encoded.hasPrefix(prefixV2) {
             guard let machineID else {
                 throw AppError.other("SecretBox: enc:v2: value but no hardware UUID to derive its key")
             }
             usedKey = machineKey(machineID)
             payload = String(encoded.dropFirst(prefixV2.count))
+            aad = fieldBinding(field)
         } else if encoded.hasPrefix(prefix) {
             usedKey = key
             payload = String(encoded.dropFirst(prefix.count))
+            aad = nil
         } else {
             return nil
         }
@@ -110,8 +136,13 @@ public enum SecretBox {
         }
         do {
             let sealed = try AES.GCM.SealedBox(combined: combined)
-            // A v2 value from another Mac fails here (GCM tag mismatch).
-            let plaintext = try AES.GCM.open(sealed, using: usedKey)
+            // A v2 value from another Mac or another field fails here (tag).
+            let plaintext: Data
+            if let aad {
+                plaintext = try AES.GCM.open(sealed, using: usedKey, authenticating: aad)
+            } else {
+                plaintext = try AES.GCM.open(sealed, using: usedKey)
+            }
             return String(data: plaintext, encoding: .utf8)
         } catch {
             throw AppError.other("SecretBox.decrypt: \(error)")
