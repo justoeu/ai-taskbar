@@ -23,6 +23,7 @@ public final class AppEnvironment {
             let loader = try ConfigLoader()
             let cfg = try loader.load()
             topUpConfigSections(loader)
+            upgradeStoredSecrets(loader)
             // Build HTTP client with TLS pinning if configured.
             // Fail closed: if pin_hosts is set but PinStore cannot open, do
             // not silently fall back to an unpinned client.
@@ -70,6 +71,34 @@ public final class AppEnvironment {
             onFailure(error)
             return error
         }
+    }
+
+    /// Rewrites plaintext / legacy `enc:v1:` secrets as machine-bound
+    /// `enc:v2:` (verified, rolled back on mismatch, no backup file — see
+    /// `ConfigLoader.upgradeSecretsIfNeeded`).
+    /// The in-memory config already holds the plaintext, so nothing reloads.
+    /// Best-effort like the top-up, but logged — never silent. Returns the
+    /// failure for tests.
+    @discardableResult
+    static func upgradeStoredSecrets(
+        _ loader: ConfigLoader,
+        onFailure: (Error) -> Void = logSecretUpgradeFailure
+    ) -> Error? {
+        do {
+            let upgraded = try loader.upgradeSecretsIfNeeded()
+            if upgraded > 0 {
+                AppLog.lifecycle.notice("re-encrypted \(upgraded, privacy: .public) stored secret(s) as enc:v2 (machine-bound)")
+            }
+            return nil
+        } catch {
+            onFailure(error)
+            return error
+        }
+    }
+
+    nonisolated static func logSecretUpgradeFailure(_ error: Error) {
+        AppLog.lifecycle.error(
+            "could not re-encrypt stored secrets as enc:v2: \(String(describing: error), privacy: .public)")
     }
 
     nonisolated static func logConfigTopUpFailure(_ error: Error) {

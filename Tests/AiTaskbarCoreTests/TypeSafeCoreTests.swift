@@ -91,13 +91,14 @@ struct TypeSafeCoreTests {
             .appendingPathComponent("ai-taskbar-ts-seal-\(UUID().uuidString)")
         try Paths.ensureDir(tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
-        let loader = ConfigLoader(path: tmp.appendingPathComponent("config.toml"))
+        var loader = ConfigLoader(path: tmp.appendingPathComponent("config.toml"))
+        loader.machineID = "11111111-2222-3333-4444-555555555555"
         var cfg = AppConfig()
         cfg.typesafe.enabled = true
         cfg.typesafe.apiKey = "ts-plain-on-save"
         try loader.save(cfg)
         let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
-        #expect(onDisk.contains("enc:v1:"))
+        #expect(onDisk.contains("enc:v2:"))
         #expect(!onDisk.contains("ts-plain-on-save"))
         #expect(try loader.load().typesafe.apiKey == "ts-plain-on-save")
     }

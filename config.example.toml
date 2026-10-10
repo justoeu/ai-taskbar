@@ -4,6 +4,11 @@
 # Missing sections are appended to this file on launch. If config.toml is a
 # symlink (e.g. into a dotfiles repo) the app reads it but never writes
 # through it: the append is skipped (logged) and Settings cannot save.
+# Inline secrets (api_key, console_session) are stored as "enc:v2:..." —
+# encrypted with a key bound to THIS Mac's hardware UUID. A plaintext value you
+# type here is re-encrypted on the next launch (no backup copy is kept — it
+# would hold the plaintext). Copied to another Mac, those keys cannot be read
+# and must be entered again there.
 
 [ui]
 # primary = "anthropic"             # anthropic | openai | zai | openrouter | kimi | gemini | deepseek | xai

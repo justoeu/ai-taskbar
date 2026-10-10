@@ -64,6 +64,30 @@ struct TOMLEditorTests {
         #expect(out.contains("enabled = true"))
     }
 
+    @Test("a ' #' inside a single-quoted literal string is not a comment start")
+    func hash_inside_literal_string_not_treated_as_comment() throws {
+        let src = """
+        [zai]
+        api_key = 'zai #frag'  # personal
+        """
+        let out = try TOMLEditor.setValue(
+            in: src, section: "zai", key: "api_key", value: .string("new"))
+        // Bug mode took `#frag'  # personal` as the comment and kept it.
+        #expect(out.contains("api_key = \"new\"  # personal"))
+        #expect(!out.contains("#frag"))
+    }
+
+    @Test("a backslash does not escape the closing quote of a literal string")
+    func literal_string_has_no_escapes() throws {
+        let src = """
+        [zai]
+        api_key = 'C:\\dir\\' # note
+        """
+        let out = try TOMLEditor.setValue(
+            in: src, section: "zai", key: "api_key", value: .string("new"))
+        #expect(out.contains("api_key = \"new\"  # note"))
+    }
+
     @Test("replaces double value (integer form when whole)")
     func replace_double_integer_form() throws {
         let out = try TOMLEditor.setValue(

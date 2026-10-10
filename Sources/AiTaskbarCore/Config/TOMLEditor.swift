@@ -199,25 +199,27 @@ public enum TOMLEditor {
 
     /// Returns the trailing `# comment` portion of a RHS string, if present.
     /// Tracks string state so `#` inside quotes (e.g. `api_key = "sk-#x"`)
-    /// is not treated as a comment start (BUG-ART-005).
+    /// is not treated as a comment start (BUG-ART-005). Both TOML string
+    /// kinds count: basic `"..."` (backslash escapes) and literal `'...'`
+    /// (no escapes at all, so a `\` there is just a character).
     private static func extractTrailingComment(_ rhs: String) -> String? {
-        var inString = false
+        var openQuote: Character?
         var escaped = false
         var prev: Character = " "
         var i = rhs.startIndex
         while i < rhs.endIndex {
             let c = rhs[i]
-            if inString {
+            if let quote = openQuote {
                 if escaped {
                     escaped = false
-                } else if c == "\\" {
+                } else if quote == "\"" && c == "\\" {
                     escaped = true
-                } else if c == "\"" {
-                    inString = false
+                } else if c == quote {
+                    openQuote = nil
                 }
             } else {
-                if c == "\"" {
-                    inString = true
+                if c == "\"" || c == "'" {
+                    openQuote = c
                 } else if c == "#" && (prev == " " || prev == "\t") {
                     return String(rhs[i...]).trimmingCharacters(in: .whitespaces)
                 }

@@ -1251,6 +1251,19 @@ section("B7: ConfigLoader(path:) is non-throwing") {
     expect(loader.path == tmp, "explicit-path init sets path")
 }
 
+section("SecretBox v2: machine-bound, v1 still readable") {
+    let a = "11111111-2222-3333-4444-555555555555"
+    let b = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+    let v2 = try SecretBox.encrypt("sk-bound", field: "zai.api_key", machineID: a)
+    expect(v2.hasPrefix(SecretBox.prefixV2), "machine id present → enc:v2:")
+    expect((try? SecretBox.decryptIfPresent(v2, field: "zai.api_key", machineID: a)) == "sk-bound", "same Mac reads v2")
+    expect((try? SecretBox.decryptIfPresent(v2, field: "zai.api_key", machineID: b)) == nil, "another Mac cannot read v2")
+    let v1 = try SecretBox.encrypt("sk-legacy", field: "zai.api_key", machineID: nil)
+    expect(v1.hasPrefix(SecretBox.prefix), "no machine id → enc:v1: fallback")
+    expect((try? SecretBox.decryptIfPresent(v1, field: "zai.api_key", machineID: a)) == "sk-legacy", "v1 still decrypts")
+    expect(MachineIdentity.current != nil, "hardware UUID readable on this Mac")
+}
+
 section("B1: OpenAIProvider memoizes plan label") {
     let header = Data("{\"alg\":\"none\"}".utf8).base64URL()
     let payload = Data(#"{"https://api.openai.com/auth.chatgpt_plan_type":"pro"}"#.utf8).base64URL()

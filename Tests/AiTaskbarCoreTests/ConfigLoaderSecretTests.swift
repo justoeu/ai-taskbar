@@ -3,12 +3,17 @@ import Foundation
 @testable import AiTaskbarCore
 
 /// Integration tests for the `ConfigLoader.applyChanges` surgical write path
-/// and its transparent decryption of `enc:v1:`-prefixed secrets on `load()`.
+/// and its transparent decryption of `enc:v2:` / `enc:v1:` secrets on `load()`.
 @Suite("ConfigLoader secret + applyChanges round-trip", .serialized)
 struct ConfigLoaderSecretTests {
+    static let thisMac = "11111111-2222-3333-4444-555555555555"
+    static let otherMac = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+
     private func makeLoader(in tmp: URL) throws -> ConfigLoader {
         let file = tmp.appendingPathComponent("config.toml")
-        return ConfigLoader(path: file)
+        var loader = ConfigLoader(path: file)
+        loader.machineID = Self.thisMac
+        return loader
     }
 
     @Test("applyChanges writes a normal field and re-load reads it back")
@@ -44,9 +49,9 @@ struct ConfigLoaderSecretTests {
             .secret(section: "zai", key: "api_key", plaintext: plaintext),
         ])
 
-        // On-disk file MUST contain `enc:v1:` and MUST NOT contain the plaintext.
+        // On-disk file MUST contain `enc:v2:` and MUST NOT contain the plaintext.
         let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
-        #expect(onDisk.contains("enc:v1:"))
+        #expect(onDisk.contains("enc:v2:"))
         #expect(!onDisk.contains(plaintext))
 
         // Loaded config decrypts transparently.
@@ -147,7 +152,7 @@ struct ConfigLoaderSecretTests {
         cfg.zai.apiKey = "sk-plain-on-save"
         try loader.save(cfg)
         let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
-        #expect(onDisk.contains("enc:v1:"))
+        #expect(onDisk.contains("enc:v2:"))
         #expect(!onDisk.contains("sk-plain-on-save"))
         let loaded = try loader.load()
         #expect(loaded.zai.apiKey == "sk-plain-on-save")
@@ -223,5 +228,192 @@ struct ConfigLoaderSecretTests {
         let attrs = try FileManager.default.attributesOfItem(atPath: loader.path.path)
         let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
         #expect(perms == 0o600, "config.toml must be 0o600 because it can hold encrypted api_keys")
+    }
+
+    // MARK: Machine-bound enc:v2 + upgrade
+
+    private func seeded(_ body: String) throws -> (ConfigLoader, URL) {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-v2-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        let loader = try makeLoader(in: tmp)
+        try AtomicFileWrite.write(Data(body.utf8), to: loader.path, permissions: 0o600)
+        return (loader, tmp)
+    }
+
+    private func backups(in dir: URL) throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.contains(".bak-") }
+    }
+
+    @Test("a secret sealed on this Mac cannot be read on another Mac")
+    func v2_unreadable_on_other_mac() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-v2-other-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let loader = try makeLoader(in: tmp)
+        try loader.applyChanges([.secret(section: "zai", key: "api_key", plaintext: "sk-bound")])
+        #expect(try loader.load().zai.apiKey == "sk-bound")
+
+        var elsewhere = ConfigLoader(path: loader.path)
+        elsewhere.machineID = Self.otherMac
+        #expect(try elsewhere.load().zai.apiKey == nil)
+    }
+
+    @Test("a v2 secret copied into another field loads as absent there")
+    func v2_moved_between_fields_does_not_open() throws {
+        let zaiValue = try SecretBox.encrypt("sk-zai", field: "zai.api_key", machineID: Self.thisMac)
+        let (loader, tmp) = try seeded("""
+        [zai]
+        api_key = "\(zaiValue)"
+
+        [openrouter]
+        api_key = "\(zaiValue)"
+        """)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let cfg = try loader.load()
+        #expect(cfg.zai.apiKey == "sk-zai")
+        #expect(cfg.openrouter.apiKey == nil)
+    }
+
+    @Test("upgrade rewrites plaintext and enc:v1 secrets as enc:v2, without a backup")
+    func upgrade_plaintext_and_v1() throws {
+        let v1 = try SecretBox.encrypt("sk-or-legacy", field: "openrouter.api_key", machineID: nil)
+        #expect(v1.hasPrefix(SecretBox.prefix))
+        let (loader, tmp) = try seeded("""
+        # keep me
+        [zai]
+        enabled = true
+        api_key = "zai-plain-key"
+
+        [openrouter]
+        api_key = "\(v1)"
+
+        [typesafe]
+        console_session = "ts-session-plain"
+        """)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let original = try Data(contentsOf: loader.path)
+
+        let upgraded = try loader.upgradeSecretsIfNeeded()
+        #expect(upgraded == 3)
+
+        let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
+        #expect(!onDisk.contains("zai-plain-key"))
+        #expect(!onDisk.contains("ts-session-plain"))
+        #expect(!onDisk.contains(SecretBox.prefix))
+        #expect(onDisk.components(separatedBy: SecretBox.prefixV2).count == 4)
+        #expect(onDisk.contains("# keep me"))
+
+        let cfg = try loader.load()
+        #expect(cfg.zai.apiKey == "zai-plain-key")
+        #expect(cfg.openrouter.apiKey == "sk-or-legacy")
+        #expect(cfg.typesafe.consoleSession == "ts-session-plain")
+
+        // No backup: a copy of the original would keep the plaintext on disk.
+        #expect(try backups(in: tmp).isEmpty)
+        let everyFile = try FileManager.default.contentsOfDirectory(atPath: tmp.path)
+        #expect(everyFile == ["config.toml"])
+        #expect(try Data(contentsOf: loader.path) != original)
+    }
+
+    @Test("upgrade leaves a tampered enc:v1 on disk and still upgrades the rest")
+    func upgrade_skips_tampered_v1() throws {
+        let foreign = try SecretBox.encrypt("sk-foreign", field: "deepseek.api_key", machineID: Self.otherMac)
+        let (loader, tmp) = try seeded("""
+        [zai]
+        api_key = "enc:v1:not-valid-ciphertext=="
+
+        [deepseek]
+        api_key = "\(foreign)"
+
+        [xai]
+        api_key = "xai-plain"
+        """)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        #expect(try loader.upgradeSecretsIfNeeded() == 1)
+        let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
+        #expect(onDisk.contains("enc:v1:not-valid-ciphertext=="))
+        #expect(onDisk.contains(foreign))
+        #expect(!onDisk.contains("xai-plain"))
+        #expect(try loader.load().xai.apiKey == "xai-plain")
+    }
+
+    @Test("upgrade without a machine id leaves enc:v1 alone")
+    func upgrade_keeps_v1_without_machine_id() throws {
+        let v1 = try SecretBox.encrypt("sk-v1", field: "kimi.api_key", machineID: nil)
+        let (seededLoader, tmp) = try seeded("[kimi]\napi_key = \"\(v1)\"\n")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        var loader = seededLoader
+        loader.machineID = nil
+        #expect(try loader.upgradeSecretsIfNeeded() == 0)
+        #expect(try String(contentsOf: loader.path, encoding: .utf8).contains(v1))
+    }
+
+    @Test("upgrade is a no-op when every secret is already enc:v2")
+    func upgrade_noop_when_current() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-v2-noop-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let loader = try makeLoader(in: tmp)
+        try loader.applyChanges([.secret(section: "xai", key: "api_key", plaintext: "xai-key")])
+        let before = try Data(contentsOf: loader.path)
+        #expect(try loader.upgradeSecretsIfNeeded() == 0)
+        #expect(try Data(contentsOf: loader.path) == before)
+        #expect(try backups(in: tmp).isEmpty)
+    }
+
+    @Test("upgrade leaves another Mac's enc:v2 untouched")
+    func upgrade_skips_foreign_v2() throws {
+        let foreign = try SecretBox.encrypt("sk-foreign", field: "deepseek.api_key", machineID: Self.otherMac)
+        let (loader, tmp) = try seeded("[deepseek]\napi_key = \"\(foreign)\"\n")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        #expect(try loader.upgradeSecretsIfNeeded() == 0)
+        let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
+        #expect(onDisk.contains(foreign))
+        #expect(try loader.load().deepseek.apiKey == nil)
+    }
+
+    @Test("upgrade does nothing without a machine id or a file")
+    func upgrade_without_machine_id_or_file() throws {
+        let (seededLoader, tmp) = try seeded("[zai]\napi_key = \"zai-plain\"\n")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        var loader = seededLoader
+        loader.machineID = nil
+        #expect(try loader.upgradeSecretsIfNeeded() == 0)
+        #expect(try String(contentsOf: loader.path, encoding: .utf8).contains("zai-plain"))
+
+        let missing = ConfigLoader(path: tmp.appendingPathComponent("absent.toml"))
+        #expect(try missing.upgradeSecretsIfNeeded() == 0)
+    }
+
+    @Test("upgrade surfaces an unparseable file instead of rewriting it")
+    func upgrade_throws_on_bad_toml() throws {
+        let (loader, tmp) = try seeded("[zai\napi_key = \"x\"\n")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        #expect(throws: AppError.self) { try loader.upgradeSecretsIfNeeded() }
+    }
+
+    @Test("every secret field is sealed by save and unsealed by load")
+    func every_secret_field_round_trips() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ai-taskbar-v2-all-\(UUID().uuidString)")
+        try Paths.ensureDir(tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let loader = try makeLoader(in: tmp)
+        var cfg = AppConfig()
+        for (i, field) in ConfigLoader.secretFields.enumerated() {
+            cfg[keyPath: field.path] = "secret-\(i)"
+        }
+        try loader.save(cfg)
+        let onDisk = try String(contentsOf: loader.path, encoding: .utf8)
+        let loaded = try loader.load()
+        for (i, field) in ConfigLoader.secretFields.enumerated() {
+            #expect(!onDisk.contains("\"secret-\(i)\""))
+            #expect(loaded[keyPath: field.path] == "secret-\(i)")
+        }
+        #expect(ConfigLoader.secretFields.count == 8)
+        #expect(onDisk.components(separatedBy: SecretBox.prefixV2).count - 1 == 8)
     }
 }
