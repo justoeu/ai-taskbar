@@ -289,12 +289,53 @@ struct CostTests {
             let m = PricingTable.lookup(id, table: PricingTable.anthropic)
             #expect(m?.inputPer1M == 2.0)
             #expect(m?.outputPer1M == 10.0)
-            #expect(m?.cacheReadPer1M == 0.2)
+            // 0.05x base, like Opus 5.5 — not Sonnet 5's $0.20.
+            #expect(m?.cacheReadPer1M == 0.1)
             #expect(m?.cacheCreatePer1M == 2.5)
             #expect(m?.cacheCreate1hPer1M == 4.0)
         }
         // Resolved by its own key, not by the Sonnet 5 prefix.
         #expect(PricingTable.anthropic["claude-sonnet-5-5"] != nil)
+        #expect(PricingTable.lookup("claude-sonnet-5", table: PricingTable.anthropic)?.cacheReadPer1M == 0.2)
+    }
+
+    @Test("Haiku 5.5 has its own $0.10/$0.50 tier with a 5x tier over 100K prompt tokens")
+    func lookup_haiku55() {
+        for id in ["claude-haiku-5-5", "claude-haiku-5.5", "claude-haiku-5-5-20261001"] {
+            let m = PricingTable.lookup(id, table: PricingTable.anthropic)
+            #expect(m?.inputPer1M == 0.1)
+            #expect(m?.outputPer1M == 0.5)
+            #expect(m?.cacheReadPer1M == 0.01)
+            #expect(m?.cacheCreatePer1M == 0.125)
+            #expect(m?.cacheCreate1hPer1M == 0.2)
+            #expect(m?.longContextThresholdTokens == 100_000)
+            #expect(m?.longContextInputMultiplier == 5)
+            #expect(m?.longContextOutputMultiplier == 5)
+            expectTrue(m?.fastModeMultiplier == nil)
+        }
+        // Haiku 4.5 keeps its own tier and never gains a long-context tier.
+        let h45 = PricingTable.lookup("claude-haiku-4-5", table: PricingTable.anthropic)
+        #expect(h45?.inputPer1M == 1.0)
+        expectTrue(h45?.longContextThresholdTokens == nil)
+    }
+
+    @Test("only Haiku 5.5 carries a Claude long-context tier")
+    func only_haiku55_has_claude_long_context() {
+        let withTier = Set(PricingTable.anthropic.filter { $0.value.longContextThresholdTokens != nil }.keys)
+        #expect(withTier == ["claude-haiku-5-5", "claude-haiku-5.5"])
+    }
+
+    @Test("Gemini 4 resolves via the provisional gemini-4 prefix at the introductory rate")
+    func lookup_gemini4() {
+        for id in ["gemini-4", "gemini-4-argon", "gemini-4-pro-preview"] {
+            let m = PricingTable.lookup(id, table: PricingTable.gemini)
+            #expect(m?.inputPer1M == 2.0)
+            #expect(m?.outputPer1M == 10.0)
+            #expect(m?.cacheReadPer1M == 0.1)
+        }
+        // Gemini 3 IDs are untouched by the new prefix.
+        #expect(PricingTable.lookup("gemini-3-pro", table: PricingTable.gemini)?.inputPer1M == 1.25)
+        expectTrue(PricingTable.table(for: .gemini)["gemini-4"] != nil)
     }
 
     @Test("GLM Flash models have expected pricing tiers")
@@ -399,6 +440,24 @@ struct CostEstimateTests {
             tagged.fastOutputTokens = 1_000
             #expect(CostMath.cost(usage: tagged, pricing: pricing) == CostMath.cost(usage: plain, pricing: pricing))
         }
+    }
+
+    @Test("Haiku 5.5 bills every category at 5x when the request is long-context")
+    func haiku55_long_context_cost() throws {
+        let pricing = try #require(PricingTable.lookup("claude-haiku-5-5", table: PricingTable.anthropic))
+        let short = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000,
+                               cacheReadTokens: 1_000_000, cacheCreateTokens: 1_000_000,
+                               cacheCreate1hTokens: 1_000_000)
+        // Standard: 0.10 + 0.50 + 0.01 + 0.125 + 0.20 = 0.935.
+        #expect(abs(CostMath.cost(usage: short, pricing: pricing) - 0.935) < 1e-9)
+        var long = short
+        long.longContextInputTokens = 1_000_000
+        long.longContextOutputTokens = 1_000_000
+        long.longContextCacheReadTokens = 1_000_000
+        long.longContextCacheCreateTokens = 1_000_000
+        long.longContextCacheCreate1hTokens = 1_000_000
+        // Published >100K row: 0.50 + 2.50 + 0.05 + 0.625 + 1.00 = 4.675.
+        #expect(abs(CostMath.cost(usage: long, pricing: pricing) - 4.675) < 1e-9)
     }
 
     @Test("fast subsets add up across samples")

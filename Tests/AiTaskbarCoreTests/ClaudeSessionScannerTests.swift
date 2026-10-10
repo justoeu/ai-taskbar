@@ -276,6 +276,50 @@ struct ClaudeSessionScannerTests {
         #expect(u?.fastCacheCreate1hTokens == 20)
     }
 
+    @Test("Haiku 5.5: a prompt over 100K (cache writes included) is long-context; exactly 100K is not")
+    func haiku55_long_context_boundary() {
+        let startOfToday = Date(timeIntervalSince1970: 1_764_000_000)
+        let iso = ISO8601DateFormatter().string(from: startOfToday.addingTimeInterval(60))
+        func line(model: String, input: Int, cacheRead: Int, write5m: Int, write1h: Int) -> String {
+            #"""
+            {"timestamp":"\#(iso)","message":{"role":"assistant","model":"\#(model)","usage":{"input_tokens":\#(input),"output_tokens":7,"cache_creation_input_tokens":\#(write5m + write1h),"cache_creation":{"ephemeral_5m_input_tokens":\#(write5m),"ephemeral_1h_input_tokens":\#(write1h)},"cache_read_input_tokens":\#(cacheRead)}}}
+            """#
+        }
+        func scan(_ text: String) -> ModelUsage? {
+            var today: [String: ModelUsage] = [:]
+            var week: [String: ModelUsage] = [:]
+            var unparseable = 0
+            ClaudeSessionScanner.scan(data: Data((text + "\n").utf8), startOfToday: startOfToday,
+                                      sevenDaysAgo: startOfToday.addingTimeInterval(-7 * 86_400),
+                                      totalsToday: &today, totalsLast7: &week,
+                                      unparseableTimestamps: &unparseable)
+            return today.values.first
+        }
+
+        // 40K + 50K + 6K + 4K = exactly 100,000: standard rates.
+        let atThreshold = scan(line(model: "claude-haiku-5-5", input: 40_000, cacheRead: 50_000,
+                                    write5m: 6_000, write1h: 4_000))
+        #expect(atThreshold?.inputTokens == 40_000)
+        #expect(atThreshold?.longContextInputTokens == 0)
+        #expect(atThreshold?.longContextOutputTokens == 0)
+
+        // One more 1h cache-write token tips it over: the WHOLE request moves.
+        let over = scan(line(model: "claude-haiku-5-5", input: 40_000, cacheRead: 50_000,
+                             write5m: 6_000, write1h: 4_001))
+        #expect(over?.inputTokens == 40_000)
+        #expect(over?.longContextInputTokens == 40_000)
+        #expect(over?.longContextOutputTokens == 7)
+        #expect(over?.longContextCacheReadTokens == 50_000)
+        #expect(over?.longContextCacheCreateTokens == 6_000)
+        #expect(over?.longContextCacheCreate1hTokens == 4_001)
+
+        // A model with no prompt-length tier is never tagged, however long.
+        let sonnet = scan(line(model: "claude-sonnet-5-5", input: 900_000, cacheRead: 0,
+                               write5m: 0, write1h: 0))
+        #expect(sonnet?.inputTokens == 900_000)
+        #expect(sonnet?.longContextInputTokens == 0)
+    }
+
     @Test("negative token counts from a hostile transcript are clamped to zero")
     func negative_counts_clamped() {
         let startOfToday = Date(timeIntervalSince1970: 1_764_000_000)
@@ -406,6 +450,38 @@ struct ClaudeSessionScannerTests {
         let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
         #expect(est.totalsByModel["claude-opus-4-7"]?.inputTokens == 110)
         #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 55)
+    }
+
+    /// A long-context Haiku 5.5 record does not fit `ScanMemo.KeyedUsage`'s
+    /// compact shape and is stored boxed. It must survive dedup (larger
+    /// output wins) and a memo replay with its surcharge subsets intact.
+    @Test("a long-context Haiku 5.5 record survives dedup and memo replay")
+    func haiku55_long_record_dedup_and_memo_replay() throws {
+        let now = Date()
+        let ts = ISO8601DateFormatter().string(from: now)
+        func line(output: Int) -> String {
+            Self.keyedLine(timestamp: ts, messageId: "msg_H", requestId: "req_H",
+                           model: "claude-haiku-5-5", input: 150_000, output: output)
+        }
+        let root = try Self.makeProjects(["orig.jsonl": [line(output: 3), line(output: 7)],
+                                          "resumed.jsonl": [line(output: 7)]])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let memo = ScanMemo()
+        _ = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
+        let resumed = root.appendingPathComponent("proj/resumed.jsonl")
+        let handle = try FileHandle(forWritingTo: resumed)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data((#"{"role":"user","content":"hi"}"# + "\n").utf8))
+        try handle.close()
+        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
+        let u = est.totalsByModel["claude-haiku-5-5"]
+        #expect(u?.inputTokens == 150_000)
+        #expect(u?.outputTokens == 7)
+        #expect(u?.longContextInputTokens == 150_000)
+        #expect(u?.longContextOutputTokens == 7)
+        // Whole request at the >100K row: 0.15M × $0.50 + 7 × $2.50/M.
+        let usd = est.modelBreakdownLast7Days["claude-haiku-5-5"] ?? -1
+        #expect(abs(usd - 0.075_017_5) < 1e-12)
     }
 
     /// LEAK-FAN-002. A cancelled scan breaks out of the walk having visited
