@@ -335,7 +335,7 @@ struct CostTests {
         }
         // Gemini 3 IDs are untouched by the new prefix.
         #expect(PricingTable.lookup("gemini-3-pro", table: PricingTable.gemini)?.inputPer1M == 1.25)
-        #expect(PricingTable.table(for: .gemini)["gemini-4"] != nil)
+        expectTrue(PricingTable.table(for: .gemini)["gemini-4"] != nil)
     }
 
     @Test("GLM Flash models have expected pricing tiers")

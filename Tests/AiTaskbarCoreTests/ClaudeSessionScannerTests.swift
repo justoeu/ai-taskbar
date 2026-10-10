@@ -452,6 +452,38 @@ struct ClaudeSessionScannerTests {
         #expect(est.totalsByModel["claude-opus-4-7"]?.outputTokens == 55)
     }
 
+    /// A long-context Haiku 5.5 record does not fit `ScanMemo.KeyedUsage`'s
+    /// compact shape and is stored boxed. It must survive dedup (larger
+    /// output wins) and a memo replay with its surcharge subsets intact.
+    @Test("a long-context Haiku 5.5 record survives dedup and memo replay")
+    func haiku55_long_record_dedup_and_memo_replay() throws {
+        let now = Date()
+        let ts = ISO8601DateFormatter().string(from: now)
+        func line(output: Int) -> String {
+            Self.keyedLine(timestamp: ts, messageId: "msg_H", requestId: "req_H",
+                           model: "claude-haiku-5-5", input: 150_000, output: output)
+        }
+        let root = try Self.makeProjects(["orig.jsonl": [line(output: 3), line(output: 7)],
+                                          "resumed.jsonl": [line(output: 7)]])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let memo = ScanMemo()
+        _ = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
+        let resumed = root.appendingPathComponent("proj/resumed.jsonl")
+        let handle = try FileHandle(forWritingTo: resumed)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data((#"{"role":"user","content":"hi"}"# + "\n").utf8))
+        try handle.close()
+        let est = ClaudeSessionScanner.estimate(now: now, projectsDir: root, memo: memo)
+        let u = est.totalsByModel["claude-haiku-5-5"]
+        #expect(u?.inputTokens == 150_000)
+        #expect(u?.outputTokens == 7)
+        #expect(u?.longContextInputTokens == 150_000)
+        #expect(u?.longContextOutputTokens == 7)
+        // Whole request at the >100K row: 0.15M × $0.50 + 7 × $2.50/M.
+        let usd = est.modelBreakdownLast7Days["claude-haiku-5-5"] ?? -1
+        #expect(abs(usd - 0.075_017_5) < 1e-12)
+    }
+
     /// LEAK-FAN-002. A cancelled scan breaks out of the walk having visited
     /// only some files. Pruning the memo to that partial set evicted every
     /// entry it had not reached, so the next scan re-parsed everything cold.
