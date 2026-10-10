@@ -457,6 +457,18 @@ standard rates; do not give it one. As of 2026-09-28 no local transcript
 carried `"speed":"fast"` (all 109k were `"standard"`); the `"fast"` value
 follows the API's `speed: "fast"` request parameter.
 
+### Claude prompt-length pricing (Haiku 5.5) is per request, too
+
+Haiku 5.5 is the only current Claude model priced by prompt length (every
+other 4.6+ model bills the full 1M window at standard rates — do not give
+them a `longContextThreshold`). A request whose prompt — `input_tokens` +
+`cache_read_input_tokens` + cache writes — is **over** 100,000 tokens pays 5x
+on every category, output included. `ClaudeSessionScanner` decides this per
+line and fills the `ModelUsage.longContext*` subsets for the whole request;
+`CostMath` adds the surcharge. Note the threshold here counts cache WRITES,
+unlike `CodexSessionScanner` (input + cache reads only); keep each scanner's
+rule matched to its vendor's docs.
+
 ### TypeSafe (Jev) — no usage API, never run an evaluation
 
 Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
