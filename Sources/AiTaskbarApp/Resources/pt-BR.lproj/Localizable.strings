@@ -424,3 +424,5 @@
 "analytics_weekly_models_title" = "Consumo Diário por Modelo";
 "analytics_hover_hint" = "Passe o mouse nas barras para ver detalhes";
 "analytics_tokens" = "tokens";
+"analytics_models_count" = "(%ld mod.)";
+

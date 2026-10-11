@@ -11,13 +11,13 @@ public struct WeeklyModelStackedChartView: View {
     public let dailyUsage: [DailyModelUsage]
     public let vendorColor: Color
 
+    private let distinctModels: [String]
+    private let points: [ChartPoint]
+    private let modelColors: [String: Color]
+    private let xDomain: ClosedRange<Date>?
+
     @State private var hoveredDate: Date? = nil
     @State private var hoveredModel: String? = nil
-
-    public init(dailyUsage: [DailyModelUsage], vendorColor: Color) {
-        self.dailyUsage = dailyUsage
-        self.vendorColor = vendorColor
-    }
 
     private static let palette: [Color] = [
         Color.accentColor,
@@ -30,7 +30,17 @@ public struct WeeklyModelStackedChartView: View {
         Color(red: 0.85, green: 0.75, blue: 0.2)  // Amber
     ]
 
-    private var distinctModels: [String] {
+    private static let dayFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .none
+        return df
+    }()
+
+    public init(dailyUsage: [DailyModelUsage], vendorColor: Color) {
+        self.dailyUsage = dailyUsage
+        self.vendorColor = vendorColor
+
         var set = Set<String>()
         var list: [String] = []
         for day in dailyUsage {
@@ -41,14 +51,45 @@ public struct WeeklyModelStackedChartView: View {
                 }
             }
         }
-        return list
+        self.distinctModels = list
+
+        var colors: [String: Color] = [:]
+        for (idx, m) in list.enumerated() {
+            colors[m] = Self.palette[idx % Self.palette.count]
+        }
+        self.modelColors = colors
+
+        var pts: [ChartPoint] = []
+        for day in dailyUsage {
+            let dayTotal = day.totalTokens
+            for model in day.usageByModel.keys.sorted() {
+                guard let usage = day.usageByModel[model] else { continue }
+                let tokens = usage.totalTokens
+                guard tokens > 0 else { continue }
+                let cost = day.costByModel[model] ?? 0
+                pts.append(ChartPoint(
+                    id: "\(day.date.timeIntervalSince1970)_\(model)",
+                    date: day.date,
+                    model: model,
+                    tokens: tokens,
+                    costUSD: cost,
+                    dayTotalTokens: dayTotal
+                ))
+            }
+        }
+        self.points = pts
+
+        if let first = dailyUsage.first?.date, let last = dailyUsage.last?.date, first <= last {
+            let endOfLast = Calendar.current.date(byAdding: .day, value: 1, to: last)
+                ?? last.addingTimeInterval(86_400)
+            self.xDomain = first...endOfLast
+        } else {
+            self.xDomain = nil
+        }
     }
 
     private func color(for model: String) -> Color {
-        guard let idx = distinctModels.firstIndex(of: model) else {
-            return vendorColor
-        }
-        return Self.palette[idx % Self.palette.count]
+        modelColors[model] ?? vendorColor
     }
 
     private struct ChartPoint: Identifiable {
@@ -63,27 +104,6 @@ public struct WeeklyModelStackedChartView: View {
             guard dayTotalTokens > 0 else { return 0 }
             return (Double(tokens) / Double(dayTotalTokens)) * 100.0
         }
-    }
-
-    private var points: [ChartPoint] {
-        var result: [ChartPoint] = []
-        for day in dailyUsage {
-            let dayTotal = day.totalTokens
-            for (model, usage) in day.usageByModel {
-                let tokens = usage.totalTokens
-                guard tokens > 0 else { continue }
-                let cost = day.costByModel[model] ?? 0
-                result.append(ChartPoint(
-                    id: "\(day.date.timeIntervalSince1970)_\(model)",
-                    date: day.date,
-                    model: model,
-                    tokens: tokens,
-                    costUSD: cost,
-                    dayTotalTokens: dayTotal
-                ))
-            }
-        }
-        return result
     }
 
     private var totalWeeklyTokens: Int {
@@ -119,7 +139,7 @@ public struct WeeklyModelStackedChartView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let day = selectedDay {
-                    Text(dayFormatter.string(from: day.date))
+                    Text(Self.dayFormatter.string(from: day.date))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.primary)
                 } else {
@@ -162,7 +182,8 @@ public struct WeeklyModelStackedChartView: View {
                                 .font(.caption.monospacedDigit().weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
-                        Text("(\(day.usageByModel.filter { $0.value.totalTokens > 0 }.count) mod.)")
+                        let activeModelCount = day.usageByModel.filter { $0.value.totalTokens > 0 }.count
+                        Text(String(format: L10n.localizedString("analytics_models_count"), activeModelCount))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -224,8 +245,17 @@ public struct WeeklyModelStackedChartView: View {
                         case .active(let location):
                             if let rawDate: Date = proxy.value(atX: location.x) {
                                 let match = dailyUsage.first { calendar.isDate($0.date, inSameDayAs: rawDate) }
-                                withAnimation(.easeInOut(duration: 0.12)) {
-                                    hoveredDate = match?.date
+                                let newDate = match?.date
+                                if hoveredDate != newDate {
+                                    withAnimation(.easeInOut(duration: 0.12)) {
+                                        hoveredDate = newDate
+                                    }
+                                }
+                            } else {
+                                if hoveredDate != nil {
+                                    withAnimation(.easeInOut(duration: 0.12)) {
+                                        hoveredDate = nil
+                                    }
                                 }
                             }
                         case .ended:
@@ -240,7 +270,7 @@ public struct WeeklyModelStackedChartView: View {
     }
 
     private func barOpacity(for point: ChartPoint) -> Double {
-        let matchesDay = hoveredDate == nil || Calendar.current.isDate(point.date, inSameDayAs: hoveredDate!)
+        let matchesDay = hoveredDate.map { Calendar.current.isDate(point.date, inSameDayAs: $0) } ?? true
         let matchesModel = hoveredModel == nil || point.model == hoveredModel
 
         if hoveredDate != nil && hoveredModel != nil {
@@ -275,7 +305,11 @@ public struct WeeklyModelStackedChartView: View {
                     .contentShape(Rectangle())
                     .onHover { h in
                         withAnimation(.easeInOut(duration: 0.12)) {
-                            hoveredModel = h ? model : nil
+                            if h {
+                                hoveredModel = model
+                            } else if hoveredModel == model {
+                                hoveredModel = nil
+                            }
                         }
                     }
                 }
@@ -284,13 +318,7 @@ public struct WeeklyModelStackedChartView: View {
         }
     }
 
-    private var dayFormatter: DateFormatter {
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .none
-        return df
-    }
-
+    /// Formats a token count into a human-readable abbreviation (e.g. 1.2K, 3.4M, 1.5B).
     internal static func formatTokens(_ count: Int) -> String {
         let n = Double(count)
         if count >= 1_000_000_000 {

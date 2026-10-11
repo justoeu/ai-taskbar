@@ -23,8 +23,11 @@ public struct CostWindow: Sendable, Equatable {
     public let startOfToday: Date
     /// Local midnight six days before `startOfToday`.
     public let startOfLast7Days: Date
+    /// The calendar used to calculate day boundaries and offsets.
+    public let calendar: Calendar
 
     public init(now: Date, calendar: Calendar = .current) {
+        self.calendar = calendar
         let startOfToday = calendar.startOfDay(for: now)
         self.startOfToday = startOfToday
         self.startOfLast7Days = calendar.date(byAdding: .day, value: -6, to: startOfToday)
@@ -32,25 +35,29 @@ public struct CostWindow: Sendable, Equatable {
     }
 
     /// The 7 calendar day boundaries (startOfDay) in chronological order: [6 days ago, ..., today].
-    public func calendarDays(calendar: Calendar = .current) -> [Date] {
-        (0..<7).compactMap { offset in
-            calendar.date(byAdding: .day, value: offset - 6, to: startOfToday)
+    public func calendarDays(calendar: Calendar? = nil) -> [Date] {
+        let cal = calendar ?? self.calendar
+        return (0..<7).compactMap { offset in
+            cal.date(byAdding: .day, value: offset - 6, to: startOfToday)
         }
     }
 
     /// Days before today (0 for today, 1 for yesterday, ... 6 for 6 days ago).
+    /// Tolerates slight future timestamps due to clock skew by clamping them to today (0).
     /// Returns nil if outside the 7-day window.
-    public func dayOffset(for date: Date, calendar: Calendar = .current) -> Int8? {
-        let dayStart = calendar.startOfDay(for: date)
-        guard dayStart >= startOfLast7Days && dayStart <= startOfToday else { return nil }
-        let diff = calendar.dateComponents([.day], from: dayStart, to: startOfToday).day ?? -1
+    public func dayOffset(for date: Date, calendar: Calendar? = nil) -> Int8? {
+        let cal = calendar ?? self.calendar
+        let dayStart = cal.startOfDay(for: date)
+        guard dayStart >= startOfLast7Days else { return nil }
+        if dayStart > startOfToday { return 0 }
+        let diff = cal.dateComponents([.day], from: dayStart, to: startOfToday).day ?? -1
         guard diff >= 0 && diff <= 6 else { return nil }
         return Int8(diff)
     }
 
     /// Chronological slot index (0 for 6 days ago, ... 6 for today).
     /// Returns nil if outside the 7-day window.
-    public func slotIndex(for date: Date, calendar: Calendar = .current) -> Int? {
+    public func slotIndex(for date: Date, calendar: Calendar? = nil) -> Int? {
         guard let offset = dayOffset(for: date, calendar: calendar) else { return nil }
         return 6 - Int(offset)
     }

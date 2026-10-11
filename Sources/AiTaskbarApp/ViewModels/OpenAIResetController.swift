@@ -6,6 +6,7 @@ import AiTaskbarCore
 /// ambiguous attempt's idempotency key or enable a second in-flight redemption.
 @MainActor
 final class OpenAIResetController: ObservableObject {
+    /// Activity phase of the reset controller for user feedback.
     enum Activity: Equatable, Sendable {
         case idle
         case checking
@@ -19,6 +20,7 @@ final class OpenAIResetController: ObservableObject {
     @Published private(set) var pendingAttempt: OpenAIResetOffer?
     @Published private(set) var message: String?
     @Published var isConfirming = false
+    private var inFlight = false
     private let prepareAction: (URL) async throws -> OpenAIResetOffer
     private let consumeAction: (URL, OpenAIResetOffer, Bool) async throws -> OpenAIResetReceipt
 
@@ -41,8 +43,10 @@ final class OpenAIResetController: ObservableObject {
         }
     }
 
+    /// Synchronously transitions state to checking before the async prepare RPC begins,
+    /// providing immediate visual feedback to the user on button click.
     func beginPreparing() {
-        guard !isBusy else { return }
+        guard !isBusy, !inFlight else { return }
         isBusy = true
         activity = .checking
         message = nil
@@ -53,7 +57,7 @@ final class OpenAIResetController: ObservableObject {
         if !isBusy {
             beginPreparing()
         }
-        guard isBusy && activity == .checking else { return }
+        guard isBusy, activity == .checking, !inFlight else { return }
         if let pendingAttempt {
             offer = pendingAttempt
             isConfirming = true
@@ -61,7 +65,9 @@ final class OpenAIResetController: ObservableObject {
             activity = .idle
             return
         }
+        inFlight = true
         defer {
+            inFlight = false
             isBusy = false
             activity = .idle
         }
@@ -77,11 +83,11 @@ final class OpenAIResetController: ObservableObject {
     }
 
     func restorePending() async {
-        guard !isBusy, pendingAttempt == nil else { return }
+        guard !isBusy, !inFlight, pendingAttempt == nil else { return }
         do {
             // Blocking file I/O: a GCD thread, not the cooperative pool.
             let restored = try await OffPool.run { try OpenAIResetJournal().read() }
-            guard !isBusy, pendingAttempt == nil else { return }
+            guard !isBusy, !inFlight, pendingAttempt == nil else { return }
             pendingAttempt = restored
         } catch {
             message = Self.errorMessage(error)
@@ -92,14 +98,16 @@ final class OpenAIResetController: ObservableObject {
     func cancelConfirmation() {
         isConfirming = false
         offer = nil
-        if activity == .checking {
+        if !inFlight {
             activity = .idle
             isBusy = false
         }
     }
 
+    /// Synchronously transitions state to applying before the async consume RPC begins,
+    /// preventing any modal flash or frozen state after user confirmation.
     func beginConsuming() {
-        guard !isBusy, offer != nil else { return }
+        guard !isBusy, !inFlight, offer != nil else { return }
         isConfirming = false
         isBusy = true
         activity = .applying
@@ -111,9 +119,15 @@ final class OpenAIResetController: ObservableObject {
         if !isBusy {
             beginConsuming()
         }
-        guard isBusy, activity == .applying, let offer else { return false }
+        guard isBusy, activity == .applying, !inFlight, let offer else {
+            isBusy = false
+            activity = .idle
+            return false
+        }
         let retry = pendingAttempt != nil
+        inFlight = true
         defer {
+            inFlight = false
             isBusy = false
             activity = .idle
         }

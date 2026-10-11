@@ -21,6 +21,7 @@ struct IntegerFormatSpecifierTests {
         ("compare_vs_prev_week_fmt", 1),
         ("compare_vs_prev_day_fmt", 1),
         ("compare_vs_prev_month_fmt", 1),
+        ("analytics_models_count", 1),
     ]
 
     private static func render(_ key: String, _ args: [CVarArg], in language: String) -> String {
@@ -60,5 +61,13 @@ struct IntegerFormatSpecifierTests {
         L10n.languageOverride = language
         let text = L10n.localizedString("reset_confirm_message", "acct", Self.big)
         #expect(text.contains("5000000000"))
+    }
+
+    @Test("WeeklyModelStackedChartView.formatTokens abbreviates accurately")
+    func weekly_chart_format_tokens() {
+        #expect(WeeklyModelStackedChartView.formatTokens(500) == "500")
+        #expect(WeeklyModelStackedChartView.formatTokens(1_500) == "1.5K")
+        #expect(WeeklyModelStackedChartView.formatTokens(2_500_000) == "2.5M")
+        #expect(WeeklyModelStackedChartView.formatTokens(3_200_000_000) == "3.2B")
     }
 }

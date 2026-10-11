@@ -64,6 +64,7 @@ public struct ModelUsage: Sendable, Equatable {
     }
 }
 
+/// Daily token and cost breakdown partitioned by model for a specific calendar day.
 public struct DailyModelUsage: Sendable, Equatable, Identifiable {
     public var id: Date { date }
     public let date: Date

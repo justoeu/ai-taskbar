@@ -314,6 +314,7 @@ public enum ClaudeSessionScanner {
         unparseableTimestamps: inout Int
     ) {
         var longContextThresholds: [String: Int?] = [:]
+        let calendar = Calendar.current
         var offset = data.startIndex
         let end = data.endIndex
         while offset < end {
@@ -398,9 +399,17 @@ public enum ClaudeSessionScanner {
             let inWeek = ts.map { $0 >= sevenDaysAgo } ?? true
             let dayOffset: Int8
             if let ts {
-                let dayStart = Calendar.current.startOfDay(for: ts)
-                let diff = Calendar.current.dateComponents([.day], from: dayStart, to: startOfToday).day ?? -1
-                dayOffset = (diff >= 0 && diff <= 6) ? Int8(diff) : -1
+                if inWeek {
+                    let dayStart = calendar.startOfDay(for: ts)
+                    if dayStart > startOfToday {
+                        dayOffset = 0
+                    } else {
+                        let diff = calendar.dateComponents([.day], from: dayStart, to: startOfToday).day ?? -1
+                        dayOffset = (diff >= 0 && diff <= 6) ? Int8(diff) : -1
+                    }
+                } else {
+                    dayOffset = -1
+                }
             } else {
                 dayOffset = 0
             }

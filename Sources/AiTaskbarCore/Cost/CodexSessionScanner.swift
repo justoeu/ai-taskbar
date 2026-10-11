@@ -352,6 +352,7 @@ public enum CodexSessionScanner {
         var previousTotal: RolloutLine.Payload.Info.Usage?
         var pending: [(usage: ModelUsage, timestamp: Date?)] = []
         var undated = 0
+        let calendar = Calendar.current
 
         func record(_ usage: ModelUsage, at ts: Date?, model: String) {
             var usage = usage
@@ -381,11 +382,18 @@ public enum CodexSessionScanner {
                 return
             }
             if ts >= startOfToday { CostAggregator.add(usage, into: &totalsToday, model: model) }
-            if ts >= sevenDaysAgo { CostAggregator.add(usage, into: &totalsLast7, model: model) }
-            let dayStart = Calendar.current.startOfDay(for: ts)
-            let diff = Calendar.current.dateComponents([.day], from: dayStart, to: startOfToday).day ?? -1
-            if diff >= 0 && diff <= 6 && dailyTotals.count == 7 {
-                CostAggregator.add(usage, into: &dailyTotals[6 - diff], model: model)
+            if ts >= sevenDaysAgo {
+                CostAggregator.add(usage, into: &totalsLast7, model: model)
+                let dayStart = calendar.startOfDay(for: ts)
+                let diff: Int
+                if dayStart > startOfToday {
+                    diff = 0
+                } else {
+                    diff = calendar.dateComponents([.day], from: dayStart, to: startOfToday).day ?? -1
+                }
+                if diff >= 0 && diff <= 6 && dailyTotals.count == 7 {
+                    CostAggregator.add(usage, into: &dailyTotals[6 - diff], model: model)
+                }
             }
         }
 
