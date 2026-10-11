@@ -443,6 +443,51 @@ struct CodexSessionScannerTests {
         #expect(result.today["gpt-5.5"]?.inputTokens == 0)
         #expect(result.today["gpt-5.5"]?.cacheReadTokens == 100)
     }
+
+    @Test("Codex scan() with dailyTotals buckets usage into the appropriate calendar days")
+    func codex_scan_with_daily_totals_buckets() {
+        let cal = Calendar.current
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let startOfToday = cal.startOfDay(for: now)
+        let sevenDaysAgo = cal.date(byAdding: .day, value: -6, to: startOfToday)!
+        let todayISO = ISO8601DateFormatter().string(from: startOfToday.addingTimeInterval(3600))
+        let twoDaysAgo = cal.date(byAdding: .day, value: -2, to: startOfToday)!
+        let twoDaysAgoISO = ISO8601DateFormatter().string(from: twoDaysAgo.addingTimeInterval(3600))
+
+        let jsonl = rollout(model: "gpt-5.6-sol", timestamp: todayISO, input: 100, cached: 0, output: 50) +
+                    rollout(model: "gpt-6-astra", timestamp: twoDaysAgoISO, input: 300, cached: 100, output: 100)
+
+        var today: [String: ModelUsage] = [:]
+        var week: [String: ModelUsage] = [:]
+        var daily: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
+        var loss = CodexSessionScanner.ScanLoss()
+        CodexSessionScanner.scan(
+            data: Data(jsonl.utf8),
+            startOfToday: startOfToday,
+            sevenDaysAgo: sevenDaysAgo,
+            totalsToday: &today,
+            totalsLast7: &week,
+            dailyTotals: &daily,
+            loss: &loss
+        )
+
+        #expect(today["gpt-5.6-sol"]?.inputTokens == 100)
+        #expect(week["gpt-5.6-sol"]?.inputTokens == 100)
+        // gpt-6-astra: input 300 - cached 100 = 200 fresh input
+        #expect(week["gpt-6-astra"]?.inputTokens == 200)
+
+        #expect(daily.count == 7)
+        // Slot 6 is today
+        #expect(daily[6]["gpt-5.6-sol"]?.inputTokens == 100)
+        // Slot 4 is 2 days ago (6 - 2 = 4)
+        #expect(daily[4]["gpt-6-astra"]?.inputTokens == 200)
+        // Other slots empty
+        #expect(daily[0].isEmpty)
+        #expect(daily[1].isEmpty)
+        #expect(daily[2].isEmpty)
+        #expect(daily[3].isEmpty)
+        #expect(daily[5].isEmpty)
+    }
 }
 
 @Suite("CodexSessionScanner.estimate over a synthetic sessions tree")

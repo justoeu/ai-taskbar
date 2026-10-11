@@ -40,6 +40,7 @@ public final class ScanMemo: @unchecked Sendable {
         public let model: String
         public let inToday: Bool
         public let inWeek: Bool
+        public let dayOffset: Int8
         private let isFast: Bool
         private let input: Int
         private let output: Int
@@ -53,10 +54,11 @@ public final class ScanMemo: @unchecked Sendable {
             init(_ usage: ModelUsage) { self.usage = usage }
         }
 
-        public init(model: String, usage: ModelUsage, inToday: Bool, inWeek: Bool) {
+        public init(model: String, usage: ModelUsage, inToday: Bool, inWeek: Bool, dayOffset: Int8 = -1) {
             self.model = model
             self.inToday = inToday
             self.inWeek = inWeek
+            self.dayOffset = dayOffset
             let isFast = usage.fastInputTokens != 0 || usage.fastOutputTokens != 0
                 || usage.fastCacheReadTokens != 0 || usage.fastCacheCreateTokens != 0
                 || usage.fastCacheCreate1hTokens != 0
@@ -81,7 +83,8 @@ public final class ScanMemo: @unchecked Sendable {
 
         public static func == (lhs: KeyedUsage, rhs: KeyedUsage) -> Bool {
             lhs.model == rhs.model && lhs.inToday == rhs.inToday
-                && lhs.inWeek == rhs.inWeek && lhs.usage == rhs.usage
+                && lhs.inWeek == rhs.inWeek && lhs.dayOffset == rhs.dayOffset
+                && lhs.usage == rhs.usage
         }
 
         private static func expand(input: Int, output: Int, cacheRead: Int,
@@ -107,18 +110,21 @@ public final class ScanMemo: @unchecked Sendable {
         public let computedForDay: Date
         public let today: [String: ModelUsage]
         public let week: [String: ModelUsage]
+        public let daily: [[String: ModelUsage]]
         /// Keyed records, NOT folded into `today`/`week`, so the caller can
         /// dedup them against other files before aggregating.
         public let keyed: [String: KeyedUsage]
 
         public init(size: Int, mtime: Date, computedForDay: Date,
                     today: [String: ModelUsage], week: [String: ModelUsage],
+                    daily: [[String: ModelUsage]] = [],
                     keyed: [String: KeyedUsage] = [:]) {
             self.size = size
             self.mtime = mtime
             self.computedForDay = computedForDay
             self.today = today
             self.week = week
+            self.daily = daily
             self.keyed = keyed
         }
     }

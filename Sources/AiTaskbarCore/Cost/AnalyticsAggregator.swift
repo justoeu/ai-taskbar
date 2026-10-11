@@ -201,7 +201,8 @@ public enum AnalyticsAggregator {
                 usageHistory: history,
                 deltaPreviousPeriodPercent: deltaPercent,
                 lifetimeCostUSD: snapshot?.lifetimeCostUSD,
-                activity: snapshot.flatMap { activity(from: $0, timeframe: timeframe, now: now, calendar: calendar) }
+                activity: snapshot.flatMap { activity(from: $0, timeframe: timeframe, now: now, calendar: calendar) },
+                dailyModelUsage: estimate?.dailyUsage ?? []
             )
             vendorSummaries.append(summary)
         }

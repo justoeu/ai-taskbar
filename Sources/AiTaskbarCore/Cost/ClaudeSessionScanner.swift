@@ -59,6 +59,7 @@ public enum ClaudeSessionScanner {
 
         var totalsToday: [String: ModelUsage] = [:]
         var totalsLast7: [String: ModelUsage] = [:]
+        var dailyTotals: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
         var filesScanned = 0
         var unparseableTimestamps = 0
         // Responses keyed by (message.id, requestId), deduped across every
@@ -96,6 +97,11 @@ public enum ClaudeSessionScanner {
                 for (model, usage) in hit.week {
                     CostAggregator.add(usage, into: &totalsLast7, model: model)
                 }
+                for (slot, models) in hit.daily.enumerated() where slot < 7 {
+                    for (model, usage) in models {
+                        CostAggregator.add(usage, into: &dailyTotals[slot], model: model)
+                    }
+                }
                 for (key, record) in hit.keyed { mergeKeyed(record, key: key, into: &keyedAll) }
                 continue
             }
@@ -105,12 +111,14 @@ public enum ClaudeSessionScanner {
             // memoized; merge into the running totals afterwards.
             var fileToday: [String: ModelUsage] = [:]
             var fileWeek: [String: ModelUsage] = [:]
+            var fileDaily: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
             var fileKeyed: [String: ScanMemo.KeyedUsage] = [:]
             scanLines(data: data,
                       startOfToday: startOfToday,
                       sevenDaysAgo: sevenDaysAgo,
                       totalsToday: &fileToday,
                       totalsLast7: &fileWeek,
+                      dailyTotals: &fileDaily,
                       keyed: &fileKeyed,
                       unparseableTimestamps: &unparseableTimestamps)
             for (key, record) in fileKeyed { mergeKeyed(record, key: key, into: &keyedAll) }
@@ -120,11 +128,17 @@ public enum ClaudeSessionScanner {
             for (model, usage) in fileWeek {
                 CostAggregator.add(usage, into: &totalsLast7, model: model)
             }
+            for (slot, models) in fileDaily.enumerated() where slot < 7 {
+                for (model, usage) in models {
+                    CostAggregator.add(usage, into: &dailyTotals[slot], model: model)
+                }
+            }
             if let mtime = attrs?.contentModificationDate, let size = attrs?.fileSize {
                 memo.store(path: url.path,
                            entry: ScanMemo.Entry(size: size, mtime: mtime,
                                                  computedForDay: startOfToday,
                                                  today: fileToday, week: fileWeek,
+                                                 daily: fileDaily,
                                                  keyed: fileKeyed))
             }
         }
@@ -132,10 +146,18 @@ public enum ClaudeSessionScanner {
         // complete walk: a cancelled one saw a partial set, and pruning to it
         // would evict every file it had not reached yet (LEAK-FAN-002).
         if !Task.isCancelled { memo.retain(paths: seenPaths) }
-        fold(keyedAll, totalsToday: &totalsToday, totalsLast7: &totalsLast7)
+        fold(keyedAll, totalsToday: &totalsToday, totalsLast7: &totalsLast7, dailyTotals: &dailyTotals)
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.anthropic)
+        let calendarDays = window.calendarDays()
+        var dailyUsage: [DailyModelUsage] = []
+        for (slot, day) in calendarDays.enumerated() {
+            let dayModels = slot < dailyTotals.count ? dailyTotals[slot] : [:]
+            let (_, dayBreakdown) = CostAggregator.price(totals: dayModels, table: PricingTable.anthropic)
+            dailyUsage.append(DailyModelUsage(date: day, usageByModel: dayModels, costByModel: dayBreakdown))
+        }
+
         let unpricedToday = Set(totalsToday.keys.filter {
             PricingTable.lookup($0, table: PricingTable.anthropic) == nil
         })
@@ -167,7 +189,8 @@ public enum ClaudeSessionScanner {
             isApproximate: true,
             note: note,
             unpricedModelsToday: unpricedToday,
-            unpricedModelsLast7Days: unpricedLast7
+            unpricedModelsLast7Days: unpricedLast7,
+            dailyUsage: dailyUsage
         )
     }
 
@@ -217,11 +240,27 @@ public enum ClaudeSessionScanner {
         totalsLast7: inout [String: ModelUsage],
         unparseableTimestamps: inout Int
     ) {
+        var dailyTotals: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
+        scan(data: data, startOfToday: startOfToday, sevenDaysAgo: sevenDaysAgo,
+             totalsToday: &totalsToday, totalsLast7: &totalsLast7,
+             dailyTotals: &dailyTotals, unparseableTimestamps: &unparseableTimestamps)
+    }
+
+    internal static func scan(
+        data: Data,
+        startOfToday: Date,
+        sevenDaysAgo: Date,
+        totalsToday: inout [String: ModelUsage],
+        totalsLast7: inout [String: ModelUsage],
+        dailyTotals: inout [[String: ModelUsage]],
+        unparseableTimestamps: inout Int
+    ) {
         var keyed: [String: ScanMemo.KeyedUsage] = [:]
         scanLines(data: data, startOfToday: startOfToday, sevenDaysAgo: sevenDaysAgo,
                   totalsToday: &totalsToday, totalsLast7: &totalsLast7,
+                  dailyTotals: &dailyTotals,
                   keyed: &keyed, unparseableTimestamps: &unparseableTimestamps)
-        fold(keyed, totalsToday: &totalsToday, totalsLast7: &totalsLast7)
+        fold(keyed, totalsToday: &totalsToday, totalsLast7: &totalsLast7, dailyTotals: &dailyTotals)
     }
 
     /// Claude Code writes the same API response to a transcript more than
@@ -238,10 +277,14 @@ public enum ClaudeSessionScanner {
 
     private static func fold(_ keyed: [String: ScanMemo.KeyedUsage],
                              totalsToday: inout [String: ModelUsage],
-                             totalsLast7: inout [String: ModelUsage]) {
+                             totalsLast7: inout [String: ModelUsage],
+                             dailyTotals: inout [[String: ModelUsage]]) {
         for record in keyed.values {
             if record.inToday { CostAggregator.add(record.usage, into: &totalsToday, model: record.model) }
             if record.inWeek { CostAggregator.add(record.usage, into: &totalsLast7, model: record.model) }
+            if record.dayOffset >= 0 && record.dayOffset <= 6 && dailyTotals.count == 7 {
+                CostAggregator.add(record.usage, into: &dailyTotals[6 - Int(record.dayOffset)], model: record.model)
+            }
         }
     }
 
@@ -266,10 +309,12 @@ public enum ClaudeSessionScanner {
         sevenDaysAgo: Date,
         totalsToday: inout [String: ModelUsage],
         totalsLast7: inout [String: ModelUsage],
+        dailyTotals: inout [[String: ModelUsage]],
         keyed: inout [String: ScanMemo.KeyedUsage],
         unparseableTimestamps: inout Int
     ) {
         var longContextThresholds: [String: Int?] = [:]
+        let calendar = Calendar.current
         var offset = data.startIndex
         let end = data.endIndex
         while offset < end {
@@ -352,15 +397,35 @@ public enum ClaudeSessionScanner {
             // buckets; the count is surfaced in the note so users spot drift.
             let inToday = ts.map { $0 >= startOfToday } ?? true
             let inWeek = ts.map { $0 >= sevenDaysAgo } ?? true
+            let dayOffset: Int8
+            if let ts {
+                if inWeek {
+                    let dayStart = calendar.startOfDay(for: ts)
+                    if dayStart > startOfToday {
+                        dayOffset = 0
+                    } else {
+                        let diff = calendar.dateComponents([.day], from: dayStart, to: startOfToday).day ?? -1
+                        dayOffset = (diff >= 0 && diff <= 6) ? Int8(diff) : -1
+                    }
+                } else {
+                    dayOffset = -1
+                }
+            } else {
+                dayOffset = 0
+            }
             if ts == nil { unparseableTimestamps += 1 }
             if let messageId = msg.id, !messageId.isEmpty,
                let requestId = parsed.requestId, !requestId.isEmpty {
                 mergeKeyed(ScanMemo.KeyedUsage(model: model, usage: modelUsage,
-                                               inToday: inToday, inWeek: inWeek),
+                                               inToday: inToday, inWeek: inWeek,
+                                               dayOffset: dayOffset),
                            key: messageId + "\u{0}" + requestId, into: &keyed)
             } else {
                 if inToday { CostAggregator.add(modelUsage, into: &totalsToday, model: model) }
                 if inWeek { CostAggregator.add(modelUsage, into: &totalsLast7, model: model) }
+                if dayOffset >= 0 && dayOffset <= 6 && dailyTotals.count == 7 {
+                    CostAggregator.add(modelUsage, into: &dailyTotals[6 - Int(dayOffset)], model: model)
+                }
             }
         }
     }

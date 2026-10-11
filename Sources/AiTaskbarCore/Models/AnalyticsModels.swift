@@ -45,6 +45,8 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
     /// Tokens and requests in the timeframe, from a vendor that reports them
     /// (TypeSafe's console). Nil when no such source covers the timeframe.
     public let activity: VendorActivity?
+    /// Per-model daily usage for the 7-day window (scanners: Claude, Codex).
+    public let dailyModelUsage: [DailyModelUsage]
 
     public init(vendor: VendorId,
                 planLabel: String? = nil,
@@ -58,7 +60,8 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
                 usageHistory: [UsageHistoryStore.Sample] = [],
                 deltaPreviousPeriodPercent: Double? = nil,
                 lifetimeCostUSD: Double? = nil,
-                activity: VendorActivity? = nil) {
+                activity: VendorActivity? = nil,
+                dailyModelUsage: [DailyModelUsage] = []) {
         self.vendor = vendor
         self.planLabel = planLabel
         self.totalCostUSD = totalCostUSD
@@ -72,6 +75,7 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
         self.deltaPreviousPeriodPercent = deltaPreviousPeriodPercent
         self.lifetimeCostUSD = lifetimeCostUSD
         self.activity = activity
+        self.dailyModelUsage = dailyModelUsage
     }
 
     /// True when the card may say "no recent usage": nothing in the
@@ -88,6 +92,7 @@ public struct VendorAnalyticsSummary: Sendable, Equatable, Identifiable {
             && totalCostUSD <= 0.0001
             && totalUsagePercent <= 0.0001
             && !(activity?.hasActivity ?? false)
+            && dailyModelUsage.allSatisfy { $0.usageByModel.isEmpty }
     }
 }
 

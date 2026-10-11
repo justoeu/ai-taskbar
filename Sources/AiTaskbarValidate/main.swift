@@ -1495,6 +1495,29 @@ section("CostMath") {
     expect(abs(cost - 11.1) < 0.001, "cost math accumulates input + output + cacheRead")
 }
 
+section("DailyModelUsage & ModelUsage.totalTokens") {
+    let usage = ModelUsage(inputTokens: 100, outputTokens: 50,
+                           cacheReadTokens: 25, cacheCreateTokens: 10,
+                           cacheCreate1hTokens: 5)
+    expect(usage.totalTokens == 190, "totalTokens sums across all categories")
+
+    let d = Date(timeIntervalSince1970: 1_700_000_000)
+    let daily = DailyModelUsage(date: d,
+                               usageByModel: ["model-x": usage],
+                               costByModel: ["model-x": 0.45])
+    expect(daily.totalTokens == 190, "daily totalTokens")
+    expect(abs(daily.totalCostUSD - 0.45) < 0.001, "daily totalCostUSD")
+
+    let cal = Calendar.current
+    let window = CostWindow(now: d, calendar: cal)
+    let days = window.calendarDays(calendar: cal)
+    expect(days.count == 7, "CostWindow produces 7 calendar days")
+    expect(window.dayOffset(for: window.startOfToday, calendar: cal) == 0, "dayOffset today == 0")
+    expect(window.slotIndex(for: window.startOfToday, calendar: cal) == 6, "slotIndex today == 6")
+    expect(window.dayOffset(for: window.startOfLast7Days, calendar: cal) == 6, "dayOffset 6d ago == 6")
+    expect(window.slotIndex(for: window.startOfLast7Days, calendar: cal) == 0, "slotIndex 6d ago == 0")
+}
+
 // MARK: - Summary
 
 print("\n" + String(repeating: "=", count: 60))

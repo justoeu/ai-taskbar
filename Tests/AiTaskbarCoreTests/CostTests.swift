@@ -469,4 +469,52 @@ struct CostEstimateTests {
         #expect(bucket["claude-opus-5-5"]?.fastInputTokens == 10)
         #expect(bucket["claude-opus-5-5"]?.fastCacheCreate1hTokens == 4)
     }
+
+    @Test("ModelUsage.totalTokens sums across all categories")
+    func model_usage_total_tokens() {
+        let u = ModelUsage(inputTokens: 100, outputTokens: 50,
+                           cacheReadTokens: 25, cacheCreateTokens: 10,
+                           cacheCreate1hTokens: 5)
+        #expect(u.totalTokens == 190)
+    }
+
+    @Test("DailyModelUsage sums tokens and cost correctly")
+    func daily_model_usage_aggregation() {
+        let d = Date(timeIntervalSince1970: 1_700_000_000)
+        let u1 = ModelUsage(inputTokens: 100, outputTokens: 50)
+        let u2 = ModelUsage(inputTokens: 200, outputTokens: 100)
+        let daily = DailyModelUsage(
+            date: d,
+            usageByModel: ["model-a": u1, "model-b": u2],
+            costByModel: ["model-a": 1.25, "model-b": 2.50]
+        )
+        #expect(daily.id == d)
+        #expect(daily.totalTokens == 450)
+        #expect(abs(daily.totalCostUSD - 3.75) < 1e-9)
+    }
+
+    @Test("CostWindow calendarDays, dayOffset, and slotIndex")
+    func cost_window_calendar_methods() {
+        let cal = Calendar.current
+        let now = Date(timeIntervalSince1970: 1_784_000_000)
+        let window = CostWindow(now: now, calendar: cal)
+        let days = window.calendarDays(calendar: cal)
+        #expect(days.count == 7)
+        #expect(days.last == window.startOfToday)
+        #expect(days.first == window.startOfLast7Days)
+
+        #expect(window.dayOffset(for: window.startOfToday, calendar: cal) == 0)
+        #expect(window.slotIndex(for: window.startOfToday, calendar: cal) == 6)
+
+        #expect(window.dayOffset(for: window.startOfLast7Days, calendar: cal) == 6)
+        #expect(window.slotIndex(for: window.startOfLast7Days, calendar: cal) == 0)
+
+        let yesterday = cal.date(byAdding: .day, value: -1, to: window.startOfToday)!
+        #expect(window.dayOffset(for: yesterday, calendar: cal) == 1)
+        #expect(window.slotIndex(for: yesterday, calendar: cal) == 5)
+
+        let eightDaysAgo = cal.date(byAdding: .day, value: -8, to: window.startOfToday)!
+        expectTrue(window.dayOffset(for: eightDaysAgo, calendar: cal) == nil)
+        expectTrue(window.slotIndex(for: eightDaysAgo, calendar: cal) == nil)
+    }
 }

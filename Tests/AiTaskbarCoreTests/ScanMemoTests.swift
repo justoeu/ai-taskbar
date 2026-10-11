@@ -99,6 +99,15 @@ struct KeyedUsageCompactTests {
         #expect(record != ScanMemo.KeyedUsage(model: "m", usage: ModelUsage(inputTokens: 10),
                                               inToday: false, inWeek: true))
     }
+
+    @Test("dayOffset round-trips in KeyedUsage")
+    func day_offset_round_trips() {
+        let usage = ModelUsage(inputTokens: 10, outputTokens: 20)
+        let record = ScanMemo.KeyedUsage(model: "m", usage: usage, inToday: false, inWeek: true, dayOffset: 3)
+        #expect(record.dayOffset == 3)
+        #expect(!record.inToday)
+        #expect(record.inWeek)
+    }
 }
 
 @Suite("ClaudeSessionScanner memoization is observable", .serialized)

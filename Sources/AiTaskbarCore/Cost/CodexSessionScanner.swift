@@ -100,6 +100,7 @@ public enum CodexSessionScanner {
 
         var totalsToday: [String: ModelUsage] = [:]
         var totalsLast7: [String: ModelUsage] = [:]
+        var dailyTotals: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
         var filesScanned = 0
         var loss = ScanLoss()
         var seenPaths = Set<String>()
@@ -127,18 +128,25 @@ public enum CodexSessionScanner {
                 for (model, usage) in hit.week {
                     CostAggregator.add(usage, into: &totalsLast7, model: model)
                 }
+                for (slot, models) in hit.daily.enumerated() where slot < 7 {
+                    for (model, usage) in models {
+                        CostAggregator.add(usage, into: &dailyTotals[slot], model: model)
+                    }
+                }
                 continue
             }
 
             guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }
             var fileToday: [String: ModelUsage] = [:]
             var fileWeek: [String: ModelUsage] = [:]
+            var fileDaily: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
             var fileLoss = ScanLoss()
             scan(data: data,
                  startOfToday: startOfToday,
                  sevenDaysAgo: sevenDaysAgo,
                  totalsToday: &fileToday,
                  totalsLast7: &fileWeek,
+                 dailyTotals: &fileDaily,
                  loss: &fileLoss)
             loss.merge(fileLoss)
             for (model, usage) in fileToday {
@@ -147,12 +155,18 @@ public enum CodexSessionScanner {
             for (model, usage) in fileWeek {
                 CostAggregator.add(usage, into: &totalsLast7, model: model)
             }
+            for (slot, models) in fileDaily.enumerated() where slot < 7 {
+                for (model, usage) in models {
+                    CostAggregator.add(usage, into: &dailyTotals[slot], model: model)
+                }
+            }
             if let mtime = attrs?.contentModificationDate,
                let size = attrs?.fileSize {
                 memo.store(path: url.path,
                            entry: ScanMemo.Entry(size: size, mtime: mtime,
                                                  computedForDay: startOfToday,
-                                                 today: fileToday, week: fileWeek))
+                                                 today: fileToday, week: fileWeek,
+                                                 daily: fileDaily))
             }
         }
         // See ClaudeSessionScanner: never prune to a cancelled walk's partial set.
@@ -160,6 +174,14 @@ public enum CodexSessionScanner {
 
         let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.openai)
         let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.openai)
+        let calendarDays = window.calendarDays()
+        var dailyUsage: [DailyModelUsage] = []
+        for (slot, day) in calendarDays.enumerated() {
+            let dayModels = slot < dailyTotals.count ? dailyTotals[slot] : [:]
+            let (_, dayBreakdown) = CostAggregator.price(totals: dayModels, table: PricingTable.openai)
+            dailyUsage.append(DailyModelUsage(date: day, usageByModel: dayModels, costByModel: dayBreakdown))
+        }
+
         // Every model we tallied but couldn't price is excluded from the cost
         // totals. Surfacing the ids is what turns "the number looks low" into
         // "OpenAI shipped a model id we don't have a rate for yet".
@@ -190,7 +212,8 @@ public enum CodexSessionScanner {
             isApproximate: true,
             note: note,
             unpricedModelsToday: unpricedToday,
-            unpricedModelsLast7Days: Set(unpriced)
+            unpricedModelsLast7Days: Set(unpriced),
+            dailyUsage: dailyUsage
         )
         return (estimate, sawUsage)
     }
@@ -310,10 +333,26 @@ public enum CodexSessionScanner {
         totalsLast7: inout [String: ModelUsage],
         loss: inout ScanLoss
     ) {
+        var dailyTotals: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
+        scan(data: data, startOfToday: startOfToday, sevenDaysAgo: sevenDaysAgo,
+             totalsToday: &totalsToday, totalsLast7: &totalsLast7,
+             dailyTotals: &dailyTotals, loss: &loss)
+    }
+
+    internal static func scan(
+        data: Data,
+        startOfToday: Date,
+        sevenDaysAgo: Date,
+        totalsToday: inout [String: ModelUsage],
+        totalsLast7: inout [String: ModelUsage],
+        dailyTotals: inout [[String: ModelUsage]],
+        loss: inout ScanLoss
+    ) {
         var currentModel: String?
         var previousTotal: RolloutLine.Payload.Info.Usage?
         var pending: [(usage: ModelUsage, timestamp: Date?)] = []
         var undated = 0
+        let calendar = Calendar.current
 
         func record(_ usage: ModelUsage, at ts: Date?, model: String) {
             var usage = usage
@@ -337,10 +376,25 @@ public enum CodexSessionScanner {
                 undated += 1
                 CostAggregator.add(usage, into: &totalsToday, model: model)
                 CostAggregator.add(usage, into: &totalsLast7, model: model)
+                if dailyTotals.count == 7 {
+                    CostAggregator.add(usage, into: &dailyTotals[6], model: model)
+                }
                 return
             }
             if ts >= startOfToday { CostAggregator.add(usage, into: &totalsToday, model: model) }
-            if ts >= sevenDaysAgo { CostAggregator.add(usage, into: &totalsLast7, model: model) }
+            if ts >= sevenDaysAgo {
+                CostAggregator.add(usage, into: &totalsLast7, model: model)
+                let dayStart = calendar.startOfDay(for: ts)
+                let diff: Int
+                if dayStart > startOfToday {
+                    diff = 0
+                } else {
+                    diff = calendar.dateComponents([.day], from: dayStart, to: startOfToday).day ?? -1
+                }
+                if diff >= 0 && diff <= 6 && dailyTotals.count == 7 {
+                    CostAggregator.add(usage, into: &dailyTotals[6 - diff], model: model)
+                }
+            }
         }
 
         var offset = data.startIndex
