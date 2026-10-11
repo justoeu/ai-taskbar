@@ -6,7 +6,15 @@ import AiTaskbarCore
 /// ambiguous attempt's idempotency key or enable a second in-flight redemption.
 @MainActor
 final class OpenAIResetController: ObservableObject {
+    enum Activity: Equatable, Sendable {
+        case idle
+        case checking
+        case applying
+    }
+
     @Published private(set) var isBusy = false
+    @Published private(set) var activity: Activity = .idle
+    @Published private(set) var isSuccess = false
     @Published private(set) var offer: OpenAIResetOffer?
     @Published private(set) var pendingAttempt: OpenAIResetOffer?
     @Published private(set) var message: String?
@@ -33,22 +41,39 @@ final class OpenAIResetController: ObservableObject {
         }
     }
 
-    func prepare(path: URL) async {
+    func beginPreparing() {
         guard !isBusy else { return }
+        isBusy = true
+        activity = .checking
+        message = nil
+        isSuccess = false
+    }
+
+    func prepare(path: URL) async {
+        if !isBusy {
+            beginPreparing()
+        }
+        guard isBusy && activity == .checking else { return }
         if let pendingAttempt {
             offer = pendingAttempt
             isConfirming = true
+            isBusy = false
+            activity = .idle
             return
         }
-        isBusy = true
-        message = nil
-        defer { isBusy = false }
+        defer {
+            isBusy = false
+            activity = .idle
+        }
         do {
             let prepared = try await prepareAction(path)
             offer = prepared
             if prepared.isRetry { pendingAttempt = prepared }
             isConfirming = true
-        } catch { message = Self.errorMessage(error) }
+        } catch {
+            message = Self.errorMessage(error)
+            isSuccess = false
+        }
     }
 
     func restorePending() async {
@@ -58,21 +83,40 @@ final class OpenAIResetController: ObservableObject {
             let restored = try await OffPool.run { try OpenAIResetJournal().read() }
             guard !isBusy, pendingAttempt == nil else { return }
             pendingAttempt = restored
-        } catch { message = Self.errorMessage(error) }
+        } catch {
+            message = Self.errorMessage(error)
+            isSuccess = false
+        }
     }
 
     func cancelConfirmation() {
         isConfirming = false
         offer = nil
+        if activity == .checking {
+            activity = .idle
+            isBusy = false
+        }
+    }
+
+    func beginConsuming() {
+        guard !isBusy, offer != nil else { return }
+        isConfirming = false
+        isBusy = true
+        activity = .applying
+        message = nil
+        isSuccess = false
     }
 
     func consume(path: URL) async -> Bool {
-        guard !isBusy, let offer else { return false }
+        if !isBusy {
+            beginConsuming()
+        }
+        guard isBusy, activity == .applying, let offer else { return false }
         let retry = pendingAttempt != nil
-        isConfirming = false
-        isBusy = true
-        message = nil
-        defer { isBusy = false }
+        defer {
+            isBusy = false
+            activity = .idle
+        }
         do {
             let receipt = try await consumeAction(path, offer, retry)
             pendingAttempt = nil
@@ -80,8 +124,13 @@ final class OpenAIResetController: ObservableObject {
             switch receipt.outcome {
             case .reset, .alreadyRedeemed:
                 message = L10n.localizedString(receipt.limitsRefreshed ? "reset_done" : "reset_done_refresh_pending")
-            case .nothingToReset: message = L10n.localizedString("reset_nothing")
-            case .noCredit: message = L10n.localizedString("reset_no_credit")
+                isSuccess = true
+            case .nothingToReset:
+                message = L10n.localizedString("reset_nothing")
+                isSuccess = false
+            case .noCredit:
+                message = L10n.localizedString("reset_no_credit")
+                isSuccess = false
             }
             return true
         } catch {
@@ -89,6 +138,7 @@ final class OpenAIResetController: ObservableObject {
                 pendingAttempt = offer
             }
             message = Self.errorMessage(error)
+            isSuccess = false
             return false
         }
     }

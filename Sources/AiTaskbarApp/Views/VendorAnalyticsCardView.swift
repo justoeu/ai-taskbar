@@ -224,6 +224,11 @@ public struct VendorAnalyticsCardView: View {
                         activitySection(activity)
                     }
 
+                    // Weekly Daily Model Consumption Chart
+                    if !summary.dailyModelUsage.isEmpty && summary.dailyModelUsage.contains(where: { $0.totalTokens > 0 }) {
+                        WeeklyModelStackedChartView(dailyUsage: summary.dailyModelUsage, vendorColor: vendorColor)
+                    }
+
                     // Model Breakdown
                     if !summary.costByModel.isEmpty {
                         VStack(spacing: 7) {

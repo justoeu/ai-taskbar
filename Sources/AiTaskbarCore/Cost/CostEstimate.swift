@@ -55,6 +55,36 @@ public struct ModelUsage: Sendable, Equatable {
         self.fastCacheCreateTokens = fastCacheCreateTokens
         self.fastCacheCreate1hTokens = fastCacheCreate1hTokens
     }
+
+    /// Total tokens across all categories (input, output, cache reads and writes).
+    public var totalTokens: Int {
+        let inputs = CostAggregator.saturatingAdd(inputTokens, cacheReadTokens)
+        let writes = CostAggregator.saturatingAdd(cacheCreateTokens, cacheCreate1hTokens)
+        return CostAggregator.saturatingAdd(CostAggregator.saturatingAdd(inputs, writes), outputTokens)
+    }
+}
+
+public struct DailyModelUsage: Sendable, Equatable, Identifiable {
+    public var id: Date { date }
+    public let date: Date
+    public let usageByModel: [String: ModelUsage]
+    public let costByModel: [String: Double]
+
+    public init(date: Date,
+                usageByModel: [String: ModelUsage] = [:],
+                costByModel: [String: Double] = [:]) {
+        self.date = date
+        self.usageByModel = usageByModel
+        self.costByModel = costByModel
+    }
+
+    public var totalTokens: Int {
+        usageByModel.values.reduce(0) { CostAggregator.saturatingAdd($0, $1.totalTokens) }
+    }
+
+    public var totalCostUSD: Double {
+        costByModel.values.reduce(0, +)
+    }
 }
 
 public struct CostEstimate: Sendable, Equatable {
@@ -69,6 +99,7 @@ public struct CostEstimate: Sendable, Equatable {
     /// Explicitly distinguishes an unknown price from a known $0 amount.
     public let unpricedModelsToday: Set<String>
     public let unpricedModelsLast7Days: Set<String>
+    public let dailyUsage: [DailyModelUsage]
 
     /// Whether the cost footer has either money or a discovered model to show.
     /// An unpriced newly released model has a zero-dollar breakdown entry and
@@ -88,7 +119,8 @@ public struct CostEstimate: Sendable, Equatable {
                 isApproximate: Bool = true,
                 note: String? = nil,
                 unpricedModelsToday: Set<String> = [],
-                unpricedModelsLast7Days: Set<String> = []) {
+                unpricedModelsLast7Days: Set<String> = [],
+                dailyUsage: [DailyModelUsage] = []) {
         self.usdToday = usdToday
         self.usdLast7Days = usdLast7Days
         self.modelBreakdownToday = modelBreakdownToday
@@ -99,6 +131,7 @@ public struct CostEstimate: Sendable, Equatable {
         self.note = note
         self.unpricedModelsToday = unpricedModelsToday
         self.unpricedModelsLast7Days = unpricedModelsLast7Days
+        self.dailyUsage = dailyUsage
     }
 }
 

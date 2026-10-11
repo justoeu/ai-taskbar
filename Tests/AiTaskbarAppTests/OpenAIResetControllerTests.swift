@@ -64,4 +64,44 @@ struct OpenAIResetControllerTests {
         expectTrue(controller.pendingAttempt == nil)
         #expect(calls == 2)
     }
+
+    @Test("activity and isSuccess track preparation, consumption, and completion states")
+    func activity_and_success_lifecycle() async {
+        let offer = OpenAIResetOffer(accountID: "A", accountLabel: "A", availableCount: 2)
+        let controller = OpenAIResetController(
+            prepare: { _ in offer },
+            consume: { _, _, _ in
+                OpenAIResetReceipt(outcome: .reset, limitsRefreshed: true)
+            }
+        )
+        let path = URL(fileURLWithPath: "/unused-test-auth")
+
+        #expect(controller.activity == .idle)
+        #expect(!controller.isBusy)
+        #expect(!controller.isSuccess)
+
+        // beginPreparing synchronously updates state for immediate UI responsiveness
+        controller.beginPreparing()
+        #expect(controller.activity == .checking)
+        #expect(controller.isBusy)
+
+        await controller.prepare(path: path)
+        #expect(controller.activity == .idle)
+        #expect(!controller.isBusy)
+        #expect(controller.isConfirming)
+        #expect(controller.offer?.id == offer.id)
+
+        // beginConsuming synchronously updates state when modal confirms
+        controller.beginConsuming()
+        #expect(controller.activity == .applying)
+        #expect(controller.isBusy)
+        #expect(!controller.isConfirming)
+
+        let success = await controller.consume(path: path)
+        expectTrue(success)
+        #expect(controller.activity == .idle)
+        #expect(!controller.isBusy)
+        #expect(controller.isSuccess)
+        expectTrue(controller.message != nil)
+    }
 }

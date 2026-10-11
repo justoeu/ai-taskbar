@@ -563,4 +563,47 @@ struct ClaudeSessionScannerTests {
         #expect(today["claude-opus-4-7"]?.inputTokens == 100)
         #expect(week["claude-opus-4-7"]?.outputTokens == 50)
     }
+
+    @Test("scan() with dailyTotals buckets usage into the appropriate calendar days")
+    func scan_with_daily_totals_buckets() {
+        let cal = Calendar.current
+        let now = Date(timeIntervalSince1970: 1_764_000_000)
+        let startOfToday = cal.startOfDay(for: now)
+        let sevenDaysAgo = cal.date(byAdding: .day, value: -6, to: startOfToday)!
+        let todayISO = ISO8601DateFormatter().string(from: startOfToday.addingTimeInterval(3600))
+        let threeDaysAgo = cal.date(byAdding: .day, value: -3, to: startOfToday)!
+        let threeDaysAgoISO = ISO8601DateFormatter().string(from: threeDaysAgo.addingTimeInterval(3600))
+
+        let lineToday = Self.keyedLine(timestamp: todayISO, messageId: "msg_today", requestId: "req_today",
+                                       input: 100, output: 50)
+        let lineThreeDaysAgo = Self.keyedLine(timestamp: threeDaysAgoISO, messageId: "msg_3d", requestId: "req_3d",
+                                              input: 200, output: 100)
+        let data = Data(([lineToday, lineThreeDaysAgo].joined(separator: "\n") + "\n").utf8)
+
+        var today: [String: ModelUsage] = [:]
+        var week: [String: ModelUsage] = [:]
+        var daily: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
+        var unparseable = 0
+        ClaudeSessionScanner.scan(data: data,
+                                  startOfToday: startOfToday,
+                                  sevenDaysAgo: sevenDaysAgo,
+                                  totalsToday: &today,
+                                  totalsLast7: &week,
+                                  dailyTotals: &daily,
+                                  unparseableTimestamps: &unparseable)
+
+        #expect(today["claude-opus-4-7"]?.inputTokens == 100)
+        #expect(week["claude-opus-4-7"]?.inputTokens == 300)
+        #expect(daily.count == 7)
+        // Slot 6 is today
+        #expect(daily[6]["claude-opus-4-7"]?.inputTokens == 100)
+        // Slot 3 is 3 days ago (6 - 3 = 3)
+        #expect(daily[3]["claude-opus-4-7"]?.inputTokens == 200)
+        // Other slots are empty
+        #expect(daily[0].isEmpty)
+        #expect(daily[1].isEmpty)
+        #expect(daily[2].isEmpty)
+        #expect(daily[4].isEmpty)
+        #expect(daily[5].isEmpty)
+    }
 }

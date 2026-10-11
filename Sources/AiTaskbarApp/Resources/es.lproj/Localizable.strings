@@ -262,6 +262,10 @@
 "reset_button" = "Usar un reset";
 "reset_retry" = "Reintentar esta operación";
 "reset_busy" = "Consultando reset…";
+"reset_applying" = "Aplicando reset…";
+"reset_checking_status" = "Comprobando resets disponibles en Codex…";
+"reset_applying_status" = "Aplicando reset de límite en Codex…";
+"reset_waiting_response" = "Esperando respuesta de Codex CLI…";
 "reset_confirm_title" = "¿Usar un reset de límite?";
 "reset_confirm_button" = "Confirmar reset";
 "reset_cancel" = "Cancelar";
@@ -417,3 +421,6 @@
 "settings_typesafe_console_sign_out_help" = "Quita la sesión de este Mac. Para cerrarla también en TypeSafe, cierra sesión en la consola.";
 "pin_unavailable_no_usage" = "Este proveedor no informa uso para mostrar en la barra de menús.";
 "settings_typesafe_footer" = "Desactivado hasta que guardes una clave de API (créala en console.typesafe.ai). La clave solo lista modelos — nunca ejecuta una evaluación de pago. Inicia sesión en la consola para ver gasto, saldo y tokens; el inicio de sesión ocurre en una ventana privada y solo se guardan sus cookies de sesión, cifradas.";
+"analytics_weekly_models_title" = "Consumo Diario por Modelo";
+"analytics_hover_hint" = "Pase el cursor sobre las barras para ver detalles";
+"analytics_tokens" = "tokens";
