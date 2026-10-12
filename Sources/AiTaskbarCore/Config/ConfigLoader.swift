@@ -518,5 +518,15 @@ public struct ConfigLoader: Sendable {
         # base_url  = "https://api.typesafe.ai"
 
         """),
+        ("[meta]", """
+
+        [meta]
+        # Meta Muse. Off until enabled in Settings. Quota comes from the Muse
+        # CLI login (run `muse login`) — API keys cannot read subscription quota.
+        enabled = false
+        # sessions_dir = "~/.local/share/muse/sessions"  # overrides MUSE_SESSIONS_DIR
+        # auth_path = "~/.config/muse/auth.json"          # overrides MUSE_AUTH_PATH
+
+        """),
     ]
 }

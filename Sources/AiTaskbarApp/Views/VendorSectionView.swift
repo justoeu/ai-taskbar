@@ -554,7 +554,13 @@ public struct VendorSectionView: View {
     /// drift for a vendor that reports utilization; for one that never does
     /// (TypeSafe), its whole card lives in `extras`, so it always renders.
     nonisolated static func rendersSnapshot(_ snap: VendorSnapshot, vendorId: VendorId) -> Bool {
-        !snap.windows.isEmpty || !vendorId.reportsUtilization
+        if !snap.windows.isEmpty || !vendorId.reportsUtilization { return true }
+        // Meta reports utilization only with an active subscription: a
+        // pay-as-you-go or idle snapshot legitimately has no windows and
+        // renders its state row, not the schema-drift warning
+        // (docs/SDD-meta-muse.md §4.1).
+        if case .meta = snap { return true }
+        return false
     }
 
     @ViewBuilder
@@ -702,6 +708,27 @@ public struct VendorSectionView: View {
             }
         case .typesafe(let s):
             TypeSafeCardView(snapshot: s, thresholds: thresholds)
+        case .meta(let s):
+            // Windows render via `VendorSnapshot.windows`; extras carry only
+            // the states that have no honest bar to draw (SDD-meta-muse §4.1).
+            switch s.subscription {
+            case .payAsYouGo:
+                Label(L10n.localizedString("meta_payg"), systemImage: "creditcard")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            case .billingIncomplete:
+                Label(L10n.localizedString("meta_billing_incomplete"),
+                      systemImage: "exclamationmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            case .active where s.session == nil && s.weekly == nil:
+                Label(L10n.localizedString("meta_quota_unavailable"),
+                      systemImage: "info.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            case .active:
+                EmptyView()
+            }
         case .xai(let s):
             VStack(alignment: .leading, spacing: 2) {
                 if let prepaid = s.prepaidUSD {

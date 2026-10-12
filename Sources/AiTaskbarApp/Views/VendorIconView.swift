@@ -62,6 +62,12 @@ public enum VendorIconAssets {
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6.469 8.776L16.512 23h-4.464L2.005 8.776H6.47zm-.004 7.9l2.233 3.164L6.467 23H2l4.465-6.324zM22 2.582V23h-3.659V7.764L22 2.582zM22 1l-9.952 14.095-2.233-3.163L17.533 1H22z"/>
             </svg>
             """
+        case .meta:
+            // Neutral glyph (rounded square with an "M"), not Meta's brand mark.
+            return """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M6 2h12a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H6zm1.5 13.5v-10h2.2L12 11.4l2.3-3.9h2.2v10h-2.5v-5.6l-2 3.2-2-3.2v5.6z"/>
+            </svg>
+            """
         case .typesafe:
             // Neutral glyph (rounded square with a "T"), not TypeSafe's brand mark.
             return """

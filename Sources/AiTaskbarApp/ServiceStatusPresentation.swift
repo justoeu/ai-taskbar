@@ -137,7 +137,7 @@ public enum ServiceStatusPresentation {
         switch vendorId {
         case .anthropic, .openai, .kimi, .deepseek: return .full
         case .openrouter, .xai, .typesafe: return .incidentsOnly
-        case .gemini, .zai: return .linkOnly
+        case .gemini, .zai, .meta: return .linkOnly
         }
     }
 

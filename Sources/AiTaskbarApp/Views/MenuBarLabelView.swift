@@ -100,6 +100,7 @@ public struct MenuBarLabelView: View {
         case .deepseek:   return "DS"
         case .xai:        return "xAI"
         case .typesafe:   return "JEV"
+        case .meta:       return "MUSE"
         }
     }
 

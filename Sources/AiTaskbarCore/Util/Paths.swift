@@ -78,6 +78,27 @@ public enum Paths {
         return home.appendingPathComponent(".codex/sessions")
     }
 
+    /// Muse CLI (Meta) session logs:
+    /// `<root>/YYYY/MM/DD/<uuid>/session.jsonl`, tallied by
+    /// `MuseSessionScanner`. Root resolution mirrors the CLI's own:
+    /// `MUSE_SESSIONS_DIR` → `$XDG_DATA_HOME/muse/sessions` →
+    /// `~/.local/share/muse/sessions`. Empty overrides fall through.
+    public static func museSessionsDir(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        if let raw = environment["MUSE_SESSIONS_DIR"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
+        }
+        if let raw = environment["XDG_DATA_HOME"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
+                .appendingPathComponent("muse/sessions")
+        }
+        return home.appendingPathComponent(".local/share/muse/sessions")
+    }
+
     public static func ensureDir(_ url: URL) throws {
         // TOCTOU defense: refuse to use a symlinked target. If the user (or
         // an attacker with write to the parent) replaced
