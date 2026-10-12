@@ -379,6 +379,25 @@ section("TypeSafe console (phase 2) fixtures") {
            "TypeSafe session keeps only the three login cookies")
 }
 
+section("Wire types: Meta (Muse) fixtures — synthetic (SDD §14)") {
+    let active = try SharedCoders.decoder.decode(MetaMintResponse.self, from: Fixtures.data(Fixtures.metaMintActive200)).toSnapshot()
+    expect(active.subscription == .active, "Meta subscription active")
+    expect(active.planLabel == "Muse Code Power Usage", "Meta plan label from subs_tier_name")
+    expect(active.session?.label == "Session (5h)", "Meta session label from window_duration_mins")
+    expect(active.session?.utilizationPercent == 37.5, "Meta session utilization")
+    expect(active.weekly?.utilizationPercent == 12.0, "Meta weekly utilization")
+    let encoded = String(decoding: try SharedCoders.encoder.encode(active), as: UTF8.self)
+    expect(!encoded.contains("LLM|") && !encoded.contains("4242") && !encoded.contains("user@example.com"),
+           "Meta snapshot keeps no minted key, payment or email")
+    let idle = try SharedCoders.decoder.decode(MetaMintResponse.self, from: Fixtures.data(Fixtures.metaMintIdle200)).toSnapshot()
+    expect(idle.subscription == .active && idle.session == nil && idle.weekly == nil,
+           "Meta idle subscription invents no windows")
+    let payg = try SharedCoders.decoder.decode(MetaMintResponse.self, from: Fixtures.data(Fixtures.metaMintPayg200)).toSnapshot()
+    expect(payg.subscription == .payAsYouGo, "Meta pay-as-you-go state")
+    expect(MetaConfig().enabled == false, "Meta is disabled by default")
+    expect(VendorId.meta.dashboardURL?.absoluteString == "https://dev.meta.ai", "Meta dashboard URL")
+}
+
 section("DeepSeekConfig.validate") {
     expect(DeepSeekConfig.validate("https://api.deepseek.com") != nil,
            "accepts https://api.deepseek.com")

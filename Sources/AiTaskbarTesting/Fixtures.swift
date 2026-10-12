@@ -1266,5 +1266,33 @@ public enum Fixtures {
     </rss>
     """#
 
+    // MARK: - Meta (Muse) — SYNTHETIC, built from the field contract in
+    // docs/SDD-meta-muse.md §2.2 (2026-10-12). Not verbatim captures:
+    // minting a real one spends the user's login. Field names/shapes are
+    // the contract; values are invented. Replace with redacted verbatim
+    // captures if that trade ever becomes worth it (SDD §14).
+
+    /// `POST https://api.meta.ai/muse-code/key`, active subscription with
+    /// both windows. Carries a minted key and payment block on purpose:
+    /// the decoder must ignore them and they must never reach the cache.
+    public static let metaMintActive200 = #"""
+    {"api_key":"LLM|synthetic-minted-key-do-not-persist","email":"user@example.com","payment_method":{"brand":"visa","last4":"4242"},"is_subs_active":true,"require_payment":false,"subs_tier_name":"Muse Code Power Usage","subs_usage":{"window":{"used_percent":37.5,"resets_at":1791900000,"window_duration_mins":300},"weekly":{"used_percent":12.0,"resets_at":1792400000}}}
+    """#
+
+    /// Active subscription, 5-hour window idle: `subs_usage` omitted.
+    public static let metaMintIdle200 = #"""
+    {"api_key":"LLM|synthetic-minted-key-do-not-persist","is_subs_active":true,"subs_tier_name":"Muse Code Power Usage","subs_usage":null}
+    """#
+
+    /// Pay-as-you-go account: no active subscription.
+    public static let metaMintPayg200 = #"""
+    {"api_key":"LLM|synthetic-minted-key-do-not-persist","is_subs_active":false}
+    """#
+
+    /// Subscription present but a payment method is still required.
+    public static let metaMintBilling200 = #"""
+    {"api_key":"LLM|synthetic-minted-key-do-not-persist","is_subs_active":true,"require_payment":true,"subs_tier_name":"Muse Code Power Usage"}
+    """#
+
     public static func data(_ s: String) -> Data { Data(s.utf8) }
 }

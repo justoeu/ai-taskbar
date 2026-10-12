@@ -159,6 +159,8 @@ contract, not an implementation detail.
 `scripts/validate.sh` and CI share `scripts/check-swift-warnings.sh`, covering
 source, test, macro-expansion and linker diagnostics. Only deprecations in
 `Sources/AiTaskbarCore/Credentials/Keychain{AccessAuthorizer,CredentialReader,PromptSuppressor}.swift`
+e `MetaCredentialReader.swift` (mesma API clássica inevitável: `kSecUseAuthenticationUIFail`
+na leitura prompt-free do item do Muse CLI)
 and their isolated-keychain test fixtures (`KeychainAccessAuthorizerTests.swift`,
 `KeychainCredentialReaderTests.swift`, `TemporaryKeychain.swift` in
 `Tests/AiTaskbarCoreTests/`) are allowlisted. Other warnings in those files fail
