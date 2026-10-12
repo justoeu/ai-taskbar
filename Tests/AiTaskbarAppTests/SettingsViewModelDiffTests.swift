@@ -133,6 +133,13 @@ struct SettingsViewModelDiffTests {
                           .secret(section: "typesafe", key: "api_key", plaintext: "k")]),
         Row(section: "typesafe", field: "baseURL", mutate: { $0.typesafe.baseURL = "https://api.typesafe.ai/" },
             expected: .string(section: "typesafe", key: "base_url", value: "https://api.typesafe.ai/")),
+        // [meta] — disabled by default; optional paths write "" when cleared.
+        Row(section: "meta", field: "enabled", mutate: { $0.meta.enabled = true },
+            expected: .bool(section: "meta", key: "enabled", value: true)),
+        Row(section: "meta", field: "sessionsDir", mutate: { $0.meta.sessionsDir = "/tmp/muse-sessions" },
+            expected: .string(section: "meta", key: "sessions_dir", value: "/tmp/muse-sessions")),
+        Row(section: "meta", field: "authPath", mutate: { $0.meta.authPath = "/tmp/auth.json" },
+            expected: .string(section: "meta", key: "auth_path", value: "/tmp/auth.json")),
         // [xai]
         Row(section: "xai", field: "enabled", mutate: { $0.xai.enabled = false },
             expected: .bool(section: "xai", key: "enabled", value: false)),

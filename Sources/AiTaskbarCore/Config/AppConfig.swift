@@ -15,6 +15,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
     public var deepseek: DeepSeekConfig
     public var xai: XAIConfig
     public var typesafe: TypeSafeConfig
+    public var meta: MetaConfig
 
     public init(ui: UIConfig = .init(),
                 thresholds: ThresholdsConfig = .init(),
@@ -29,7 +30,8 @@ public struct AppConfig: Codable, Sendable, Equatable {
                 gemini: GeminiConfig = .init(),
                 deepseek: DeepSeekConfig = .init(),
                 xai: XAIConfig = .init(),
-                typesafe: TypeSafeConfig = .init()) {
+                typesafe: TypeSafeConfig = .init(),
+                meta: MetaConfig = .init()) {
         self.ui = ui
         self.thresholds = thresholds
         self.notifications = notifications
@@ -44,6 +46,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         self.deepseek = deepseek
         self.xai = xai
         self.typesafe = typesafe
+        self.meta = meta
     }
 
     public init(from decoder: Decoder) throws {
@@ -62,6 +65,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         deepseek       = try c.decodeIfPresent(DeepSeekConfig.self, forKey: .deepseek) ?? .init()
         xai            = try c.decodeIfPresent(XAIConfig.self, forKey: .xai) ?? .init()
         typesafe       = try c.decodeIfPresent(TypeSafeConfig.self, forKey: .typesafe) ?? .init()
+        meta           = try c.decodeIfPresent(MetaConfig.self, forKey: .meta) ?? .init()
     }
 }
 
@@ -742,7 +746,7 @@ public struct XAIConfig: Codable, Sendable, Equatable {
 extension AppConfig {
     enum CodingKeys: String, CodingKey {
         case ui, thresholds, notifications, security, updates,
-             anthropic, openai, zai, openrouter, kimi, gemini, deepseek, xai, typesafe
+             anthropic, openai, zai, openrouter, kimi, gemini, deepseek, xai, typesafe, meta
     }
 }
 
@@ -821,5 +825,45 @@ public struct TypeSafeConfig: Codable, Sendable, Equatable {
         case baseURL = "base_url"
         case consoleSession = "console_session"
         case consoleSessionExpiresAt = "console_session_expires_at"
+    }
+}
+
+/// Meta (Muse Code). No API-key fields on purpose: subscription quota only
+/// answers the CLI's device-code (`dca:`) login token — API keys get 401
+/// (`docs/SDD-meta-muse.md` §6). No `base_url` either: the quota host is
+/// fixed to `api.meta.ai` so the login token can never be redirected.
+public struct MetaConfig: Codable, Sendable, Equatable {
+    /// Off until the user turns it on in Settings (new-vendor rule). A
+    /// `[meta]` section without `enabled` also decodes as false.
+    public var enabled: Bool = false
+    /// Session-log root override; nil → `MUSE_SESSIONS_DIR` →
+    /// `$XDG_DATA_HOME/muse/sessions` → `~/.local/share/muse/sessions`.
+    public var sessionsDir: String?
+    /// CLI auth-file override; nil → `MUSE_AUTH_PATH` →
+    /// `~/.config/muse/auth.json`.
+    public var authPath: String?
+
+    public init(enabled: Bool = false,
+                sessionsDir: String? = nil,
+                authPath: String? = nil) {
+        self.enabled = enabled
+        self.sessionsDir = sessionsDir
+        self.authPath = authPath
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        // Settings writes "" for a cleared optional path; empty means unset.
+        sessionsDir = try c.decodeIfPresent(String.self, forKey: .sessionsDir)
+            .flatMap { $0.isEmpty ? nil : $0 }
+        authPath = try c.decodeIfPresent(String.self, forKey: .authPath)
+            .flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case sessionsDir = "sessions_dir"
+        case authPath = "auth_path"
     }
 }
