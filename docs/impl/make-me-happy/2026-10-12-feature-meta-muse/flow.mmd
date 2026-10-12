@@ -1,0 +1,33 @@
+flowchart TD
+    U["User (Muse login)"] --> CLI["muse CLI"]
+    CLI --> KC["Keychain ai.meta.dev.credentials/meta"]
+    CLI --> AJ["~/.config/muse/auth.json (optional)"]
+    CLI --> SJ["~/.local/share/muse/sessions/**/session.jsonl"]
+    subgraph WT1["WT-1 Core"]
+        VID["T-001 VendorId.meta + MetaSnapshot"]
+        CFG["T-002 MetaConfig [meta]"]
+        SCAN["T-003 MuseSessionScanner"]
+        COST["T-004 CostEstimator/Analytics (unpriced)"]
+    end
+    subgraph WT2["WT-2 Providers"]
+        CRED["T-005 MetaCredentialReader"]
+        WIRE["T-006 MetaWireTypes (allow-list)"]
+        PROV["T-007 MetaProvider (CachedFetch)"]
+    end
+    subgraph WT3["WT-3 App"]
+        ENV["T-008 AppEnvironment"]
+        CARD["T-009 Card + shortLabel + brand color"]
+        SET["T-010 Settings Meta"]
+        L10N["T-011 Localizable x3"]
+        DOCS["T-012 README + AGENTS.md"]
+    end
+    AJ --> CRED
+    KC --> CRED
+    CRED -->|"dca: token (never persisted)"| PROV
+    PROV -->|"POST api.meta.ai/muse-code/key"| META["Meta API (subscription windows)"]
+    META --> WIRE --> VID
+    SJ --> SCAN --> COST
+    VID --> ENV --> CARD
+    CFG --> ENV
+    SET --> CFG
+    CARD --> L10N --> DOCS

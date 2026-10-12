@@ -1,0 +1,73 @@
+[
+  {
+    "name": "mint request (the only request MetaProvider may build)",
+    "kind": "http",
+    "method": "POST",
+    "path": "https://api.meta.ai/muse-code/key",
+    "request": {},
+    "responses": [
+      {
+        "status": 200,
+        "body": {
+          "is_subs_active": true,
+          "require_payment": false,
+          "subs_tier_name": "Muse Code Power Usage",
+          "subs_usage": {
+            "window": { "used_percent": 37.5, "resets_at": 1791900000, "window_duration_mins": 300 },
+            "weekly": { "used_percent": 12.0, "resets_at": 1792400000 }
+          }
+        },
+        "note": "Synthetic golden from SDD §2.2 field contract; minted key and payment fields are never decoded"
+      },
+      {
+        "status": 200,
+        "body": {
+          "is_subs_active": true,
+          "subs_tier_name": "Muse Code Power Usage",
+          "subs_usage": null
+        },
+        "note": "Active but 5h idle: plan only, no windows, not an error"
+      },
+      {
+        "status": 200,
+        "body": { "is_subs_active": false },
+        "note": "Pay-as-you-go: no subscription, never a fake 0% bar"
+      },
+      { "status": 401, "body": "login rejected/expired", "note": "Message tells user to run muse login" },
+      { "status": 429, "body": "rate limited", "note": "Feeds RefreshScheduler backoff; stale served" }
+    ],
+    "notes": ["Headers: Authorization Bearer <dca: token>, x-api-version 1.0.0, app User-Agent", "Token and raw body never written to cache or logs"],
+    "tasks": ["T-006", "T-007"],
+    "spec_ref": "SDD §8"
+  },
+  {
+    "name": "session.jsonl usage line (counted)",
+    "kind": "file",
+    "method": "READ",
+    "path": "~/.local/share/muse/sessions/YYYY/MM/DD/<uuid>/session.jsonl",
+    "request": { "recorded_at": 1791829038220676, "payload": { "event": { "kind": "model_completed", "model": "muse-wonder-full-1.0", "usage": { "input_tokens": 52304, "output_tokens": 465, "cached_tokens": 48116, "cache_read_tokens": 48116, "cache_write_tokens": 0, "reasoning_tokens": 17 } } } },
+    "responses": [
+      {
+        "status": 200,
+        "body": "ModelUsage { inputTokens: 4188, cacheReadTokens: 48116, cacheCreateTokens: 0, outputTokens: 465 } — input minus cache read; reasoning stays inside output",
+        "note": "Values from the measured 2026-10-12 series (SDD §2.1)"
+      }
+    ],
+    "notes": ["recorded_at is Int64 microseconds", "resource_usage_sampled / goal_usage_attribution / record.quantity lines never count"],
+    "tasks": ["T-003"],
+    "spec_ref": "SDD §9"
+  },
+  {
+    "name": "config [meta] section",
+    "kind": "config",
+    "method": "TOML",
+    "path": "~/Library/Application Support/ai-taskbar/config.toml",
+    "request": { "enabled": false, "sessions_dir": null, "auth_path": null },
+    "responses": [
+      { "status": 200, "body": "MetaConfig { enabled: false, sessionsDir: nil, authPath: nil }", "note": "Disabled by default; no api_key/base_url fields exist" }
+    ],
+    "notes": ["sessions_dir overrides MUSE_SESSIONS_DIR; auth_path overrides MUSE_AUTH_PATH"],
+    "tasks": ["T-002"],
+    "spec_ref": "SDD §6"
+  }
+]
