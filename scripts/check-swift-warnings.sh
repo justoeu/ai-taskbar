@@ -8,7 +8,7 @@ test -f "$log"
 warnings=$(awk '/^(warning:|[^[:space:]|].*: warning:)/ { print }' "$log" | sort -u)
 # Only deprecations of the unavoidable classic Keychain API are tolerated,
 # both in its implementation and in the isolated-keychain test fixtures.
-legacy='(Sources/AiTaskbarCore/Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor)|Tests/AiTaskbarCoreTests/(KeychainAccessAuthorizerTests|KeychainCredentialReaderTests|TemporaryKeychain))\.swift:[0-9]+:[0-9]+: warning:.*was deprecated'
+legacy='(Sources/AiTaskbarCore/Credentials/(KeychainAccessAuthorizer|KeychainCredentialReader|KeychainPromptSuppressor|MetaCredentialReader)|Tests/AiTaskbarCoreTests/(KeychainAccessAuthorizerTests|KeychainCredentialReaderTests|TemporaryKeychain))\.swift:[0-9]+:[0-9]+: warning:.*was deprecated'
 unexpected=$(printf '%s\n' "$warnings" | grep -vE "$legacy|^$" || true)
 count=$(printf '%s\n' "$unexpected" | grep -c . || true)
 if [ "${2:-}" = --count ]; then
