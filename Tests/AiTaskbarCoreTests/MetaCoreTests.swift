@@ -10,6 +10,7 @@ struct MetaVendorModelTests {
         #expect(VendorId.meta.displayName == "Muse (Meta)")
         #expect(VendorId.meta.symbolName == "m.square")
         #expect(VendorId.meta.dashboardURL?.absoluteString == "https://dev.meta.ai")
+        #expect(VendorId.meta.statusPageURL?.absoluteString == "https://metastatus.com")
         #expect(VendorId.meta.reloginCommand == "muse login")
         expectTrue(VendorId.meta.reportsUtilization)
         expectFalse(VendorId.meta.isPrepaidOnly)

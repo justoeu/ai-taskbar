@@ -190,17 +190,33 @@ struct MetaProviderTests {
         #expect(StubURLProtocol.captured.isEmpty)
     }
 
-    @Test("blocked Keychain is guidance and never reaches the network")
+    @Test("blocked Keychain surfaces the ACL affordance shape, no network")
     func fetch_blocked_keychain() async {
         StubURLProtocol.handler = { _ in .init(data: Data()) }
         do {
             _ = try await provider(resolution: .keychainBlocked).fetchUsage(forceRefresh: true)
-            Issue.record("expected guidance")
+            Issue.record("expected ACL-blocked credentials error")
         } catch let e as AppError {
-            #expect(e == .guidance(.museKeychainBlocked))
+            expectTrue(e.isKeychainACLBlocked)
         } catch {
             Issue.record("expected AppError, got \(error)")
         }
         #expect(StubURLProtocol.captured.isEmpty)
+    }
+
+    @Test("authorize delegates to the credential reader")
+    func authorize_delegates() throws {
+        final class Fake: MetaCredentialReading, @unchecked Sendable {
+            var calls = 0
+            func resolve() -> MetaLoginResolution { .missing }
+            func hasLogin() -> Bool { false }
+            func authorizePersistently() throws -> Bool { calls += 1; return true }
+        }
+        let fake = Fake()
+        let p = MetaProvider(credentials: fake,
+                             cache: DiskCache(vendor: .meta, baseDir: tmpCacheDir),
+                             http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]))
+        expectTrue(try p.authorizeCredentialsInteractively())
+        #expect(fake.calls == 1)
     }
 }

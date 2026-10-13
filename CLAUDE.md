@@ -422,11 +422,13 @@ same steps and counting them doubles every total. Meta publishes no
 prices, so its models stay unpriced (no `PricingTable` entry) and the
 scanner reports tokens with USD 0. Quota lives elsewhere: `MetaProvider`
 reads subscription windows from `POST api.meta.ai/muse-code/key` with the
-Muse CLI's device-code (`dca:`) login token — read-only and prompt-free
-via `MetaCredentialReader`, decode by allow-list (the minted key and
+Muse CLI's device-code (`dca:`) login token — read-only via
+`MetaCredentialReader` (scheduled reads prompt-free; the single prompt is
+the user-clicked Authorize affordance over `KeychainAccessAuthorizer`,
+like Anthropic), decode by allow-list (the minted key and
 payment metadata are never decoded or cached); API keys and
 `META_API_KEY` get 401 there and are never consulted. See
-`docs/SDD-meta-muse.md`.
+`docs/SDD-meta-muse.md` (§18 field addendum).
 
 Both were established against real data, not documentation, and both are pinned
 by tests that fail if the other reading is applied. `CodexSessionScanner` also

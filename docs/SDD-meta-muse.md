@@ -489,3 +489,21 @@ zero). Nenhum código foi copiado — a implementação segue os padrões da cas
 
 
 
+
+## 18. Adendo de campo (2026-10-12, primeiro teste local)
+
+Duas decisões revistas com evidência da máquina real, sem mudar o contrato:
+
+1. **Authorize interativo (revoga "sem prompt nesta fase" de §3.2/§7.3).**
+   O item `ai.meta.dev.credentials` recusa esta assinatura por ACL, por
+   isso sem autorização a quota nunca lê. `MetaProvider` passa a expor
+   `authorizeCredentialsInteractively()` sobre
+   `KeychainAccessAuthorizer.authorize` (mesmo caminho do Anthropic: só a
+   partir do botão Authorize, leitura silenciosa exigida depois, dados
+   descartados). O erro bloqueado usa a forma `AppError.credentials` com
+   o nome do OSStatus para a affordance existente renderizar. Leituras
+   agendadas continuam prompt-free e read-only.
+2. **Página de status (revoga §3.2 "sem página conhecida").** Existe
+   página oficial: `https://metastatus.com` ("Status and outages of Meta
+   business products"). Sem feed machine-readable verificado, entra como
+   link-only (`statusPageURL` + cobertura `.linkOnly`), como Gemini/Z.AI.

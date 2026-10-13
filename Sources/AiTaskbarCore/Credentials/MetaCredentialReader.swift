@@ -50,6 +50,9 @@ public protocol MetaCredentialReading: Sendable {
     func hasLogin() -> Bool
     /// Three-way state for Settings (detected / blocked / missing).
     func detection() -> MetaLoginDetection
+    /// User-initiated durable Keychain authorization (Authorize button
+    /// only, never scheduled). False means the user canceled.
+    func authorizePersistently() throws -> Bool
 }
 
 public extension MetaCredentialReading {
@@ -61,6 +64,8 @@ public extension MetaCredentialReading {
         case .missing: return .missing
         }
     }
+
+    func authorizePersistently() throws -> Bool { false }
 }
 
 /// Reads the Muse Code CLI's device-code login, shared read-only.
@@ -83,6 +88,7 @@ public struct MetaCredentialReader: MetaCredentialReading {
     public let authFileURL: URL
     private let keychainRead: @Sendable () -> MetaKeychainRead
     private let keychainProbe: (@Sendable () -> MetaKeychainProbe)?
+    private let authorizer: @Sendable () throws -> Bool
 
     /// Test/init seam: explicit auth file and Keychain behavior. When no
     /// probe is given, presence derives from the read result (tests only:
@@ -90,10 +96,24 @@ public struct MetaCredentialReader: MetaCredentialReading {
     /// detection never requests the secret).
     public init(authFileURL: URL,
                 keychainRead: @escaping @Sendable () -> MetaKeychainRead,
-                keychainProbe: (@Sendable () -> MetaKeychainProbe)? = nil) {
+                keychainProbe: (@Sendable () -> MetaKeychainProbe)? = nil,
+                authorizer: @escaping @Sendable () throws -> Bool = {
+                    try KeychainAccessAuthorizer.authorize(
+                        service: MetaCredentialReader.keychainService,
+                        account: MetaCredentialReader.keychainAccount) == .authorized
+                }) {
         self.authFileURL = authFileURL
         self.keychainRead = keychainRead
         self.keychainProbe = keychainProbe
+        self.authorizer = authorizer
+    }
+
+    /// The one intentional interactive prompt, behind the Authorize
+    /// button only: securityd extends the item ACL to this signing
+    /// identity, then a silent read of the same item must succeed
+    /// (`KeychainAccessAuthorizer` contract). Data read is discarded.
+    public func authorizePersistently() throws -> Bool {
+        try authorizer()
     }
 
     /// Production reader: resolves the auth file from config/env/default

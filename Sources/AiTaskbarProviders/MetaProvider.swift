@@ -64,7 +64,11 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
                     // re-login affordance.
                     throw AppError.guidance(.museLoginRequired)
                 case .keychainBlocked:
-                    throw AppError.guidance(.museKeychainBlocked)
+                    // Credentials shape (not guidance) so the card shows
+                    // the Authorize affordance: `isKeychainACLBlocked`
+                    // keys on the OSStatus name, like Anthropic's reader.
+                    throw AppError.credentials(
+                        "Muse keychain read denied (errSecInteractionNotAllowed)")
                 case .unavailable(let detail):
                     throw AppError.credentials("Muse login unavailable: \(detail)")
                 }
@@ -95,6 +99,14 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
                 return try SharedCoders.encoder.encode(snapshot)
             }
         )
+    }
+
+    /// Invoked only from the explicit Authorize button. Grants this
+    /// signing identity durable access to the CLI's Keychain item, then
+    /// the authorizer verifies a silent read. Cancel returns false.
+    @discardableResult
+    public func authorizeCredentialsInteractively() throws -> Bool {
+        try credentials.authorizePersistently()
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {

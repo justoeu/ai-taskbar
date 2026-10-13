@@ -316,7 +316,7 @@ Muse is Meta's model family behind the Muse Code CLI (`muse`). The card is **off
 - **What the card shows:** your plan and the subscription windows (session + weekly, with reset countdowns) read from Meta with the CLI's own login token, plus today's / last 7 days' tokens per model from the CLI session logs on this Mac (`~/.local/share/muse/sessions`). Pay-as-you-go accounts show "No subscription" instead of an invented 0% bar.
 - **No API key works here:** dashboard keys and `META_API_KEY` cannot read subscription quota, so there is no key field. The login token is read only to fetch the windows, is never stored or logged, and is never refreshed by the app — the CLI owns it. If the Keychain refuses access, the card degrades to the local token history with a note; it never pops a password prompt.
 - **No dollars:** Meta publishes no per-token prices, so tokens are shown without a $ estimate rather than a made-up one.
-- **Status:** Meta publishes no official status feed we could verify, so the status row stays "unknown" instead of pointing at a made-up page.
+- **Status:** the row links to Meta's official [metastatus.com](https://metastatus.com); it exposes no machine-readable feed we could verify, so live incident state stays "unknown" (link-only, like Gemini) rather than scraped.
 
 ### Google Gemini — Antigravity CLI monitoring & heartbeat
 
@@ -366,6 +366,7 @@ AI Taskbar features an integrated **Service Status & Health Dashboard** that mon
 | **OpenRouter** | [status.openrouter.ai](https://status.openrouter.ai) | RSS Status Source |
 | **Jev (TypeSafe)** | [status.typesafe.ai](https://status.typesafe.ai) | RSS Status Source (one item per update, merged per incident) |
 | **Z.AI** | *(None)* | Unmonitored (no public status page) |
+| **Muse (Meta)** | [metastatus.com](https://metastatus.com) | Official Status Page (link only — no machine-readable feed wired yet) |
 
 Clicking any row in the status window opens the provider's official status page directly in your browser.
 
