@@ -60,6 +60,23 @@ struct MetaCredentialReaderTests {
         #expect(missing.detection() == .missing)
     }
 
+    @Test("detection prefers the attribute probe and never reads the secret")
+    func detection_uses_probe_not_read() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("meta-cred-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // If detection() consulted the data read it would see a token and
+        // answer .detected; the probe says blocked and must win (P-9).
+        let r = MetaCredentialReader(
+            authFileURL: dir.appendingPathComponent("auth.json"),
+            keychainRead: { .found(Data(#"{"access_token":"dca:must-not-be-read"}"#.utf8)) },
+            keychainProbe: { .blocked })
+        #expect(r.detection() == .keychainBlocked)
+        expectTrue(r.hasLogin())
+        // resolve() is the only path allowed to read the payload.
+        #expect(r.resolve() == .token("dca:must-not-be-read"))
+    }
+
     @Test("no auth file and blocked Keychain degrades, never prompts")
     func blocked_degrades() throws {
         let r = try reader(authJSON: nil, keychain: { .blocked })

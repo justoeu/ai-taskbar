@@ -27,8 +27,21 @@ public enum MetaKeychainRead: Equatable, Sendable {
 /// Settings-facing login state: no token ever crosses this boundary.
 public enum MetaLoginDetection: Equatable, Sendable {
     case detected
+    /// Only the ACL statuses (-25308/-25293) earn this case (SDD §7.2).
     case keychainBlocked
     case missing
+    /// Any other Keychain failure: access is unavailable, but calling it
+    /// "blocked" or "missing" would both be guesses.
+    case unavailable
+}
+
+/// Attribute-only Keychain probe result: presence and ACL state without
+/// ever requesting the secret payload (SDD §7.2).
+public enum MetaKeychainProbe: Equatable, Sendable {
+    case present
+    case blocked
+    case missing
+    case failed(OSStatus)
 }
 
 public protocol MetaCredentialReading: Sendable {
@@ -43,7 +56,8 @@ public extension MetaCredentialReading {
     func detection() -> MetaLoginDetection {
         switch resolve() {
         case .token: return .detected
-        case .keychainBlocked, .unavailable: return .keychainBlocked
+        case .keychainBlocked: return .keychainBlocked
+        case .unavailable: return .unavailable
         case .missing: return .missing
         }
     }
@@ -68,13 +82,15 @@ public struct MetaCredentialReader: MetaCredentialReading {
 
     public let authFileURL: URL
     private let keychainRead: @Sendable () -> MetaKeychainRead
-    private let keychainProbe: (@Sendable () -> Bool)?
+    private let keychainProbe: (@Sendable () -> MetaKeychainProbe)?
 
     /// Test/init seam: explicit auth file and Keychain behavior. When no
-    /// probe is given, presence derives from the read result.
+    /// probe is given, presence derives from the read result (tests only:
+    /// production always injects the attribute-only probe, so Settings
+    /// detection never requests the secret).
     public init(authFileURL: URL,
                 keychainRead: @escaping @Sendable () -> MetaKeychainRead,
-                keychainProbe: (@Sendable () -> Bool)? = nil) {
+                keychainProbe: (@Sendable () -> MetaKeychainProbe)? = nil) {
         self.authFileURL = authFileURL
         self.keychainRead = keychainRead
         self.keychainProbe = keychainProbe
@@ -89,7 +105,7 @@ public struct MetaCredentialReader: MetaCredentialReading {
             authFileURL: Self.authFileURL(configPath: configPath,
                                           environment: environment, home: home),
             keychainRead: { Self.readKeychain() },
-            keychainProbe: { Self.keychainItemPresent() })
+            keychainProbe: { Self.probeKeychain() })
     }
 
     public init(config: MetaConfig) {
@@ -129,18 +145,34 @@ public struct MetaCredentialReader: MetaCredentialReading {
 
     public func hasLogin() -> Bool {
         if authFileRecord() != nil { return true }
-        if let keychainProbe { return keychainProbe() }
+        if let keychainProbe {
+            switch keychainProbe() {
+            case .present, .blocked: return true
+            case .missing, .failed: return false
+            }
+        }
         return keychainRead() != .missing
     }
 
-    /// Classifies without handing the token to the caller: the payload is
-    /// read only to tell "blocked" from "present", and discarded here.
+    /// Three-way Settings state from the attribute-only probe: the secret
+    /// payload is never requested on this path (SDD §7.2). Only readers
+    /// built without a probe (tests) fall back to classifying the read
+    /// result, discarding any payload unread.
     public func detection() -> MetaLoginDetection {
         if authFileRecord() != nil { return .detected }
+        if let keychainProbe {
+            switch keychainProbe() {
+            case .present: return .detected
+            case .blocked: return .keychainBlocked
+            case .missing: return .missing
+            case .failed: return .unavailable
+            }
+        }
         switch keychainRead() {
         case .found: return .detected
-        case .blocked, .failed: return .keychainBlocked
+        case .blocked: return .keychainBlocked
         case .missing: return .missing
+        case .failed: return .unavailable
         }
     }
 
@@ -234,16 +266,26 @@ public struct MetaCredentialReader: MetaCredentialReading {
 
     /// Presence by attributes only — never requests the secret. An
     /// ACL-blocked item still proves a login exists.
-    static func keychainItemPresent() -> Bool {
+    /// Attribute-only probe: distinguishes present / ACL-blocked / missing
+    /// from the query status alone. The secret payload is never requested
+    /// (`kSecReturnData` stays unset), so Settings detection can run with
+    /// Meta disabled without touching the credential (SDD §7.2).
+    static func probeKeychain() -> MetaKeychainProbe {
         KeychainPromptSuppressor.withPromptsSuppressed {
             var query = baseQuery()
             query[kSecReturnAttributes as String] = true
             query[kSecMatchLimit as String] = kSecMatchLimitOne
             var item: CFTypeRef?
             let status = SecItemCopyMatching(query as CFDictionary, &item)
-            if status == errSecItemNotFound { return false }
-            return status == errSecSuccess
-                || KeychainCredentialReader.isACLBlockedStatus(status)
+            switch status {
+            case errSecSuccess:
+                return .present
+            case errSecItemNotFound:
+                return .missing
+            default:
+                return KeychainCredentialReader.isACLBlockedStatus(status)
+                    ? .blocked : .failed(status)
+            }
         }
     }
 }

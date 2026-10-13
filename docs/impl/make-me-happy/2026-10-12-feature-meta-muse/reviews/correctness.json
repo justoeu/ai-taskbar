@@ -1,44 +1,47 @@
 {
   "axis": "correctness",
-  "verdict": "REJECT",
-  "round": 1,
-  "summary": "All 12 DONE tasks are genuinely implemented in the diff, code tasks T-001..T-010 carry real non-vacuous tests (34 new @Tests + 3 Settings diff rows + a validate section, verified in the test files), immutability goldens for the scanner (T-003) and mint wire type (T-006) are present and field-by-field, slices stayed disjoint, and coverage.json shows 93.17% >= the 90 floor with make validate green (1392 tests, 484 assertions). Rejected on bookkeeping truthfulness only: T-012 (docs) and T-011 (i18n) claim tests_added=1 and red_green=true, but no such tests were added (T-011 parity rests on the pre-existing ratchet), and all 12 red excerpts are identical boilerplate rather than captured evidence. No product-code change is required.",
+  "verdict": "APPROVE",
+  "round": 2,
+  "summary": "Round 2: C-1/C-2/C-3 fixed. T-011/T-012 now carry real reversal-verified tests in Tests/AiTaskbarAppTests/MetaLocalizationDocsTests.swift (commit 25afe2b): meta_keys_everywhere checks 17 keys x en/pt-BR/es via LocalizableStrings.defines (with negative-control helper test); docs_present pins README row/section/[meta] plus the AGENTS MuseSessionScanner row. Base cab15ce lacks the keys/markers (verified 0), so reversal-red is sound; 17/17/17 keys present at HEAD. TASKS.json red/green excerpts are now per-task factual. T-009 rotating/pin behaviour gained rotating_skips_windowless; only the literal shortLabel 'MUSE' still lacks a direct test (low, C-4, non-blocking). Immutability goldens (T-003 scanner, T-006 mint) present; coverage.json 93.21 >= floor 90; tests.json ok, 1400 passed, 487 runtime assertions.",
   "findings": [
     {
       "id": "C-1",
       "severity": "high",
       "title": "T-012 claims a red-green test that does not exist",
-      "description": "T-012 (README + AGENTS.md scanner row) records tests_added=1 and red_green=true, but no test was added for it anywhere in Tests/ or AiTaskbarValidate; the docs changes themselves are present and correct in the diff. Per the axis rule a DONE task without a real test is a REJECT; fix by correcting the bookkeeping (tests_added=0, red_green=false, note diff-verified) or adding a real check.",
+      "description": "T-012 (README + AGENTS.md scanner row) records tests_added=1 and red_green=true, but no test was added for it anywhere in Tests/ or AiTaskbarValidate; the docs changes themselves are present and correct in the diff. Per the axis rule a DONE task without a real test is a REJECT; fix by correcting the bookkeeping (tests_added=0, red_green=false, note diff-verified) or adding a real check. | ROUND 2 fixed: docs_present (MetaLocalizationDocsTests.swift:32) asserts README | **Muse (Meta)** | / ### Meta (Muse) / [meta] enabled=false and AGENTS MuseSessionScanner row + SDD ref; reversal premise verified (cab15ce README has 0 Muse markers).",
       "file": "docs/impl/make-me-happy/2026-10-12-feature-meta-muse/TASKS.json",
       "line": 296,
-      "status": "open",
-      "round": 1
+      "status": "fixed",
+      "round": 1,
+      "fixed_in_round": 2
     },
     {
       "id": "C-2",
       "severity": "high",
       "title": "T-011 claims 1 added test; enforcement is the pre-existing ratchet",
-      "description": "T-011 (Localizable en/pt-BR/es) records tests_added=1, red_green=true. The 11 meta_* / settings_meta_* keys are present in all three locales, but no test referencing them was added; key/specifier parity is checked only by the pre-existing scripts/check-source-ratchets.sh (section 3) inside make validate. That gate is real but was not added by this task, so the claim overstates the evidence.",
+      "description": "T-011 (Localizable en/pt-BR/es) records tests_added=1, red_green=true. The 11 meta_* / settings_meta_* keys are present in all three locales, but no test referencing them was added; key/specifier parity is checked only by the pre-existing scripts/check-source-ratchets.sh (section 3) inside make validate. That gate is real but was not added by this task, so the claim overstates the evidence. | ROUND 2 fixed: meta_keys_everywhere (MetaLocalizationDocsTests.swift:21) asserts 17 meta keys defined in en/pt-BR/es; verified 17/17/17 at HEAD, 0 at base. tasks_added=1 now matches one real @Test.",
       "file": "docs/impl/make-me-happy/2026-10-12-feature-meta-muse/TASKS.json",
       "line": 268,
-      "status": "open",
-      "round": 1
+      "status": "fixed",
+      "round": 1,
+      "fixed_in_round": 2
     },
     {
       "id": "C-3",
       "severity": "medium",
       "title": "Red evidence is identical boilerplate for all 12 tasks",
-      "description": "Every task's red.output_excerpt is the same string ('compile errors: cannot find type/symbol (exit 1)') and green likewise. For T-001..T-008 a compile-fail red is plausible and the green tests are verified real, but the excerpts are clearly templated rather than captured per task, and cannot be genuine for T-011/T-012 (strings/docs do not fail compilation). Red-green discipline for the code tasks is credible; the recorded evidence is not.",
+      "description": "Every task's red.output_excerpt is the same string ('compile errors: cannot find type/symbol (exit 1)') and green likewise. For T-001..T-008 a compile-fail red is plausible and the green tests are verified real, but the excerpts are clearly templated rather than captured per task, and cannot be genuine for T-011/T-012 (strings/docs do not fail compilation). Red-green discipline for the code tasks is credible; the recorded evidence is not. | ROUND 2 fixed: TASKS.json excerpts rewritten per-task (slice RED runs, named symbols, reversal notes for T-011/T-012); no longer identical boilerplate.",
       "file": "docs/impl/make-me-happy/2026-10-12-feature-meta-muse/TASKS.json",
       "line": 21,
-      "status": "open",
-      "round": 1
+      "status": "fixed",
+      "round": 1,
+      "fixed_in_round": 2
     },
     {
       "id": "C-4",
       "severity": "low",
-      "title": "T-009 shortLabel and pin-without-percent have no direct test; T-004 count overlaps MetaCardTests",
-      "description": "MenuBarLabelView shortLabel .meta -> 'MUSE' (MenuBarLabelView.swift:103) and pinned-badge-without-percent behaviour are implemented but no test names them (grep of Tests/ for shortLabel is empty); card gates are covered by payg_renders/idle_renders in MetaCardTests. T-004's tests_added=3 appears to count the same MetaCardTests that T-009 draws on, so per-task attribution is fuzzy though the underlying asserts exist. UI remainder is smoke-launch territory per repo policy; noted, not blocking on its own.",
+      "title": "shortLabel 'MUSE' literal still has no direct test (rotating behaviour now covered)",
+      "description": "MenuBarLabelView shortLabel .meta -> 'MUSE' (MenuBarLabelView.swift:103) and pinned-badge-without-percent behaviour are implemented but no test names them (grep of Tests/ for shortLabel is empty); card gates are covered by payg_renders/idle_renders in MetaCardTests. T-004's tests_added=3 appears to count the same MetaCardTests that T-009 draws on, so per-task attribution is fuzzy though the underlying asserts exist. UI remainder is smoke-launch territory per repo policy; noted, not blocking on its own. | ROUND 2 partially fixed: MetaCardTests.rotating_skips_windowless (MetaCardTests.swift:26) directly tests MenuBarLabelView.isRotatingCandidate for window-less Meta; only shortLabel(for:.meta)==\"MUSE\" remains un-named by any test. Low/UI smoke territory, non-blocking.",
       "file": "Sources/AiTaskbarApp/Views/MenuBarLabelView.swift",
       "line": 103,
       "status": "open",
@@ -87,6 +90,57 @@
           "severity": "low",
           "title": "T-009 shortLabel and pin-without-percent have no direct test; T-004 count overlaps MetaCardTests",
           "description": "MenuBarLabelView shortLabel .meta -> 'MUSE' (MenuBarLabelView.swift:103) and pinned-badge-without-percent behaviour are implemented but no test names them (grep of Tests/ for shortLabel is empty); card gates are covered by payg_renders/idle_renders in MetaCardTests. T-004's tests_added=3 appears to count the same MetaCardTests that T-009 draws on, so per-task attribution is fuzzy though the underlying asserts exist. UI remainder is smoke-launch territory per repo policy; noted, not blocking on its own.",
+          "file": "Sources/AiTaskbarApp/Views/MenuBarLabelView.swift",
+          "line": 103,
+          "status": "open",
+          "round": 1
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "verdict": "APPROVE",
+      "at": "2026-10-13T01:41:45Z",
+      "summary": "C-1, C-2, C-3 fixed with real reversal-verified tests and factual bookkeeping; C-4 narrowed to the shortLabel literal (low, non-blocking). Coverage 93.21>=90, 1400 tests green.",
+      "findings": [
+        {
+          "id": "C-1",
+          "severity": "high",
+          "title": "T-012 claims a red-green test that does not exist",
+          "description": "T-012 (README + AGENTS.md scanner row) records tests_added=1 and red_green=true, but no test was added for it anywhere in Tests/ or AiTaskbarValidate; the docs changes themselves are present and correct in the diff. Per the axis rule a DONE task without a real test is a REJECT; fix by correcting the bookkeeping (tests_added=0, red_green=false, note diff-verified) or adding a real check. | ROUND 2 fixed: docs_present (MetaLocalizationDocsTests.swift:32) asserts README | **Muse (Meta)** | / ### Meta (Muse) / [meta] enabled=false and AGENTS MuseSessionScanner row + SDD ref; reversal premise verified (cab15ce README has 0 Muse markers).",
+          "file": "docs/impl/make-me-happy/2026-10-12-feature-meta-muse/TASKS.json",
+          "line": 296,
+          "status": "fixed",
+          "round": 1,
+          "fixed_in_round": 2
+        },
+        {
+          "id": "C-2",
+          "severity": "high",
+          "title": "T-011 claims 1 added test; enforcement is the pre-existing ratchet",
+          "description": "T-011 (Localizable en/pt-BR/es) records tests_added=1, red_green=true. The 11 meta_* / settings_meta_* keys are present in all three locales, but no test referencing them was added; key/specifier parity is checked only by the pre-existing scripts/check-source-ratchets.sh (section 3) inside make validate. That gate is real but was not added by this task, so the claim overstates the evidence. | ROUND 2 fixed: meta_keys_everywhere (MetaLocalizationDocsTests.swift:21) asserts 17 meta keys defined in en/pt-BR/es; verified 17/17/17 at HEAD, 0 at base. tasks_added=1 now matches one real @Test.",
+          "file": "docs/impl/make-me-happy/2026-10-12-feature-meta-muse/TASKS.json",
+          "line": 268,
+          "status": "fixed",
+          "round": 1,
+          "fixed_in_round": 2
+        },
+        {
+          "id": "C-3",
+          "severity": "medium",
+          "title": "Red evidence is identical boilerplate for all 12 tasks",
+          "description": "Every task's red.output_excerpt is the same string ('compile errors: cannot find type/symbol (exit 1)') and green likewise. For T-001..T-008 a compile-fail red is plausible and the green tests are verified real, but the excerpts are clearly templated rather than captured per task, and cannot be genuine for T-011/T-012 (strings/docs do not fail compilation). Red-green discipline for the code tasks is credible; the recorded evidence is not. | ROUND 2 fixed: TASKS.json excerpts rewritten per-task (slice RED runs, named symbols, reversal notes for T-011/T-012); no longer identical boilerplate.",
+          "file": "docs/impl/make-me-happy/2026-10-12-feature-meta-muse/TASKS.json",
+          "line": 21,
+          "status": "fixed",
+          "round": 1,
+          "fixed_in_round": 2
+        },
+        {
+          "id": "C-4",
+          "severity": "low",
+          "title": "shortLabel 'MUSE' literal still has no direct test (rotating behaviour now covered)",
+          "description": "MenuBarLabelView shortLabel .meta -> 'MUSE' (MenuBarLabelView.swift:103) and pinned-badge-without-percent behaviour are implemented but no test names them (grep of Tests/ for shortLabel is empty); card gates are covered by payg_renders/idle_renders in MetaCardTests. T-004's tests_added=3 appears to count the same MetaCardTests that T-009 draws on, so per-task attribution is fuzzy though the underlying asserts exist. UI remainder is smoke-launch territory per repo policy; noted, not blocking on its own. | ROUND 2 partially fixed: MetaCardTests.rotating_skips_windowless (MetaCardTests.swift:26) directly tests MenuBarLabelView.isRotatingCandidate for window-less Meta; only shortLabel(for:.meta)==\"MUSE\" remains un-named by any test. Low/UI smoke territory, non-blocking.",
           "file": "Sources/AiTaskbarApp/Views/MenuBarLabelView.swift",
           "line": 103,
           "status": "open",

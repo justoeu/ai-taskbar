@@ -796,7 +796,7 @@ public struct SettingsView: View {
     private var metaDetectionKey: String {
         switch metaDetection {
         case .detected: return "settings_meta_login_detected"
-        case .keychainBlocked: return "settings_meta_login_blocked"
+        case .keychainBlocked, .unavailable: return "settings_meta_login_blocked"
         case .missing: return "settings_meta_login_missing"
         }
     }
