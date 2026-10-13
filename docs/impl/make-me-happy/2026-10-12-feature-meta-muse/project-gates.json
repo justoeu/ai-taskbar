@@ -1,0 +1,6 @@
+{ "gates": [
+  {"name": "make validate (build, 487 runtime assertions, 1401 tests + coverage floor 90, app bundle, smoke, permission audit, ratchets, warnings)", "source": "AGENTS.md Validation policy", "status": "DONE", "evidence": "All validations passed on merged tree 2026-10-12; coverage 93.12%"},
+  {"name": "N+1 audit (backend/frontend)", "source": "nplus1-check skill", "status": "DONE", "evidence": "docs/audits/n-plus-1.md — no HIGH; 1 MEDIUM fixed (Settings probe cached)"},
+  {"name": "PR review pipeline: /code-review + /security-review + Swift-best-practices agent + Performance/CVE agent", "source": "AGENTS.md PR review pipeline", "status": "OPEN", "evidence": "Runs when the PR is opened; branch feature/meta-muse not yet pushed. MMH 3-axis review (standards/spec/correctness, 3x APPROVE) does not substitute it."},
+  {"name": "CLAUDE.md mirror of AGENTS.md", "source": "validate.sh doc-mirror check", "status": "DONE", "evidence": "cmp identical; validate step 7 green"}
+]}

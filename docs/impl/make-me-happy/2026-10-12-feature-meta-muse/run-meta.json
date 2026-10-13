@@ -8,7 +8,7 @@
   "spec": "docs/SDD-meta-muse.md",
   "spec_status": "confirmed",
   "coverage_floor": 90,
-  "status": "in_progress",
+  "status": "closed",
   "test_cmd": "make test",
   "project_gate": "make validate"
 }
