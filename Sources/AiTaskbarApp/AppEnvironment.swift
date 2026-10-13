@@ -202,7 +202,26 @@ public final class AppEnvironment {
                 AppLog.lifecycle.error("typesafe init failed: \(String(describing: error), privacy: .public)")
             }
         }
+        if config.meta.enabled {
+            do {
+                let p = try MetaProvider(config: config.meta, http: http, cacheTTL: ttl)
+                out.append(p)
+            } catch {
+                AppLog.lifecycle.error("meta init failed: \(String(describing: error), privacy: .public)")
+            }
+        }
         return out
+    }
+
+    /// The `[meta] sessions_dir` override as a URL for `CostEstimator`;
+    /// nil means the scanner resolves env/default itself
+    /// (`docs/SDD-meta-muse.md` §6/§9).
+    public nonisolated static func museSessionsDir(for config: MetaConfig) -> URL? {
+        guard let raw = config.sessionsDir?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
     }
 
     /// Enabled status rows come from config flags rather than successful
@@ -219,6 +238,7 @@ public final class AppEnvironment {
         if config.deepseek.enabled { ids.append(.deepseek) }
         if config.xai.enabled { ids.append(.xai) }
         if config.typesafe.enabled { ids.append(.typesafe) }
+        if config.meta.enabled { ids.append(.meta) }
         return ids
     }
 
