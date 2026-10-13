@@ -4,14 +4,14 @@ import Foundation
 /// 2026-09-05; intentionally conservative when a model isn't listed. Update as
 /// new models ship.
 ///
-/// Only `anthropic` and `openai` are defined here — they are the **only** two
-/// tables consulted at runtime (`ClaudeSessionScanner`, `CodexSessionScanner`,
-/// and the legacy `CodexLogScanner` compute cost locally from on-disk CLI
-/// logs). Gemini, Kimi, OpenRouter, and
-/// Z.AI all surface usage/cost/balance straight from each vendor's own API, so
-/// they never touch this table. Don't add a vendor table here unless a local
-/// log scanner actually prices against it — otherwise it's dead code that rots
-/// out of date and misleads (see git history: stale `gemini`/`kimi` tables).
+/// The runtime-consulted tables are the ones a local log scanner prices
+/// against (`ClaudeSessionScanner`, `CodexSessionScanner`, the legacy
+/// `CodexLogScanner`, and `MuseSessionScanner`). Gemini, Kimi, OpenRouter,
+/// and Z.AI all surface usage/cost/balance straight from each vendor's own
+/// API, so they never touch this table. Don't add a vendor table here unless
+/// a local log scanner actually prices against it — otherwise it's dead code
+/// that rots out of date and misleads (see git history: stale `gemini`/`kimi`
+/// tables).
 public struct ModelPricing: Sendable, Equatable {
     public let inputPer1M: Double
     public let outputPer1M: Double
@@ -279,6 +279,25 @@ public enum PricingTable {
         "moonshot-v1":        ModelPricing(input: 1.65, output: 1.65, cacheRead: 0.15),
     ]
 
+    /// Meta — Muse family. Consumed by `MuseSessionScanner`.
+    /// Published Meta Model API rates as of the 2026-10-12 launch
+    /// (multiple launch reports agree; dev.meta.ai serves no static
+    /// pricing page to diff against). Cache-write has no published rate,
+    /// so it falls back to the input price.
+    public static let meta: [String: ModelPricing] = [
+        "muse-wonder-1.0": ModelPricing(input: 4, output: 20, cacheRead: 0.20),
+        // Wonder Full has NO public per-token rate (Muse Code subscription
+        // tiers only). Estimated at the published Wonder rate, the
+        // `codex-auto-review` precedent: a missing key would price the
+        // user's main subscription model at $0.
+        "muse-wonder-full-1.0": ModelPricing(input: 4, output: 20, cacheRead: 0.20),
+        "muse-spark-1.3":  ModelPricing(input: 1.25, output: 4.25, cacheRead: 0.15),
+        "muse-spark-1.2":  ModelPricing(input: 1.25, output: 4.25, cacheRead: 0.15),
+        // `muse-image-1.0` deliberately absent: no published token rate,
+        // so its turns stay visible but unpriced. `-contributor` variants
+        // resolve to their base model by longest-prefix.
+    ]
+
     public static func table(for vendor: VendorId) -> [String: ModelPricing] {
         switch vendor {
         case .anthropic:  return PricingTable.anthropic
@@ -287,6 +306,7 @@ public enum PricingTable {
         case .gemini:     return PricingTable.gemini
         case .zai:        return PricingTable.zai
         case .kimi:       return PricingTable.kimi
+        case .meta:       return PricingTable.meta
         default:          return [:]
         }
     }

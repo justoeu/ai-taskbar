@@ -87,7 +87,7 @@ struct MuseSessionScannerTests {
         #expect(today["unknown"]?.cacheReadTokens == 400)
     }
 
-    @Test("estimate over a temp sessions tree is unpriced with zero USD")
+    @Test("estimate over a temp sessions tree prices at published API rates")
     func estimate_end_to_end() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("muse-scan-\(UUID().uuidString)")
@@ -101,12 +101,12 @@ struct MuseSessionScannerTests {
                                 atomically: true, encoding: .utf8)
         let est = MuseSessionScanner.estimate(now: Self.now, sessionsDir: root, memo: ScanMemo())
         #expect(est.totalsByModel["muse-wonder-full-1.0"]?.totalTokens == 1100)
-        #expect(est.usdToday == 0)
-        #expect(est.usdLast7Days == 0)
-        expectTrue(est.unpricedModelsLast7Days.contains("muse-wonder-full-1.0"))
-        // Zero-dollar breakdown rows keep the card footer visible (P-1).
-        #expect(est.modelBreakdownToday["muse-wonder-full-1.0"] == 0)
-        #expect(est.modelBreakdownLast7Days["muse-wonder-full-1.0"] == 0)
+        // 750 fresh input + 250 cache read + 100 output at Wonder rates
+        // ($4 / $0.20 / $20 per 1M) = $0.00505.
+        expectTrue(abs(est.usdToday - 0.00505) < 1e-9)
+        expectTrue(abs(est.usdLast7Days - 0.00505) < 1e-9)
+        expectFalse(est.unpricedModelsLast7Days.contains("muse-wonder-full-1.0"))
+        expectTrue(abs((est.modelBreakdownToday["muse-wonder-full-1.0"] ?? -1) - 0.00505) < 1e-9)
         expectTrue(est.hasDisplayData)
     }
 

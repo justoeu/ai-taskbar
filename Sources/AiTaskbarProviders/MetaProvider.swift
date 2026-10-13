@@ -54,8 +54,11 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
             forceRefresh: forceRefresh,
             decode: decodeSnapshot,
             fetch: { [self] in
+                // resolve() may block on the /usr/bin/security fallback
+                // (5 s budget): keep it off the cooperative pool.
+                let resolution = try await OffPool.run { self.credentials.resolve() }
                 let token: String
-                switch credentials.resolve() {
+                switch resolution {
                 case .token(let value):
                     token = value
                 case .missing:

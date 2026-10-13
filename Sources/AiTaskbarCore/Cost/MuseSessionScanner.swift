@@ -14,9 +14,9 @@ import Foundation
 ///   `record.quantity` are rollups/telemetry over the same steps; counting
 ///   them too would double every total.
 ///
-/// Meta publishes no prices (the local model catalog carries `cost: null`),
-/// so every model is reported unpriced and USD stays 0 — tokens are the
-/// whole story here, never dollars.
+/// Dollars are estimated at the published Meta Model API rates
+/// (`PricingTable.meta`), like the Claude/Codex subscription scanners:
+/// an API-value estimate, not a bill (subscription use is flat-fee).
 public enum MuseSessionScanner {
     private static let memo = ScanMemo()
 
@@ -104,38 +104,48 @@ public enum MuseSessionScanner {
         }
         if !Task.isCancelled { memo.retain(paths: seenPaths) }
 
-        // Zero-dollar breakdown rows for every discovered model, like the
-        // priced scanners emit for unpriced models: without them
-        // `hasDisplayData` is false and the card footer never renders.
-        let zeroBreakdown: ([String: ModelUsage]) -> [String: Double] = {
-            Dictionary(uniqueKeysWithValues: $0.keys.map { ($0, 0.0) })
-        }
+        // Price at the published Meta Model API rates (PricingTable.meta).
+        // `price` keeps a zero-dollar row for unpriced models, so the
+        // footer renders for them too.
+        let table = PricingTable.meta
+        let (usdToday, byModelToday) = CostAggregator.price(totals: totalsToday, table: table)
+        let (usd7d, byModel7d) = CostAggregator.price(totals: totalsLast7, table: table)
         let dailyUsage = window.calendarDays().enumerated().map { slot, day in
             DailyModelUsage(date: day,
                             usageByModel: slot < dailyTotals.count ? dailyTotals[slot] : [:],
-                            costByModel: zeroBreakdown(
-                                slot < dailyTotals.count ? dailyTotals[slot] : [:]))
+                            costByModel: CostAggregator.price(
+                                totals: slot < dailyTotals.count ? dailyTotals[slot] : [:],
+                                table: table).1)
         }
-        let note: String?
+        let unpricedToday = Set(totalsToday.keys.filter {
+            PricingTable.lookup($0, table: table) == nil
+        })
+        let unpriced7d = Set(totalsLast7.keys.filter {
+            PricingTable.lookup($0, table: table) == nil
+        })
+        var notes: [String] = []
         if filesScanned == 0 {
-            note = "No recent Muse sessions found."
-        } else if drift > 0 {
-            note = "Tokens only — Meta publishes no prices. "
-                 + "\(drift) malformed usage records were skipped."
+            notes.append("No recent Muse sessions found.")
         } else {
-            note = "Tokens only — Meta publishes no prices."
+            notes.append("Estimated from Muse session logs at Meta Model API rates; subscription use has no marginal cost.")
+        }
+        if !unpriced7d.isEmpty {
+            notes.append("Unpriced: \(unpriced7d.sorted().joined(separator: ", ")).")
+        }
+        if drift > 0 {
+            notes.append("\(drift) malformed usage records were skipped.")
         }
         return CostEstimate(
-            usdToday: 0,
-            usdLast7Days: 0,
-            modelBreakdownToday: zeroBreakdown(totalsToday),
-            modelBreakdownLast7Days: zeroBreakdown(totalsLast7),
+            usdToday: usdToday,
+            usdLast7Days: usd7d,
+            modelBreakdownToday: byModelToday,
+            modelBreakdownLast7Days: byModel7d,
             totalsByModel: totalsToday,
             computedAt: now,
             isApproximate: true,
-            note: note,
-            unpricedModelsToday: Set(totalsToday.keys),
-            unpricedModelsLast7Days: Set(totalsLast7.keys),
+            note: notes.joined(separator: " "),
+            unpricedModelsToday: unpricedToday,
+            unpricedModelsLast7Days: unpriced7d,
             dailyUsage: dailyUsage
         )
     }

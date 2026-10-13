@@ -410,8 +410,8 @@ section("Wire types: Meta (Muse) fixtures — synthetic (SDD §14)") {
     let est = MuseSessionScanner.estimate(now: now, sessionsDir: root)
     expect(est.totalsByModel["muse-wonder-1.0"]?.inputTokens == 750, "Muse scanner subtracts cache read from input")
     expect(est.totalsByModel["muse-wonder-1.0"]?.outputTokens == 100, "Muse scanner keeps reasoning inside output")
-    expect(est.hasDisplayData && est.modelBreakdownToday["muse-wonder-1.0"] == 0,
-           "Muse scanner emits zero-dollar rows so the footer renders")
+    expect(est.hasDisplayData && abs(est.usdToday - 0.00505) < 1e-9,
+           "Muse scanner prices at published Wonder rates ($4/$0.20/$20)")
 }
 
 section("DeepSeekConfig.validate") {

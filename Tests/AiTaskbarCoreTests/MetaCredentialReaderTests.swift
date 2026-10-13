@@ -97,6 +97,24 @@ struct MetaCredentialReaderTests {
         expectTrue(r.hasLogin())
     }
 
+    @Test("ACL-blocked direct read falls back to the security tool")
+    func security_tool_fallback() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("meta-cred-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let payload = Data(#"{"access_token":"dca:via-tool"}"#.utf8)
+        let withTool = MetaCredentialReader(
+            authFileURL: dir.appendingPathComponent("auth.json"),
+            keychainRead: { .blocked },
+            securityToolRead: { payload })
+        #expect(withTool.resolve() == .token("dca:via-tool"))
+        let noTool = MetaCredentialReader(
+            authFileURL: dir.appendingPathComponent("auth.json"),
+            keychainRead: { .blocked },
+            securityToolRead: { nil })
+        #expect(noTool.resolve() == .keychainBlocked)
+    }
+
     @Test("auth file URL resolution: config, env, default")
     func auth_url_resolution() {
         let home = URL(fileURLWithPath: "/Users/test")

@@ -418,9 +418,11 @@ produces numbers that are wrong by multiples while looking plausible:
 `automated_review_completed` events and buckets by `recorded_at`
 (microseconds), never the `YYYY/MM/DD` folder date; `record.quantity`,
 `goal_usage_attribution` and `resource_usage_sampled` are rollups over the
-same steps and counting them doubles every total. Meta publishes no
-prices, so its models stay unpriced (no `PricingTable` entry) and the
-scanner reports tokens with USD 0. Quota lives elsewhere: `MetaProvider`
+same steps and counting them doubles every total. Dollars are estimated
+at the published Meta Model API rates in `PricingTable.meta` (Wonder
+$4/$20, Spark $1.25/$4.25 per 1M; Wonder Full has no public rate and is
+estimated at the Wonder rate, the `codex-auto-review` precedent;
+`muse-image-1.0` stays unpriced). Quota lives elsewhere: `MetaProvider`
 reads subscription windows from `POST api.meta.ai/muse-code/key` with the
 Muse CLI's device-code (`dca:`) login token — read-only via
 `MetaCredentialReader` (scheduled reads prompt-free; the single prompt is

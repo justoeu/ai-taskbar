@@ -424,7 +424,7 @@
 "meta_payg" = "Sin suscripción (pago por uso)";
 "meta_billing_incomplete" = "Facturación incompleta — complétala en dev.meta.ai";
 "meta_quota_unavailable" = "Cuota no incluida en esta respuesta de inicio de sesión";
-"settings_meta_footer" = "Usa el inicio de sesión de Muse CLI (ejecuta `muse login`). Las claves de API no pueden leer la cuota de suscripción. El token solo se lee para obtener las ventanas de uso y nunca se guarda; el historial de tokens viene de los registros de sesión del CLI en este Mac. Meta no publica precios, así que los tokens se muestran sin $.";
+"settings_meta_footer" = "Usa el inicio de sesión de Muse CLI (ejecuta `muse login`). Las claves de API no pueden leer la cuota de suscripción. El token solo se lee para obtener las ventanas de uso y nunca se guarda; el historial de tokens viene de los registros de sesión del CLI en este Mac. Los importes en $ son estimaciones con las tarifas publicadas de Meta Model API.";
 "settings_meta_login" = "Sesión de Muse";
 "settings_meta_login_detected" = "Detectada";
 "settings_meta_login_missing" = "No encontrada — ejecuta `muse login`";

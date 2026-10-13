@@ -507,3 +507,16 @@ Duas decisões revistas com evidência da máquina real, sem mudar o contrato:
    página oficial: `https://metastatus.com` ("Status and outages of Meta
    business products"). Sem feed machine-readable verificado, entra como
    link-only (`statusPageURL` + cobertura `.linkOnly`), como Gemini/Z.AI.
+3. **Preços publicados (revoga §3.2/§10 "sem USD").** A Meta Model API
+   publica tarifas: Wonder $4,00/$0,20/$20,00 e Spark 1.3
+   $1,25/$0,15/$4,25 por 1M (in/cached/out), confirmadas por várias fontes
+   do lançamento de 2026-10-12. `PricingTable.meta` precifica o scanner
+   como estimativa de valor de API (assinatura é flat-fee). Wonder Full
+   não tem tarifa pública (só assinatura): estimado à tarifa Wonder,
+   precedente `codex-auto-review`; `muse-image-1.0` fica unpriced.
+4. **Fallback `/usr/bin/security` (revoga §7 "não generalizar").**
+   Medido nesta máquina: a ferramenta lê o item da Meta silenciosamente,
+   por isso o padrão do Claude aplica-se tal e qual — leitura direta
+   bloqueada por ACL → mesmo item via a ferramenta (keychain desbloqueada
+   exigida, argumentos exactos, cooldowns), sem prompt nenhum. O
+   Authorize do ponto 1 fica como último recurso.

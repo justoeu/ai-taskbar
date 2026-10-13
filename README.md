@@ -315,7 +315,7 @@ Muse is Meta's model family behind the Muse Code CLI (`muse`). The card is **off
 
 - **What the card shows:** your plan and the subscription windows (session + weekly, with reset countdowns) read from Meta with the CLI's own login token, plus today's / last 7 days' tokens per model from the CLI session logs on this Mac (`~/.local/share/muse/sessions`). Pay-as-you-go accounts show "No subscription" instead of an invented 0% bar.
 - **No API key works here:** dashboard keys and `META_API_KEY` cannot read subscription quota, so there is no key field. The login token is read only to fetch the windows, is never stored or logged, and is never refreshed by the app — the CLI owns it. If the Keychain refuses access, the card degrades to the local token history with a note; it never pops a password prompt.
-- **No dollars:** Meta publishes no per-token prices, so tokens are shown without a $ estimate rather than a made-up one.
+- **Dollar figures are API-value estimates:** local tokens are priced at the published Meta Model API rates (Muse Wonder $4/$20 per 1M in/out, Spark $1.25/$4.25). Wonder Full has no public per-token rate (subscription-only), so it is estimated at the Wonder rate; subscription use itself is flat-fee.
 - **Status:** the row links to Meta's official [metastatus.com](https://metastatus.com); it exposes no machine-readable feed we could verify, so live incident state stays "unknown" (link-only, like Gemini) rather than scraped.
 
 ### Google Gemini — Antigravity CLI monitoring & heartbeat

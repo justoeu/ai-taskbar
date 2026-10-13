@@ -425,7 +425,7 @@
 "meta_payg" = "No subscription (pay-as-you-go)";
 "meta_billing_incomplete" = "Billing incomplete — finish setup at dev.meta.ai";
 "meta_quota_unavailable" = "Quota not included in this login response";
-"settings_meta_footer" = "Uses your Muse CLI login (run `muse login`). API keys cannot read subscription quota. The login token is read only to fetch usage windows and is never stored; token history comes from the CLI session logs on this Mac. Meta publishes no prices, so tokens are shown without $.";
+"settings_meta_footer" = "Uses your Muse CLI login (run `muse login`). API keys cannot read subscription quota. The login token is read only to fetch usage windows and is never stored; token history comes from the CLI session logs on this Mac, priced as an estimate at the published Meta Model API rates.";
 "settings_meta_login" = "Muse login";
 "settings_meta_login_detected" = "Detected";
 "settings_meta_login_missing" = "Not found — run `muse login`";
