@@ -23,6 +23,9 @@ public struct SettingsView: View {
     @State private var activeHelpKey: String? = nil
     @State private var showGeminiAdvanced = false
     @State private var showXAIAdvanced = false
+    /// Cached so the probe (file read + Keychain attribute query) runs when
+    /// the section appears / the auth path changes, not on every body pass.
+    @State private var metaLoginDetected = false
 
     public init(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -765,9 +768,12 @@ public struct SettingsView: View {
             // Detection never reads a secret (SDD-meta-muse §7.2): the
             // auth file and a Keychain attribute probe only.
             LabeledContent(L10n.localizedString("settings_meta_login")) {
-                Text(metaLoginStateText)
+                Text(L10n.localizedString(metaLoginDetected
+                    ? "settings_meta_login_detected" : "settings_meta_login_missing"))
                     .foregroundStyle(.secondary)
             }
+            .onAppear { refreshMetaLoginDetection() }
+            .onChange(of: viewModel.draft.meta.authPath) { _ in refreshMetaLoginDetection() }
             HelpTextField(label: L10n.localizedString("settings_meta_sessions_dir"),
                           helpKey: "settings_meta_sessions_dir_help",
                           text: Binding(
@@ -781,12 +787,8 @@ public struct SettingsView: View {
         }
     }
 
-    private var metaLoginStateText: String {
-        let reader = MetaCredentialReader(config: viewModel.draft.meta)
-        if reader.hasLogin() {
-            return L10n.localizedString("settings_meta_login_detected")
-        }
-        return L10n.localizedString("settings_meta_login_missing")
+    private func refreshMetaLoginDetection() {
+        metaLoginDetected = MetaCredentialReader(config: viewModel.draft.meta).hasLogin()
     }
 
     // MARK: - Vendor: xAI
