@@ -65,7 +65,8 @@ struct AiTaskbarApp: App {
             providers: env.makeStatusProviders(for: enabledStatusIds)
         )
         let costEstimator = CostEstimator(
-            museSessionsDir: AppEnvironment.museSessionsDir(for: env.config.meta))
+            museSessionsDir: AppEnvironment.museSessionsDir(for: env.config.meta),
+            museEnabled: env.config.meta.enabled)
         costEstimator.refresh()
         _cost = StateObject(wrappedValue: costEstimator)
         let scheduler = RefreshScheduler(store: store,

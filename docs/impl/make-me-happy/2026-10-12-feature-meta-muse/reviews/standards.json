@@ -1,0 +1,162 @@
+{
+  "axis": "standards",
+  "verdict": "APPROVE",
+  "round": 1,
+  "summary": "No hard documented-standard breach found. The vendor-add checklist, Keychain prompt-suppression/read-only rules, cancellation checkpoints, safe-numeric conversion, CostWindow use and disabled-by-default config all hold; Shotgun Surgery and Repeated Switches are suppressed because the repo checklist mandates that pattern. Six judgement-call findings remain, worst being synthetic (non-verbatim) mint fixtures behind the golden tests.",
+  "findings": [
+    {
+      "id": "S-1",
+      "severity": "medium",
+      "kind": "judgement",
+      "title": "Golden tests decode synthetic, non-verbatim mint fixtures",
+      "description": "The Meta mint fixtures are explicitly synthetic with invented values (comment at Fixtures.swift:1269), so the golden tests freeze the author's assumed field contract rather than an observed wire capture, weakening the immutability guarantee. Disclosed in SDD section 14 with a real constraint (minting a real response spends the user's login), and the policy requires a canonical fixture rather than a verbatim capture, so this is a judgement call, not a hard breach. Close by replacing with a redacted verbatim capture when that trade is worth it.",
+      "file": "Sources/AiTaskbarTesting/Fixtures.swift",
+      "line": 1269,
+      "rule": "AGENTS.md Testing policy section 2 (golden/snapshot testing on every vendor wire type)",
+      "status": "open",
+      "round": 1
+    },
+    {
+      "id": "S-2",
+      "severity": "low",
+      "kind": "judgement",
+      "title": "Wire type pre-clamps utilization that UsageWindow already sanitizes",
+      "description": "usageWindow passes min(100, max(0, percent)) into UsageWindow, whose init already applies UtilizationPercent.sanitized (NaN to 0, clamped 0...1000). The extra clamp duplicates the single sanitization point and silently narrows Meta to 100 while other vendors can report over 100 percent. In-range behavior is identical, so judgement only; drop the pre-clamp and pass percent through.",
+      "file": "Sources/AiTaskbarProviders/MetaWireTypes.swift",
+      "line": 92,
+      "rule": "AGENTS.md Hard rules (utilization sanitized once by UtilizationPercent.sanitized inside UsageWindow)",
+      "status": "open",
+      "round": 1
+    },
+    {
+      "id": "S-3",
+      "severity": "low",
+      "kind": "judgement",
+      "title": "Test seam defaults to a live Muse scan",
+      "description": "The internal CostEstimator init requires claudeEstimate, codexEstimate and opencodeScan but defaults museEstimate to { MuseSessionScanner.estimate() }, so existing seam-based tests now scan the real ~/.local/share/muse/sessions. That erodes the isolation stated in the seam comment at CostEstimator.swift:17. Make museEstimate required like its siblings, or default it to an empty estimate.",
+      "file": "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift",
+      "line": 97,
+      "rule": "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift scanner-seam contract (lines 17-18); sibling-seam convention",
+      "status": "open",
+      "round": 1
+    },
+    {
+      "id": "S-4",
+      "severity": "low",
+      "kind": "judgement",
+      "title": "Speculative Generality: multiple unobserved Keychain payload spellings",
+      "description": "token(fromKeychainPayload:) accepts a bare token string plus access_token, accessToken and token keys for a payload shape the comment admits is unobserved ('the exact key spelling is the CLI's business'). The dca: prefix gate bounds the risk, but the accepted shapes should narrow to the observed one once known.",
+      "file": "Sources/AiTaskbarCore/Credentials/MetaCredentialReader.swift",
+      "line": 159,
+      "rule": "catalogs/fowler-smells.md Speculative Generality (baseline, judgement call)",
+      "status": "open",
+      "round": 1
+    },
+    {
+      "id": "S-5",
+      "severity": "low",
+      "kind": "judgement",
+      "title": "Duplicated Code: identical merge blocks for memo hit and fresh scan",
+      "description": "The memo-hit branch (lines 77-82) and the fresh-scan branch (lines 92-96) repeat the same merge of today/week/daily aggregates apart from the source value. Extract one merge helper taking the three dictionaries so the shape lives in one place.",
+      "file": "Sources/AiTaskbarCore/Cost/MuseSessionScanner.swift",
+      "line": 77,
+      "rule": "catalogs/fowler-smells.md Duplicated Code (baseline, judgement call)",
+      "status": "open",
+      "round": 1
+    },
+    {
+      "id": "S-6",
+      "severity": "low",
+      "kind": "judgement",
+      "title": "Data Clumps: aggregate dictionaries plus drift travel as inout parameters",
+      "description": "totalsToday, totalsLast7, dailyTotals and drift travel together through scan and scanLines as four inout parameters (duplicated in both signatures). They are one accumulation result wanting a small struct, which would also let the scan test seam stop discarding drift.",
+      "file": "Sources/AiTaskbarCore/Cost/MuseSessionScanner.swift",
+      "line": 183,
+      "rule": "catalogs/fowler-smells.md Data Clumps (baseline, judgement call)",
+      "status": "open",
+      "round": 1
+    }
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "verdict": "APPROVE",
+      "at": "2026-10-13T01:21:19Z",
+      "summary": "No hard documented-standard breach found. The vendor-add checklist, Keychain prompt-suppression/read-only rules, cancellation checkpoints, safe-numeric conversion, CostWindow use and disabled-by-default config all hold; Shotgun Surgery and Repeated Switches are suppressed because the repo checklist mandates that pattern. Six judgement-call findings remain, worst being synthetic (non-verbatim) mint fixtures behind the golden tests.",
+      "findings": [
+        {
+          "id": "S-1",
+          "severity": "medium",
+          "kind": "judgement",
+          "title": "Golden tests decode synthetic, non-verbatim mint fixtures",
+          "description": "The Meta mint fixtures are explicitly synthetic with invented values (comment at Fixtures.swift:1269), so the golden tests freeze the author's assumed field contract rather than an observed wire capture, weakening the immutability guarantee. Disclosed in SDD section 14 with a real constraint (minting a real response spends the user's login), and the policy requires a canonical fixture rather than a verbatim capture, so this is a judgement call, not a hard breach. Close by replacing with a redacted verbatim capture when that trade is worth it.",
+          "file": "Sources/AiTaskbarTesting/Fixtures.swift",
+          "line": 1269,
+          "rule": "AGENTS.md Testing policy section 2 (golden/snapshot testing on every vendor wire type)",
+          "status": "open",
+          "round": 1
+        },
+        {
+          "id": "S-2",
+          "severity": "low",
+          "kind": "judgement",
+          "title": "Wire type pre-clamps utilization that UsageWindow already sanitizes",
+          "description": "usageWindow passes min(100, max(0, percent)) into UsageWindow, whose init already applies UtilizationPercent.sanitized (NaN to 0, clamped 0...1000). The extra clamp duplicates the single sanitization point and silently narrows Meta to 100 while other vendors can report over 100 percent. In-range behavior is identical, so judgement only; drop the pre-clamp and pass percent through.",
+          "file": "Sources/AiTaskbarProviders/MetaWireTypes.swift",
+          "line": 92,
+          "rule": "AGENTS.md Hard rules (utilization sanitized once by UtilizationPercent.sanitized inside UsageWindow)",
+          "status": "open",
+          "round": 1
+        },
+        {
+          "id": "S-3",
+          "severity": "low",
+          "kind": "judgement",
+          "title": "Test seam defaults to a live Muse scan",
+          "description": "The internal CostEstimator init requires claudeEstimate, codexEstimate and opencodeScan but defaults museEstimate to { MuseSessionScanner.estimate() }, so existing seam-based tests now scan the real ~/.local/share/muse/sessions. That erodes the isolation stated in the seam comment at CostEstimator.swift:17. Make museEstimate required like its siblings, or default it to an empty estimate.",
+          "file": "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift",
+          "line": 97,
+          "rule": "Sources/AiTaskbarApp/ViewModels/CostEstimator.swift scanner-seam contract (lines 17-18); sibling-seam convention",
+          "status": "open",
+          "round": 1
+        },
+        {
+          "id": "S-4",
+          "severity": "low",
+          "kind": "judgement",
+          "title": "Speculative Generality: multiple unobserved Keychain payload spellings",
+          "description": "token(fromKeychainPayload:) accepts a bare token string plus access_token, accessToken and token keys for a payload shape the comment admits is unobserved ('the exact key spelling is the CLI's business'). The dca: prefix gate bounds the risk, but the accepted shapes should narrow to the observed one once known.",
+          "file": "Sources/AiTaskbarCore/Credentials/MetaCredentialReader.swift",
+          "line": 159,
+          "rule": "catalogs/fowler-smells.md Speculative Generality (baseline, judgement call)",
+          "status": "open",
+          "round": 1
+        },
+        {
+          "id": "S-5",
+          "severity": "low",
+          "kind": "judgement",
+          "title": "Duplicated Code: identical merge blocks for memo hit and fresh scan",
+          "description": "The memo-hit branch (lines 77-82) and the fresh-scan branch (lines 92-96) repeat the same merge of today/week/daily aggregates apart from the source value. Extract one merge helper taking the three dictionaries so the shape lives in one place.",
+          "file": "Sources/AiTaskbarCore/Cost/MuseSessionScanner.swift",
+          "line": 77,
+          "rule": "catalogs/fowler-smells.md Duplicated Code (baseline, judgement call)",
+          "status": "open",
+          "round": 1
+        },
+        {
+          "id": "S-6",
+          "severity": "low",
+          "kind": "judgement",
+          "title": "Data Clumps: aggregate dictionaries plus drift travel as inout parameters",
+          "description": "totalsToday, totalsLast7, dailyTotals and drift travel together through scan and scanLines as four inout parameters (duplicated in both signatures). They are one accumulation result wanting a small struct, which would also let the scan test seam stop discarding drift.",
+          "file": "Sources/AiTaskbarCore/Cost/MuseSessionScanner.swift",
+          "line": 183,
+          "rule": "catalogs/fowler-smells.md Data Clumps (baseline, judgement call)",
+          "status": "open",
+          "round": 1
+        }
+      ]
+    }
+  ]
+}

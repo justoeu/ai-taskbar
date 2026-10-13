@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import os
 @testable import AiTaskbarApp
 import AiTaskbarCore
 
@@ -17,6 +18,24 @@ struct MetaWiringTests {
     @MainActor func enabled_vendor_ids() {
         expectTrue(env(metaEnabled: true).enabledVendorIds().contains(.meta))
         expectFalse(env(metaEnabled: false).enabledVendorIds().contains(.meta))
+    }
+
+    @Test("disabled Meta never invokes the scanner seam (SDD §4.3)")
+    @MainActor func disabled_never_scans() async throws {
+        let calls = OSAllocatedUnfairLock(initialState: 0)
+        let e = CostEstimator(
+            claudeEstimate: { CostEstimate(usdToday: 0, usdLast7Days: 0) },
+            codexEstimate: { CostEstimate(usdToday: 0, usdLast7Days: 0) },
+            opencodeScan: { _ in [:] },
+            museEstimate: { calls.withLock { $0 += 1 }; return CostEstimate(usdToday: 0, usdLast7Days: 0) },
+            museEnabled: false)
+        e.refresh(force: true)
+        let deadline = Date().addingTimeInterval(5)
+        while e.isLoading, Date() < deadline {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        #expect(calls.withLock { $0 } == 0)
+        #expect(e.byVendor[.meta] == nil)
     }
 
     @Test("sessions dir override expands tilde; empty means default")

@@ -104,6 +104,10 @@ struct MuseSessionScannerTests {
         #expect(est.usdToday == 0)
         #expect(est.usdLast7Days == 0)
         expectTrue(est.unpricedModelsLast7Days.contains("muse-wonder-full-1.0"))
+        // Zero-dollar breakdown rows keep the card footer visible (P-1).
+        #expect(est.modelBreakdownToday["muse-wonder-full-1.0"] == 0)
+        #expect(est.modelBreakdownLast7Days["muse-wonder-full-1.0"] == 0)
+        expectTrue(est.hasDisplayData)
     }
 
     @Test("missing sessions directory reports honestly, not a measured zero")

@@ -24,10 +24,29 @@ public enum MetaKeychainRead: Equatable, Sendable {
     case failed(OSStatus)
 }
 
+/// Settings-facing login state: no token ever crosses this boundary.
+public enum MetaLoginDetection: Equatable, Sendable {
+    case detected
+    case keychainBlocked
+    case missing
+}
+
 public protocol MetaCredentialReading: Sendable {
     func resolve() -> MetaLoginResolution
     /// Login presence for Settings, detectable without reading any secret.
     func hasLogin() -> Bool
+    /// Three-way state for Settings (detected / blocked / missing).
+    func detection() -> MetaLoginDetection
+}
+
+public extension MetaCredentialReading {
+    func detection() -> MetaLoginDetection {
+        switch resolve() {
+        case .token: return .detected
+        case .keychainBlocked, .unavailable: return .keychainBlocked
+        case .missing: return .missing
+        }
+    }
 }
 
 /// Reads the Muse Code CLI's device-code login, shared read-only.
@@ -114,6 +133,17 @@ public struct MetaCredentialReader: MetaCredentialReading {
         return keychainRead() != .missing
     }
 
+    /// Classifies without handing the token to the caller: the payload is
+    /// read only to tell "blocked" from "present", and discarded here.
+    public func detection() -> MetaLoginDetection {
+        if authFileRecord() != nil { return .detected }
+        switch keychainRead() {
+        case .found: return .detected
+        case .blocked, .failed: return .keychainBlocked
+        case .missing: return .missing
+        }
+    }
+
     // MARK: - auth.json
 
     private struct AuthFileRecord {
@@ -153,30 +183,20 @@ public struct MetaCredentialReader: MetaCredentialReading {
 
     // MARK: - Keychain payload
 
-    /// The item's payload is a JSON object holding the access token. The
-    /// exact key spelling is the CLI's business, so both spellings (and a
-    /// bare token string) are accepted; the `dca:` prefix is the real gate.
+    /// The item's payload is a JSON object holding the access token under
+    /// `access_token` (the spelling the CLI uses in `auth.json`). Only that
+    /// contracted shape is accepted, and the `dca:` prefix is the gate.
     static func token(fromKeychainPayload data: Data) -> String? {
-        if let text = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           text.hasPrefix(tokenPrefix) {
-            return text
-        }
         struct Payload: Decodable {
             let access_token: String?
-            let accessToken: String?
-            let token: String?
         }
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data),
+              let token = payload.access_token?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              token.hasPrefix(tokenPrefix) else {
             return nil
         }
-        for candidate in [payload.access_token, payload.accessToken, payload.token] {
-            if let token = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
-               token.hasPrefix(tokenPrefix) {
-                return token
-            }
-        }
-        return nil
+        return token
     }
 
     // MARK: - Keychain access (prompt-free, read-only)

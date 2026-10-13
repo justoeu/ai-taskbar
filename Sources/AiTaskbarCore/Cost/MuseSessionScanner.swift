@@ -104,10 +104,17 @@ public enum MuseSessionScanner {
         }
         if !Task.isCancelled { memo.retain(paths: seenPaths) }
 
+        // Zero-dollar breakdown rows for every discovered model, like the
+        // priced scanners emit for unpriced models: without them
+        // `hasDisplayData` is false and the card footer never renders.
+        let zeroBreakdown: ([String: ModelUsage]) -> [String: Double] = {
+            Dictionary(uniqueKeysWithValues: $0.keys.map { ($0, 0.0) })
+        }
         let dailyUsage = window.calendarDays().enumerated().map { slot, day in
             DailyModelUsage(date: day,
                             usageByModel: slot < dailyTotals.count ? dailyTotals[slot] : [:],
-                            costByModel: [:])
+                            costByModel: zeroBreakdown(
+                                slot < dailyTotals.count ? dailyTotals[slot] : [:]))
         }
         let note: String?
         if filesScanned == 0 {
@@ -121,6 +128,8 @@ public enum MuseSessionScanner {
         return CostEstimate(
             usdToday: 0,
             usdLast7Days: 0,
+            modelBreakdownToday: zeroBreakdown(totalsToday),
+            modelBreakdownLast7Days: zeroBreakdown(totalsLast7),
             totalsByModel: totalsToday,
             computedAt: now,
             isApproximate: true,

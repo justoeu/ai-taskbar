@@ -396,6 +396,22 @@ section("Wire types: Meta (Muse) fixtures — synthetic (SDD §14)") {
     expect(payg.subscription == .payAsYouGo, "Meta pay-as-you-go state")
     expect(MetaConfig().enabled == false, "Meta is disabled by default")
     expect(VendorId.meta.dashboardURL?.absoluteString == "https://dev.meta.ai", "Meta dashboard URL")
+
+    // Scanner: one measured-shape line in a temp sessions tree.
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("muse-validate-\(UUID().uuidString)")
+    let dayDir = root.appendingPathComponent("2026/10/12/session-a")
+    try fm.createDirectory(at: dayDir, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: root) }
+    let now = Date()
+    let us = Int64(now.timeIntervalSince1970 * 1_000_000)
+    let line = "{\"recorded_at\":\(us),\"payload\":{\"event\":{\"kind\":\"model_completed\",\"model\":\"muse-wonder-1.0\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":100,\"cached_tokens\":250,\"cache_read_tokens\":250,\"cache_write_tokens\":0,\"reasoning_tokens\":10}}}}"
+    try (line + "\n").write(to: dayDir.appendingPathComponent("session.jsonl"), atomically: true, encoding: .utf8)
+    let est = MuseSessionScanner.estimate(now: now, sessionsDir: root)
+    expect(est.totalsByModel["muse-wonder-1.0"]?.inputTokens == 750, "Muse scanner subtracts cache read from input")
+    expect(est.totalsByModel["muse-wonder-1.0"]?.outputTokens == 100, "Muse scanner keeps reasoning inside output")
+    expect(est.hasDisplayData && est.modelBreakdownToday["muse-wonder-1.0"] == 0,
+           "Muse scanner emits zero-dollar rows so the footer renders")
 }
 
 section("DeepSeekConfig.validate") {

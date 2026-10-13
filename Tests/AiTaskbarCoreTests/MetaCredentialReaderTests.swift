@@ -34,8 +34,30 @@ struct MetaCredentialReaderTests {
     @Test("non-dca inline token is ignored, Keychain is tried")
     func non_dca_ignored() throws {
         let r = try reader(authJSON: #"{"providers":{"meta":{"access_token":"LLM_dashboard"}}}"#,
-                           keychain: { .found(Data(#"{"accessToken":"dca:camel"}"#.utf8)) })
-        #expect(r.resolve() == .token("dca:camel"))
+                           keychain: { .found(Data(#"{"access_token":"dca:keychain2"}"#.utf8)) })
+        #expect(r.resolve() == .token("dca:keychain2"))
+    }
+
+    @Test("uncontracted keychain payload shapes are refused")
+    func uncontracted_payload_refused() throws {
+        for payload in [#"{"accessToken":"dca:camel"}"#, #"{"token":"dca:bare"}"#, "dca:rawstring"] {
+            let r = try reader(authJSON: nil, keychain: { .found(Data(payload.utf8)) })
+            guard case .unavailable = r.resolve() else {
+                Issue.record("payload \(payload) must not resolve to a token")
+                continue
+            }
+        }
+    }
+
+    @Test("detection classifies detected, blocked and missing without a token")
+    func detection_states() throws {
+        let found = try reader(authJSON: nil,
+                               keychain: { .found(Data(#"{"access_token":"dca:x"}"#.utf8)) })
+        #expect(found.detection() == .detected)
+        let blocked = try reader(authJSON: nil, keychain: { .blocked })
+        #expect(blocked.detection() == .keychainBlocked)
+        let missing = try reader(authJSON: nil, keychain: { .missing })
+        #expect(missing.detection() == .missing)
     }
 
     @Test("no auth file and blocked Keychain degrades, never prompts")

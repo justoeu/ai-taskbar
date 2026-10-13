@@ -1,0 +1,1 @@
+{ "pct": 93.21, "tool": "llvm-cov via scripts/coverage.sh (AiTaskbarCore+AiTaskbarProviders)", "report": "make validate 2026-10-12 (post-review fixes)", "floor": 90 }

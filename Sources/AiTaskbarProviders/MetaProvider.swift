@@ -59,16 +59,26 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
                 case .token(let value):
                     token = value
                 case .missing:
-                    throw AppError.credentials(
-                        "Muse login not found. Run `muse login`, then refresh.")
+                    // Quiet setup state, not a noisy error (SDD §7.3/§8):
+                    // guidance renders localized and (401-shaped) arms the
+                    // re-login affordance.
+                    throw AppError.guidance(.museLoginRequired)
                 case .keychainBlocked:
-                    throw AppError.credentials(
-                        "Keychain access unavailable for the Muse login.")
+                    throw AppError.guidance(.museKeychainBlocked)
                 case .unavailable(let detail):
                     throw AppError.credentials("Muse login unavailable: \(detail)")
                 }
                 try Task.checkCancellation()
-                let data = try await http.fetchPayload(mintRequest(token: token))
+                // No redirects (SDD §8): a 3xx is surfaced as-is and reads
+                // as unavailable through the status check below.
+                let (data, response) = try await http.sendBounded(
+                    mintRequest(token: token),
+                    maximumResponseBytes: HTTPClient.defaultMaximumResponseBytes,
+                    allowRedirect: { _ in false })
+                guard (200..<300).contains(response.statusCode) else {
+                    let body = String(data: data.prefix(1024), encoding: .utf8) ?? ""
+                    throw AppError.http(status: response.statusCode, body: body)
+                }
                 try Task.checkCancellation()
                 let snapshot: MetaSnapshot
                 do {

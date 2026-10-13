@@ -432,6 +432,12 @@
 "settings_meta_sessions_dir_help" = "Donde Muse CLI guarda los registros de sesión. Déjalo vacío para usar el valor predeterminado (~/.local/share/muse/sessions).";
 "settings_meta_auth_path" = "Archivo de auth";
 "settings_meta_auth_path_help" = "El archivo de auth de Muse CLI. Déjalo vacío para usar el predeterminado (~/.config/muse/auth.json).";
+"settings_meta_login_blocked" = "Acceso al Llavero no disponible";
+"settings_meta_sessions" = "Registros de sesión";
+"settings_meta_sessions_found" = "Encontrados";
+"settings_meta_sessions_missing" = "No se encontraron sesiones de Muse";
+"guidance_meta_login_required" = "Para supervisar el uso de Meta, ejecuta `muse login` y actualiza.";
+"guidance_meta_keychain_blocked" = "Acceso al Llavero no disponible — se muestra solo el historial local de tokens.";
 "analytics_weekly_models_title" = "Consumo Diario por Modelo";
 "analytics_hover_hint" = "Pase el cursor sobre las barras para ver detalles";
 "analytics_tokens" = "tokens";

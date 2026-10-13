@@ -21,4 +21,16 @@ struct MetaCardTests {
     @MainActor func cost_footer_supported() {
         expectTrue(CostEstimator.supportedVendors.contains(.meta))
     }
+
+    @Test("rotating label skips window-less Meta snapshots")
+    func rotating_skips_windowless() {
+        let payg = VendorSnapshot.meta(MetaSnapshot(subscription: .payAsYouGo))
+        expectFalse(MenuBarLabelView.isRotatingCandidate(vendorId: .meta, snapshot: payg))
+        let active = VendorSnapshot.meta(MetaSnapshot(
+            subscription: .active,
+            session: UsageWindow(label: "Session (5h)", utilizationPercent: 10)))
+        expectTrue(MenuBarLabelView.isRotatingCandidate(vendorId: .meta, snapshot: active))
+        expectTrue(MenuBarLabelView.isRotatingCandidate(vendorId: .meta, snapshot: nil))
+        expectFalse(MenuBarLabelView.isRotatingCandidate(vendorId: .typesafe, snapshot: nil))
+    }
 }

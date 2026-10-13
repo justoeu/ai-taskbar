@@ -23,9 +23,10 @@ public struct SettingsView: View {
     @State private var activeHelpKey: String? = nil
     @State private var showGeminiAdvanced = false
     @State private var showXAIAdvanced = false
-    /// Cached so the probe (file read + Keychain attribute query) runs when
-    /// the section appears / the auth path changes, not on every body pass.
-    @State private var metaLoginDetected = false
+    /// Cached so the probe (file read + Keychain query) runs when the
+    /// section appears / paths change, not on every body pass.
+    @State private var metaDetection: MetaLoginDetection = .missing
+    @State private var metaSessionsPresent = false
 
     public init(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -765,15 +766,20 @@ public struct SettingsView: View {
                        isOn: Binding(
                         get: { viewModel.draft.meta.enabled },
                         set: { viewModel.draft.meta.enabled = $0 }))
-            // Detection never reads a secret (SDD-meta-muse §7.2): the
-            // auth file and a Keychain attribute probe only.
+            // Detection state (SDD-meta-muse §11): login three-way plus
+            // session-log presence. No secret reaches this view.
             LabeledContent(L10n.localizedString("settings_meta_login")) {
-                Text(L10n.localizedString(metaLoginDetected
-                    ? "settings_meta_login_detected" : "settings_meta_login_missing"))
+                Text(L10n.localizedString(metaDetectionKey))
                     .foregroundStyle(.secondary)
             }
-            .onAppear { refreshMetaLoginDetection() }
-            .onChange(of: viewModel.draft.meta.authPath) { _ in refreshMetaLoginDetection() }
+            LabeledContent(L10n.localizedString("settings_meta_sessions")) {
+                Text(L10n.localizedString(metaSessionsPresent
+                    ? "settings_meta_sessions_found" : "settings_meta_sessions_missing"))
+                    .foregroundStyle(.secondary)
+            }
+            .onAppear { refreshMetaDetection() }
+            .onChange(of: viewModel.draft.meta.authPath) { _ in refreshMetaDetection() }
+            .onChange(of: viewModel.draft.meta.sessionsDir) { _ in refreshMetaDetection() }
             HelpTextField(label: L10n.localizedString("settings_meta_sessions_dir"),
                           helpKey: "settings_meta_sessions_dir_help",
                           text: Binding(
@@ -787,8 +793,21 @@ public struct SettingsView: View {
         }
     }
 
-    private func refreshMetaLoginDetection() {
-        metaLoginDetected = MetaCredentialReader(config: viewModel.draft.meta).hasLogin()
+    private var metaDetectionKey: String {
+        switch metaDetection {
+        case .detected: return "settings_meta_login_detected"
+        case .keychainBlocked: return "settings_meta_login_blocked"
+        case .missing: return "settings_meta_login_missing"
+        }
+    }
+
+    private func refreshMetaDetection() {
+        metaDetection = MetaCredentialReader(config: viewModel.draft.meta).detection()
+        let dir = AppEnvironment.museSessionsDir(for: viewModel.draft.meta)
+            ?? Paths.museSessionsDir()
+        var isDir: ObjCBool = false
+        metaSessionsPresent = FileManager.default
+            .fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     // MARK: - Vendor: xAI

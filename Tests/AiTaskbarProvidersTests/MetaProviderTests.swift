@@ -132,28 +132,74 @@ struct MetaProviderTests {
         expectFalse(text.contains("dca:test"))
     }
 
-    @Test("401 from the mint is an auth failure")
-    func fetch_401() async {
-        StubURLProtocol.handler = { _ in .init(status: 401, data: Data()) }
-        await #expect(throws: AppError.self) {
-            try await provider().fetchUsage(forceRefresh: true)
+    @Test("401/403/429/5xx/3xx from the mint are HTTP failures")
+    func fetch_http_failures() async {
+        for status in [401, 403, 429, 500, 302] {
+            StubURLProtocol.reset()
+            StubURLProtocol.handler = { _ in .init(status: status, data: Data()) }
+            do {
+                _ = try await provider().fetchUsage(forceRefresh: true)
+                Issue.record("expected HTTP \(status) to throw")
+            } catch let e as AppError {
+                #expect(e.httpStatus == status)
+                expectTrue(e.isRateLimited == (status == 429))
+            } catch {
+                Issue.record("expected AppError for \(status), got \(error)")
+            }
         }
     }
 
-    @Test("missing login never reaches the network")
+    @Test("a later failure serves the stale snapshot")
+    func fetch_stale_after_success() async throws {
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintActive200)) }
+        let p = provider()
+        _ = try await p.fetchUsage(forceRefresh: true)
+        StubURLProtocol.handler = { _ in .init(status: 500, data: Data()) }
+        let outcome = try await p.fetchUsage(forceRefresh: true)
+        expectTrue(outcome.isStale)
+        #expect(try snapshot(outcome).subscription == .active)
+    }
+
+    @Test("non-finite or over-range percents never reach a window raw")
+    func percent_sanitization() throws {
+        func snap(percent: Double) throws -> MetaSnapshot {
+            try MetaMintResponse(
+                isSubsActive: true, requirePayment: false, subsTierName: nil,
+                subsUsage: .init(
+                    window: .init(usedPercent: percent, resetsAt: nil, windowDurationMins: 300),
+                    weekly: .init(usedPercent: 1, resetsAt: nil, windowDurationMins: nil)))
+                .toSnapshot()
+        }
+        #expect(throws: AppError.self) { try snap(percent: .nan) }
+        #expect(throws: AppError.self) { try snap(percent: .infinity) }
+        #expect(try snap(percent: 150).session?.utilizationPercent == 100)
+        #expect(try snap(percent: -5).session?.utilizationPercent == 0)
+    }
+
+    @Test("missing login is quiet guidance and never reaches the network")
     func fetch_missing_login() async {
         StubURLProtocol.handler = { _ in .init(data: Data()) }
-        await #expect(throws: AppError.self) {
-            try await provider(resolution: .missing).fetchUsage(forceRefresh: true)
+        do {
+            _ = try await provider(resolution: .missing).fetchUsage(forceRefresh: true)
+            Issue.record("expected guidance")
+        } catch let e as AppError {
+            #expect(e == .guidance(.museLoginRequired))
+        } catch {
+            Issue.record("expected AppError, got \(error)")
         }
         #expect(StubURLProtocol.captured.isEmpty)
     }
 
-    @Test("blocked Keychain never reaches the network")
+    @Test("blocked Keychain is guidance and never reaches the network")
     func fetch_blocked_keychain() async {
         StubURLProtocol.handler = { _ in .init(data: Data()) }
-        await #expect(throws: AppError.self) {
-            try await provider(resolution: .keychainBlocked).fetchUsage(forceRefresh: true)
+        do {
+            _ = try await provider(resolution: .keychainBlocked).fetchUsage(forceRefresh: true)
+            Issue.record("expected guidance")
+        } catch let e as AppError {
+            #expect(e == .guidance(.museKeychainBlocked))
+        } catch {
+            Issue.record("expected AppError, got \(error)")
         }
         #expect(StubURLProtocol.captured.isEmpty)
     }

@@ -23,6 +23,8 @@ public enum VendorNoticeText {
         case .antigravityTimedOut:         return "guidance_antigravity_timed_out"
         case .antigravityCanceled:         return "guidance_antigravity_canceled"
         case .grokCLIRequired:             return "guidance_grok_cli_required"
+        case .museLoginRequired:           return "guidance_meta_login_required"
+        case .museKeychainBlocked:         return "guidance_meta_keychain_blocked"
         }
     }
 
