@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Native macOS menu-bar tracker for LLM usage across 8 providers.</b><br/>
-  Anthropic Claude · OpenAI Codex/ChatGPT · OpenRouter · Z.AI (GLM) · Kimi (Moonshot) · Gemini · DeepSeek · xAI (Grok) · Jev (TypeSafe)
+  Anthropic Claude · OpenAI Codex/ChatGPT · OpenRouter · Z.AI (GLM) · Kimi (Moonshot) · Gemini · DeepSeek · xAI (Grok) · Jev (TypeSafe) · Muse (Meta)
 </p>
 
 <p align="center">
@@ -106,6 +106,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 | **Gemini** | Antigravity CLI (`agy`) or API key | **Requires local CLI:** Run `agy` to authenticate (required for live quota/usage monitoring). Fallback: API key in `[gemini]` for heartbeat only. |
 | **Jev (TypeSafe)** | API key | Settings → Jev (TypeSafe) → paste the key (create it at [console.typesafe.ai](https://console.typesafe.ai)). Off until a key is saved. Optional: **Sign in to TypeSafe…** on the card or in Settings adds spend, balance and tokens. See [TypeSafe](#typesafe-jev--api-key-plus-optional-console-sign-in). |
 | **xAI (Grok)** | Grok CLI (`~/.grok/auth.json`) or Management API | **Requires local CLI:** Run `grok login` (required for SuperGrok quota & balance). Fallback: Management key + `team_id` in `[xai]` for team API billing. |
+| **Muse (Meta)** | Muse CLI login (`muse login`) | **Requires local CLI:** run `muse login`, then enable in Settings → Muse (Meta). Off by default; API keys cannot read subscription quota. See [Meta](#meta-muse--cli-login-quota-plus-local-token-history). |
 
 > ⚠️ **macOS env vars footgun:** GUI apps launched from Finder do **not** inherit your shell environment. If you set `OPENROUTER_API_KEY=...` in `~/.zshrc`, the menu bar app **won't see it**. Three workarounds:
 > 1. **Put the key directly in `config.toml`** (file is `chmod 600`).
@@ -307,6 +308,15 @@ AI Taskbar supports two modes for xAI:
 - **No menu-bar percentage:** there is no quota to measure, so the provider can't be pinned and never moves the menu-bar gauge.
 - **Status:** incidents from [status.typesafe.ai](https://status.typesafe.ai). Its feed publishes one item per update, so updates are merged per incident, and an unresolved incident with no update for 48 h is treated as abandoned rather than ongoing.
 - **Pricing (for reference, not used by the app):** US$ 0.042 per million input tokens, output free ([docs.typesafe.ai/models](https://docs.typesafe.ai/models), checked 2026-09-29).
+
+### Meta (Muse) — CLI-login quota plus local token history
+
+Muse is Meta's model family behind the Muse Code CLI (`muse`). The card is **off until you enable it** in Settings → Muse (Meta), and it needs the CLI login: run `muse login` once.
+
+- **What the card shows:** your plan and the subscription windows (session + weekly, with reset countdowns) read from Meta with the CLI's own login token, plus today's / last 7 days' tokens per model from the CLI session logs on this Mac (`~/.local/share/muse/sessions`). Pay-as-you-go accounts show "No subscription" instead of an invented 0% bar.
+- **No API key works here:** dashboard keys and `META_API_KEY` cannot read subscription quota, so there is no key field. The login token is read only to fetch the windows, is never stored or logged, and is never refreshed by the app — the CLI owns it. If the Keychain refuses access, the card degrades to the local token history with a note; it never pops a password prompt.
+- **No dollars:** Meta publishes no per-token prices, so tokens are shown without a $ estimate rather than a made-up one.
+- **Status:** Meta publishes no official status feed we could verify, so the status row stays "unknown" instead of pointing at a made-up page.
 
 ### Google Gemini — Antigravity CLI monitoring & heartbeat
 
@@ -576,6 +586,11 @@ prefer_grok_cli = true          # default true: reads ~/.grok/auth.json for Supe
 # api_key = "xai-..."
 # team_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 # base_url = "https://management-api.x.ai"
+
+[meta]
+enabled = false                 # Meta Muse; enable in Settings after `muse login`
+# sessions_dir = "~/.local/share/muse/sessions"  # overrides MUSE_SESSIONS_DIR
+# auth_path = "~/.config/muse/auth.json"          # overrides MUSE_AUTH_PATH
 ```
 
 Each `notify_at` threshold notifies once per usage window. A notification that macOS failed to deliver is retried on the next refresh; one that failed while notifications were turned off for the app is sent on a later refresh once you allow them again.

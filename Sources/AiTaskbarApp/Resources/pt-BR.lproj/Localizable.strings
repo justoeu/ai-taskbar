@@ -421,6 +421,17 @@
 "settings_typesafe_console_sign_out_help" = "Remove a sessão deste Mac. Para encerrá-la também na TypeSafe, saia pelo console.";
 "pin_unavailable_no_usage" = "Este provedor não informa uso para mostrar na barra de menus.";
 "settings_typesafe_footer" = "Desativado até você salvar uma chave de API (crie em console.typesafe.ai). A chave só lista modelos — nunca executa uma avaliação paga. Entre no console para ver gasto, saldo e tokens; o login é feito numa janela privada e só os cookies da sessão são guardados, cifrados.";
+"meta_payg" = "Sem assinatura (pay-as-you-go)";
+"meta_billing_incomplete" = "Cobrança pendente — conclua em dev.meta.ai";
+"meta_quota_unavailable" = "Quota não incluída nesta resposta de login";
+"settings_meta_footer" = "Usa o login do Muse CLI (execute `muse login`). Chaves de API não leem a quota da assinatura. O token de login é lido só para buscar as janelas de uso e nunca é guardado; o histórico de tokens vem dos logs de sessão do CLI neste Mac. A Meta não publica preços, por isso os tokens aparecem sem $.";
+"settings_meta_login" = "Login do Muse";
+"settings_meta_login_detected" = "Detetado";
+"settings_meta_login_missing" = "Não encontrado — execute `muse login`";
+"settings_meta_sessions_dir" = "Pasta de sessões";
+"settings_meta_sessions_dir_help" = "Onde o Muse CLI guarda os logs de sessão. Deixe vazio para o padrão (~/.local/share/muse/sessions).";
+"settings_meta_auth_path" = "Arquivo de auth";
+"settings_meta_auth_path_help" = "O arquivo de auth do Muse CLI. Deixe vazio para o padrão (~/.config/muse/auth.json).";
 "analytics_weekly_models_title" = "Consumo Diário por Modelo";
 "analytics_hover_hint" = "Passe o mouse nas barras para ver detalhes";
 "analytics_tokens" = "tokens";

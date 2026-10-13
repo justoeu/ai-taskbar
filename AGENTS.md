@@ -1,7 +1,8 @@
 # Project: ai-taskbar
 
 Native macOS menu-bar app monitoring LLM usage across Anthropic, OpenAI/Codex,
-OpenRouter, Z.AI, Kimi/Moonshot, Gemini, DeepSeek, xAI and TypeSafe (Jev).
+OpenRouter, Z.AI, Kimi/Moonshot, Gemini, DeepSeek, xAI, TypeSafe (Jev) and
+Meta (Muse).
 Swift Package Manager, SwiftUI
 `MenuBarExtra`, targets macOS 13+.
 
@@ -411,6 +412,21 @@ produces numbers that are wrong by multiples while looking plausible:
 |---|---|---|
 | `CodexSessionScanner` (`~/.codex/sessions`) | **yes** — cached is subtracted out | folded into output |
 | `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
+| `MuseSessionScanner` (`~/.local/share/muse/sessions`) | **yes** — cache read (`cache_read_tokens` ?? `cached_tokens`) is subtracted out | subset of output, **not** added |
+
+`MuseSessionScanner` counts only `model_completed` /
+`automated_review_completed` events and buckets by `recorded_at`
+(microseconds), never the `YYYY/MM/DD` folder date; `record.quantity`,
+`goal_usage_attribution` and `resource_usage_sampled` are rollups over the
+same steps and counting them doubles every total. Meta publishes no
+prices, so its models stay unpriced (no `PricingTable` entry) and the
+scanner reports tokens with USD 0. Quota lives elsewhere: `MetaProvider`
+reads subscription windows from `POST api.meta.ai/muse-code/key` with the
+Muse CLI's device-code (`dca:`) login token — read-only and prompt-free
+via `MetaCredentialReader`, decode by allow-list (the minted key and
+payment metadata are never decoded or cached); API keys and
+`META_API_KEY` get 401 there and are never consulted. See
+`docs/SDD-meta-muse.md`.
 
 Both were established against real data, not documentation, and both are pinned
 by tests that fail if the other reading is applied. `CodexSessionScanner` also
