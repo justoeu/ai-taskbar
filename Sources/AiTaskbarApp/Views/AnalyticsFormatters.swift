@@ -77,6 +77,7 @@ public enum AnalyticsFormatters {
         case .kimi:       return Color(red: 0.95, green: 0.65, blue: 0.15) // Amber
         case .deepseek:   return Color(red: 0.40, green: 0.50, blue: 0.60) // Slate
         case .typesafe:   return Color(red: 0.30, green: 0.75, blue: 0.35) // Green
+        case .meta:       return Color(red: 0.00, green: 0.51, blue: 0.98) // Meta Blue
         }
     }
 }

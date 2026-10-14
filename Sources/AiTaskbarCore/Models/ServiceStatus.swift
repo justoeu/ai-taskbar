@@ -178,6 +178,7 @@ public extension VendorId {
         case .deepseek:   return URL(string: "https://status.deepseek.com")
         case .xai:        return URL(string: "https://status.x.ai")
         case .typesafe:   return URL(string: "https://status.typesafe.ai")
+        case .meta:       return URL(string: "https://metastatus.com")
         }
     }
 }

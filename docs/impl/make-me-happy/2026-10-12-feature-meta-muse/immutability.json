@@ -1,0 +1,11 @@
+{
+  "green": true,
+  "tests": [
+    {"name": "golden: input includes cache read; reasoning stays inside output", "task": "T-003", "file": "Tests/AiTaskbarCoreTests/MuseSessionScannerTests.swift"},
+    {"name": "only model_completed and automated_review_completed count", "task": "T-003", "file": "Tests/AiTaskbarCoreTests/MuseSessionScannerTests.swift"},
+    {"name": "golden: mint response decodes field by field", "task": "T-006", "file": "Tests/AiTaskbarProvidersTests/MetaProviderTests.swift"},
+    {"name": "golden: idle keeps plan, invents no windows", "task": "T-006", "file": "Tests/AiTaskbarProvidersTests/MetaProviderTests.swift"},
+    {"name": "fetch mints, maps windows, and caches no secret material", "task": "T-007", "file": "Tests/AiTaskbarProvidersTests/MetaProviderTests.swift"}
+  ],
+  "note": "Public Snapshot shape frozen by goldens (repo immutability mandate). Mint fixture is synthetic per SDD SS14 (field contract, invented values); scanner fixture values are the measured 2026-10-12 series."
+}

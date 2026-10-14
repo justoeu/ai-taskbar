@@ -1,7 +1,8 @@
 # Project: ai-taskbar
 
 Native macOS menu-bar app monitoring LLM usage across Anthropic, OpenAI/Codex,
-OpenRouter, Z.AI, Kimi/Moonshot, Gemini, DeepSeek, xAI and TypeSafe (Jev).
+OpenRouter, Z.AI, Kimi/Moonshot, Gemini, DeepSeek, xAI, TypeSafe (Jev) and
+Meta (Muse).
 Swift Package Manager, SwiftUI
 `MenuBarExtra`, targets macOS 13+.
 
@@ -159,6 +160,8 @@ contract, not an implementation detail.
 `scripts/validate.sh` and CI share `scripts/check-swift-warnings.sh`, covering
 source, test, macro-expansion and linker diagnostics. Only deprecations in
 `Sources/AiTaskbarCore/Credentials/Keychain{AccessAuthorizer,CredentialReader,PromptSuppressor}.swift`
+and `MetaCredentialReader.swift` (same unavoidable classic API: `kSecUseAuthenticationUIFail`
+on the prompt-free Muse CLI item read)
 and their isolated-keychain test fixtures (`KeychainAccessAuthorizerTests.swift`,
 `KeychainCredentialReaderTests.swift`, `TemporaryKeychain.swift` in
 `Tests/AiTaskbarCoreTests/`) are allowlisted. Other warnings in those files fail
@@ -409,6 +412,25 @@ produces numbers that are wrong by multiples while looking plausible:
 |---|---|---|
 | `CodexSessionScanner` (`~/.codex/sessions`) | **yes** — cached is subtracted out | folded into output |
 | `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
+| `MuseSessionScanner` (`~/.local/share/muse/sessions`) | **yes** — cache read (`cache_read_tokens` ?? `cached_tokens`) is subtracted out | subset of output, **not** added |
+
+`MuseSessionScanner` counts only `model_completed` /
+`automated_review_completed` events and buckets by `recorded_at`
+(microseconds), never the `YYYY/MM/DD` folder date; `record.quantity`,
+`goal_usage_attribution` and `resource_usage_sampled` are rollups over the
+same steps and counting them doubles every total. Dollars are estimated
+at the published Meta Model API rates in `PricingTable.meta` (Wonder
+$4/$20, Spark $1.25/$4.25 per 1M; Wonder Full has no public rate and is
+estimated at the Wonder rate, the `codex-auto-review` precedent;
+`muse-image-1.0` stays unpriced). Quota lives elsewhere: `MetaProvider`
+reads subscription windows from `POST api.meta.ai/muse-code/key` with the
+Muse CLI's device-code (`dca:`) login token — read-only via
+`MetaCredentialReader` (scheduled reads prompt-free; the single prompt is
+the user-clicked Authorize affordance over `KeychainAccessAuthorizer`,
+like Anthropic), decode by allow-list (the minted key and
+payment metadata are never decoded or cached); API keys and
+`META_API_KEY` get 401 there and are never consulted. See
+`docs/SDD-meta-muse.md` (§18 field addendum).
 
 Both were established against real data, not documentation, and both are pinned
 by tests that fail if the other reading is applied. `CodexSessionScanner` also
@@ -788,6 +810,14 @@ that came out of fixing that:
   tool, so the tool is on its trusted-app list and `apple-tool:` partition no
   matter how this binary is signed — which is what made ad-hoc dev builds
   re-prompt after every rebuild (36 dead `cdhash` grants on one machine).
+  The same fallback covers the Muse CLI item (`MetaCredentialReader`): its
+  partition list carries `apple-tool:` from creation — verified by ACL dump
+  on 2026-10-12 (`teamid:<Meta>`, `apple-tool:`; our own teamid there came
+  from the user's Authorize click), the system default for `SecItemAdd`
+  items. The criterion for any future item is that same *verified*
+  `apple-tool:` partition membership, never the assumption that the tool
+  might be trusted: without it, the tool would raise the dialog this
+  suppressor exists to prevent (bounded only by the 5 s kill + cooldowns).
   Rules: exact-match arguments only (`-s` is exact, verified; `-a ""` for the
   legacy account-less item), the item's own keychain file is passed and must
   be **unlocked** (a locked keychain fast-fails with the same code and the

@@ -86,7 +86,21 @@ public struct MenuBarLabelView: View {
     /// utilization, so a provider without a quota never shows "0%".
     private var rotatingVendors: [VendorViewModel] {
         let base = store.sortedVendors.isEmpty ? store.vendors : store.sortedVendors
-        return base.filter(\.vendorId.reportsUtilization)
+        return base.filter {
+            Self.isRotatingCandidate(vendorId: $0.vendorId,
+                                     snapshot: $0.state.outcome?.snapshot)
+        }
+    }
+
+    /// A vendor whose current snapshot legitimately has no windows (e.g.
+    /// Meta pay-as-you-go / idle subscription) is skipped: rotating to a
+    /// permanent "MUSE 0%" would be invented utilization. Vendors with no
+    /// snapshot yet keep the existing behavior.
+    nonisolated static func isRotatingCandidate(vendorId: VendorId,
+                                                snapshot: VendorSnapshot?) -> Bool {
+        guard vendorId.reportsUtilization else { return false }
+        guard let snapshot else { return true }
+        return !snapshot.windows.isEmpty
     }
 
     private func shortLabel(for v: VendorId) -> String {
@@ -100,6 +114,7 @@ public struct MenuBarLabelView: View {
         case .deepseek:   return "DS"
         case .xai:        return "xAI"
         case .typesafe:   return "JEV"
+        case .meta:       return "MUSE"
         }
     }
 

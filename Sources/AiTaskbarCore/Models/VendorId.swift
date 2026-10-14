@@ -10,6 +10,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
     case deepseek
     case xai
     case typesafe
+    case meta
 
     public var id: String { rawValue }
 
@@ -24,6 +25,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .deepseek:   return "DeepSeek"
         case .xai:        return "xAI (Grok)"
         case .typesafe:   return "Jev (TypeSafe)"
+        case .meta:       return "Muse (Meta)"
         }
     }
 
@@ -39,6 +41,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .deepseek:   return "fish.fill"
         case .xai:        return "xmark"
         case .typesafe:   return "t.square"
+        case .meta:       return "m.square"
         }
     }
 
@@ -55,6 +58,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .deepseek:   return URL(string: "https://platform.deepseek.com/usage")
         case .xai:        return URL(string: "https://console.x.ai/team/default/usage")
         case .typesafe:   return URL(string: "https://console.typesafe.ai/usage")
+        case .meta:       return URL(string: "https://dev.meta.ai")
         }
     }
 
@@ -64,7 +68,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         switch self {
         case .openrouter, .deepseek, .kimi, .typesafe:
             return true
-        case .anthropic, .openai, .gemini, .zai, .xai:
+        case .anthropic, .openai, .gemini, .zai, .xai, .meta:
             return false
         }
     }
@@ -80,6 +84,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         case .openai:     return "codex login"
         case .gemini:     return "agy"
         case .xai:        return "grok login"
+        case .meta:       return "muse login"
         default:          return nil
         }
     }
@@ -92,7 +97,7 @@ public enum VendorId: String, Codable, CaseIterable, Sendable, Identifiable {
         switch self {
         case .typesafe:
             return false
-        case .anthropic, .openai, .zai, .openrouter, .kimi, .gemini, .deepseek, .xai:
+        case .anthropic, .openai, .zai, .openrouter, .kimi, .gemini, .deepseek, .xai, .meta:
             return true
         }
     }

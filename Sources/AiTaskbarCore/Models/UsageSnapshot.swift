@@ -12,6 +12,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
     case deepseek(DeepSeekSnapshot)
     case xai(XAISnapshot)
     case typesafe(TypeSafeSnapshot)
+    case meta(MetaSnapshot)
 
     public var vendorId: VendorId {
         switch self {
@@ -24,6 +25,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .deepseek:   return .deepseek
         case .xai:        return .xai
         case .typesafe:   return .typesafe
+        case .meta:       return .meta
         }
     }
 
@@ -38,6 +40,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .deepseek(let s):   return s.planLabel
         case .xai(let s):        return s.planLabel
         case .typesafe(let s):   return s.planLabel
+        case .meta(let s):       return s.planLabel
         }
     }
 
@@ -69,6 +72,8 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             // No quota or utilization exists on the wire: nothing to draw as a
             // bar and nothing to feed the menu-bar percentage.
             return []
+        case .meta(let s):
+            return [s.session, s.weekly].compactMap { $0 }
         }
     }
 
@@ -96,6 +101,8 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             return (s.weekly?.utilizationPercent, s.daily?.utilizationPercent ?? maxUtilization)
         case .xai(let s):
             return (nil, s.weekly?.utilizationPercent ?? maxUtilization)
+        case .meta(let s):
+            return (s.weekly?.utilizationPercent, s.session?.utilizationPercent ?? maxUtilization)
         case .kimi, .deepseek, .typesafe:
             return (nil, maxUtilization)
         }
@@ -118,6 +125,8 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             return (s.daily, s.weekly)
         case .xai(let s):
             return (nil, s.weekly)
+        case .meta(let s):
+            return (s.session, s.weekly)
         case .kimi, .deepseek, .typesafe:
             return (nil, nil)
         }
@@ -814,5 +823,49 @@ public struct XAISnapshot: Sendable, Equatable, Codable {
         prepaidUsedUSD = try c.decodeIfPresent(Double.self, forKey: .prepaidUsedUSD)
         billingCycleLabel = try c.decodeIfPresent(String.self, forKey: .billingCycleLabel)
         disclaimer = try c.decodeIfPresent(VendorDisclaimer.self, forKey: .disclaimer)
+    }
+}
+
+/// Subscription state reported by the Meta mint endpoint
+/// (`docs/SDD-meta-muse.md` §5/§8). Pay-as-you-go is a real state, never a
+/// fake 0% window.
+public enum MetaSubscriptionState: String, Sendable, Equatable, Codable {
+    case active
+    case payAsYouGo
+    case billingIncomplete
+}
+
+/// Meta Muse subscription usage. Windows exist only when the mint response
+/// carried `subs_usage`; an active subscription whose 5-hour window is idle
+/// omits it, so both stay nil rather than invented zeros.
+public struct MetaSnapshot: Sendable, Equatable, Codable {
+    public let planLabel: String?
+    public let subscription: MetaSubscriptionState
+    /// Rolling session window (wire `subs_usage.window`); its duration comes
+    /// from the wire, never assumed to be 5h in code.
+    public let session: UsageWindow?
+    public let weekly: UsageWindow?
+
+    public init(planLabel: String? = nil,
+                subscription: MetaSubscriptionState = .payAsYouGo,
+                session: UsageWindow? = nil,
+                weekly: UsageWindow? = nil) {
+        self.planLabel = planLabel
+        self.subscription = subscription
+        self.session = session
+        self.weekly = weekly
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case planLabel, subscription, session, weekly
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        planLabel = try c.decodeIfPresent(String.self, forKey: .planLabel)
+        subscription = try c.decodeIfPresent(MetaSubscriptionState.self,
+                                             forKey: .subscription) ?? .payAsYouGo
+        session = try c.decodeIfPresent(UsageWindow.self, forKey: .session)
+        weekly = try c.decodeIfPresent(UsageWindow.self, forKey: .weekly)
     }
 }

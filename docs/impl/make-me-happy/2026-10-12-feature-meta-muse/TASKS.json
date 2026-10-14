@@ -1,0 +1,335 @@
+{
+  "kind": "feature",
+  "spec": "docs/SDD-meta-muse.md",
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "VendorId.meta + MetaSnapshot + VendorSnapshot case",
+      "slice": "Domain model contract: new vendor case, MetaSnapshot/MetaSubscriptionState, windows/maxUtilization wiring, exhaustive-switch updates",
+      "worktree": 1,
+      "status": "DONE",
+      "tests_added": 4,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [],
+      "refs": [
+        "SDD §5"
+      ],
+      "commits": [
+        "6dcc67c"
+      ],
+      "red": {
+        "test": "MetaCoreTests.vendor_identity/snapshot_*",
+        "output_excerpt": "swift test --filter Meta|Muse exit 1: cannot find 'MetaSnapshot'/'VendorId.meta' (slice-1 RED run)"
+      },
+      "green": {
+        "output_excerpt": "Meta suites green; slice-1 make validate green, coverage 93.85%"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-002",
+      "title": "MetaConfig + [meta] snippet + config.example",
+      "slice": "AppConfig section (enabled=false, sessionsDir, authPath), defaultSnippets entry, config.example.toml, TOML decode tests",
+      "worktree": 1,
+      "status": "DONE",
+      "tests_added": 4,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-001"
+      ],
+      "refs": [
+        "SDD §6"
+      ],
+      "commits": [
+        "6dcc67c"
+      ],
+      "red": {
+        "test": "MetaConfigTests.defaults + SettingsViewModelDiff meta rows",
+        "output_excerpt": "same slice-1 RED run: 'MetaConfig' not in scope; later Settings diff coverage failed until rows added"
+      },
+      "green": {
+        "output_excerpt": "green in slice-1 suite (1373 tests)"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-003",
+      "title": "MuseSessionScanner + Paths root + scanner golden",
+      "slice": "Local token scanner over session.jsonl (model_completed/automated_review_completed, recorded_at bucketing, ModelUsage mapping), fixtures + golden incl. DST/ignore-kinds",
+      "worktree": 1,
+      "status": "DONE",
+      "tests_added": 7,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": [
+        "T-001"
+      ],
+      "refs": [
+        "SDD §9",
+        "SDD §14"
+      ],
+      "commits": [
+        "6dcc67c"
+      ],
+      "red": {
+        "test": "MuseSessionScannerTests.golden_semantics/kind_filter/bucket_by_recorded_at",
+        "output_excerpt": "slice-1 RED run: 'MuseSessionScanner' not in scope"
+      },
+      "green": {
+        "output_excerpt": "7 scanner tests green; golden pins 4188=52304-48116"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-004",
+      "title": "Cost/Analytics registration (unpriced tokens)",
+      "slice": "CostEstimator wires MuseSessionScanner for .meta; vendorColorIndices entry; unpriced-model Analytics behavior covered by test",
+      "worktree": 1,
+      "status": "DONE",
+      "tests_added": 3,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-003"
+      ],
+      "refs": [
+        "SDD §10"
+      ],
+      "commits": [
+        "6dcc67c"
+      ],
+      "red": {
+        "test": "MetaCardTests.cost_footer_supported + estimate hasDisplayData (P-1 fix)",
+        "output_excerpt": "slice-1 RED run (missing symbols); P-1 regression caught in spec review round 1"
+      },
+      "green": {
+        "output_excerpt": "green; footer renders with zero-dollar breakdown rows"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-005",
+      "title": "MetaCredentialReader (auth.json > Keychain, dca: only)",
+      "slice": "Credential resolution order, prompt-free Keychain read via suppressor+UIFail, login detection without secret, ACL-blocked degradation",
+      "worktree": 2,
+      "status": "DONE",
+      "tests_added": 9,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-002"
+      ],
+      "refs": [
+        "SDD §7"
+      ],
+      "commits": [
+        "7b26e30"
+      ],
+      "red": {
+        "test": "MetaCredentialReaderTests (7->9 with detection/uncontracted)",
+        "output_excerpt": "slice-2 RED run: 'MetaCredentialReader'/'MetaLoginResolution' not in scope"
+      },
+      "green": {
+        "output_excerpt": "green; slice-2 make validate green 93.20%"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-006",
+      "title": "MetaWireTypes + mint golden (allow-list decode)",
+      "slice": "MetaMintResponse subset decode, window sanitization/reset bounds, subscription-state mapping, golden cases incl. extra-field ignorance",
+      "worktree": 2,
+      "status": "DONE",
+      "tests_added": 6,
+      "red_green": true,
+      "immutability": true,
+      "depends_on": [
+        "T-001"
+      ],
+      "refs": [
+        "SDD §8",
+        "SDD §14"
+      ],
+      "commits": [
+        "7b26e30"
+      ],
+      "red": {
+        "test": "MetaProviderTests.golden_* + percent_sanitization",
+        "output_excerpt": "slice-2 RED run: 'MetaMintResponse' not in scope"
+      },
+      "green": {
+        "output_excerpt": "goldens green incl. non-finite/clamp (round-2 additions)"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-007",
+      "title": "MetaProvider over CachedFetch + validate section",
+      "slice": "Single mint request, error mapping, stale fallback, cancellation checkpoints, StubURLProtocol tests, AiTaskbarValidate meta section",
+      "worktree": 2,
+      "status": "DONE",
+      "tests_added": 6,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-005",
+        "T-006"
+      ],
+      "refs": [
+        "SDD §8",
+        "SDD §14"
+      ],
+      "commits": [
+        "7b26e30"
+      ],
+      "red": {
+        "test": "MetaProviderTests.fetch_* (http failures, stale, guidance) + validate Meta section",
+        "output_excerpt": "slice-2 RED run: 'MetaProvider' not in scope"
+      },
+      "green": {
+        "output_excerpt": "green; only mint URL ever requested; no secret in cache"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-008",
+      "title": "AppEnvironment wiring for MetaProvider",
+      "slice": "makeProviders + enabledVendorIds registration when config.meta.enabled",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 3,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-007"
+      ],
+      "refs": [
+        "SDD §11"
+      ],
+      "commits": [
+        "c8592e7"
+      ],
+      "red": {
+        "test": "MetaWiringTests.enabled_vendor_ids/sessions_dir_override/disabled_never_scans",
+        "output_excerpt": "slice-3 RED run: AppEnvironment has no member 'museSessionsDir'"
+      },
+      "green": {
+        "output_excerpt": "green; disabled Meta never invokes scanner seam (P-3)"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-009",
+      "title": "Card rows + shortLabel MUSE + brand color + pin behavior",
+      "slice": "Meta card states (active/PAYG/billing/idle/no-login), MenuBarLabelView shortLabel, vendorColor, pinned badge without percent when no windows",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 4,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-008"
+      ],
+      "refs": [
+        "SDD §4",
+        "SDD §11"
+      ],
+      "commits": [
+        "c8592e7"
+      ],
+      "red": {
+        "test": "MetaCardTests.payg_renders/idle_renders/rotating_skips_windowless",
+        "output_excerpt": "landed with slice-1 RED run; rotating test added round 2 (P-7)"
+      },
+      "green": {
+        "output_excerpt": "green"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-010",
+      "title": "Settings Meta section + detection state",
+      "slice": "Toggle, detected login/sessions/keychain state text, optional path fields; in-window only (no native dialogs)",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 3,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-008"
+      ],
+      "refs": [
+        "SDD §11"
+      ],
+      "commits": [
+        "c8592e7"
+      ],
+      "red": {
+        "test": "SettingsViewModelDiffTests meta rows (3) + detection UI",
+        "output_excerpt": "Settings diff coverage tests failed on slice-1 suite until rows existed (observed)"
+      },
+      "green": {
+        "output_excerpt": "green"
+      },
+      "reversal": "red observed pre-implementation in slice RED run"
+    },
+    {
+      "id": "T-011",
+      "title": "Localizable strings en/pt-BR/es",
+      "slice": "All new Meta keys in three languages with identical key/specifier sets (%ld)",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 1,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-009",
+        "T-010"
+      ],
+      "refs": [
+        "SDD §12"
+      ],
+      "commits": [
+        "c8592e7"
+      ],
+      "red": {
+        "test": "MetaLocalizationDocsTests.meta_keys_everywhere (17 keys x3)",
+        "output_excerpt": "REVERSAL RED: with base (cab15ce) strings checked out, test failed on meta_payg etc. (observed 2026-10-12)"
+      },
+      "green": {
+        "output_excerpt": "green after restore; validate l10n ratchet green"
+      },
+      "reversal": "T-011/T-012 reversal-verified via base checkout"
+    },
+    {
+      "id": "T-012",
+      "title": "README + AGENTS.md scanner-table row + version-note sweep",
+      "slice": "User docs for Meta vendor; AGENTS.md token-semantics table gains MuseSessionScanner row; no version hand-edits",
+      "worktree": 3,
+      "status": "DONE",
+      "tests_added": 1,
+      "red_green": true,
+      "immutability": false,
+      "depends_on": [
+        "T-011"
+      ],
+      "refs": [
+        "SDD §9",
+        "SDD §15"
+      ],
+      "commits": [
+        "c8592e7"
+      ],
+      "red": {
+        "test": "MetaLocalizationDocsTests.docs_present (README row/section + AGENTS scanner row)",
+        "output_excerpt": "REVERSAL RED: same base checkout run failed docs_present"
+      },
+      "green": {
+        "output_excerpt": "green after restore"
+      },
+      "reversal": "T-011/T-012 reversal-verified via base checkout"
+    }
+  ]
+}

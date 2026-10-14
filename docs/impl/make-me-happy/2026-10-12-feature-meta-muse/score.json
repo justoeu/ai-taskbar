@@ -1,0 +1,48 @@
+{
+  "score": 10,
+  "max": 10,
+  "coverage": {
+    "pct": 93.12,
+    "floor": 90,
+    "floor_min": 90,
+    "requested": 90,
+    "tool": "llvm-cov via scripts/coverage.sh (AiTaskbarCore+AiTaskbarProviders)",
+    "ok": true,
+    "detail": "93.12% >= 90%"
+  },
+  "closable": true,
+  "gates": [
+    {
+      "id": "tasks",
+      "ok": true,
+      "detail": "12 DONE"
+    },
+    {
+      "id": "red-green",
+      "ok": true,
+      "detail": "each DONE has tests_added>=1 and red_green"
+    },
+    {
+      "id": "immutability",
+      "ok": true,
+      "detail": "5 contract test(s) green",
+      "items": [
+        "golden: input includes cache read; reasoning stays inside output",
+        "only model_completed and automated_review_completed count",
+        "golden: mint response decodes field by field",
+        "golden: idle keeps plan, invents no windows",
+        "fetch mints, maps windows, and caches no secret material"
+      ]
+    },
+    {
+      "id": "review",
+      "ok": true,
+      "detail": "standards=APPROVE spec=APPROVE correctness=APPROVE"
+    },
+    {
+      "id": "worktrees",
+      "ok": true,
+      "detail": "3/3 merged+removed"
+    }
+  ]
+}

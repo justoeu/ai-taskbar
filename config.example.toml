@@ -136,3 +136,13 @@ api_key_env = "TYPESAFE_API_KEY"
 # console after "Sign in to TypeSafe…" (card or Settings), which writes:
 # console_session = "enc:..."            # the 3 login cookies, encrypted
 # console_session_expires_at = 0         # Unix seconds; ~14 days after login
+
+[meta]
+# Meta Muse. Off until enabled in Settings. Usage comes from the Muse CLI
+# login (run `muse login`) — API keys cannot read subscription quota.
+enabled = false
+# sessions_dir = "~/.local/share/muse/sessions"  # overrides MUSE_SESSIONS_DIR
+# auth_path = "~/.config/muse/auth.json"          # overrides MUSE_AUTH_PATH
+# Note: the card reads subscription windows from api.meta.ai with the CLI's
+# device-code login token (read-only, never stored) and local token history
+# from the CLI session logs. Meta publishes no prices, so tokens show without $.

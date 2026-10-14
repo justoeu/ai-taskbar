@@ -23,6 +23,11 @@ public struct SettingsView: View {
     @State private var activeHelpKey: String? = nil
     @State private var showGeminiAdvanced = false
     @State private var showXAIAdvanced = false
+    /// Cached so the probe (file read + Keychain query) runs when the
+    /// section appears / paths change, not on every body pass.
+    @State private var metaDetection: MetaLoginDetection = .missing
+    @State private var metaSessionsPresent = false
+    @State private var metaDetectionTask: Task<Void, Never>?
 
     public init(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -61,6 +66,9 @@ public struct SettingsView: View {
                 Section(content: { vendorTypeSafe },
                         header: { vendorHeader("Jev (TypeSafe)", isEnabled: viewModel.draft.typesafe.enabled, vendor: .typesafe) },
                         footer: { Text(L10n.localizedString("settings_typesafe_footer")).font(.caption2).foregroundStyle(.secondary) })
+                Section(content: { vendorMeta },
+                        header: { vendorHeader("Muse (Meta)", isEnabled: viewModel.draft.meta.enabled, vendor: .meta) },
+                        footer: { Text(L10n.localizedString("settings_meta_footer")).font(.caption2).foregroundStyle(.secondary) })
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -746,6 +754,73 @@ public struct SettingsView: View {
             .pickerStyle(.menu)
             .help(L10n.localizedString("settings_base_url_help"))
             TypeSafeConsoleSettingsRow()
+        }
+    }
+
+    // MARK: - Vendor: Meta (Muse)
+
+    @ViewBuilder
+    private var vendorMeta: some View {
+        vendorBody("Muse (Meta)") {
+            HelpToggle(label: L10n.localizedString("settings_enabled"),
+                       helpKey: "settings_enabled_help",
+                       isOn: Binding(
+                        get: { viewModel.draft.meta.enabled },
+                        set: { viewModel.draft.meta.enabled = $0 }))
+            // Detection state (SDD-meta-muse §11): login three-way plus
+            // session-log presence. No secret reaches this view.
+            LabeledContent(L10n.localizedString("settings_meta_login")) {
+                Text(L10n.localizedString(metaDetectionKey))
+                    .foregroundStyle(.secondary)
+            }
+            LabeledContent(L10n.localizedString("settings_meta_sessions")) {
+                Text(L10n.localizedString(metaSessionsPresent
+                    ? "settings_meta_sessions_found" : "settings_meta_sessions_missing"))
+                    .foregroundStyle(.secondary)
+            }
+            .onAppear { refreshMetaDetection() }
+            .onChange(of: viewModel.draft.meta.authPath) { _ in refreshMetaDetection() }
+            .onChange(of: viewModel.draft.meta.sessionsDir) { _ in refreshMetaDetection() }
+            HelpTextField(label: L10n.localizedString("settings_meta_sessions_dir"),
+                          helpKey: "settings_meta_sessions_dir_help",
+                          text: Binding(
+                            get: { viewModel.draft.meta.sessionsDir ?? "" },
+                            set: { viewModel.draft.meta.sessionsDir = $0.isEmpty ? nil : $0 }))
+            HelpTextField(label: L10n.localizedString("settings_meta_auth_path"),
+                          helpKey: "settings_meta_auth_path_help",
+                          text: Binding(
+                            get: { viewModel.draft.meta.authPath ?? "" },
+                            set: { viewModel.draft.meta.authPath = $0.isEmpty ? nil : $0 }))
+        }
+    }
+
+    private var metaDetectionKey: String {
+        switch metaDetection {
+        case .detected: return "settings_meta_login_detected"
+        case .keychainBlocked: return "settings_meta_login_blocked"
+        case .unavailable: return "settings_meta_login_unavailable"
+        case .missing: return "settings_meta_login_missing"
+        }
+    }
+
+    /// Debounced and off-main: detection does a file read plus a Keychain
+    /// query, and the path fields retrigger it per keystroke.
+    private func refreshMetaDetection() {
+        metaDetectionTask?.cancel()
+        let config = viewModel.draft.meta
+        metaDetectionTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            let detected = try? await OffPool.run {
+                MetaCredentialReader(config: config).detection()
+            }
+            let dir = AppEnvironment.museSessionsDir(for: config)
+                ?? Paths.museSessionsDir()
+            var isDir: ObjCBool = false
+            let present = FileManager.default
+                .fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue
+            if let detected { metaDetection = detected }
+            metaSessionsPresent = present
         }
     }
 

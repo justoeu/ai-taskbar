@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Native macOS menu-bar tracker for LLM usage across 8 providers.</b><br/>
-  Anthropic Claude · OpenAI Codex/ChatGPT · OpenRouter · Z.AI (GLM) · Kimi (Moonshot) · Gemini · DeepSeek · xAI (Grok) · Jev (TypeSafe)
+  Anthropic Claude · OpenAI Codex/ChatGPT · OpenRouter · Z.AI (GLM) · Kimi (Moonshot) · Gemini · DeepSeek · xAI (Grok) · Jev (TypeSafe) · Muse (Meta)
 </p>
 
 <p align="center">
@@ -106,6 +106,7 @@ The app **reads existing credentials** — you don't need to paste API keys for 
 | **Gemini** | Antigravity CLI (`agy`) or API key | **Requires local CLI:** Run `agy` to authenticate (required for live quota/usage monitoring). Fallback: API key in `[gemini]` for heartbeat only. |
 | **Jev (TypeSafe)** | API key | Settings → Jev (TypeSafe) → paste the key (create it at [console.typesafe.ai](https://console.typesafe.ai)). Off until a key is saved. Optional: **Sign in to TypeSafe…** on the card or in Settings adds spend, balance and tokens. See [TypeSafe](#typesafe-jev--api-key-plus-optional-console-sign-in). |
 | **xAI (Grok)** | Grok CLI (`~/.grok/auth.json`) or Management API | **Requires local CLI:** Run `grok login` (required for SuperGrok quota & balance). Fallback: Management key + `team_id` in `[xai]` for team API billing. |
+| **Muse (Meta)** | Muse CLI login (`muse login`) | **Requires local CLI:** run `muse login`, then enable in Settings → Muse (Meta). Off by default; API keys cannot read subscription quota. See [Meta](#meta-muse--cli-login-quota-plus-local-token-history). |
 
 > ⚠️ **macOS env vars footgun:** GUI apps launched from Finder do **not** inherit your shell environment. If you set `OPENROUTER_API_KEY=...` in `~/.zshrc`, the menu bar app **won't see it**. Three workarounds:
 > 1. **Put the key directly in `config.toml`** (file is `chmod 600`).
@@ -308,6 +309,15 @@ AI Taskbar supports two modes for xAI:
 - **Status:** incidents from [status.typesafe.ai](https://status.typesafe.ai). Its feed publishes one item per update, so updates are merged per incident, and an unresolved incident with no update for 48 h is treated as abandoned rather than ongoing.
 - **Pricing (for reference, not used by the app):** US$ 0.042 per million input tokens, output free ([docs.typesafe.ai/models](https://docs.typesafe.ai/models), checked 2026-09-29).
 
+### Meta (Muse) — CLI-login quota plus local token history
+
+Muse is Meta's model family behind the Muse Code CLI (`muse`). The card is **off until you enable it** in Settings → Muse (Meta), and it needs the CLI login: run `muse login` once.
+
+- **What the card shows:** your plan and the subscription windows (session + weekly, with reset countdowns) read from Meta with the CLI's own login token, plus today's / last 7 days' tokens per model from the CLI session logs on this Mac (`~/.local/share/muse/sessions`). Pay-as-you-go accounts show "No subscription" instead of an invented 0% bar.
+- **No API key works here:** dashboard keys and `META_API_KEY` cannot read subscription quota, so there is no key field. The login token is read only to fetch the windows, is never stored or logged, and is never refreshed by the app — the CLI owns it. If the Keychain refuses access, the card degrades to the local token history with a note; it never pops a password prompt.
+- **Dollar figures are API-value estimates:** local tokens are priced at the published Meta Model API rates (Muse Wonder $4/$20 per 1M in/out, Spark $1.25/$4.25). Wonder Full has no public per-token rate (subscription-only), so it is estimated at the Wonder rate; subscription use itself is flat-fee.
+- **Status:** the row links to Meta's official [metastatus.com](https://metastatus.com); it exposes no machine-readable feed we could verify, so live incident state stays "unknown" (link-only, like Gemini) rather than scraped.
+
 ### Google Gemini — Antigravity CLI monitoring & heartbeat
 
 > ⚠️ **Important requirement:** Google does **not** provide a public REST API for personal Gemini subscription quotas (such as the 5-hour or weekly consumer limits on gemini.google.com). To monitor Gemini quotas and models, you **must have Google's Antigravity CLI (`agy`) installed and authenticated locally**.
@@ -356,6 +366,7 @@ AI Taskbar features an integrated **Service Status & Health Dashboard** that mon
 | **OpenRouter** | [status.openrouter.ai](https://status.openrouter.ai) | RSS Status Source |
 | **Jev (TypeSafe)** | [status.typesafe.ai](https://status.typesafe.ai) | RSS Status Source (one item per update, merged per incident) |
 | **Z.AI** | *(None)* | Unmonitored (no public status page) |
+| **Muse (Meta)** | [metastatus.com](https://metastatus.com) | Official Status Page (link only — no machine-readable feed wired yet) |
 
 Clicking any row in the status window opens the provider's official status page directly in your browser.
 
@@ -576,6 +587,11 @@ prefer_grok_cli = true          # default true: reads ~/.grok/auth.json for Supe
 # api_key = "xai-..."
 # team_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 # base_url = "https://management-api.x.ai"
+
+[meta]
+enabled = false                 # Meta Muse; enable in Settings after `muse login`
+# sessions_dir = "~/.local/share/muse/sessions"  # overrides MUSE_SESSIONS_DIR
+# auth_path = "~/.config/muse/auth.json"          # overrides MUSE_AUTH_PATH
 ```
 
 Each `notify_at` threshold notifies once per usage window. A notification that macOS failed to deliver is retried on the next refresh; one that failed while notifications were turned off for the app is sent on a later refresh once you allow them again.

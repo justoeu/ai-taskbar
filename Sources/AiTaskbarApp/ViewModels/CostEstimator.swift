@@ -12,12 +12,16 @@ public final class CostEstimator: ObservableObject {
     /// Vendors with a local scanner; the Models breakdown only makes sense
     /// for these (we have no per-model attribution for OpenRouter / Z.AI /
     /// Kimi balances).
-    public static let supportedVendors: Set<VendorId> = [.anthropic, .openai]
+    public static let supportedVendors: Set<VendorId> = [.anthropic, .openai, .meta]
 
     /// Scanner seams keep the refresh state machine independently testable
     /// from the size and contents of the current user's on-disk histories.
     private let claudeEstimate: @Sendable () -> CostEstimate
     private let codexEstimate: @Sendable () -> CostEstimate
+    private let museEstimate: @Sendable () -> CostEstimate
+    /// Meta disabled means no scan at all (SDD-meta-muse §4.3): the seam
+    /// is not invoked and no `.meta` estimate is published.
+    private let museEnabled: Bool
     private let opencodeScan: @Sendable ([String: [String]]) -> [String: OpencodeScan]?
 
     /// Usage that reached a vendor through opencode rather than that vendor's
@@ -67,9 +71,11 @@ public final class CostEstimator: ObservableObject {
     /// failure it prevents is silent.
     private var generation: UInt64 = 0
 
-    public init() {
+    public init(museSessionsDir: URL? = nil, museEnabled: Bool = false) {
         self.claudeEstimate = { ClaudeSessionScanner.estimate() }
         self.codexEstimate = { CodexCost.estimate() }
+        self.museEstimate = { MuseSessionScanner.estimate(sessionsDir: museSessionsDir) }
+        self.museEnabled = museEnabled
         self.opencodeScan = { groups in
             Self.opencodeRows(from: OpencodeScanner.scanOutcome(providerGroups: groups))
         }
@@ -91,11 +97,15 @@ public final class CostEstimator: ObservableObject {
     internal init(
         claudeEstimate: @escaping @Sendable () -> CostEstimate,
         codexEstimate: @escaping @Sendable () -> CostEstimate,
-        opencodeScan: @escaping @Sendable ([String: [String]]) -> [String: OpencodeScan]?
+        opencodeScan: @escaping @Sendable ([String: [String]]) -> [String: OpencodeScan]?,
+        museEstimate: @escaping @Sendable () -> CostEstimate = { MuseSessionScanner.estimate() },
+        museEnabled: Bool = true
     ) {
         self.claudeEstimate = claudeEstimate
         self.codexEstimate = codexEstimate
         self.opencodeScan = opencodeScan
+        self.museEstimate = museEstimate
+        self.museEnabled = museEnabled
     }
 
     /// Recomputes scanners if either no result exists or the previous one is
@@ -111,6 +121,8 @@ public final class CostEstimator: ObservableObject {
         isLoading = true
         let claudeEstimate = self.claudeEstimate
         let codexEstimate = self.codexEstimate
+        let museEstimate = self.museEstimate
+        let museEnabled = self.museEnabled
         let opencodeScan = self.opencodeScan
         // Held so a teardown (or a superseding refresh) can cancel the scan.
         // Both scanners poll `Task.isCancelled` between files; without a
@@ -122,9 +134,11 @@ public final class CostEstimator: ObservableObject {
         inFlight = Task.detached(priority: .utility) {
             async let claude = claudeEstimate()
             async let codex = codexEstimate()
+            async let muse: CostEstimate? = museEnabled ? museEstimate() : nil
             let started = Date()
             let claudeEstimate = await claude
             let codexEstimate = await codex
+            let museEstimate = await muse
             // Kept in the shipping build. The cold Claude scan dominates this
             // (5s on the maintainer's machine) and the Models section shows
             // "Loading…" for its whole duration, which is indistinguishable
@@ -156,6 +170,7 @@ public final class CostEstimator: ObservableObject {
                 var updated = self.byVendor
                 updated[.anthropic] = claudeEstimate
                 updated[.openai] = codexEstimate
+                updated[.meta] = museEstimate
                 self.byVendor = updated
                 self.lastComputedAt = .now
                 self.isLoading = false

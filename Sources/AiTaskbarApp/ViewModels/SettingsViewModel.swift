@@ -305,6 +305,18 @@ public final class SettingsViewModel: ObservableObject {
             out.append(.string(section: "typesafe", key: "base_url", value: ts.baseURL))
         }
 
+        // [meta] — no secrets: quota reads the Muse CLI login, never a key
+        // stored here (docs/SDD-meta-muse.md §6).
+        if old.meta.enabled != new.meta.enabled {
+            out.append(.bool(section: "meta", key: "enabled", value: new.meta.enabled))
+        }
+        if old.meta.sessionsDir != new.meta.sessionsDir {
+            out.append(.string(section: "meta", key: "sessions_dir", value: new.meta.sessionsDir ?? ""))
+        }
+        if old.meta.authPath != new.meta.authPath {
+            out.append(.string(section: "meta", key: "auth_path", value: new.meta.authPath ?? ""))
+        }
+
         // [xai]
         if old.xai.enabled != new.xai.enabled {
             out.append(.bool(section: "xai", key: "enabled", value: new.xai.enabled))

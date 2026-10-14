@@ -34,6 +34,11 @@ public enum VendorGuidance: String, Sendable, Equatable, Codable, CaseIterable {
     case antigravityCanceled
     /// `prefer_grok_cli` is on, Grok CLI auth is missing and no team_id is set.
     case grokCLIRequired
+    /// No Muse CLI login found (run `muse login`).
+    case museLoginRequired
+    /// The Muse CLI's Keychain item refuses this binary; local token
+    /// history still shows (docs/SDD-meta-muse.md §7.3).
+    case museKeychainBlocked
 
     /// HTTP status the situation is equivalent to, so the 401 re-login banner
     /// and the transient/back-off logic treat it as they treated the old
@@ -41,6 +46,7 @@ public enum VendorGuidance: String, Sendable, Equatable, Codable, CaseIterable {
     public var httpStatus: Int? {
         switch self {
         case .antigravityNotAuthenticated: return 401
+        case .museLoginRequired:           return 401
         case .antigravityUnavailable:      return 503
         default:                           return nil
         }
@@ -63,6 +69,10 @@ public enum VendorGuidance: String, Sendable, Equatable, Codable, CaseIterable {
             return "agy: context canceled"
         case .grokCLIRequired:
             return "Grok CLI is required (grok login), or set the xAI management key and team_id"
+        case .museLoginRequired:
+            return "Muse login not found; run 'muse login'"
+        case .museKeychainBlocked:
+            return "Keychain access unavailable for the Muse login"
         }
     }
 }

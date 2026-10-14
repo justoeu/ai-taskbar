@@ -10,7 +10,8 @@ public enum AnalyticsAggregator {
         .zai: 4,       // Teal / Cyan
         .openrouter: 5,// Pink / Magenta
         .kimi: 6,      // Yellow / Amber
-        .deepseek: 7   // Slate / Gray
+        .deepseek: 7,  // Slate / Gray
+        .meta: 8       // Meta Blue (vendorColor is authoritative in views)
     ]
 
     public static func computeDelta(current: Double, previous: Double) -> Double? {

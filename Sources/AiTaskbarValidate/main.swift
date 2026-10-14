@@ -379,6 +379,41 @@ section("TypeSafe console (phase 2) fixtures") {
            "TypeSafe session keeps only the three login cookies")
 }
 
+section("Wire types: Meta (Muse) fixtures — synthetic (SDD §14)") {
+    let active = try SharedCoders.decoder.decode(MetaMintResponse.self, from: Fixtures.data(Fixtures.metaMintActive200)).toSnapshot()
+    expect(active.subscription == .active, "Meta subscription active")
+    expect(active.planLabel == "Muse Code Power Usage", "Meta plan label from subs_tier_name")
+    expect(active.session?.label == "Session (5h)", "Meta session label from window_duration_mins")
+    expect(active.session?.utilizationPercent == 37.5, "Meta session utilization")
+    expect(active.weekly?.utilizationPercent == 12.0, "Meta weekly utilization")
+    let encoded = String(decoding: try SharedCoders.encoder.encode(active), as: UTF8.self)
+    expect(!encoded.contains("LLM|") && !encoded.contains("4242") && !encoded.contains("user@example.com"),
+           "Meta snapshot keeps no minted key, payment or email")
+    let idle = try SharedCoders.decoder.decode(MetaMintResponse.self, from: Fixtures.data(Fixtures.metaMintIdle200)).toSnapshot()
+    expect(idle.subscription == .active && idle.session == nil && idle.weekly == nil,
+           "Meta idle subscription invents no windows")
+    let payg = try SharedCoders.decoder.decode(MetaMintResponse.self, from: Fixtures.data(Fixtures.metaMintPayg200)).toSnapshot()
+    expect(payg.subscription == .payAsYouGo, "Meta pay-as-you-go state")
+    expect(MetaConfig().enabled == false, "Meta is disabled by default")
+    expect(VendorId.meta.dashboardURL?.absoluteString == "https://dev.meta.ai", "Meta dashboard URL")
+
+    // Scanner: one measured-shape line in a temp sessions tree.
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("muse-validate-\(UUID().uuidString)")
+    let dayDir = root.appendingPathComponent("2026/10/12/session-a")
+    try fm.createDirectory(at: dayDir, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: root) }
+    let now = Date()
+    let us = Int64(now.timeIntervalSince1970 * 1_000_000)
+    let line = "{\"recorded_at\":\(us),\"payload\":{\"event\":{\"kind\":\"model_completed\",\"model\":\"muse-wonder-1.0\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":100,\"cached_tokens\":250,\"cache_read_tokens\":250,\"cache_write_tokens\":0,\"reasoning_tokens\":10}}}}"
+    try (line + "\n").write(to: dayDir.appendingPathComponent("session.jsonl"), atomically: true, encoding: .utf8)
+    let est = MuseSessionScanner.estimate(now: now, sessionsDir: root)
+    expect(est.totalsByModel["muse-wonder-1.0"]?.inputTokens == 750, "Muse scanner subtracts cache read from input")
+    expect(est.totalsByModel["muse-wonder-1.0"]?.outputTokens == 100, "Muse scanner keeps reasoning inside output")
+    expect(est.hasDisplayData && abs(est.usdToday - 0.00505) < 1e-9,
+           "Muse scanner prices at published Wonder rates ($4/$0.20/$20)")
+}
+
 section("DeepSeekConfig.validate") {
     expect(DeepSeekConfig.validate("https://api.deepseek.com") != nil,
            "accepts https://api.deepseek.com")
