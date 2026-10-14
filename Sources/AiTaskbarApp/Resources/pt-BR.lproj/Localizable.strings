@@ -432,7 +432,8 @@
 "settings_meta_sessions_dir_help" = "Onde o Muse CLI guarda os logs de sessão. Deixe vazio para o padrão (~/.local/share/muse/sessions).";
 "settings_meta_auth_path" = "Arquivo de auth";
 "settings_meta_auth_path_help" = "O arquivo de auth do Muse CLI. Deixe vazio para o padrão (~/.config/muse/auth.json).";
-"settings_meta_login_blocked" = "Acesso ao Keychain indisponível";
+"settings_meta_login_blocked" = "Acesso ao Keychain bloqueado";
+"settings_meta_login_unavailable" = "Acesso ao Keychain indisponível";
 "settings_meta_sessions" = "Logs de sessão";
 "settings_meta_sessions_found" = "Encontrados";
 "settings_meta_sessions_missing" = "Sem sessões do Muse encontradas";

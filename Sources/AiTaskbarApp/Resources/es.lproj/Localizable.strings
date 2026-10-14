@@ -432,7 +432,8 @@
 "settings_meta_sessions_dir_help" = "Donde Muse CLI guarda los registros de sesión. Déjalo vacío para usar el valor predeterminado (~/.local/share/muse/sessions).";
 "settings_meta_auth_path" = "Archivo de auth";
 "settings_meta_auth_path_help" = "El archivo de auth de Muse CLI. Déjalo vacío para usar el predeterminado (~/.config/muse/auth.json).";
-"settings_meta_login_blocked" = "Acceso al Llavero no disponible";
+"settings_meta_login_blocked" = "Acceso al Llavero bloqueado";
+"settings_meta_login_unavailable" = "Acceso al Llavero no disponible";
 "settings_meta_sessions" = "Registros de sesión";
 "settings_meta_sessions_found" = "Encontrados";
 "settings_meta_sessions_missing" = "No se encontraron sesiones de Muse";

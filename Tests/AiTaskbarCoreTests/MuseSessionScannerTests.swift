@@ -87,6 +87,22 @@ struct MuseSessionScannerTests {
         #expect(today["unknown"]?.cacheReadTokens == 400)
     }
 
+    @Test("hostile counts clamp instead of trapping")
+    func hostile_counts_clamp() {
+        let cal = Calendar.current
+        let t = cal.startOfDay(for: Self.now).addingTimeInterval(3_600)
+        // Int.min input used to trap on `input - cacheRead`; cache reads
+        // beyond the stated input must not price nonexistent tokens.
+        let (today, _) = scan([Self.usageLine(at: t, input: Int.min, output: 5,
+                                              cached: 100, cacheRead: 100)])
+        #expect(today["muse-wonder-full-1.0"]?.inputTokens == 0)
+        #expect(today["muse-wonder-full-1.0"]?.cacheReadTokens == 0)
+        let (today2, _) = scan([Self.usageLine(at: t, input: 50, output: 5,
+                                               cached: 999, cacheRead: 999)])
+        #expect(today2["muse-wonder-full-1.0"]?.cacheReadTokens == 50)
+        #expect(today2["muse-wonder-full-1.0"]?.inputTokens == 0)
+    }
+
     @Test("estimate over a temp sessions tree prices at published API rates")
     func estimate_end_to_end() throws {
         let fm = FileManager.default

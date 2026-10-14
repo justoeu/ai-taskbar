@@ -93,12 +93,29 @@ struct MetaProviderTests {
         #expect(s.weekly?.resetsAt == nil)
     }
 
-    @Test("malformed subs_usage object is schema drift, not a fake window")
-    func malformed_usage_throws() {
-        let body = #"{"is_subs_active":true,"subs_usage":{"window":{"used_percent":50}}}"#
+    @Test("unrecognized mint body is schema drift, never a fake pay-as-you-go")
+    func unrecognized_body_throws() {
+        for body in ["{}", #"{"maintenance":true}"#] {
+            #expect(throws: AppError.self) {
+                try SharedCoders.decoder.decode(MetaMintResponse.self,
+                                                from: Fixtures.data(body)).toSnapshot()
+            }
+        }
+    }
+
+    @Test("windows are independent; a present window needs a usable percent")
+    func independent_windows() throws {
+        // Weekly only, no session window/duration: weekly survives.
+        let body = #"{"is_subs_active":true,"subs_usage":{"weekly":{"used_percent":25}}}"#
+        let s = try SharedCoders.decoder.decode(MetaMintResponse.self,
+                                                from: Fixtures.data(body)).toSnapshot()
+        #expect(s.session == nil)
+        #expect(s.weekly?.utilizationPercent == 25)
+        // Present session window without percent is drift.
+        let bad = #"{"is_subs_active":true,"subs_usage":{"window":{"window_duration_mins":300}}}"#
         #expect(throws: AppError.self) {
             try SharedCoders.decoder.decode(MetaMintResponse.self,
-                                            from: Fixtures.data(body)).toSnapshot()
+                                            from: Fixtures.data(bad)).toSnapshot()
         }
     }
 

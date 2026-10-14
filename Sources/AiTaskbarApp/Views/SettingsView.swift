@@ -27,6 +27,7 @@ public struct SettingsView: View {
     /// section appears / paths change, not on every body pass.
     @State private var metaDetection: MetaLoginDetection = .missing
     @State private var metaSessionsPresent = false
+    @State private var metaDetectionTask: Task<Void, Never>?
 
     public init(onDone: @escaping () -> Void) {
         self.onDone = onDone
@@ -796,18 +797,31 @@ public struct SettingsView: View {
     private var metaDetectionKey: String {
         switch metaDetection {
         case .detected: return "settings_meta_login_detected"
-        case .keychainBlocked, .unavailable: return "settings_meta_login_blocked"
+        case .keychainBlocked: return "settings_meta_login_blocked"
+        case .unavailable: return "settings_meta_login_unavailable"
         case .missing: return "settings_meta_login_missing"
         }
     }
 
+    /// Debounced and off-main: detection does a file read plus a Keychain
+    /// query, and the path fields retrigger it per keystroke.
     private func refreshMetaDetection() {
-        metaDetection = MetaCredentialReader(config: viewModel.draft.meta).detection()
-        let dir = AppEnvironment.museSessionsDir(for: viewModel.draft.meta)
-            ?? Paths.museSessionsDir()
-        var isDir: ObjCBool = false
-        metaSessionsPresent = FileManager.default
-            .fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue
+        metaDetectionTask?.cancel()
+        let config = viewModel.draft.meta
+        metaDetectionTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            let detected = try? await OffPool.run {
+                MetaCredentialReader(config: config).detection()
+            }
+            let dir = AppEnvironment.museSessionsDir(for: config)
+                ?? Paths.museSessionsDir()
+            var isDir: ObjCBool = false
+            let present = FileManager.default
+                .fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue
+            if let detected { metaDetection = detected }
+            metaSessionsPresent = present
+        }
     }
 
     // MARK: - Vendor: xAI

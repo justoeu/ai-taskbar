@@ -192,7 +192,11 @@ public struct MetaCredentialReader: MetaCredentialReading {
     /// built without a probe (tests) fall back to classifying the read
     /// result, discarding any payload unread.
     public func detection() -> MetaLoginDetection {
-        if authFileRecord() != nil { return .detected }
+        // An inline token is self-sufficient. An oauth marker alone only
+        // says the token should be in the Keychain, so fall through to
+        // the probe: marker present + item deleted/blocked must not read
+        // as "Detected".
+        if authFileRecord()?.inlineToken != nil { return .detected }
         if let keychainProbe {
             switch keychainProbe() {
             case .present: return .detected
@@ -233,9 +237,19 @@ public struct MetaCredentialReader: MetaCredentialReading {
     }
 
     private func authFileRecord() -> AuthFileRecord? {
-        guard let data = try? Data(contentsOf: authFileURL),
-              let file = try? JSONDecoder().decode(AuthFile.self, from: data),
-              let meta = file.providers?.meta else { return nil }
+        // Bounded read: the path is steerable (config/env), so never slurp
+        // an unbounded or non-regular file on the scheduled path. A file
+        // that exists but does not parse is logged, then treated as absent
+        // so the Keychain path still gets its chance.
+        guard let data = Self.boundedRead(authFileURL) else { return nil }
+        let file: AuthFile
+        do {
+            file = try SharedCoders.decoder.decode(AuthFile.self, from: data)
+        } catch {
+            AppLog.keychain.error("Muse auth file present but unparseable; falling back to Keychain.")
+            return nil
+        }
+        guard let meta = file.providers?.meta else { return nil }
         let trimmed = meta.accessToken?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let inline = trimmed.hasPrefix(Self.tokenPrefix) ? trimmed : nil
@@ -244,6 +258,18 @@ public struct MetaCredentialReader: MetaCredentialReading {
             .lowercased() == "oauth"
         guard inline != nil || isOAuth else { return nil }
         return AuthFileRecord(inlineToken: inline)
+    }
+
+    /// At most 64 KiB from a regular file; nil for missing/oversized/other.
+    static func boundedRead(_ url: URL, limit: Int = 65_536) -> Data? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              (attrs[.type] as? FileAttributeType) == .typeRegular,
+              let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: limit + 1), data.count <= limit else {
+            return nil
+        }
+        return data
     }
 
     // MARK: - Keychain payload
@@ -255,7 +281,7 @@ public struct MetaCredentialReader: MetaCredentialReading {
         struct Payload: Decodable {
             let access_token: String?
         }
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: data),
+        guard let payload = try? SharedCoders.decoder.decode(Payload.self, from: data),
               let token = payload.access_token?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
               token.hasPrefix(tokenPrefix) else {

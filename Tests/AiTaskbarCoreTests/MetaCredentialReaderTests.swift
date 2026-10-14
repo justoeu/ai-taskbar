@@ -60,6 +60,24 @@ struct MetaCredentialReaderTests {
         #expect(missing.detection() == .missing)
     }
 
+    @Test("oauth marker alone does not fake detection; the probe decides")
+    func oauth_marker_falls_through_to_probe() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("meta-cred-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let auth = dir.appendingPathComponent("auth.json")
+        try #"{"providers":{"meta":{"mechanism":"oauth"}}}"#
+            .write(to: auth, atomically: true, encoding: .utf8)
+        let blocked = MetaCredentialReader(authFileURL: auth,
+                                           keychainRead: { .missing },
+                                           keychainProbe: { .blocked })
+        #expect(blocked.detection() == .keychainBlocked)
+        let missing = MetaCredentialReader(authFileURL: auth,
+                                           keychainRead: { .missing },
+                                           keychainProbe: { .missing })
+        #expect(missing.detection() == .missing)
+    }
+
     @Test("detection prefers the attribute probe and never reads the secret")
     func detection_uses_probe_not_read() throws {
         let dir = FileManager.default.temporaryDirectory

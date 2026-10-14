@@ -433,7 +433,8 @@
 "settings_meta_sessions_dir_help" = "Where the Muse CLI keeps session logs. Leave empty for the default (~/.local/share/muse/sessions).";
 "settings_meta_auth_path" = "Auth file";
 "settings_meta_auth_path_help" = "The Muse CLI auth file. Leave empty for the default (~/.config/muse/auth.json).";
-"settings_meta_login_blocked" = "Keychain access unavailable";
+"settings_meta_login_blocked" = "Keychain access blocked";
+"settings_meta_login_unavailable" = "Keychain access unavailable";
 "settings_meta_sessions" = "Session logs";
 "settings_meta_sessions_found" = "Found";
 "settings_meta_sessions_missing" = "No Muse sessions found";

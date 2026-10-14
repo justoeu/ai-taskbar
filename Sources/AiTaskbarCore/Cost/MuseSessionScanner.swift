@@ -57,6 +57,7 @@ public enum MuseSessionScanner {
         var dailyTotals: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
         var filesScanned = 0
         var drift = 0
+        var unreadable = 0
         var seenPaths = Set<String>()
 
         for case let url as URL in walker {
@@ -82,7 +83,10 @@ public enum MuseSessionScanner {
                 continue
             }
 
-            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }
+            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
+                unreadable += 1
+                continue
+            }
             var fileToday: [String: ModelUsage] = [:]
             var fileWeek: [String: ModelUsage] = [:]
             var fileDaily: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
@@ -134,6 +138,9 @@ public enum MuseSessionScanner {
         }
         if drift > 0 {
             notes.append("\(drift) malformed usage records were skipped.")
+        }
+        if unreadable > 0 {
+            notes.append("\(unreadable) session files could not be read.")
         }
         return CostEstimate(
             usdToday: usdToday,
@@ -205,29 +212,44 @@ public enum MuseSessionScanner {
                                   totalsLast7: inout [String: ModelUsage],
                                   dailyTotals: inout [[String: ModelUsage]],
                                   drift: inout Int) {
-        let decoder = JSONDecoder()
-        for line in data.split(separator: newline, omittingEmptySubsequences: true) {
-            let slice = Data(line)
-            guard slice.range(of: completedMarker) != nil
-                    || slice.range(of: reviewMarker) != nil else { continue }
-            guard let envelope = try? decoder.decode(Envelope.self, from: slice),
+        // Zero-copy offset walk like Claude/Codex: `Data(line)` per line
+        // copied every prompt/tool payload in the file (the 62.8 MB/refresh
+        // pattern removed from ClaudeSessionScanner).
+        var offset = data.startIndex
+        let end = data.endIndex
+        while offset < end {
+            let lineEnd = data[offset..<end].firstIndex(of: newline) ?? end
+            defer { offset = lineEnd < end ? lineEnd + 1 : end }
+            guard lineEnd > offset else { continue }
+            let line = data[offset..<lineEnd]
+            guard line.range(of: completedMarker) != nil
+                    || line.range(of: reviewMarker) != nil else { continue }
+            // Drift counts only decoded counted-kind events that are
+            // malformed; an undecodable line or a content line merely
+            // quoting the marker literal is not schema drift.
+            guard let envelope = try? SharedCoders.decoder.decode(Envelope.self, from: line),
                   let event = envelope.payload?.event,
                   let kind = event.kind,
                   kind == "model_completed" || kind == "automated_review_completed"
-            else { drift += 1; continue }
+            else { continue }
             guard let usage = event.usage else { continue }  // a completed event without usage is not drift (SDD §16)
             guard let recordedAt = envelope.recorded_at else { drift += 1; continue }
             let date = Date(timeIntervalSince1970: TimeInterval(recordedAt) / 1_000_000)
             guard let offset = window.dayOffset(for: date) else { continue }
 
-            let cacheRead = max(0, usage.cache_read_tokens ?? usage.cached_tokens ?? 0)
+            // Clamp like CodexSessionScanner: external counts must never
+            // trap (Int.min input minus cache read) nor price cache reads
+            // beyond the stated input.
+            let input = max(0, usage.input_tokens ?? 0)
+            let cacheRead = min(max(0, usage.cache_read_tokens ?? usage.cached_tokens ?? 0), input)
             let modelUsage = ModelUsage(
-                inputTokens: max(0, (usage.input_tokens ?? 0) - cacheRead),
+                inputTokens: input - cacheRead,
                 outputTokens: max(0, usage.output_tokens ?? 0),
                 cacheReadTokens: cacheRead,
                 cacheCreateTokens: max(0, usage.cache_write_tokens ?? 0))
-            let model = event.model?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let bucket = (model?.isEmpty ?? true) ? unknownModel : model!
+            let trimmed = event.model?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let bucket: String
+            if let trimmed, !trimmed.isEmpty { bucket = trimmed } else { bucket = unknownModel }
 
             CostAggregator.add(modelUsage, into: &totalsLast7, model: bucket)
             if offset == 0 {

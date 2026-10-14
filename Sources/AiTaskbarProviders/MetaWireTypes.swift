@@ -46,10 +46,17 @@ public struct MetaMintResponse: Decodable, Sendable, Equatable {
     static let maxResetsAtSeconds: Double = 64_092_211_200
 
     public func toSnapshot() throws -> MetaSnapshot {
+        // `is_subs_active` is the one field every real mint response
+        // carries; without it the body is not a mint response at all
+        // (renamed field, maintenance JSON) and must read as schema
+        // drift, never as a fabricated fresh "pay-as-you-go".
+        guard let isSubsActive else {
+            throw AppError.schema("meta mint response missing is_subs_active")
+        }
         let state: MetaSubscriptionState
         if requirePayment == true {
             state = .billingIncomplete
-        } else if isSubsActive == true {
+        } else if isSubsActive {
             state = .active
         } else {
             state = .payAsYouGo
@@ -58,25 +65,37 @@ public struct MetaMintResponse: Decodable, Sendable, Equatable {
         guard let subsUsage else {
             return MetaSnapshot(planLabel: subsTierName, subscription: state)
         }
-        guard let window = subsUsage.window, let weekly = subsUsage.weekly else {
-            throw AppError.schema("meta subs_usage missing window/weekly")
+        // Windows are independent: a response carrying only one of them
+        // keeps that one. A present window without a usable percent is
+        // still drift, not a window to invent.
+        var session: UsageWindow?
+        if let window = subsUsage.window {
+            guard let parsed = Self.sessionWindow(window) else {
+                throw AppError.schema("meta subs_usage.window malformed")
+            }
+            session = parsed
         }
-        guard let session = try Self.sessionWindow(window) else {
-            throw AppError.schema("meta subs_usage.window malformed")
-        }
-        guard let weeklyWindow = Self.usageWindow(label: "Weekly (7d)", from: weekly) else {
-            throw AppError.schema("meta subs_usage.weekly malformed")
+        var weeklyWindow: UsageWindow?
+        if let weekly = subsUsage.weekly {
+            guard let parsed = Self.usageWindow(label: "Weekly (7d)", from: weekly) else {
+                throw AppError.schema("meta subs_usage.weekly malformed")
+            }
+            weeklyWindow = parsed
         }
         return MetaSnapshot(planLabel: subsTierName, subscription: state,
                             session: session, weekly: weeklyWindow)
     }
 
-    private static func sessionWindow(_ window: Window) throws -> UsageWindow? {
-        guard let minsRaw = window.windowDurationMins,
-              let mins = Int(checkedTruncating: minsRaw), mins > 0 else {
-            throw AppError.schema("meta window_duration_mins invalid")
+    private static func sessionWindow(_ window: Window) -> UsageWindow? {
+        // Duration only refines the label; an absent/invalid one must not
+        // discard an otherwise valid window.
+        let label: String
+        if let minsRaw = window.windowDurationMins,
+           let mins = Int(checkedTruncating: minsRaw), mins > 0 {
+            label = mins % 60 == 0 ? "Session (\(mins / 60)h)" : "Session (\(mins)m)"
+        } else {
+            label = "Session"
         }
-        let label = mins % 60 == 0 ? "Session (\(mins / 60)h)" : "Session (\(mins)m)"
         return usageWindow(label: label, from: window)
     }
 

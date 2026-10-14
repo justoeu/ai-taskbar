@@ -61,10 +61,12 @@ public struct StatusItemButtonFinder: NSViewRepresentable {
 public struct PinnedStatusBadgeView: View {
     public let vendorId: VendorId
     public let weekly: Double?
-    public let current: Double
+    /// Nil renders the icon alone: a snapshot that legitimately has no
+    /// windows (e.g. Meta pay-as-you-go) must not pin as a fake "0%".
+    public let current: Double?
     public let thresholds: ThresholdsConfig
 
-    public init(vendorId: VendorId, weekly: Double?, current: Double, thresholds: ThresholdsConfig) {
+    public init(vendorId: VendorId, weekly: Double?, current: Double?, thresholds: ThresholdsConfig) {
         self.vendorId = vendorId
         self.weekly = weekly
         self.current = current
@@ -77,12 +79,12 @@ public struct PinnedStatusBadgeView: View {
     private static let menuBarFont = Font(NSFont.menuBarFont(ofSize: 0))
 
     private var isFull: Bool {
-        let maxVal = max(weekly ?? 0, current)
+        let maxVal = max(weekly ?? 0, current ?? 0)
         return SeverityColor.showsFlame(forPercent: maxVal, thresholds: thresholds)
     }
 
     private var flameColor: Color {
-        let maxVal = max(weekly ?? 0, current)
+        let maxVal = max(weekly ?? 0, current ?? 0)
         return SeverityColor.flameTint(forPercent: maxVal, thresholds: thresholds)
     }
 
@@ -99,11 +101,13 @@ public struct PinnedStatusBadgeView: View {
                     Text(PercentText.format(weekly))
                         .font(Self.menuBarFont)
                         .foregroundStyle(.primary)
-                    Text(PercentText.format(current))
-                        .font(Self.menuBarFont)
-                        .foregroundStyle(.primary)
+                    if let current {
+                        Text(PercentText.format(current))
+                            .font(Self.menuBarFont)
+                            .foregroundStyle(.primary)
+                    }
                 }
-            } else {
+            } else if let current {
                 // The main MenuBarExtra label ignores its custom font: the
                 // system draws it in the standard menu-bar font. This badge is
                 // our own NSHostingView, so a custom font here WOULD apply and
@@ -432,8 +436,12 @@ public final class PinnedStatusItemManager: ObservableObject {
     private func updateButton(for item: NSStatusItem, vm: VendorViewModel, store: UsageStore) {
         guard let button = item.button else { return }
 
-        let (weekly, current) = vm.state.outcome?.snapshot.menuBarDisplayPercentages
-            ?? (nil, vm.state.outcome?.snapshot.maxUtilization ?? 0)
+        let snapshot = vm.state.outcome?.snapshot
+        let percentages = snapshot?.menuBarDisplayPercentages
+        // A snapshot with no windows has no honest percent to pin.
+        let weekly = percentages?.weekly
+        let current: Double? = (snapshot?.windows.isEmpty ?? true)
+            ? nil : (percentages?.current ?? snapshot?.maxUtilization ?? 0)
 
         let badgeView = PinnedStatusBadgeView(
             vendorId: vm.vendorId,
@@ -471,7 +479,7 @@ public final class PinnedStatusItemManager: ObservableObject {
         button.toolTip = MenuBarTooltipBuilder.buildTooltip(
             vendorId: vm.vendorId,
             snapshot: vm.state.outcome?.snapshot,
-            currentPercent: current
+            currentPercent: current ?? 0
         )
     }
 

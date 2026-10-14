@@ -16,6 +16,7 @@ struct MetaLocalizationDocsTests {
         "settings_meta_login_blocked", "settings_meta_sessions",
         "settings_meta_sessions_found", "settings_meta_sessions_missing",
         "guidance_meta_login_required", "guidance_meta_keychain_blocked",
+        "settings_meta_login_unavailable",
     ]
 
     @Test("every Meta key is defined in en, pt-BR and es")

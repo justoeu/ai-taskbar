@@ -82,7 +82,7 @@ public enum KeychainAccessAuthorizer {
             case .permissionNotPersistent:
                 return "macOS allowed access, but silent verification failed. Try again and choose Always Allow if offered. Managed Keychain policies may prevent persistent access."
             case .authorizationDenied:
-                return "macOS could not authorize this app to access the Claude Code Keychain item (OSStatus -25293)."
+                return "macOS could not authorize this app to access the shared CLI Keychain item (OSStatus -25293)."
             }
         }
     }

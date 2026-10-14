@@ -160,8 +160,8 @@ contract, not an implementation detail.
 `scripts/validate.sh` and CI share `scripts/check-swift-warnings.sh`, covering
 source, test, macro-expansion and linker diagnostics. Only deprecations in
 `Sources/AiTaskbarCore/Credentials/Keychain{AccessAuthorizer,CredentialReader,PromptSuppressor}.swift`
-e `MetaCredentialReader.swift` (mesma API clássica inevitável: `kSecUseAuthenticationUIFail`
-na leitura prompt-free do item do Muse CLI)
+and `MetaCredentialReader.swift` (same unavoidable classic API: `kSecUseAuthenticationUIFail`
+on the prompt-free Muse CLI item read)
 and their isolated-keychain test fixtures (`KeychainAccessAuthorizerTests.swift`,
 `KeychainCredentialReaderTests.swift`, `TemporaryKeychain.swift` in
 `Tests/AiTaskbarCoreTests/`) are allowlisted. Other warnings in those files fail
@@ -810,6 +810,14 @@ that came out of fixing that:
   tool, so the tool is on its trusted-app list and `apple-tool:` partition no
   matter how this binary is signed — which is what made ad-hoc dev builds
   re-prompt after every rebuild (36 dead `cdhash` grants on one machine).
+  The same fallback covers the Muse CLI item (`MetaCredentialReader`): its
+  partition list carries `apple-tool:` from creation — verified by ACL dump
+  on 2026-10-12 (`teamid:<Meta>`, `apple-tool:`; our own teamid there came
+  from the user's Authorize click), the system default for `SecItemAdd`
+  items. The criterion for any future item is that same *verified*
+  `apple-tool:` partition membership, never the assumption that the tool
+  might be trusted: without it, the tool would raise the dialog this
+  suppressor exists to prevent (bounded only by the 5 s kill + cooldowns).
   Rules: exact-match arguments only (`-s` is exact, verified; `-a ""` for the
   legacy account-less item), the item's own keychain file is passed and must
   be **unlocked** (a locked keychain fast-fails with the same code and the
