@@ -213,14 +213,16 @@ public enum PricingTable {
     /// Google Gemini family. Consumed by Opencode and local scanners.
     /// Prices in USD per 1M tokens based on Google Cloud official pricing.
     public static let gemini: [String: ModelPricing] = [
-        // Gemini 4 (Argon) — PROVISIONAL, NOT verified on the official price
-        // list. Announced 2026-09-30 with restricted access (Fairwind program)
-        // and, as of 2026-10-10, absent from ai.google.dev/gemini-api/docs/pricing
-        // and /models, so there is no public model ID. A `gemini-4` prefix
-        // catches whatever ID ships (`gemini-4-argon`, `gemini-4-pro`, ...).
-        // Priced at the announced INTRODUCTORY rate ($2 in / $10 out, cached
-        // input 95% off = $0.10). Google said it doubles to $4/$20 when the
-        // introductory window ends — re-check and add explicit keys then.
+        // Gemini 4 Argon — public model ID `gemini-4-argon`, verified
+        // against the Google Cloud Blog launch post (2026-10-13):
+        // introductory $2 in / $10 out through 2026-11-30, cached input
+        // 95% off (= $0.10). From 2026-12-01 the standard rate is
+        // $4 / $20 (cached $0.20) — flip this key then. Explicit key, not
+        // left to the `gemini-4` prefix below, so that flip cannot
+        // silently reprice other Gemini 4 variants.
+        "gemini-4-argon":     ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),
+        // Conservative catch-all for other Gemini 4 variants at Argon's
+        // introductory tier.
         "gemini-4":           ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),
         // Gemini 3.x
         "gemini-3.8-flash":   ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
@@ -297,6 +299,14 @@ public enum PricingTable {
         // so its turns stay visible but unpriced. `-contributor` variants
         // resolve to their base model by longest-prefix.
     ]
+
+    /// What `GeminiUsageScanner` prices with: Antigravity also routes Claude
+    /// models (`claude-opus-5-5-high` measured 2026-10-15, billed by the
+    /// Google subscription), so the Gemini rates plus the Anthropic table.
+    /// The key sets do not overlap; the effort suffix (`-high`) resolves to
+    /// the base model by longest prefix, as in `lookup`.
+    public static let antigravity: [String: ModelPricing] =
+        gemini.merging(anthropic) { geminiRate, _ in geminiRate }
 
     public static func table(for vendor: VendorId) -> [String: ModelPricing] {
         switch vendor {

@@ -325,7 +325,7 @@ struct CostTests {
         #expect(withTier == ["claude-haiku-5-5", "claude-haiku-5.5"])
     }
 
-    @Test("Gemini 4 resolves via the provisional gemini-4 prefix at the introductory rate")
+    @Test("Gemini 4 Argon prices at the introductory rate; prefix covers other variants")
     func lookup_gemini4() {
         for id in ["gemini-4", "gemini-4-argon", "gemini-4-pro-preview"] {
             let m = PricingTable.lookup(id, table: PricingTable.gemini)
@@ -333,8 +333,11 @@ struct CostTests {
             #expect(m?.outputPer1M == 10.0)
             #expect(m?.cacheReadPer1M == 0.1)
         }
-        // Gemini 3 IDs are untouched by the new prefix.
+        // Gemini 3 IDs are untouched by the new keys.
         #expect(PricingTable.lookup("gemini-3-pro", table: PricingTable.gemini)?.inputPer1M == 1.25)
+        // The shipped model ID has an explicit key, so the Dec 1 rate flip
+        // cannot leak into other Gemini 4 variants via the prefix.
+        expectTrue(PricingTable.table(for: .gemini)["gemini-4-argon"] != nil)
         expectTrue(PricingTable.table(for: .gemini)["gemini-4"] != nil)
     }
 

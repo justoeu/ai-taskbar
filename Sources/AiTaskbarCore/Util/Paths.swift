@@ -99,6 +99,15 @@ public enum Paths {
         return home.appendingPathComponent(".local/share/muse/sessions")
     }
 
+    /// Gemini CLI / Antigravity home (`~/.gemini`): chat logs under `tmp/`
+    /// and conversation databases under `antigravity-cli/`, tallied by
+    /// `GeminiUsageScanner`.
+    public static func geminiHome(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        home.appendingPathComponent(".gemini")
+    }
+
     public static func ensureDir(_ url: URL) throws {
         // TOCTOU defense: refuse to use a symlinked target. If the user (or
         // an attacker with write to the parent) replaced
