@@ -173,7 +173,12 @@ struct GeminiUsageScannerTests {
         #expect(usage.cacheReadTokens == 400)
         #expect(usage.outputTokens == 150)       // 100 + 50 thoughts
         // Priced at the Argon introductory rates ($2/$10, cache $0.10 per 1M).
-        let expected = (600 * 2.0 + 400 * 0.10 + 150 * 10.0) / 1_000_000
+        // Typed sub-terms: as one literal expression, Swift 6.2 (CI) gives up
+        // type-checking it in reasonable time.
+        let inputUSD: Double = 600 * 2.0
+        let cacheUSD: Double = 400 * 0.10
+        let outputUSD: Double = 150 * 10.0
+        let expected: Double = (inputUSD + cacheUSD + outputUSD) / 1_000_000
         #expect(abs(est.usdToday - expected) < 1e-12)
     }
 
