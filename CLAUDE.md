@@ -427,7 +427,10 @@ reads subscription windows from `POST api.meta.ai/muse-code/key` with the
 Muse CLI's device-code (`dca:`) login token — read-only via
 `MetaCredentialReader` (scheduled reads prompt-free; the single prompt is
 the user-clicked Authorize affordance over `KeychainAccessAuthorizer`,
-like Anthropic), decode by allow-list (the minted key and
+like Anthropic — but **no `/usr/bin/security` fallback**: the `muse` binary
+writes the item natively, its rewrite of 2026-10-14 dropped the tool's
+grant, and the tool, a separate process outside the suppressor, then raised
+its own password dialog; a blocked read shows the Authorize banner), decode by allow-list (the minted key and
 payment metadata are never decoded or cached); API keys and
 `META_API_KEY` get 401 there and are never consulted. See
 `docs/SDD-meta-muse.md` (§18 field addendum).

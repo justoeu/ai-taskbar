@@ -520,3 +520,13 @@ Duas decisões revistas com evidência da máquina real, sem mudar o contrato:
    bloqueada por ACL → mesmo item via a ferramenta (keychain desbloqueada
    exigida, argumentos exactos, cooldowns), sem prompt nenhum. O
    Authorize do ponto 1 fica como último recurso.
+   **Revogado em 2026-10-15 — volta a valer §7 "não generalizar".** O CLI
+   regravou o item em 2026-10-14 22:28 (`mdat` mudou, `cdat` de 2026-10-12
+   ficou): logo a seguir a ferramenta abriu "security wants to access key
+   ai.meta.dev.credentials" com campo de senha, e o app também. A leitura
+   silenciosa medida antes dependia de uma autorização que a regravação do
+   `muse` (binário assinado pela Meta, time V9WTTPBFK9, grava pela API do
+   Keychain, nunca pela ferramenta) não preserva. A ferramenta corre como
+   outro processo, fora do `KeychainPromptSuppressor`, então era o único
+   caminho capaz de abrir um diálogo sozinho. Removida: leitura bloqueada →
+   banner Authorize, nunca um prompt.
