@@ -1,5 +1,6 @@
 import Foundation
 import SQLite3
+import os
 
 /// Local per-model usage for Google's own clients, which no Google API
 /// exposes: Gemini CLI chat logs (`~/.gemini/tmp/*/chats/session-*.jsonl`)
@@ -111,7 +112,8 @@ public enum GeminiUsageScanner {
         let tmp = home.appendingPathComponent("tmp")
         guard let walker = FileManager.default.enumerator(
             at: tmp,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey,
+                                         .isSymbolicLinkKey, .fileSizeKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else { return 0 }
 
@@ -127,9 +129,17 @@ public enum GeminiUsageScanner {
                   url.lastPathComponent.hasPrefix("session-"),
                   url.deletingLastPathComponent().lastPathComponent == "chats"
             else { continue }
-            let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey,
+                                                          .isSymbolicLinkKey, .fileSizeKey])
+            // Regular files only (a symlink could point at a FIFO or
+            // /dev/zero), bounded: a session log is a few MB.
+            guard attrs?.isRegularFile == true, attrs?.isSymbolicLink != true,
+                  (attrs?.fileSize ?? 0) <= maxChatFileBytes else { continue }
             if let mtime = attrs?.contentModificationDate, mtime < window.startOfLast7Days { continue }
-            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }
+            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
+                drift += 1
+                continue
+            }
             files += 1
 
             for line in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
@@ -142,13 +152,20 @@ public enum GeminiUsageScanner {
                       let model = row.model, !model.isEmpty,
                       let tsText = row.timestamp, let at = ISO8601Parsing.parse(tsText)
                 else { continue }
+                // Saturating throughout: a row with output = Int.max must not
+                // trap the app on every scan.
                 let input = max(0, tokens.input ?? 0)
                 let cached = min(input, max(0, tokens.cached ?? 0))
+                let output = max(0, tokens.output ?? 0)
+                    .addingReportingOverflow(max(0, tokens.thoughts ?? 0))
+                let billedOutput = output.overflow ? Int.max : output.partialValue
                 let usage = ModelUsage(
                     inputTokens: input - cached,
-                    outputTokens: max(0, tokens.output ?? 0) + max(0, tokens.thoughts ?? 0),
+                    outputTokens: billedOutput,
                     cacheReadTokens: cached)
-                let total = tokens.total ?? (input + (tokens.output ?? 0) + (tokens.thoughts ?? 0))
+                // The dedupe compares the same clamped figures it bills.
+                let sum = input.addingReportingOverflow(billedOutput)
+                let total = max(0, tokens.total ?? (sum.overflow ? Int.max : sum.partialValue))
                 if let id = row.id, !id.isEmpty {
                     if let existing = best[id], existing.total >= total { continue }
                     best[id] = (model, usage, at, total)
@@ -166,25 +183,86 @@ public enum GeminiUsageScanner {
     private static func scanConversations(home: URL, window: CostWindow, drift: inout Int,
                                           add: (String, ModelUsage, Date) -> Void) -> Int {
         let dir = home.appendingPathComponent("antigravity-cli/conversations")
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey,
+                                         .isSymbolicLinkKey, .fileSizeKey]
         guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: [.contentModificationDateKey],
+            at: dir, includingPropertiesForKeys: Array(keys),
             options: [.skipsHiddenFiles])
         else { return 0 }
 
         var files = 0
+        var seen: Set<String> = []
         for url in entries where url.pathExtension == "db" {
             if Task.isCancelled { break }
+            // Regular files only: a symlinked .db could point the read-only
+            // open at any other database of the user's.
+            guard let attrs = try? url.resourceValues(forKeys: keys),
+                  attrs.isRegularFile == true, attrs.isSymbolicLink != true else { continue }
             // A live conversation may keep recent rows in the -wal sidecar,
             // whose mtime is the freshest signal the directory listing has.
             let wal = URL(fileURLWithPath: url.path + "-wal")
-            let mtimes = [url, wal].compactMap {
-                (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            let walAttrs = try? wal.resourceValues(forKeys: keys)
+            let mtimes = [attrs.contentModificationDate, walAttrs?.contentModificationDate].compactMap { $0 }
+            guard let newest = mtimes.max(), newest >= window.startOfLast7Days else { continue }
+            seen.insert(url.path)
+
+            // Memo: an unchanged database (same size + mtime of db and wal)
+            // replays its rows instead of being re-opened and re-parsed on
+            // every refresh. Rows are stored with their dates and re-filtered
+            // by the window at add time, so a cached entry only ages out.
+            let stamp = ConversationStamp(size: attrs.fileSize ?? 0, mtime: newest,
+                                          walSize: walAttrs?.fileSize ?? 0)
+            if let cached = conversationMemo.withLock({ $0[url.path] }), cached.stamp == stamp {
+                for row in cached.rows { add(row.model, row.usage, row.at) }
+                files += 1
+                continue
             }
-            if let newest = mtimes.max(), newest < window.startOfLast7Days { continue }
-            files += scanConversation(dbPath: url.path, window: window, drift: &drift, add: add) ? 1 : 0
+            var rows: [ConversationRow] = []
+            var fileDrift = 0
+            if scanConversation(dbPath: url.path, window: window, drift: &fileDrift,
+                                add: { rows.append(ConversationRow(model: $0, usage: $1, at: $2)) }) {
+                files += 1
+                if fileDrift == 0, !Task.isCancelled {
+                    let entry = ConversationMemoEntry(stamp: stamp, rows: rows)
+                    let path = url.path
+                    conversationMemo.withLock { $0[path] = entry }
+                }
+            }
+            drift += fileDrift
+            for row in rows { add(row.model, row.usage, row.at) }
+        }
+        let live = seen
+        conversationMemo.withLock { memo in
+            memo = memo.filter { live.contains($0.key) }
         }
         return files
     }
+
+    private struct ConversationStamp: Equatable, Sendable {
+        let size: Int
+        let mtime: Date
+        let walSize: Int
+    }
+
+    private struct ConversationRow: Sendable {
+        let model: String
+        let usage: ModelUsage
+        let at: Date
+    }
+
+    private struct ConversationMemoEntry: Sendable {
+        let stamp: ConversationStamp
+        let rows: [ConversationRow]
+    }
+
+    private static let conversationMemo =
+        OSAllocatedUnfairLock<[String: ConversationMemoEntry]>(initialState: [:])
+
+    /// Gemini CLI session logs are a few MB; anything far larger is not one.
+    static let maxChatFileBytes = 64 << 20
+    /// Generation / step blobs measured at most ~1 MB; larger rows are skipped
+    /// (counted as drift) instead of being copied into memory several times.
+    static let maxBlobBytes = 8 << 20
 
     private static func scanConversation(dbPath: String, window: CostWindow, drift: inout Int,
                                          add: (String, ModelUsage, Date) -> Void) -> Bool {
@@ -194,27 +272,45 @@ public enum GeminiUsageScanner {
         // Steps first (small metadata): only generations inside the window
         // need their model resolved from the potentially huge gen blobs.
         var pending: [String: (usage: ModelUsage, at: Date)] = [:]
-        queryBlobs(db: db, sql: "SELECT metadata FROM steps WHERE step_type = 15 AND metadata IS NOT NULL ORDER BY idx") { blob in
-            guard let step = parseStepMetadata(blob) else { drift += 1; return }
+        let stepsOK = queryBlobs(
+            db: db,
+            sql: "SELECT metadata FROM steps WHERE step_type = 15 AND metadata IS NOT NULL AND length(metadata) <= \(maxBlobBytes) ORDER BY idx"
+        ) { blob in
+            guard let step = parseStepMetadata(blob) else { drift += 1; return true }
             let at = Date(timeIntervalSince1970: TimeInterval(step.epochSeconds))
-            guard window.slotIndex(for: at) != nil else { return }
+            guard window.slotIndex(for: at) != nil else { return true }
             pending[step.responseID] = (step.usage, at)
+            return true
         }
+        // A statement that stops short (busy, interrupted, unreadable) is
+        // drift, not "no usage": partial results must not read as complete.
+        if !stepsOK { drift += 1 }
         guard !pending.isEmpty else { return true }
 
-        queryBlobs(db: db, sql: "SELECT data FROM gen_metadata WHERE data IS NOT NULL ORDER BY idx") { blob in
-            guard let gen = parseGeneration(blob) else { drift += 1; return }
-            guard let hit = pending.removeValue(forKey: gen.responseID) else { return }
-            add(gen.model, hit.usage, hit.at)
+        // Newest first: in-window generations are the latest rows, so the
+        // walk stops as soon as every pending step has found its model.
+        let gensOK = queryBlobs(
+            db: db,
+            sql: "SELECT data FROM gen_metadata WHERE data IS NOT NULL AND length(data) <= \(maxBlobBytes) ORDER BY idx DESC"
+        ) { blob in
+            guard let gen = parseGeneration(blob) else { drift += 1; return true }
+            if let hit = pending.removeValue(forKey: gen.responseID) {
+                add(gen.model, hit.usage, hit.at)
+            }
+            return !pending.isEmpty
         }
+        if !gensOK { drift += 1 }
         return true
     }
 
     static func openReadOnly(_ path: String) -> OpaquePointer? {
         // The database belongs to a possibly running application: read-only,
-        // never create. URI mode=ro reads a live WAL through its shm when
-        // present; immutable=1 is the fallback for when it is not (it then
-        // sees only checkpointed pages — stale, never wrong).
+        // never create. `readonly_shm=1` keeps mode=ro from CREATING a
+        // missing `-shm` (plain mode=ro opens it O_CREAT — a file written into
+        // Antigravity's directory, review finding on #49); with an existing
+        // shm it reads a live WAL normally. `immutable=1` is the fallback: no
+        // locking at all, so against a live writer it may see a torn page and
+        // fail or skip rows (counted as drift) — never write anything.
         //
         // `sqlite3_open_v2` succeeds lazily: a WAL-mode database with no
         // `-shm` sidecar (23 of 93 Antigravity conversations measured on
@@ -223,7 +319,15 @@ public enum GeminiUsageScanner {
         // not create the shm. Each candidate is therefore proven with a real
         // read before it is returned; checking only the open made every such
         // database read as empty, silently.
-        for uri in ["file:\(path)?mode=ro", "file:\(path)?mode=ro&immutable=1"] {
+        // The path is percent-encoded: a `?`, `#` or `%XX` in a file name
+        // would otherwise rewrite the URI's parameters. No
+        // SQLITE_OPEN_NOFOLLOW: it rejects a symlink ANYWHERE in the path
+        // (`/var` → `/private/var`, a symlinked home), which would silence
+        // the scanner again; the caller already skips a symlinked `.db`.
+        guard let encoded = path.addingPercentEncoding(withAllowedCharacters: uriPathAllowed) else {
+            return nil
+        }
+        for uri in ["file:\(encoded)?mode=ro&readonly_shm=1", "file:\(encoded)?mode=ro&immutable=1"] {
             var db: OpaquePointer?
             let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
             if sqlite3_open_v2(uri, &db, flags, nil) == SQLITE_OK, let db, canRead(db) {
@@ -235,6 +339,12 @@ public enum GeminiUsageScanner {
         return nil
     }
 
+    private static let uriPathAllowed: CharacterSet = {
+        var set = CharacterSet.urlPathAllowed
+        set.remove(charactersIn: "?#%")
+        return set
+    }()
+
     private static func canRead(_ db: OpaquePointer) -> Bool {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, "SELECT count(*) FROM sqlite_master", -1, &stmt, nil) == SQLITE_OK else {
@@ -244,15 +354,21 @@ public enum GeminiUsageScanner {
         return sqlite3_step(stmt) == SQLITE_ROW
     }
 
-    private static func queryBlobs(db: OpaquePointer, sql: String, _ body: (Data) -> Void) {
+    /// Steps one blob column. `body` returns false to stop early. Returns
+    /// whether the statement finished cleanly (SQLITE_DONE or an early stop);
+    /// a prepare failure or a step error (busy, interrupt, cantopen) is false.
+    @discardableResult
+    private static func queryBlobs(db: OpaquePointer, sql: String, _ body: (Data) -> Bool) -> Bool {
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
         defer { sqlite3_finalize(stmt) }
-        while sqlite3_step(stmt) == SQLITE_ROW {
+        while true {
+            let rc = sqlite3_step(stmt)
+            guard rc == SQLITE_ROW else { return rc == SQLITE_DONE }
             guard let raw = sqlite3_column_blob(stmt, 0) else { continue }
             let count = Int(sqlite3_column_bytes(stmt, 0))
             guard count > 0 else { continue }
-            body(Data(bytes: raw, count: count))
+            if !body(Data(bytes: raw, count: count)) { return true }
         }
     }
 

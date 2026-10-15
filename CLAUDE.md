@@ -907,7 +907,15 @@ skipped.
   open of those SUCCEEDS and then fails the first statement with
   SQLITE_CANTOPEN, so `openReadOnly` proves each candidate with a real read
   before falling back to `immutable=1` — checking only the open made every
-  such database read as empty and the card showed $0. (2) Antigravity also
+  such database read as empty and the card showed $0. The first candidate
+  carries `readonly_shm=1`: plain `mode=ro` CREATES a missing `-shm` in the
+  other app's directory. The path is percent-encoded into the URI, symlinked
+  or non-regular files are skipped (not via `SQLITE_OPEN_NOFOLLOW`, which
+  rejects a symlink anywhere in the path, e.g. `/var`), blobs over
+  8 MiB and chat logs over 64 MiB are skipped, a statement that stops short
+  of `SQLITE_DONE` is drift (never "no usage"), JSONL token sums saturate
+  (an `Int.max` row used to trap the app), and an unchanged database (size +
+  mtime of db and wal) is replayed from an in-process memo. (2) Antigravity also
   routes Claude (`claude-opus-5-5-high`), billed by the Google subscription:
   it stays on the Gemini card, priced through `PricingTable.antigravity`
   (Gemini + Anthropic rates; the effort suffix resolves by longest prefix).

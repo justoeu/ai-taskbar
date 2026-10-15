@@ -88,22 +88,30 @@ struct GeminiUsageScannerTests {
 
     private func writeConversationDB(home: URL, name: String,
                                      gens: [(model: String, id: String, input: Int, output: Int, cache: Int, thinking: Int, epoch: Int64)],
-                                     orphanStep: Bool = false) {
+                                     orphanStep: Bool = false,
+                                     extraGenBlobs: [Data] = []) throws {
+        struct FixtureError: Error { let step: String }
         let dir = home.appendingPathComponent("antigravity-cli/conversations")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = dir.appendingPathComponent(name).path
         var db: OpaquePointer?
-        sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil)
+        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
+            throw FixtureError(step: "open")
+        }
         defer { sqlite3_close(db) }
-        sqlite3_exec(db, """
+        let created = sqlite3_exec(db, """
             CREATE TABLE steps (idx integer, step_type integer NOT NULL DEFAULT 0,
               status integer NOT NULL DEFAULT 0, metadata blob, PRIMARY KEY (idx));
             CREATE TABLE gen_metadata (idx integer, data blob,
               size integer NOT NULL DEFAULT 0, PRIMARY KEY (idx));
             """, nil, nil, nil)
-        func insert(_ sql: String, blob: Data, idx: Int, stepType: Int?) {
+        guard created == SQLITE_OK else { throw FixtureError(step: "schema") }
+        func insert(_ sql: String, blob: Data, idx: Int, stepType: Int?) throws {
             var stmt: OpaquePointer?
-            sqlite3_prepare_v2(db, sql, -1, &stmt, nil)
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw FixtureError(step: "prepare")
+            }
+            defer { sqlite3_finalize(stmt) }
             sqlite3_bind_int(stmt, 1, Int32(idx))
             if let stepType { sqlite3_bind_int(stmt, 2, Int32(stepType)) }
             let pos = stepType == nil ? 2 : 3
@@ -111,21 +119,25 @@ struct GeminiUsageScannerTests {
                 sqlite3_bind_blob(stmt, Int32(pos), $0.baseAddress, Int32(blob.count),
                                   unsafeBitCast(-1, to: sqlite3_destructor_type.self))
             }
-            sqlite3_step(stmt)
-            sqlite3_finalize(stmt)
+            guard sqlite3_step(stmt) == SQLITE_DONE else { throw FixtureError(step: "insert") }
         }
         for (i, g) in gens.enumerated() {
-            insert("INSERT INTO gen_metadata VALUES (?, ?, 0)",
-                   blob: genBlob(model: g.model, id: g.id, input: g.input, output: g.output,
-                                 cache: g.cache, thinking: g.thinking),
+            // The generation's own usage copy deliberately differs from the
+            // step's (input +7, cache +3): usage must come from the STEP.
+            try insert("INSERT INTO gen_metadata VALUES (?, ?, 0)",
+                   blob: genBlob(model: g.model, id: g.id, input: g.input + 7, output: g.output,
+                                 cache: g.cache + 3, thinking: g.thinking),
                    idx: i, stepType: nil)
-            insert("INSERT INTO steps VALUES (?, ?, 3, ?)",
+            try insert("INSERT INTO steps VALUES (?, ?, 3, ?)",
                    blob: stepMeta(epoch: g.epoch, id: g.id, input: g.input, output: g.output,
                                   cache: g.cache, thinking: g.thinking),
                    idx: i * 2 + 1, stepType: 15)
         }
+        for (j, blob) in extraGenBlobs.enumerated() {
+            try insert("INSERT INTO gen_metadata VALUES (?, ?, 0)", blob: blob, idx: 500 + j, stepType: nil)
+        }
         if orphanStep {
-            insert("INSERT INTO steps VALUES (?, ?, 3, ?)",
+            try insert("INSERT INTO steps VALUES (?, ?, 3, ?)",
                    blob: stepMeta(epoch: gens.first?.epoch ?? 0, id: "orphan-id",
                                   input: 999, output: 999, cache: 0, thinking: 0),
                    idx: 999, stepType: 15)
@@ -137,6 +149,7 @@ struct GeminiUsageScannerTests {
     @Test("CLI chats: cached subset subtracted, thoughts added to output, dup ids counted once")
     func cli_chats_semantics() throws {
         let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
         let window = CostWindow(now: now)
         let today = window.startOfToday.addingTimeInterval(3600)
         let line = """
@@ -146,8 +159,13 @@ struct GeminiUsageScannerTests {
         let userLine = """
             {"id":"u1","type":"user","timestamp":"\(iso(today))","content":"hi"}
             """
-        // Same id written twice (streaming rewrite) must count once.
-        try writeChat(home: home, lines: [line, line, userLine])
+        // Same id rewritten while streaming: a smaller partial, the final
+        // row, then the final again — counted once, at the LARGEST total.
+        let partial = """
+            {"id":"m1","type":"gemini","model":"gemini-4-argon","timestamp":"\(iso(today))",\
+            "tokens":{"input":1000,"output":10,"cached":400,"thoughts":5,"tool":0,"total":1015}}
+            """
+        try writeChat(home: home, lines: [partial, line, line, userLine])
 
         let est = GeminiUsageScanner.estimate(now: now, geminiHome: home)
         let usage = try #require(est.totalsByModel["gemini-4-argon"])
@@ -162,6 +180,7 @@ struct GeminiUsageScannerTests {
     @Test("CLI chats: rows outside the 7-day window are ignored")
     func cli_chats_window() throws {
         let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
         let window = CostWindow(now: now)
         let old = window.startOfLast7Days.addingTimeInterval(-3600)
         let inWeek = window.startOfLast7Days.addingTimeInterval(3600)
@@ -183,9 +202,10 @@ struct GeminiUsageScannerTests {
     @Test("Antigravity: calibration values map to input/output with thinking folded")
     func antigravity_calibration() throws {
         let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
         let window = CostWindow(now: now)
         let epoch = Int64(window.startOfToday.timeIntervalSince1970) + 3600
-        writeConversationDB(home: home, name: "conv-1.db", gens: [
+        try writeConversationDB(home: home, name: "conv-1.db", gens: [
             (model: "gemini-4-argon", id: "respA", input: 15535, output: 26, cache: 0, thinking: 21, epoch: epoch),
         ])
 
@@ -199,9 +219,10 @@ struct GeminiUsageScannerTests {
     @Test("Antigravity: cache_read is separate from input; orphan step skipped; models split")
     func antigravity_cache_and_join() throws {
         let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
         let window = CostWindow(now: now)
         let epoch = Int64(window.startOfToday.timeIntervalSince1970) + 7200
-        writeConversationDB(home: home, name: "conv-2.db", gens: [
+        try writeConversationDB(home: home, name: "conv-2.db", gens: [
             (model: "gemini-3.8-flash-high", id: "r1", input: 4712, output: 132, cache: 123765, thinking: 45, epoch: epoch),
             (model: "claude-opus-5-5-high", id: "r2", input: 2000, output: 300, cache: 0, thinking: 100, epoch: epoch),
         ], orphanStep: true)
@@ -211,20 +232,92 @@ struct GeminiUsageScannerTests {
         #expect(flash.inputTokens == 4712)       // NOT 4712 + cache, NOT 4712 - cache
         #expect(flash.cacheReadTokens == 123765)
         #expect(flash.outputTokens == 132)
-        // Orphan step (no matching gen_metadata) contributes nothing.
-        #expect(est.totalsByModel.count == 2)
-        // Third-party model used via Antigravity is reported (tokens; pricing
-        // falls back to unpriced in the Gemini table if absent).
+        // Orphan step (no matching gen_metadata, 999 tokens) contributes
+        // nothing to any model.
+        let totalInput = est.totalsByModel.values.reduce(0) { $0 + $1.inputTokens }
+        #expect(totalInput == 4712 + 2000)
+        // Claude used via Antigravity is reported, and priced at Anthropic rates.
         #expect(est.totalsByModel["claude-opus-5-5-high"]?.inputTokens == 2000)
+        #expect(est.unpricedModelsToday.isEmpty)
     }
 
     @Test("Missing .gemini directory yields an empty, noted estimate")
     func missing_home() throws {
-        let home = try makeHome().appendingPathComponent("does-not-exist")
+        let root = try makeHome()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let home = root.appendingPathComponent("does-not-exist")
         let est = GeminiUsageScanner.estimate(now: now, geminiHome: home)
         #expect(est.usdToday == 0)
         #expect(est.totalsByModel.isEmpty)
         #expect(est.note != nil)
+    }
+
+    @Test("CLI chats: an Int.max token count saturates instead of trapping")
+    func cli_overflow_saturates() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let at = CostWindow(now: now).startOfToday.addingTimeInterval(60)
+        try writeChat(home: home, lines: ["""
+            {"id":"big","type":"gemini","model":"gemini-4-argon","timestamp":"\(iso(at))",\
+            "tokens":{"input":1,"output":9223372036854775807,"thoughts":1}}
+            """])
+        let est = GeminiUsageScanner.estimate(now: now, geminiHome: home)
+        #expect(est.totalsByModel["gemini-4-argon"]?.outputTokens == Int.max)
+    }
+
+    @Test("malformed records are counted as drift in the note")
+    func drift_is_reported() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let epoch = Int64(CostWindow(now: now).startOfToday.timeIntervalSince1970) + 60
+        try writeChat(home: home, lines: [#"{"id":"x","tokens": not json"#])
+        try writeConversationDB(home: home, name: "conv-drift.db", gens: [
+            (model: "gemini-4-argon", id: "ok", input: 10, output: 1, cache: 0, thinking: 0, epoch: epoch),
+        ], extraGenBlobs: [Data([0x0a, 0xff, 0xff])])
+        let est = GeminiUsageScanner.estimate(now: now, geminiHome: home)
+        let note = try #require(est.note)
+        expectTrue(note.contains("malformed"))
+        #expect(est.totalsByModel["gemini-4-argon"]?.inputTokens == 10)
+    }
+
+    @Test("a symlinked .db or session log is never followed")
+    func symlinks_are_skipped() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let elsewhere = try makeHome()
+        defer { try? FileManager.default.removeItem(at: elsewhere) }
+        let epoch = Int64(CostWindow(now: now).startOfToday.timeIntervalSince1970) + 60
+        try writeConversationDB(home: elsewhere, name: "real.db", gens: [
+            (model: "gemini-4-argon", id: "r", input: 10, output: 1, cache: 0, thinking: 0, epoch: epoch),
+        ])
+        let dir = home.appendingPathComponent("antigravity-cli/conversations")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: dir.appendingPathComponent("link.db"),
+            withDestinationURL: elsewhere.appendingPathComponent("antigravity-cli/conversations/real.db"))
+        let est = GeminiUsageScanner.estimate(now: now, geminiHome: home)
+        #expect(est.totalsByModel.isEmpty)
+    }
+
+    @Test("an unchanged database is replayed from the memo; a changed one is re-read")
+    func conversation_memo() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let epoch = Int64(CostWindow(now: now).startOfToday.timeIntervalSince1970) + 60
+        let gen1 = (model: "gemini-4-argon", id: "a", input: 10, output: 1, cache: 0, thinking: 0, epoch: epoch)
+        try writeConversationDB(home: home, name: "memo.db", gens: [gen1])
+        let first = GeminiUsageScanner.estimate(now: now, geminiHome: home)
+        let second = GeminiUsageScanner.estimate(now: now, geminiHome: home)
+        #expect(first.totalsByModel == second.totalsByModel)
+        #expect(second.totalsByModel["gemini-4-argon"]?.inputTokens == 10)
+
+        // Rewrite with a second generation: size/mtime change → re-read.
+        try FileManager.default.removeItem(
+            at: home.appendingPathComponent("antigravity-cli/conversations/memo.db"))
+        let gen2 = (model: "gemini-4-argon", id: "b", input: 20, output: 2, cache: 0, thinking: 0, epoch: epoch)
+        try writeConversationDB(home: home, name: "memo.db", gens: [gen1, gen2])
+        let third = GeminiUsageScanner.estimate(now: now, geminiHome: home)
+        #expect(third.totalsByModel["gemini-4-argon"]?.inputTokens == 30)
     }
 
     @Test("a WAL database without its -shm still opens (immutable fallback)")
