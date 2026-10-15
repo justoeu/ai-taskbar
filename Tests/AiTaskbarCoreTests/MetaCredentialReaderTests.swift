@@ -189,7 +189,7 @@ struct MetaCredentialReaderTests {
         #expect(r.resolve() == .keychainBlocked)
         #expect(r.detection() == .keychainBlocked)
         try store.save("dca:kept")
-        #expect(r.resolve() == .token("dca:kept"))
+        #expect(r.resolve() == .storedToken("dca:kept"))
         #expect(r.detection() == .detected)
     }
 
@@ -212,5 +212,26 @@ struct MetaCredentialReaderTests {
         expectTrue(r.discardStoredToken("dca:current"))
         #expect(store.load() == nil)
         #expect(r.resolve() == .keychainBlocked)
+    }
+
+    @Test("a non-ACL Keychain failure also serves the copy, and detection agrees")
+    func failed_uses_copy() throws {
+        let (r, store, dir) = try storeReader(keychain: { .failed(-25300) }, probe: { .failed(-25300) })
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(r.detection() == .unavailable)
+        try store.save("dca:kept")
+        #expect(r.resolve() == .storedToken("dca:kept"))
+        #expect(r.detection() == .detected)
+    }
+
+    @Test("an inline auth.json token wins and drops a stale Keychain-era copy")
+    func inline_token_clears_copy() throws {
+        let (r, store, dir) = try storeReader(keychain: { .blocked })
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save("dca:old-keychain")
+        try #"{"providers":{"meta":{"access_token":"dca:inline"}}}"#
+            .write(to: dir.appendingPathComponent("auth.json"), atomically: true, encoding: .utf8)
+        #expect(r.resolve() == .token("dca:inline"))
+        #expect(store.load() == nil)
     }
 }

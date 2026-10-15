@@ -58,9 +58,14 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
                 // cooperative pool.
                 let resolution = try await OffPool.run { self.credentials.resolve() }
                 let token: String
+                let fromStoredCopy: Bool
                 switch resolution {
                 case .token(let value):
                     token = value
+                    fromStoredCopy = false
+                case .storedToken(let value):
+                    token = value
+                    fromStoredCopy = true
                 case .missing:
                     // Quiet setup state, not a noisy error (SDD §7.3/§8):
                     // guidance renders localized and (401-shaped) arms the
@@ -86,8 +91,14 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
                     // Meta refused the token. If it was the app's stored
                     // copy, drop it so the next read goes back to the
                     // Keychain (a new `muse login` minted another token).
-                    if [401, 403].contains(response.statusCode),
-                       credentials.discardStoredToken(token) {
+                    // 401 = the token is dead. Any copy of it goes (a live
+                    // token's copy too). Only when the copy is what we sent
+                    // does it mean "authorize again"; a dead LIVE token is a
+                    // dead login and surfaces as the plain 401 (re-login).
+                    // 403 is not proof of a dead token: the copy stays.
+                    if response.statusCode == 401,
+                       credentials.discardStoredToken(token),
+                       fromStoredCopy {
                         throw AppError.credentials(
                             "Muse stored token rejected; keychain read denied (errSecInteractionNotAllowed)")
                     }

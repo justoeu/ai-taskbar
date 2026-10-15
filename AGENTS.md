@@ -436,12 +436,19 @@ its own password dialog; a blocked read shows the Authorize banner). **The
 Muse self-update rewrites the item and drops EVERY grant** (1.4.8 → 1.4.9 in
 one day; CodexBar documents the same loss), so an ACL grant alone means a
 password per update. `MetaTokenStore` keeps the app's own copy of the `dca:`
-token — `SecretBox` `enc:v2`, field `meta.token_copy`, 0600 at
-`credentials/meta-token`, checked by `validate.sh` — saved on every silent
-read and served when the read is blocked; a 401/403 on the copy discards it
-(back to the banner), `muse logout` (item gone) clears it, and Settings
-detection counts it as detected. The authorizer itself still never keeps
-the bytes it reads), decode by allow-list (the minted key and
+token — `SecretBox` `enc:v2` only (no copy without a hardware UUID), field
+`meta.token_copy`, 0600 at `credentials/meta-token` in a 0700 dir, all
+checked by `validate.sh` — saved on every silent read and served as
+`.storedToken` when the read is blocked or fails. A **401** discards any copy
+of the token sent; only when the copy was what got sent does it mean
+"Authorize again" — a 401 on a LIVE Keychain token is a dead login and
+surfaces as the plain 401 (re-login), never as the banner (all three
+reviews of #51 caught that). A 403 keeps the copy. `muse logout` (item
+gone) and an inline `auth.json` token clear it; Settings detection mirrors
+`resolve()`. Honest scope: the copy protects the file copied off this Mac,
+not against same-user processes (the UUID is public) — a step down from the
+Keychain ACL, accepted over a password per Muse update. The authorizer
+itself still never keeps the bytes it reads), decode by allow-list (the minted key and
 payment metadata are never decoded or cached); API keys and
 `META_API_KEY` get 401 there and are never consulted. See
 `docs/SDD-meta-muse.md` (§18 field addendum).

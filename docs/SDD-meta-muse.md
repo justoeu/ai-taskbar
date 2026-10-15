@@ -550,8 +550,15 @@ Decisão: `MetaTokenStore` guarda a cópia do próprio app do token `dca:`.
 - Gravada a cada leitura silenciosa bem-sucedida, que roda logo depois do
   Authorize. O autorizador continua sem guardar os bytes que lê.
 - Usada quando a leitura direta é bloqueada ou falha.
-- Descartada quando a Meta recusa a cópia (401/403): volta o banner, porque
-  um `muse login` novo gerou outro token.
+- Servida como `.storedToken`, distinto de `.token` (leitura ao vivo).
+- Num 401, qualquer cópia do token enviado é descartada. Só quando a cópia era
+  o que foi enviado volta o banner Authorize. Um 401 num token lido ao vivo do
+  Keychain é login morto e aparece como 401 (refazer `muse login`), nunca
+  como banner. Um 403 mantém a cópia. (Achado das 3 revisões do #51.)
+- Sem UUID de hardware nenhuma cópia é gravada (nunca `enc:v1`).
+- Alcance honesto: protege o arquivo copiado para fora do Mac, não contra
+  processos do mesmo usuário (o UUID é público). É um passo abaixo do ACL do
+  Keychain, aceito em troca de não pedir senha a cada atualização do Muse.
 - Apagada quando o item some (`muse logout`).
 - As Configurações mostram "detectado" quando a cópia existe.
 - Continua read-only quanto ao CLI: nada é escrito no item nem no `auth.json`,

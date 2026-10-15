@@ -61,4 +61,44 @@ struct MetaTokenStoreTests {
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real.fileURL)
         #expect(MetaTokenStore(fileURL: link, machineID: Self.thisMac).load() == nil)
     }
+
+    @Test("without a hardware UUID nothing is stored (no machine-independent copy)")
+    func no_machine_id_no_copy() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = MetaTokenStore(fileURL: dir.appendingPathComponent("meta-token"), machineID: nil)
+        try store.save("dca:x")
+        expectFalse(FileManager.default.fileExists(atPath: store.fileURL.path))
+    }
+
+    @Test("an unchanged token is not rewritten")
+    func unchanged_not_rewritten() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = MetaTokenStore(fileURL: dir.appendingPathComponent("meta-token"), machineID: Self.thisMac)
+        try store.save("dca:same")
+        let first = try Data(contentsOf: store.fileURL)
+        try store.save("dca:same")
+        #expect(try Data(contentsOf: store.fileURL) == first)  // AES-GCM nonces differ: a rewrite would change bytes
+    }
+
+    @Test("a tampered copy reads as absent")
+    func tampered_is_absent() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = MetaTokenStore(fileURL: dir.appendingPathComponent("meta-token"), machineID: Self.thisMac)
+        try store.save("dca:t")
+        var bytes = Array(try Data(contentsOf: store.fileURL))
+        bytes[bytes.count - 3] ^= 0x01
+        try Data(bytes).write(to: store.fileURL)
+        #expect(store.load() == nil)
+    }
+
+    @Test("clear reports success for a missing file")
+    func clear_missing_is_success() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = MetaTokenStore(fileURL: dir.appendingPathComponent("meta-token"), machineID: Self.thisMac)
+        expectTrue(store.clear())
+    }
 }

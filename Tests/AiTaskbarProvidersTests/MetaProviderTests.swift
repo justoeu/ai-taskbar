@@ -238,30 +238,59 @@ struct MetaProviderTests {
     }
 
     private final class DiscardingCredentials: MetaCredentialReading, @unchecked Sendable {
-        var discarded: [String] = []
-        func resolve() -> MetaLoginResolution { .token("dca:stored-copy") }
+        let resolution: MetaLoginResolution
+        private let lock = NSLock()
+        private var _discarded: [String] = []
+        var discarded: [String] { lock.withLock { _discarded } }
+        init(_ resolution: MetaLoginResolution) { self.resolution = resolution }
+        func resolve() -> MetaLoginResolution { resolution }
         func hasLogin() -> Bool { true }
         func discardStoredToken(_ token: String) -> Bool {
-            discarded.append(token)
+            lock.withLock { _discarded.append(token) }
             return true
         }
     }
 
-    @Test("a 401 on the stored copy drops it and shows the Authorize banner")
-    func rejected_copy_is_discarded() async {
-        StubURLProtocol.handler = { _ in .init(status: 401, data: Data()) }
-        let creds = DiscardingCredentials()
+    private func fetchError(_ creds: DiscardingCredentials, status: Int) async -> AppError? {
+        StubURLProtocol.reset()
+        StubURLProtocol.handler = { _ in .init(status: status, data: Data()) }
         let p = MetaProvider(credentials: creds,
                              cache: DiskCache(vendor: .meta, baseDir: tmpCacheDir),
                              http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]))
         do {
             _ = try await p.fetchUsage(forceRefresh: true)
-            Issue.record("expected the rejected copy to throw")
+            Issue.record("expected HTTP \(status) to throw")
+            return nil
         } catch let e as AppError {
-            expectTrue(e.isKeychainACLBlocked)
+            return e
         } catch {
             Issue.record("expected AppError, got \(error)")
+            return nil
         }
+    }
+
+    @Test("a 401 on the stored copy drops it and shows the Authorize banner")
+    func rejected_copy_is_discarded() async throws {
+        let creds = DiscardingCredentials(.storedToken("dca:stored-copy"))
+        let e = try #require(await fetchError(creds, status: 401))
+        expectTrue(e.isKeychainACLBlocked)
         #expect(creds.discarded == ["dca:stored-copy"])
+    }
+
+    @Test("a 401 on a LIVE Keychain token is a dead login, not an ACL block")
+    func rejected_live_token_is_relogin() async throws {
+        let creds = DiscardingCredentials(.token("dca:live"))
+        let e = try #require(await fetchError(creds, status: 401))
+        expectFalse(e.isKeychainACLBlocked)
+        #expect(e.httpStatus == 401)
+        #expect(creds.discarded == ["dca:live"])  // its copy is dead too
+    }
+
+    @Test("a 403 keeps the stored copy")
+    func forbidden_keeps_copy() async throws {
+        let creds = DiscardingCredentials(.storedToken("dca:stored-copy"))
+        let e = try #require(await fetchError(creds, status: 403))
+        #expect(e.httpStatus == 403)
+        #expect(creds.discarded.isEmpty)
     }
 }

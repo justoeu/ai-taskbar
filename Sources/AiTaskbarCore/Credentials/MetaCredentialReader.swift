@@ -5,8 +5,14 @@ import os
 /// Outcome of looking for the Muse CLI login, without ever logging the
 /// token itself (`docs/SDD-meta-muse.md` §7).
 public enum MetaLoginResolution: Equatable, Sendable {
-    /// A device-code (`dca:`) access token. Never persisted or logged.
+    /// A device-code (`dca:`) access token read live (auth file or Keychain).
+    /// Never logged.
     case token(String)
+    /// The app's own sealed copy (`MetaTokenStore`), served because the live
+    /// Keychain read was refused. Distinct from `.token` so a rejection of
+    /// THIS token reads as "authorize again", while a rejection of a live
+    /// token reads as "sign in again" (the login itself is dead).
+    case storedToken(String)
     /// The Keychain item exists but its ACL refuses this binary. Prompt-free
     /// by design: the caller degrades instead of asking for a password.
     case keychainBlocked
@@ -54,14 +60,15 @@ public protocol MetaCredentialReading: Sendable {
     /// only, never scheduled). False means the user canceled.
     func authorizePersistently() throws -> Bool
     /// Meta rejected `token`: forget the app's own copy if `token` is it.
-    /// True when a stored copy was discarded (the caller may resolve again).
+    /// True only when a matching copy existed and is now gone. Conformers
+    /// without a store keep the default (false).
     func discardStoredToken(_ token: String) -> Bool
 }
 
 public extension MetaCredentialReading {
     func detection() -> MetaLoginDetection {
         switch resolve() {
-        case .token: return .detected
+        case .token, .storedToken: return .detected
         case .keychainBlocked: return .keychainBlocked
         case .unavailable: return .unavailable
         case .missing: return .missing
@@ -168,6 +175,8 @@ public struct MetaCredentialReader: MetaCredentialReading {
 
     public func resolve() -> MetaLoginResolution {
         if let token = authFileRecord()?.inlineToken {
+            // The auth file wins; a Keychain-era copy would only go stale.
+            tokenStore?.clear()
             return .token(token)
         }
         switch keychainRead() {
@@ -193,22 +202,21 @@ public struct MetaCredentialReader: MetaCredentialReading {
             // dialog of its own (a separate process, outside
             // `KeychainPromptSuppressor`). The stored copy answers instead;
             // only without one does the Authorize banner appear.
-            if let stored = tokenStore?.load() { return .token(stored) }
+            if let stored = tokenStore?.load() { return .storedToken(stored) }
             return .keychainBlocked
         case .missing:
             // `muse logout`: the login is gone, so is the copy.
             tokenStore?.clear()
             return .missing
         case .failed(let status):
-            if let stored = tokenStore?.load() { return .token(stored) }
+            if let stored = tokenStore?.load() { return .storedToken(stored) }
             return .unavailable("keychain read failed with OSStatus \(status)")
         }
     }
 
     public func discardStoredToken(_ token: String) -> Bool {
         guard let tokenStore, tokenStore.load() == token else { return false }
-        tokenStore.clear()
-        return true
+        return tokenStore.clear()
     }
 
     public func hasLogin() -> Bool {
@@ -235,16 +243,18 @@ public struct MetaCredentialReader: MetaCredentialReading {
         if let keychainProbe {
             switch keychainProbe() {
             case .present: return .detected
+            // Mirrors `resolve()`: wherever it would serve the stored copy,
+            // the login counts as detected.
             case .blocked: return tokenStore?.load() != nil ? .detected : .keychainBlocked
             case .missing: return .missing
-            case .failed: return .unavailable
+            case .failed: return tokenStore?.load() != nil ? .detected : .unavailable
             }
         }
         switch keychainRead() {
         case .found: return .detected
-        case .blocked: return .keychainBlocked
+        case .blocked: return tokenStore?.load() != nil ? .detected : .keychainBlocked
         case .missing: return .missing
-        case .failed: return .unavailable
+        case .failed: return tokenStore?.load() != nil ? .detected : .unavailable
         }
     }
 
