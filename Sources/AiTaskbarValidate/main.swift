@@ -1129,8 +1129,9 @@ section("PricingTable lookup") {
     let haiku55Dot = PricingTable.lookup("claude-haiku-5.5", table: PricingTable.anthropic)
     expect(haiku55Dot?.inputPer1M == 0.1, "Haiku 5.5 dotted format input price ($0.10/MTok)")
     let gemini4 = PricingTable.lookup("gemini-4-argon", table: PricingTable.gemini)
-    expect(gemini4?.inputPer1M == 2, "Gemini 4 provisional introductory input price ($2/MTok)")
-    expect(gemini4?.outputPer1M == 10, "Gemini 4 provisional introductory output price ($10/MTok)")
+    expect(gemini4?.inputPer1M == 2, "Gemini 4 Argon introductory input price ($2/MTok)")
+    expect(gemini4?.outputPer1M == 10, "Gemini 4 Argon introductory output price ($10/MTok)")
+    expect(gemini4?.cacheReadPer1M == 0.1, "Gemini 4 Argon cached input 95% off ($0.10/MTok)")
     var fastOpus = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000)
     fastOpus.fastInputTokens = 1_000_000
     fastOpus.fastOutputTokens = 1_000_000

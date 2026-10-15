@@ -413,6 +413,8 @@ produces numbers that are wrong by multiples while looking plausible:
 | `CodexSessionScanner` (`~/.codex/sessions`) | **yes** — cached is subtracted out | folded into output |
 | `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
 | `MuseSessionScanner` (`~/.local/share/muse/sessions`) | **yes** — cache read (`cache_read_tokens` ?? `cached_tokens`) is subtracted out | subset of output, **not** added |
+| `GeminiUsageScanner` — Gemini CLI (`~/.gemini/tmp/*/chats/session-*.jsonl`) | **yes** — cached is subtracted out | **separate field** (`thoughts`), added to output |
+| `GeminiUsageScanner` — Antigravity (`~/.gemini/antigravity-cli/conversations/*.db`) | **no** — field 2 is the non-cached part only | folded into output (`field3 == field9 + field10`) |
 
 `MuseSessionScanner` counts only `model_completed` /
 `automated_review_completed` events and buckets by `recorded_at`
@@ -886,16 +888,29 @@ skipped.
   `make publish`, credentials via `NOTARY_PROFILE` keychain profile or
   `APPLE_ID`/`APPLE_TEAM_ID`/`APPLE_PASSWORD`). CI deliberately has no signing
   secrets — see "Releasing / versioning".
-- **Gemini is API-key heartbeat only — no usage/cost integration is feasible
-  today** (see README "Google Gemini — limited"). The consumer Gemini app
-  subscription (Plus/Pro/Ultra) has no public usage API; the developer
-  Cloud Monitoring API measures GCP-project API requests, not the
-  subscription; Code Assist's `cloudcode-pa…v1internal:retrieveUserQuota`
-  (read from `~/.gemini/oauth_creds.json`) works but is undocumented and is
-  being retired for individuals on 2026-06-18; the Antigravity CLI (`agy`)
-  exposes no usage command and stores auth as encrypted Electron
-  cookies/safeStorage. Revisit only if Google ships a real OAuth usage API.
-  Do NOT build against `v1internal` or scrape Electron cookies.
+- **The Gemini card's API source is heartbeat/quota only — per-model usage
+  comes from local client records, never from a Google API** (see README
+  "Google Gemini — limited"). The consumer Gemini app subscription
+  (Plus/Pro/Ultra) has no public usage API; the developer Cloud Monitoring
+  API measures GCP-project API requests, not the subscription; Code Assist's
+  `cloudcode-pa…v1internal:retrieveUserQuota` is undocumented and retired for
+  individuals on 2026-06-18; the Antigravity CLI (`agy`) exposes no per-model
+  usage command (its `/usage` is quota per model GROUP — that is what the
+  card's bars show; group membership is NOT usage and is never presented as
+  "models in use"). What IS used, since 2026-10-14: `GeminiUsageScanner`
+  reads the clients' own records — Gemini CLI chat JSONL and Antigravity's
+  per-conversation SQLite databases (protobuf fields calibrated against
+  `agy --print` JSON ground truth; semantics in the scanner table above).
+  Still do NOT build against `v1internal` or scrape Electron cookies.
+  Two facts measured on real data (2026-10-15): (1) Antigravity leaves its
+  conversation databases in WAL mode with NO `-shm` (23 of 93); a `mode=ro`
+  open of those SUCCEEDS and then fails the first statement with
+  SQLITE_CANTOPEN, so `openReadOnly` proves each candidate with a real read
+  before falling back to `immutable=1` — checking only the open made every
+  such database read as empty and the card showed $0. (2) Antigravity also
+  routes Claude (`claude-opus-5-5-high`), billed by the Google subscription:
+  it stays on the Gemini card, priced through `PricingTable.antigravity`
+  (Gemini + Anthropic rates; the effort suffix resolves by longest prefix).
 - **TOMLKit is the single runtime dependency and is effectively unmaintained**
   (no release in ~2.5 years, no commits in ~18 months, pinned at 0.6.0 in
   `Package.resolved`). **Accepted residual risk** (ultra-deep DEP-PRI-001):

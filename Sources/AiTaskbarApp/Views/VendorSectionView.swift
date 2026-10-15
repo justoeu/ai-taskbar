@@ -646,11 +646,12 @@ public struct VendorSectionView: View {
         case .gemini(let s):
             VStack(alignment: .leading, spacing: 4) {
                 if let count = s.modelCount, !s.isAntigravityActive {
-                    Label("\(count) models available",
+                    Label(L10n.localizedString("models_available_fmt", count),
                           systemImage: "sparkles")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+
                 if let disclaimer = s.disclaimer {
                     HStack(alignment: .top, spacing: 5) {
                         Image(systemName: "info.circle")

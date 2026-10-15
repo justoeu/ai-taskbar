@@ -344,6 +344,8 @@ AI Taskbar supports two monitoring paths for Google Gemini:
    - If you do not use Antigravity, you can set `prefer_antigravity = false` and supply a Google AI Studio API key (`api_key = "AIza..."` or `GEMINI_API_KEY`).
    - Acts strictly as an authenticated heartbeat (`GET /v1beta/models`) to check key validity and count available models. Developer keys do not expose subscription usage or remaining quotas.
 
+**Per-model usage & cost (local estimate):** independently of the quota path above, the card's cost footer breaks down the models you actually used — tokens and estimated dollars per model for today and the last 7 days. Google exposes no per-model usage API, so AI Taskbar reads the clients' own local records: Gemini CLI chat logs (`~/.gemini/tmp/*/chats/session-*.jsonl`) and Antigravity's conversation databases (`~/.gemini/antigravity-cli/conversations/*.db`), priced at published Google AI rates. It is an API-value estimate, not a bill: subscription use has no marginal cost. Quota bars stay group-based (that is all `agy /usage` reports); the footer is where real per-model consumption lives.
+
 ---
 
 ## Service status & health pages
@@ -397,7 +399,7 @@ Daily and 7-day costs are computed **locally** from the CLI transcripts (`~/.cla
 
 Prices per million tokens. **Fast mode** keeps the same model id, so it is detected per request from the transcript's `usage.speed` and billed at 2x on every token category, cache included. Models without fast mode (Opus 4.7 rejects it, Opus 4.6 runs it at standard price) are billed at standard rates. **Haiku 5.5** is priced by prompt length: a request whose prompt (input + cache reads + cache writes) is over 100,000 tokens is billed entirely at the higher row, output included. A model missing from the table still appears in the breakdown, marked as not yet priced, rather than disappearing.
 
-**Gemini 4 (Argon)** is priced provisionally under a `gemini-4` prefix at its announced introductory rate ($2 / $10, cached input $0.10): as of 2026-10-10 it has no public model ID and is not on Google's official price list.
+**Gemini 4 Argon** (`gemini-4-argon`) is priced at Google's introductory rate ($2 / $10 per 1M in/out, cached input $0.10), valid through 2026-11-30; the standard rate from 2026-12-01 is $4 / $20 (cached $0.20). Other Gemini 4 variants fall back to a `gemini-4` prefix at the same introductory tier.
 
 ---
 

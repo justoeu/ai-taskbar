@@ -116,6 +116,7 @@
 
 // Model breakdown
 "models_label" = "Models";
+"models_available_fmt" = "%ld models available";
 "models_columns_header" = "today / last 7 days";
 
 // About — cost data source
