@@ -115,22 +115,31 @@ struct MetaCredentialReaderTests {
         expectTrue(r.hasLogin())
     }
 
-    @Test("ACL-blocked direct read falls back to the security tool")
-    func security_tool_fallback() throws {
+    @Test("ACL-blocked direct read reports blocked; no security-tool fallback")
+    func blocked_has_no_tool_fallback() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("meta-cred-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let payload = Data(#"{"access_token":"dca:via-tool"}"#.utf8)
-        let withTool = MetaCredentialReader(
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let r = MetaCredentialReader(
             authFileURL: dir.appendingPathComponent("auth.json"),
-            keychainRead: { .blocked },
-            securityToolRead: { payload })
-        #expect(withTool.resolve() == .token("dca:via-tool"))
-        let noTool = MetaCredentialReader(
-            authFileURL: dir.appendingPathComponent("auth.json"),
-            keychainRead: { .blocked },
-            securityToolRead: { nil })
-        #expect(noTool.resolve() == .keychainBlocked)
+            keychainRead: { .blocked })
+        #expect(r.resolve() == .keychainBlocked)
+    }
+
+    @Test("the Meta reader never shells out to /usr/bin/security")
+    func source_has_no_security_tool() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/AiTaskbarCore/Credentials/MetaCredentialReader.swift")
+        let text = try String(contentsOf: source, encoding: .utf8)
+        // Code lines only: the explanatory comment names the tool on purpose.
+        let code = text.split(separator: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(!code.contains("SecurityToolCredentialReader"))
+        #expect(!code.contains("/usr/bin/security"))
+        #expect(!code.contains("Process("))
     }
 
     @Test("auth file URL resolution: config, env, default")

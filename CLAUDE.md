@@ -427,7 +427,10 @@ reads subscription windows from `POST api.meta.ai/muse-code/key` with the
 Muse CLI's device-code (`dca:`) login token — read-only via
 `MetaCredentialReader` (scheduled reads prompt-free; the single prompt is
 the user-clicked Authorize affordance over `KeychainAccessAuthorizer`,
-like Anthropic), decode by allow-list (the minted key and
+like Anthropic — but **no `/usr/bin/security` fallback**: the `muse` binary
+writes the item natively, its rewrite of 2026-10-14 dropped the tool's
+grant, and the tool, a separate process outside the suppressor, then raised
+its own password dialog; a blocked read shows the Authorize banner), decode by allow-list (the minted key and
 payment metadata are never decoded or cached); API keys and
 `META_API_KEY` get 401 there and are never consulted. See
 `docs/SDD-meta-muse.md` (§18 field addendum).
@@ -810,14 +813,15 @@ that came out of fixing that:
   tool, so the tool is on its trusted-app list and `apple-tool:` partition no
   matter how this binary is signed — which is what made ad-hoc dev builds
   re-prompt after every rebuild (36 dead `cdhash` grants on one machine).
-  The same fallback covers the Muse CLI item (`MetaCredentialReader`): its
-  partition list carries `apple-tool:` from creation — verified by ACL dump
-  on 2026-10-12 (`teamid:<Meta>`, `apple-tool:`; our own teamid there came
-  from the user's Authorize click), the system default for `SecItemAdd`
-  items. The criterion for any future item is that same *verified*
-  `apple-tool:` partition membership, never the assumption that the tool
-  might be trusted: without it, the tool would raise the dialog this
-  suppressor exists to prevent (bounded only by the 5 s kill + cooldowns).
+  It does NOT cover the Muse CLI item (`MetaCredentialReader`) — revoked
+  2026-10-15. An ACL dump on 2026-10-12 showed `apple-tool:` in that item's
+  partition list and the tool read it silently, but the `muse` binary
+  (Meta-signed, team V9WTTPBFK9) writes the item natively, and its rewrite of
+  2026-10-14 dropped the grant: the tool, a separate process outside this
+  suppressor, then raised its own password dialog. A partition entry seen
+  once is not a guarantee: only an item its CLI writes WITH
+  `/usr/bin/security` (the Claude item) keeps the tool trusted across
+  rewrites. Never extend the fallback to another item on a one-off dump.
   Rules: exact-match arguments only (`-s` is exact, verified; `-a ""` for the
   legacy account-less item), the item's own keychain file is passed and must
   be **unlocked** (a locked keychain fast-fails with the same code and the

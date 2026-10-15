@@ -89,8 +89,6 @@ public struct MetaCredentialReader: MetaCredentialReading {
     private let keychainRead: @Sendable () -> MetaKeychainRead
     private let keychainProbe: (@Sendable () -> MetaKeychainProbe)?
     private let authorizer: @Sendable () throws -> Bool
-    /// `/usr/bin/security` fallback payload for the same item, or nil.
-    private let securityToolRead: @Sendable () -> Data?
 
     /// Test/init seam: explicit auth file and Keychain behavior. When no
     /// probe is given, presence derives from the read result (tests only:
@@ -103,13 +101,11 @@ public struct MetaCredentialReader: MetaCredentialReading {
                     try KeychainAccessAuthorizer.authorize(
                         service: MetaCredentialReader.keychainService,
                         account: MetaCredentialReader.keychainAccount) == .authorized
-                },
-                securityToolRead: @escaping @Sendable () -> Data? = { nil }) {
+                }) {
         self.authFileURL = authFileURL
         self.keychainRead = keychainRead
         self.keychainProbe = keychainProbe
         self.authorizer = authorizer
-        self.securityToolRead = securityToolRead
     }
 
     /// The one intentional interactive prompt, behind the Authorize
@@ -129,8 +125,7 @@ public struct MetaCredentialReader: MetaCredentialReading {
             authFileURL: Self.authFileURL(configPath: configPath,
                                           environment: environment, home: home),
             keychainRead: { Self.readKeychain() },
-            keychainProbe: { Self.probeKeychain() },
-            securityToolRead: { Self.readViaSecurityTool() })
+            keychainProbe: { Self.probeKeychain() })
     }
 
     public init(config: MetaConfig) {
@@ -160,14 +155,12 @@ public struct MetaCredentialReader: MetaCredentialReading {
             }
             return .token(token)
         case .blocked:
-            // Same item through /usr/bin/security (the Claude-proven
-            // fallback): the tool is trusted by the item even when this
-            // binary is not, so no password prompt is ever needed. Only
-            // when the tool also fails does the Authorize banner remain.
-            if let data = securityToolRead(),
-               let token = Self.token(fromKeychainPayload: data) {
-                return .token(token)
-            }
+            // No `/usr/bin/security` fallback here (unlike the Claude
+            // item): the Muse CLI writes this item natively, and its
+            // rewrite on 2026-10-14 dropped every grant — the tool then
+            // raised a password dialog of its own (a separate process,
+            // outside `KeychainPromptSuppressor`). Blocked → Authorize
+            // banner, never a prompt nobody asked for.
             return .keychainBlocked
         case .missing:
             return .missing
@@ -320,61 +313,6 @@ public struct MetaCredentialReader: MetaCredentialReading {
                 }
                 return .failed(status)
             }
-        }
-    }
-
-    /// Presence by attributes only — never requests the secret. An
-    /// ACL-blocked item still proves a login exists.
-    private static let securityTool = SecurityToolCredentialReader()
-    private static let didLogFallback = OSAllocatedUnfairLock<Bool>(initialState: false)
-
-    /// Same item, read by `/usr/bin/security` instead of this binary —
-    /// the fallback that ended the per-build password prompts for the
-    /// Claude item, applied under its exact guardrails: skipped when the
-    /// item's keychain is locked (the same fast-fail would mean "locked"
-    /// and the tool would raise the unlock dialog), exact-match
-    /// arguments pinned to the item's own keychain file, payload never
-    /// logged, cooldowns owned by `SecurityToolCredentialReader`.
-    /// Blocking: call only via `resolve()` from an off-pool thread.
-    static func readViaSecurityTool() -> Data? {
-        guard let keychain = itemKeychain(), KeychainCredentialReader.isUnlocked(keychain) else {
-            AppLog.keychain.notice("Muse keychain read blocked and the item's keychain is locked or unresolved; not consulting /usr/bin/security.")
-            return nil
-        }
-        do {
-            let data = try securityTool.read(
-                service: keychainService, account: keychainAccount,
-                keychainPaths: [KeychainCredentialReader.path(of: keychain)].compactMap { $0 })
-            let first = didLogFallback.withLock { logged -> Bool in
-                defer { logged = true }
-                return !logged
-            }
-            if first {
-                AppLog.keychain.notice("Direct Muse keychain read ACL-blocked; credential read through /usr/bin/security (no prompt). Authorize remains available for direct reads.")
-            }
-            return data
-        } catch SecurityToolCredentialReader.Failure.coolingDown {
-            return nil
-        } catch {
-            AppLog.keychain.error("Muse security tool fallback unavailable: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-    }
-
-    /// The keychain file holding the login item (reference query, no decrypt).
-    private static func itemKeychain() -> SecKeychain? {
-        KeychainPromptSuppressor.withPromptsSuppressed {
-            var query = baseQuery()
-            query[kSecReturnRef as String] = true
-            query[kSecMatchLimit as String] = kSecMatchLimitOne
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-                  let item else { return nil }
-            var keychain: SecKeychain?
-            guard SecKeychainItemCopyKeychain(item as! SecKeychainItem, &keychain) == errSecSuccess else {
-                return nil
-            }
-            return keychain
         }
     }
 
