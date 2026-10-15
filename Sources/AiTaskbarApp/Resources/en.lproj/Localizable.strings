@@ -38,6 +38,8 @@
 "keychain_auth_pending" = "Waiting for macOS authorization…";
 "keychain_auth_button" = "Authorize";
 "keychain_auth_denied" = "macOS could not authorize access to the Claude Code credential (error -25293). Check this item's permissions in Keychain Access. This error alone does not indicate an incorrect password.";
+"keychain_auth_hint_muse" = "Muse keeps your login in the macOS Keychain. Authorize once and choose \"Always Allow\": the app keeps its own encrypted copy of the access and will not ask again, not even when Muse updates itself. It asks again only if you sign in to Muse with another account. The app never sees or stores your password.";
+"keychain_auth_denied_muse" = "macOS did not authorize access to the Muse login. Click Authorize again and choose \"Always Allow\". If it keeps failing, sign in again with `muse login` in Terminal.";
 "token_expired_relogin_hint" = "Opens a browser to sign in — we'll re-check automatically.";
 "relogin" = "Re-login";
 "relogin_started" = "Browser opened — complete sign-in.";

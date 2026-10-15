@@ -400,7 +400,9 @@ public struct VendorSectionView: View {
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 } else {
-                    L10n.text("keychain_auth_hint")
+                    // Each vendor names its own credential: the Muse card
+                    // used to say "the Claude Code credential".
+                    L10n.text(vm.vendorId == .meta ? "keychain_auth_hint_muse" : "keychain_auth_hint")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -439,7 +441,7 @@ public struct VendorSectionView: View {
                     if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
                        failure == .authorizationDenied {
                         keychainAuthError = L10n.localizedString(
-                            "keychain_auth_denied")
+                            vm.vendorId == .meta ? "keychain_auth_denied_muse" : "keychain_auth_denied")
                     } else if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
                               failure == .permissionNotPersistent {
                         keychainAuthError = L10n.localizedString("keychain_auth_not_persistent")

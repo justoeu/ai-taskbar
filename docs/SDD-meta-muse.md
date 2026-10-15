@@ -530,3 +530,36 @@ Duas decisões revistas com evidência da máquina real, sem mudar o contrato:
    outro processo, fora do `KeychainPromptSuppressor`, então era o único
    caminho capaz de abrir um diálogo sozinho. Removida: leitura bloqueada →
    banner Authorize, nunca um prompt.
+
+## 19. Adendo (2026-10-15): cópia cifrada do token — revoga §7 "nunca guardado"
+
+O banner Authorize voltou no mesmo dia, depois de o `muse` se atualizar
+sozinho (1.4.8 → 1.4.9; o launcher verifica atualizações a cada hora). Cada
+regravação do item `ai.meta.dev.credentials` apaga as autorizações de
+terceiros. O CodexBar documenta a mesma perda ("a fresh `muse login` can
+recreate the Keychain item without the grant") e também pede de novo. Só uma
+autorização no ACL significaria, então, uma senha a cada atualização do Muse,
+o que é inaceitável num app público.
+
+Decisão: `MetaTokenStore` guarda a cópia do próprio app do token `dca:`.
+
+- Formato: `SecretBox` `enc:v2`, amarrado ao Mac, campo `meta.token_copy`.
+- Arquivo: `credentials/meta-token`, 0600 na escrita, verificado pelo
+  `validate.sh`. Link simbólico é ignorado; valor que não começa com `dca:`
+  não é gravado.
+- Gravada a cada leitura silenciosa bem-sucedida, que roda logo depois do
+  Authorize. O autorizador continua sem guardar os bytes que lê.
+- Usada quando a leitura direta é bloqueada ou falha.
+- Servida como `.storedToken`, distinto de `.token` (leitura ao vivo).
+- Num 401, qualquer cópia do token enviado é descartada. Só quando a cópia era
+  o que foi enviado volta o banner Authorize. Um 401 num token lido ao vivo do
+  Keychain é login morto e aparece como 401 (refazer `muse login`), nunca
+  como banner. Um 403 mantém a cópia. (Achado das 3 revisões do #51.)
+- Sem UUID de hardware nenhuma cópia é gravada (nunca `enc:v1`).
+- Alcance honesto: protege o arquivo copiado para fora do Mac, não contra
+  processos do mesmo usuário (o UUID é público). É um passo abaixo do ACL do
+  Keychain, aceito em troca de não pedir senha a cada atualização do Muse.
+- Apagada quando o item some (`muse logout`).
+- As Configurações mostram "detectado" quando a cópia existe.
+- Continua read-only quanto ao CLI: nada é escrito no item nem no `auth.json`,
+  e o token nunca é renovado pelo app.

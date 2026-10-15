@@ -102,6 +102,21 @@ if [ -f "$codex_auth" ]; then
     perm=$(stat -f "%Lp" "$codex_auth")
     [ "$perm" = "600" ] && ok "~/.codex/auth.json 0600" || fail "codex auth $perm (expected 600)"
 fi
+# The app's sealed copy of the Muse CLI token (MetaTokenStore): enc:v2 only,
+# 0600, a regular file (never a symlink), inside a 0700 credentials dir.
+cred_dir="$support_dir/credentials"
+if [ -d "$cred_dir" ]; then
+    perm=$(stat -f "%Lp" "$cred_dir")
+    [ "$perm" = "700" ] && ok "credentials dir 0700" || fail "credentials dir $perm (expected 700)"
+fi
+meta_token="$cred_dir/meta-token"
+if [ -L "$meta_token" ]; then
+    fail "credentials/meta-token is a symlink"
+elif [ -f "$meta_token" ]; then
+    perm=$(stat -f "%Lp" "$meta_token")
+    [ "$perm" = "600" ] && ok "credentials/meta-token 0600" || fail "meta-token $perm (expected 600)"
+    head -c 7 "$meta_token" | grep -q '^enc:v2:' && ok "credentials/meta-token sealed (enc:v2)" || fail "meta-token is not enc:v2-sealed"
+fi
 
 # The Anthropic reader may exec /usr/bin/security as a read-only fallback for
 # an ACL-blocked Keychain item. Pin the binary we exec: Apple-signed and
