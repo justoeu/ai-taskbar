@@ -156,4 +156,61 @@ struct MetaCredentialReaderTests {
         #expect(MetaCredentialReader.keychainService == "ai.meta.dev.credentials")
         #expect(MetaCredentialReader.keychainAccount == "meta")
     }
+
+    // MARK: stored copy (MetaTokenStore)
+
+    private func storeReader(keychain: @escaping @Sendable () -> MetaKeychainRead,
+                             probe: (@Sendable () -> MetaKeychainProbe)? = nil)
+        throws -> (MetaCredentialReader, MetaTokenStore, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("meta-store-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = MetaTokenStore(fileURL: dir.appendingPathComponent("meta-token"),
+                                   machineID: "11111111-2222-3333-4444-555555555555")
+        let reader = MetaCredentialReader(authFileURL: dir.appendingPathComponent("auth.json"),
+                                          keychainRead: keychain, keychainProbe: probe,
+                                          tokenStore: store)
+        return (reader, store, dir)
+    }
+
+    @Test("a successful Keychain read keeps a sealed copy of the token")
+    func found_saves_copy() throws {
+        let payload = Data(#"{"access_token":"dca:from-keychain"}"#.utf8)
+        let (r, store, dir) = try storeReader(keychain: { .found(payload) })
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(r.resolve() == .token("dca:from-keychain"))
+        #expect(store.load() == "dca:from-keychain")
+    }
+
+    @Test("after Muse drops the grant, the stored copy answers without a banner")
+    func blocked_uses_copy() throws {
+        let (r, store, dir) = try storeReader(keychain: { .blocked }, probe: { .blocked })
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(r.resolve() == .keychainBlocked)
+        #expect(r.detection() == .keychainBlocked)
+        try store.save("dca:kept")
+        #expect(r.resolve() == .token("dca:kept"))
+        #expect(r.detection() == .detected)
+    }
+
+    @Test("muse logout (item gone) clears the copy")
+    func missing_clears_copy() throws {
+        let (r, store, dir) = try storeReader(keychain: { .missing })
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save("dca:old")
+        #expect(r.resolve() == .missing)
+        #expect(store.load() == nil)
+    }
+
+    @Test("discardStoredToken drops only the matching copy")
+    func discard_matching_only() throws {
+        let (r, store, dir) = try storeReader(keychain: { .blocked })
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save("dca:current")
+        expectFalse(r.discardStoredToken("dca:other"))
+        #expect(store.load() == "dca:current")
+        expectTrue(r.discardStoredToken("dca:current"))
+        #expect(store.load() == nil)
+        #expect(r.resolve() == .keychainBlocked)
+    }
 }

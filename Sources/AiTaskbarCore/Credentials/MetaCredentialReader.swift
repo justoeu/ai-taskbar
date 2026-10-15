@@ -53,6 +53,9 @@ public protocol MetaCredentialReading: Sendable {
     /// User-initiated durable Keychain authorization (Authorize button
     /// only, never scheduled). False means the user canceled.
     func authorizePersistently() throws -> Bool
+    /// Meta rejected `token`: forget the app's own copy if `token` is it.
+    /// True when a stored copy was discarded (the caller may resolve again).
+    func discardStoredToken(_ token: String) -> Bool
 }
 
 public extension MetaCredentialReading {
@@ -66,6 +69,8 @@ public extension MetaCredentialReading {
     }
 
     func authorizePersistently() throws -> Bool { false }
+
+    func discardStoredToken(_ token: String) -> Bool { false }
 }
 
 /// Reads the Muse Code CLI's device-code login, shared read-only.
@@ -89,6 +94,8 @@ public struct MetaCredentialReader: MetaCredentialReading {
     private let keychainRead: @Sendable () -> MetaKeychainRead
     private let keychainProbe: (@Sendable () -> MetaKeychainProbe)?
     private let authorizer: @Sendable () throws -> Bool
+    /// The app's own sealed copy of the token (`MetaTokenStore`), or nil.
+    private let tokenStore: MetaTokenStore?
 
     /// Test/init seam: explicit auth file and Keychain behavior. When no
     /// probe is given, presence derives from the read result (tests only:
@@ -101,11 +108,13 @@ public struct MetaCredentialReader: MetaCredentialReading {
                     try KeychainAccessAuthorizer.authorize(
                         service: MetaCredentialReader.keychainService,
                         account: MetaCredentialReader.keychainAccount) == .authorized
-                }) {
+                },
+                tokenStore: MetaTokenStore? = nil) {
         self.authFileURL = authFileURL
         self.keychainRead = keychainRead
         self.keychainProbe = keychainProbe
         self.authorizer = authorizer
+        self.tokenStore = tokenStore
     }
 
     /// The one intentional interactive prompt, behind the Authorize
@@ -120,12 +129,25 @@ public struct MetaCredentialReader: MetaCredentialReading {
     /// and reads the CLI's Keychain item prompt-free.
     public init(configPath: String? = nil,
                 environment: [String: String] = ProcessInfo.processInfo.environment,
-                home: URL = FileManager.default.homeDirectoryForCurrentUser) {
+                home: URL = FileManager.default.homeDirectoryForCurrentUser,
+                tokenStore: MetaTokenStore? = Self.defaultTokenStore()) {
         self.init(
             authFileURL: Self.authFileURL(configPath: configPath,
                                           environment: environment, home: home),
             keychainRead: { Self.readKeychain() },
-            keychainProbe: { Self.probeKeychain() })
+            keychainProbe: { Self.probeKeychain() },
+            tokenStore: tokenStore)
+    }
+
+    /// The production store; nil (no copy kept) only if Application
+    /// Support cannot be prepared — logged, the Keychain path still works.
+    public static func defaultTokenStore() -> MetaTokenStore? {
+        do {
+            return try MetaTokenStore.default()
+        } catch {
+            AppLog.keychain.error("Muse token store unavailable: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     public init(config: MetaConfig) {
@@ -153,20 +175,40 @@ public struct MetaCredentialReader: MetaCredentialReading {
             guard let token = Self.token(fromKeychainPayload: data) else {
                 return .unavailable("unrecognized Muse keychain payload")
             }
+            // Keep the app's own copy: the next Muse self-update drops this
+            // grant, and the copy is what keeps that from costing the user
+            // a password (see `MetaTokenStore`).
+            if let tokenStore {
+                do {
+                    try tokenStore.save(token)
+                } catch {
+                    AppLog.keychain.error("Muse token copy not saved: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             return .token(token)
         case .blocked:
             // No `/usr/bin/security` fallback here (unlike the Claude
             // item): the Muse CLI writes this item natively, and its
-            // rewrite on 2026-10-14 dropped every grant — the tool then
-            // raised a password dialog of its own (a separate process,
-            // outside `KeychainPromptSuppressor`). Blocked → Authorize
-            // banner, never a prompt nobody asked for.
+            // rewrites drop every grant — the tool then raised a password
+            // dialog of its own (a separate process, outside
+            // `KeychainPromptSuppressor`). The stored copy answers instead;
+            // only without one does the Authorize banner appear.
+            if let stored = tokenStore?.load() { return .token(stored) }
             return .keychainBlocked
         case .missing:
+            // `muse logout`: the login is gone, so is the copy.
+            tokenStore?.clear()
             return .missing
         case .failed(let status):
+            if let stored = tokenStore?.load() { return .token(stored) }
             return .unavailable("keychain read failed with OSStatus \(status)")
         }
+    }
+
+    public func discardStoredToken(_ token: String) -> Bool {
+        guard let tokenStore, tokenStore.load() == token else { return false }
+        tokenStore.clear()
+        return true
     }
 
     public func hasLogin() -> Bool {
@@ -193,7 +235,7 @@ public struct MetaCredentialReader: MetaCredentialReading {
         if let keychainProbe {
             switch keychainProbe() {
             case .present: return .detected
-            case .blocked: return .keychainBlocked
+            case .blocked: return tokenStore?.load() != nil ? .detected : .keychainBlocked
             case .missing: return .missing
             case .failed: return .unavailable
             }

@@ -236,4 +236,32 @@ struct MetaProviderTests {
         expectTrue(try p.authorizeCredentialsInteractively())
         #expect(fake.calls == 1)
     }
+
+    private final class DiscardingCredentials: MetaCredentialReading, @unchecked Sendable {
+        var discarded: [String] = []
+        func resolve() -> MetaLoginResolution { .token("dca:stored-copy") }
+        func hasLogin() -> Bool { true }
+        func discardStoredToken(_ token: String) -> Bool {
+            discarded.append(token)
+            return true
+        }
+    }
+
+    @Test("a 401 on the stored copy drops it and shows the Authorize banner")
+    func rejected_copy_is_discarded() async {
+        StubURLProtocol.handler = { _ in .init(status: 401, data: Data()) }
+        let creds = DiscardingCredentials()
+        let p = MetaProvider(credentials: creds,
+                             cache: DiskCache(vendor: .meta, baseDir: tmpCacheDir),
+                             http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]))
+        do {
+            _ = try await p.fetchUsage(forceRefresh: true)
+            Issue.record("expected the rejected copy to throw")
+        } catch let e as AppError {
+            expectTrue(e.isKeychainACLBlocked)
+        } catch {
+            Issue.record("expected AppError, got \(error)")
+        }
+        #expect(creds.discarded == ["dca:stored-copy"])
+    }
 }

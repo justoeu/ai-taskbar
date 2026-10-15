@@ -432,7 +432,16 @@ the user-clicked Authorize affordance over `KeychainAccessAuthorizer`,
 like Anthropic — but **no `/usr/bin/security` fallback**: the `muse` binary
 writes the item natively, its rewrite of 2026-10-14 dropped the tool's
 grant, and the tool, a separate process outside the suppressor, then raised
-its own password dialog; a blocked read shows the Authorize banner), decode by allow-list (the minted key and
+its own password dialog; a blocked read shows the Authorize banner). **The
+Muse self-update rewrites the item and drops EVERY grant** (1.4.8 → 1.4.9 in
+one day; CodexBar documents the same loss), so an ACL grant alone means a
+password per update. `MetaTokenStore` keeps the app's own copy of the `dca:`
+token — `SecretBox` `enc:v2`, field `meta.token_copy`, 0600 at
+`credentials/meta-token`, checked by `validate.sh` — saved on every silent
+read and served when the read is blocked; a 401/403 on the copy discards it
+(back to the banner), `muse logout` (item gone) clears it, and Settings
+detection counts it as detected. The authorizer itself still never keeps
+the bytes it reads), decode by allow-list (the minted key and
 payment metadata are never decoded or cached); API keys and
 `META_API_KEY` get 401 there and are never consulted. See
 `docs/SDD-meta-muse.md` (§18 field addendum).

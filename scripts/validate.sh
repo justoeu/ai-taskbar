@@ -102,6 +102,13 @@ if [ -f "$codex_auth" ]; then
     perm=$(stat -f "%Lp" "$codex_auth")
     [ "$perm" = "600" ] && ok "~/.codex/auth.json 0600" || fail "codex auth $perm (expected 600)"
 fi
+# The app's sealed copy of the Muse CLI token (MetaTokenStore): enc:v2, 0600.
+meta_token="$support_dir/credentials/meta-token"
+if [ -f "$meta_token" ]; then
+    perm=$(stat -f "%Lp" "$meta_token")
+    [ "$perm" = "600" ] && ok "credentials/meta-token 0600" || fail "meta-token $perm (expected 600)"
+    head -c 7 "$meta_token" | grep -q '^enc:v' && ok "credentials/meta-token sealed" || fail "meta-token is not SecretBox-sealed"
+fi
 
 # The Anthropic reader may exec /usr/bin/security as a read-only fallback for
 # an ACL-blocked Keychain item. Pin the binary we exec: Apple-signed and

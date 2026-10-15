@@ -37,6 +37,8 @@
 "keychain_auth_pending" = "Esperando la autorización de macOS…";
 "keychain_auth_button" = "Autorizar";
 "keychain_auth_denied" = "macOS no pudo autorizar el acceso a la credencial de Claude Code (error -25293). Revisa los permisos de este elemento en Acceso a Llaveros. Este error por sí solo no indica una contraseña incorrecta.";
+"keychain_auth_hint_muse" = "Muse guarda tu inicio de sesión en el Llavero de macOS. Autoriza una vez y elige \"Permitir siempre\": la app guarda su propia copia cifrada del acceso y no volverá a pedirlo, ni siquiera cuando Muse se actualice. Solo vuelve a pedirlo si inicias sesión en Muse con otra cuenta. La app nunca ve ni guarda tu contraseña.";
+"keychain_auth_denied_muse" = "macOS no autorizó el acceso al inicio de sesión de Muse. Haz clic en Autorizar de nuevo y elige \"Permitir siempre\". Si sigue fallando, vuelve a iniciar sesión con `muse login` en Terminal.";
 "token_expired_relogin_hint" = "Abre el navegador para iniciar sesión — verificaremos automáticamente.";
 "relogin" = "Re-iniciar sesión";
 "relogin_started" = "Navegador abierto — completa el inicio de sesión.";

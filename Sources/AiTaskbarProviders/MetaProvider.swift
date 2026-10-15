@@ -54,8 +54,8 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
             forceRefresh: forceRefresh,
             decode: decodeSnapshot,
             fetch: { [self] in
-                // resolve() may block on the /usr/bin/security fallback
-                // (5 s budget): keep it off the cooperative pool.
+                // resolve() does Keychain + file I/O: keep it off the
+                // cooperative pool.
                 let resolution = try await OffPool.run { self.credentials.resolve() }
                 let token: String
                 switch resolution {
@@ -83,6 +83,14 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
                     maximumResponseBytes: HTTPClient.defaultMaximumResponseBytes,
                     allowRedirect: { _ in false })
                 guard (200..<300).contains(response.statusCode) else {
+                    // Meta refused the token. If it was the app's stored
+                    // copy, drop it so the next read goes back to the
+                    // Keychain (a new `muse login` minted another token).
+                    if [401, 403].contains(response.statusCode),
+                       credentials.discardStoredToken(token) {
+                        throw AppError.credentials(
+                            "Muse stored token rejected; keychain read denied (errSecInteractionNotAllowed)")
+                    }
                     let body = String(data: data.prefix(1024), encoding: .utf8) ?? ""
                     throw AppError.http(status: response.statusCode, body: body)
                 }
