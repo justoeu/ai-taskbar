@@ -133,7 +133,13 @@ struct MetaCredentialReaderTests {
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Sources/AiTaskbarCore/Credentials/MetaCredentialReader.swift")
         let text = try String(contentsOf: source, encoding: .utf8)
-        #expect(!text.contains("SecurityToolCredentialReader"))
+        // Code lines only: the explanatory comment names the tool on purpose.
+        let code = text.split(separator: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(!code.contains("SecurityToolCredentialReader"))
+        #expect(!code.contains("/usr/bin/security"))
+        #expect(!code.contains("Process("))
     }
 
     @Test("auth file URL resolution: config, env, default")
