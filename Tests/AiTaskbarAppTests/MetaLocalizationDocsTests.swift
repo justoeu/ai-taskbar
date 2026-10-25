@@ -8,7 +8,7 @@ import Foundation
 @Suite("Meta localization + docs pins (T-011/T-012)")
 struct MetaLocalizationDocsTests {
     static let metaKeys = [
-        "meta_payg", "meta_billing_incomplete", "meta_quota_unavailable",
+        "meta_payg", "meta_billing_incomplete", "meta_quota_unavailable", "meta_open_usage",
         "settings_meta_footer", "settings_meta_login",
         "settings_meta_login_detected", "settings_meta_login_missing",
         "settings_meta_sessions_dir", "settings_meta_sessions_dir_help",

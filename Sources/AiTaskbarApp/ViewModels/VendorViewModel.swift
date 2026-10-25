@@ -295,7 +295,8 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 // fallback or a cache replay re-serves an old number, and
                 // stamping it `now` would plot a pre-outage percent past a
                 // window reset (BUG-ART-010).
-                if Self.isFreshNetworkOutcome(outcome) {
+                if Self.isFreshNetworkOutcome(outcome),
+                   Self.recordsHistorySample(outcome.snapshot) {
                     self.recordHistory(outcome.snapshot.maxUtilization)
                 }
             } catch is CancellationError {
@@ -349,6 +350,15 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         var current = history
         current.append(sample)
         history = current.filter { $0.at >= cutoff }
+    }
+
+    /// A snapshot with no window carries no reading at all (Muse's idle
+    /// response, TypeSafe, schema drift): `maxUtilization` is 0 there by
+    /// construction, and plotting it drew a fake "0%" — read as free quota
+    /// while a spent weekly cap was the very reason the session sat idle.
+    /// Unknown is left as a gap, never recorded as zero.
+    nonisolated static func recordsHistorySample(_ snapshot: VendorSnapshot) -> Bool {
+        !snapshot.windows.isEmpty
     }
 
     /// "Network, not cache": `CachedFetch` stamps a live fetch `cacheAge: 0`
