@@ -234,6 +234,10 @@ public struct WeeklyModelStackedChartView: View {
                 }
             }
         }
+        // The whole 7-day window, empty days included: without it the axis
+        // spanned only days with tokens, so an idle today (or first day)
+        // vanished from the chart.
+        .chartXScale(domain: xDomain ?? Self.fallbackDomain)
         .frame(height: 105)
         .chartOverlay { proxy in
             GeometryReader { geo in
@@ -243,7 +247,12 @@ public struct WeeklyModelStackedChartView: View {
                     .onContinuousHover { phase in
                         switch phase {
                         case .active(let location):
-                            if let rawDate: Date = proxy.value(atX: location.x) {
+                            // `location` is in the overlay's space, which
+                            // includes the leading Y-axis labels; the proxy
+                            // wants plot-area x. Unshifted, every hover read
+                            // a label-width to the right: the next day's bar.
+                            if let plotX = Self.plotRelativeX(location.x, plotArea: Self.plotArea(proxy, geo)),
+                               let rawDate: Date = proxy.value(atX: plotX) {
                                 let match = dailyUsage.first { calendar.isDate($0.date, inSameDayAs: rawDate) }
                                 let newDate = match?.date
                                 if hoveredDate != newDate {
@@ -319,6 +328,28 @@ public struct WeeklyModelStackedChartView: View {
     }
 
     /// Formats a token count into a human-readable abbreviation (e.g. 1.2K, 3.4M, 1.5B).
+    /// Never used with real data (the scanners always send the 7 days);
+    /// only keeps `chartXScale` total when `dailyUsage` is empty.
+    private static let fallbackDomain: ClosedRange<Date> = {
+        let today = Calendar.current.startOfDay(for: Date())
+        return today...(Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today.addingTimeInterval(86_400))
+    }()
+
+    /// The chart's plot area in the overlay's coordinate space.
+    private static func plotArea(_ proxy: ChartProxy, _ geo: GeometryProxy) -> CGRect {
+        if #available(macOS 14.0, *) {
+            return proxy.plotFrame.map { geo[$0] } ?? .zero
+        }
+        return geo[proxy.plotAreaFrame]
+    }
+
+    /// Overlay x → plot-area x, or nil outside the plot (over the Y-axis
+    /// labels or past the last day), where no bar can be hovered.
+    internal static func plotRelativeX(_ overlayX: CGFloat, plotArea: CGRect) -> CGFloat? {
+        guard plotArea.width > 0, overlayX >= plotArea.minX, overlayX <= plotArea.maxX else { return nil }
+        return overlayX - plotArea.minX
+    }
+
     internal static func formatTokens(_ count: Int) -> String {
         let n = Double(count)
         if count >= 1_000_000_000 {

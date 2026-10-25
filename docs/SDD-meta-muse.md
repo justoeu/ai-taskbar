@@ -591,3 +591,12 @@ Decisão:
 - É um limite inferior (a semanal só cresce até o reset), por isso entra no
   `maxUtilization` e no selo fixado. O cartão diz "Semanal: última leitura
   …" com a hora, nunca a apresenta como leitura atual.
+
+**Sem leitura nenhuma (medido 2026-10-25).** O próprio CLI também não tem a
+semanal nesse estado: `muse usage --json` devolve `allowance: null`,
+`reason: server_sent_no_usage`. Então, sem leitura guardada, o cartão diz que
+o uso da semana está **desconhecido** e oferece o link para o dev.meta.ai (o
+único lugar que ainda mostra a semana), e o histórico de 24 h não grava
+amostra para um snapshot sem janela (`recordsHistorySample`): antes desenhava
+um "0%" falso. A leitura por cookie do dev.meta.ai (§17) continua não
+implementada, por decisão do usuário.

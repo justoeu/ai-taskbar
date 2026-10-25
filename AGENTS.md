@@ -436,7 +436,13 @@ reading is scoped to `subs_tier_name` and carries only under the same plan,
 and a missing login (`muse logout`) clears it. It feeds `maxUtilization`.
 Never carried: past `resetsAt`, without a `resetsAt`, under another plan,
 for PAYG/billing-incomplete, or a reading stamped in the future. The cache holds
-only what Meta sent; never record a cached or carried window as live. Dollars are estimated
+only what Meta sent; never record a cached or carried window as live.
+The Muse CLI has no other source either: `muse usage --json` returns
+`allowance: null`, `reason: server_sent_no_usage` in the same state
+(measured 2026-10-25), so with no stored reading the card says the week is
+UNKNOWN and links to dev.meta.ai — never a 0% bar. Likewise
+`VendorViewModel.recordsHistorySample` skips any snapshot with no window: its
+`maxUtilization` is 0 by construction and the sparkline drew a fake "0%". Dollars are estimated
 at the published Meta Model API rates in `PricingTable.meta` (Wonder
 $4/$20, Spark $1.25/$4.25 per 1M; Wonder Full has no public rate and is
 estimated at the Wonder rate, the `codex-auto-review` precedent;

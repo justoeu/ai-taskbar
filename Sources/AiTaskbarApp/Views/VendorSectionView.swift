@@ -747,10 +747,23 @@ public struct VendorSectionView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             case .active where s.session == nil && s.weekly == nil:
-                Label(L10n.localizedString("meta_quota_unavailable"),
-                      systemImage: "info.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                // Unknown, not 0%: Meta omits every window while the session
+                // is idle — which a spent weekly cap causes — so say so, and
+                // point to the one place that still shows the week.
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(L10n.localizedString("meta_quota_unavailable"),
+                          systemImage: "info.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let url = VendorId.meta.dashboardURL {
+                        Button(L10n.localizedString("meta_open_usage")) {
+                            NSWorkspace.shared.open(url)
+                        }
+                        .buttonStyle(.link)
+                        .font(.subheadline)
+                    }
+                }
             case .active:
                 if let seen = s.weeklyLastSeenAt {
                     Label(Self.metaWeeklyLastSeenText(seen), systemImage: "clock.arrow.circlepath")

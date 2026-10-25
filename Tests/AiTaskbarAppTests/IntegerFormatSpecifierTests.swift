@@ -63,6 +63,18 @@ struct IntegerFormatSpecifierTests {
         #expect(text.contains("5000000000"))
     }
 
+    @Test("chart hover x is shifted into the plot area, nil over the axis labels")
+    func chart_hover_plot_relative_x() {
+        // Leading Y-axis labels take the first 40 pt of the overlay.
+        let plot = CGRect(x: 40, y: 0, width: 280, height: 105)
+        #expect(WeeklyModelStackedChartView.plotRelativeX(40, plotArea: plot) == 0)
+        #expect(WeeklyModelStackedChartView.plotRelativeX(180, plotArea: plot) == 140)
+        #expect(WeeklyModelStackedChartView.plotRelativeX(320, plotArea: plot) == 280)
+        #expect(WeeklyModelStackedChartView.plotRelativeX(20, plotArea: plot) == nil)
+        #expect(WeeklyModelStackedChartView.plotRelativeX(321, plotArea: plot) == nil)
+        #expect(WeeklyModelStackedChartView.plotRelativeX(10, plotArea: .zero) == nil)
+    }
+
     @Test("WeeklyModelStackedChartView.formatTokens abbreviates accurately")
     func weekly_chart_format_tokens() {
         #expect(WeeklyModelStackedChartView.formatTokens(500) == "500")
