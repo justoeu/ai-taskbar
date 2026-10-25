@@ -191,9 +191,12 @@ public enum AnalyticsAggregator {
             // Peak day from the daily token series when a scanner provides
             // one; quota history for vendors without it, and for Month: the
             // series covers 7 days and would name a day under a 30-day label.
+            // The fallback reads only the selected period: the history spans
+            // 90 days, and Week once named a day from September.
             let dailySeries = timeframe == .monthly ? [] : (estimate?.dailyUsage ?? [])
+            let periodHistory = history.filter { $0.at >= currentStart && $0.at <= nowTs }
             let peakDay = computePeakDay(from: dailySeries)
-                ?? computePeakDay(from: history, now: now)
+                ?? computePeakDay(from: periodHistory, now: now)
 
             // Calculate usage percentage from snapshot or history
             let historyMax = history.map { $0.max }.max() ?? 0

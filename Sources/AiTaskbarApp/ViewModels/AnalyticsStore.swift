@@ -100,7 +100,8 @@ public final class AnalyticsStore: ObservableObject {
             // tokens) in a separate section. Only the token totals merge.
             guard let existing = dict[v] else {
                 dict[v] = CostEstimate(usdToday: 0, usdLast7Days: 0,
-                                       totalsByModel: scan.last7DaysByModel)
+                                       totalsByModel: scan.last7DaysByModel,
+                                       dailyUsage: scan.daily)
                 continue
             }
             var mergedTotals = existing.totalsByModel
@@ -117,10 +118,32 @@ public final class AnalyticsStore: ObservableObject {
                 isApproximate: existing.isApproximate,
                 note: existing.note,
                 unpricedModelsToday: existing.unpricedModelsToday,
-                unpricedModelsLast7Days: existing.unpricedModelsLast7Days
+                unpricedModelsLast7Days: existing.unpricedModelsLast7Days,
+                // The daily series used to be dropped here, so a vendor with
+                // both a scanner and opencode traffic lost its chart.
+                dailyUsage: mergingDaily(existing.dailyUsage, opencode: scan.daily)
             )
         }
         return dict
+    }
+
+    /// Adds opencode's per-day tokens into a scanner's series, day by day
+    /// (same `CostWindow` days). Tokens only: opencode dollars never reach a
+    /// vendor's figures, so each day keeps the scanner's `costByModel`.
+    nonisolated static func mergingDaily(_ scanner: [DailyModelUsage],
+                                         opencode: [DailyModelUsage]) -> [DailyModelUsage] {
+        guard !scanner.isEmpty else { return opencode }
+        guard !opencode.isEmpty else { return scanner }
+        let calendar = Calendar.current
+        return scanner.map { day in
+            guard let extra = opencode.first(where: { calendar.isDate($0.date, inSameDayAs: day.date) })
+            else { return day }
+            var usage = day.usageByModel
+            for (m, u) in extra.usageByModel {
+                CostAggregator.add(u, into: &usage, model: m)
+            }
+            return DailyModelUsage(date: day.date, usageByModel: usage, costByModel: day.costByModel)
+        }
     }
 
     /// The estimates Analytics shows: the cost scanners' per-vendor totals
