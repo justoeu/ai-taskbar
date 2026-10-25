@@ -411,7 +411,7 @@ produces numbers that are wrong by multiples while looking plausible:
 | | `input` includes cached? | reasoning tokens |
 |---|---|---|
 | `CodexSessionScanner` (`~/.codex/sessions`) | **yes** — cached is subtracted out | folded into output |
-| `OpencodeScanner` (`~/.local/share/opencode/opencode.db`) | **no** — carried across as-is | **separate field**, added to output |
+| `OpencodeScanner` (`~/.local/share/opencode/opencode.db`, 1.x `message` / 2.x `session_message`) | **no** — carried across as-is | **separate field**, added to output |
 | `MuseSessionScanner` (`~/.local/share/muse/sessions`) | **yes** — cache read (`cache_read_tokens` ?? `cached_tokens`) is subtracted out | subset of output, **not** added |
 | `GeminiUsageScanner` — Gemini CLI (`~/.gemini/tmp/*/chats/session-*.jsonl`) | **yes** — cached is subtracted out | **separate field** (`thoughts`), added to output |
 | `GeminiUsageScanner` — Antigravity (`~/.gemini/antigravity-cli/conversations/*.db`) | **no** — field 2 is the non-cached part only | folded into output (`field3 == field9 + field10`) |
@@ -420,7 +420,20 @@ produces numbers that are wrong by multiples while looking plausible:
 `automated_review_completed` events and buckets by `recorded_at`
 (microseconds), never the `YYYY/MM/DD` folder date; `record.quantity`,
 `goal_usage_attribution` and `resource_usage_sampled` are rollups over the
-same steps and counting them doubles every total. Dollars are estimated
+same steps and counting them doubles every total.
+**Muse weekly carry.** The mint omits `subs_usage` ENTIRELY while the 5 h
+session window is idle — weekly included — which is exactly what a spent
+weekly cap causes, so the card read "quota not included" with an empty 0%
+while the week was at 100% (measured in `history/meta.jsonl`: weekly 66→100%
+over three days, back to 0 at every idle response). `MetaProvider` records
+each LIVE weekly window in `LastSeenWindowStore` (`quota/meta.json`, not a
+secret) and, on read (`decodeSnapshot`, so it expires at its own reset),
+`MetaSnapshot.carryingWeekly` puts it back for an `.active` snapshot with no
+weekly of its own, with `weeklyLastSeenAt` set; the card says "last reading
+…". A lower bound (weekly only grows until reset), so it also feeds
+`maxUtilization`. Never carried: past `resetsAt`, without a `resetsAt`, for
+PAYG/billing-incomplete, or a reading stamped in the future. The cache holds
+only what Meta sent; never record a cached or carried window as live. Dollars are estimated
 at the published Meta Model API rates in `PricingTable.meta` (Wonder
 $4/$20, Spark $1.25/$4.25 per 1M; Wonder Full has no public rate and is
 estimated at the Wonder rate, the `codex-auto-review` precedent;
@@ -470,6 +483,16 @@ others; do not reintroduce one. `OpencodeScanner` reads
 per-MESSAGE, never `session.model` — that column holds the last model a session
 used, so session-level attribution files every pre-switch token under the wrong
 model (measured: ~20M tokens on this machine).
+It reads BOTH opencode layouts, chosen by `OpencodeScanner.Schema.detect` from
+`sqlite_master`, never from an installed binary's version (it need not be the
+one that wrote the file): 1.x `message` (`$.role`, `$.modelID`, `$.providerID`)
+and 2.x `session_message` (role in the `type` column, `$.model.id`,
+`$.model.providerID`; measured on v2.1.4, 2026-10-25, with the same
+`tokens`/`cost` shape and semantics). With both tables present 2.x is read
+alone (an in-place upgrade may keep the old table; summing would double
+count); with neither the scan is `.unavailable`. The 2.x upgrade made
+`prepare` fail on `FROM message`, and every card silently lost its opencode
+rows until this was added.
 
 opencode is a **client, not a vendor**. Its usage is attributed to whichever
 vendor billed it and is never merged into that vendor's own totals: OpenAI
@@ -741,6 +764,13 @@ that came out of fixing that:
   validate.
 
 ## Hard rules
+
+- **Analytics "busiest day" comes from the daily token series**
+  (`AnalyticsAggregator.computePeakDay(from: [DailyModelUsage])`: most tokens,
+  then dollars, then the later day) — the series the stacked chart draws.
+  Quota history is only the fallback for vendors without one: weekly windows
+  are cumulative, so every day after a cap reads 100% and the tie named the
+  latest day, not the tallest bar (reported 2026-10-25 on Claude and Codex).
 
 - **Never use `[String: Any]`** for anything that crosses an actor boundary
   or is stored on a `Sendable` type. Use `JSONValue` (in `AiTaskbarCore/Util/`).

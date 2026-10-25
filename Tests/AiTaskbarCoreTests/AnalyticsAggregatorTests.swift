@@ -145,6 +145,74 @@ struct AnalyticsAggregatorTests {
         #expect(tiePeak?.date == day2)
     }
 
+    @Test("busiest day follows the daily token series, not a capped quota history")
+    func peak_day_from_daily_tokens() {
+        // The reported card: the weekly quota hit 100% on Thursday and stayed
+        // there, so the quota history tied every later day at 100% and named
+        // Friday, while Thursday's bar held ~20x Friday's tokens.
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let thursday = calendar.date(byAdding: .day, value: -3, to: today)!
+        let friday = calendar.date(byAdding: .day, value: -2, to: today)!
+        let saturday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let history = [
+            UsageHistoryStore.Sample(at: thursday.timeIntervalSince1970 + 3600, max: 100),
+            UsageHistoryStore.Sample(at: friday.timeIntervalSince1970 + 3600, max: 100),
+            UsageHistoryStore.Sample(at: saturday.timeIntervalSince1970 + 3600, max: 40),
+        ]
+        let daily = [
+            DailyModelUsage(date: thursday,
+                            usageByModel: ["m": ModelUsage(inputTokens: 4_000_000_000, outputTokens: 200_000_000)],
+                            costByModel: ["m": 1_600]),
+            DailyModelUsage(date: friday,
+                            usageByModel: ["m": ModelUsage(inputTokens: 200_000_000)],
+                            costByModel: ["m": 80]),
+            DailyModelUsage(date: saturday,
+                            usageByModel: ["m": ModelUsage(inputTokens: 2_400_000_000)],
+                            costByModel: ["m": 900]),
+        ]
+        let snapshot = AnalyticsAggregator.aggregate(
+            timeframe: .weekly, compareWithPrevious: false,
+            histories: [.anthropic: history],
+            estimates: [.anthropic: CostEstimate(usdToday: 0, usdLast7Days: 2_580, dailyUsage: daily)])
+        let peak = snapshot.vendorSummaries.first?.peakDay
+        #expect(peak?.date == thursday)
+        #expect(peak?.tokens == 4_200_000_000)
+        #expect(peak?.costUSD == 1_600)
+    }
+
+    @Test("daily-series peak breaks a token tie by cost, then by the later day")
+    func peak_day_daily_ties() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let earlier = calendar.date(byAdding: .day, value: -2, to: today)!
+        let later = calendar.date(byAdding: .day, value: -1, to: today)!
+        let usage = ["m": ModelUsage(inputTokens: 1_000)]
+        let costTie = AnalyticsAggregator.computePeakDay(from: [
+            DailyModelUsage(date: earlier, usageByModel: usage, costByModel: ["m": 5]),
+            DailyModelUsage(date: later, usageByModel: usage, costByModel: ["m": 1]),
+        ])
+        #expect(costTie?.date == earlier)
+        let fullTie = AnalyticsAggregator.computePeakDay(from: [
+            DailyModelUsage(date: earlier, usageByModel: usage, costByModel: ["m": 1]),
+            DailyModelUsage(date: later, usageByModel: usage, costByModel: ["m": 1]),
+        ])
+        #expect(fullTie?.date == later)
+    }
+
+    @Test("a daily series with no tokens falls back to the quota history")
+    func peak_day_empty_daily_falls_back() {
+        let today = Calendar.current.startOfDay(for: Date())
+        #expect(AnalyticsAggregator.computePeakDay(from: [DailyModelUsage(date: today)]) == nil)
+        let snapshot = AnalyticsAggregator.aggregate(
+            timeframe: .weekly, compareWithPrevious: false,
+            histories: [.zai: [UsageHistoryStore.Sample(at: today.timeIntervalSince1970 + 60, max: 70)]],
+            estimates: [.zai: CostEstimate(usdToday: 0, usdLast7Days: 0, dailyUsage: [DailyModelUsage(date: today)])])
+        let peak = snapshot.vendorSummaries.first?.peakDay
+        #expect(peak?.utilizationPercent == 70)
+        #expect(peak?.tokens == nil)
+    }
+
     @Test("delta comparison calculates percent change")
     func delta_comparison() {
         let delta = AnalyticsAggregator.computeDelta(current: 120.0, previous: 100.0)

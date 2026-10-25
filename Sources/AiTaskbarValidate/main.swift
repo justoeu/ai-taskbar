@@ -1140,6 +1140,10 @@ section("PricingTable lookup") {
     }
     let kimiK15 = PricingTable.lookup("kimi-k1.5", table: PricingTable.kimi)
     expect(kimiK15?.inputPer1M == 1.65, "Kimi k1.5 input price ($1.65/MTok)")
+    let kimiK31Pro = PricingTable.lookup("kimi-k3.1-pro", table: PricingTable.kimi)
+    expect(kimiK31Pro?.outputPer1M == 10.00, "Kimi K3.1 Pro output price ($10/MTok)")
+    let kimiK31Fast = PricingTable.lookup("kimi-k3.1-pro-highspeed", table: PricingTable.kimi)
+    expect(kimiK31Fast?.outputPer1M == 20.00, "Kimi K3.1 Pro highspeed output price ($20/MTok)")
     let moonshotAuto = PricingTable.lookup("moonshot-v1-auto", table: PricingTable.kimi)
     expect(moonshotAuto?.inputPer1M == 1.65, "Moonshot v1 auto input price ($1.65/MTok)")
     let kimiTable = PricingTable.table(for: .kimi)

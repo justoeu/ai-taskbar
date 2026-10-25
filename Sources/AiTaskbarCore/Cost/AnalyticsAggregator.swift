@@ -19,6 +19,30 @@ public enum AnalyticsAggregator {
         return ((current - previous) / previous) * 100.0
     }
 
+    /// Busiest day of a scanner's daily series: most tokens, then most
+    /// dollars, then the later day. This is the series the stacked chart
+    /// draws, so the highlight and the tallest bar always agree. The quota
+    /// history below cannot answer "busiest": weekly windows are cumulative,
+    /// so every day after a cap reads 100% and the tie went to the latest one
+    /// (the card named a day with a fraction of the tallest bar's tokens).
+    public static func computePeakDay(from daily: [DailyModelUsage]) -> PeakDayRecord? {
+        let best = daily
+            .filter { $0.totalTokens > 0 }
+            .max { a, b in
+                if a.totalTokens != b.totalTokens { return a.totalTokens < b.totalTokens }
+                if a.totalCostUSD != b.totalCostUSD { return a.totalCostUSD < b.totalCostUSD }
+                return a.date < b.date
+            }
+        guard let best else { return nil }
+        return PeakDayRecord(date: best.date,
+                             costUSD: best.totalCostUSD,
+                             utilizationPercent: 0,
+                             isHistoricalPeak: true,
+                             tokens: best.totalTokens)
+    }
+
+    /// Fallback for vendors without a daily token series: the day with the
+    /// highest quota reading.
     public static func computePeakDay(from samples: [UsageHistoryStore.Sample], now: Date = Date()) -> PeakDayRecord? {
         guard !samples.isEmpty else { return nil }
         let calendar = Calendar.current
@@ -161,8 +185,10 @@ public enum AnalyticsAggregator {
 
             totalCostUSD += cost
 
-            // Peak day from history
-            let peakDay = computePeakDay(from: history, now: now)
+            // Peak day from the daily token series when a scanner provides
+            // one; quota history only for vendors without it.
+            let peakDay = computePeakDay(from: estimate?.dailyUsage ?? [])
+                ?? computePeakDay(from: history, now: now)
 
             // Calculate usage percentage from snapshot or history
             let historyMax = history.map { $0.max }.max() ?? 0

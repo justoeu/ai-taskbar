@@ -563,3 +563,26 @@ Decisão: `MetaTokenStore` guarda a cópia do próprio app do token `dca:`.
 - As Configurações mostram "detectado" quando a cópia existe.
 - Continua read-only quanto ao CLI: nada é escrito no item nem no `auth.json`,
   e o token nunca é renovado pelo app.
+
+## 20. Adendo (2026-10-25): janela semanal mantida com a sessão ociosa — revoga §4.1 "sem barras"
+
+O mint omite `subs_usage` **inteiro** quando a janela de 5 h está ociosa, e a
+semanal some junto. É justamente o que uma semanal esgotada provoca: sem
+quota, a sessão fica ociosa. O cartão mostrava "quota não incluída" e 0%,
+com a semana em 100% (medido em `history/meta.jsonl`: semanal 66→100% em três
+dias, de volta a 0 a cada resposta ociosa) — falsa sensação de tokens livres.
+
+Decisão:
+
+- `MetaProvider` grava cada janela semanal **ao vivo** em
+  `LastSeenWindowStore` (`quota/meta.json`: percentual, reset e hora da
+  leitura; não é segredo). Nunca grava uma janela vinda do cache ou mantida.
+- Na leitura (`decodeSnapshot`, cache e stale incluídos),
+  `MetaSnapshot.carryingWeekly` devolve a última semanal a um snapshot
+  `.active` sem semanal própria, com `weeklyLastSeenAt`. O cache continua
+  guardando só o que a Meta enviou.
+- Só antes do `resets_at` da própria janela; sem `resets_at`, com leitura
+  datada no futuro, ou em PAYG/cobrança pendente, não há transporte.
+- É um limite inferior (a semanal só cresce até o reset), por isso entra no
+  `maxUtilization` e no selo fixado. O cartão diz "Semanal: última leitura
+  …" com a hora, nunca a apresenta como leitura atual.

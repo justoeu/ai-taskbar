@@ -45,6 +45,24 @@ struct AnalyticsQuotaLocalizationTests {
             .hasSuffix("($12.50 / 85% da quota)"))
     }
 
+    @Test("pt-BR token peak-day line shows tokens and cost, never a quota")
+    func peak_day_tokens_pt_br() {
+        let record = PeakDayRecord(date: Self.record.date, costUSD: 1_600,
+                                   utilizationPercent: 0, isHistoricalPeak: true,
+                                   tokens: 4_200_000_000)
+        #expect(Self.inLanguage("pt-BR") { AnalyticsFormatters.peakDayText(record) }
+            .hasSuffix("(4.2B tokens · $1,600.00)"))
+    }
+
+    @Test("en token peak-day line without cost shows tokens only")
+    func peak_day_tokens_no_cost_en() {
+        let record = PeakDayRecord(date: Self.record.date, costUSD: 0,
+                                   utilizationPercent: 0, isHistoricalPeak: true,
+                                   tokens: 12_500)
+        #expect(Self.inLanguage("en") { AnalyticsFormatters.peakDayText(record) }
+            .hasSuffix("(12.5K tokens)"))
+    }
+
     @Test("pt-BR card quota label")
     func card_quota_pt_br() {
         #expect(Self.inLanguage("pt-BR") { AnalyticsFormatters.quotaText(84.6) } == "85% da quota")

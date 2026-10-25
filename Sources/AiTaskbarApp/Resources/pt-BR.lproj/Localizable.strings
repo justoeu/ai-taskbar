@@ -427,6 +427,7 @@
 "meta_payg" = "Sem assinatura (pay-as-you-go)";
 "meta_billing_incomplete" = "Cobrança pendente — conclua em dev.meta.ai";
 "meta_quota_unavailable" = "Quota não incluída nesta resposta de login";
+"meta_weekly_last_seen_fmt" = "Semanal: última leitura %@ — a Meta omite a quota enquanto a sessão está ociosa";
 "settings_meta_footer" = "Usa o login do Muse CLI (execute `muse login`). Chaves de API não leem a quota da assinatura. O token de login é lido só para buscar as janelas de uso e nunca é guardado; o histórico de tokens vem dos logs de sessão do CLI neste Mac. Os valores em $ são estimativas pelas tarifas publicadas da Meta Model API.";
 "settings_meta_login" = "Login do Muse";
 "settings_meta_login_detected" = "Detetado";

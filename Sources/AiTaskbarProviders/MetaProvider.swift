@@ -15,16 +15,24 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
     private let credentials: any MetaCredentialReading
     private let fetcher: CachedFetch
     private let http: HTTPClient
+    /// Last live weekly reading, carried while the mint omits `subs_usage`.
+    /// nil disables the carry (the idle note renders instead).
+    private let weeklyMemory: LastSeenWindowStore?
+    private let clock: @Sendable () -> Date
 
     /// The single endpoint this provider may ever target.
     public static let mintURL = URL(string: "https://api.meta.ai/muse-code/key")!
 
     public init(credentials: any MetaCredentialReading,
                 cache: DiskCache,
-                http: HTTPClient) {
+                http: HTTPClient,
+                weeklyMemory: LastSeenWindowStore? = nil,
+                clock: @escaping @Sendable () -> Date = { Date() }) {
         self.credentials = credentials
         self.fetcher = CachedFetch(cache: cache)
         self.http = http
+        self.weeklyMemory = weeklyMemory
+        self.clock = clock
     }
 
     public convenience init(config: MetaConfig,
@@ -32,7 +40,10 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
                             cacheTTL: TimeInterval = 300) throws {
         let cache = try DiskCache.defaultFor(.meta, ttl: cacheTTL)
         self.init(credentials: MetaCredentialReader(config: config),
-                  cache: cache, http: http)
+                  cache: cache, http: http,
+                  // Best-effort: an unwritable directory costs the carried
+                  // weekly bar, not the live numbers.
+                  weeklyMemory: try? LastSeenWindowStore.defaultFor(.meta))
     }
 
     /// The mint request. Exposed so tests can pin its shape.
@@ -115,6 +126,11 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
                 } catch {
                     throw AppError.schema("meta mint decode: \(error)")
                 }
+                // Remember a LIVE weekly reading only (never a cached or
+                // carried one), so the carry below can stand in for it.
+                if let weekly = snapshot.weekly {
+                    weeklyMemory?.record(weekly, at: clock())
+                }
                 try Task.checkCancellation()
                 // Cache the interpreted snapshot only (TypeSafe precedent):
                 // the raw body carries a minted key and payment metadata.
@@ -133,7 +149,10 @@ public final class MetaProvider: UsageProvider, @unchecked Sendable {
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {
         do {
-            return .meta(try SharedCoders.decoder.decode(MetaSnapshot.self, from: data))
+            // The cache holds the response as Meta sent it; the carried
+            // weekly is applied on every read so it expires at its reset.
+            let snapshot = try SharedCoders.decoder.decode(MetaSnapshot.self, from: data)
+            return .meta(snapshot.carryingWeekly(weeklyMemory?.carried(at: clock())))
         } catch {
             throw AppError.schema("meta snapshot decode: \(error)")
         }

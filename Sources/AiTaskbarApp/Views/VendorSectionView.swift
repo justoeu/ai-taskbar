@@ -565,6 +565,17 @@ public struct VendorSectionView: View {
         return false
     }
 
+    /// The note under a carried Muse weekly bar: when it was last read live,
+    /// and why this response has none (SDD-meta-muse §20).
+    static func metaWeeklyLastSeenText(_ seen: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = L10n.effectiveLocale
+        formatter.doesRelativeDateFormatting = true
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return L10n.localizedString("meta_weekly_last_seen_fmt", formatter.string(from: seen))
+    }
+
     @ViewBuilder
     private func renderSnapshot(_ snap: VendorSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -730,7 +741,12 @@ public struct VendorSectionView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             case .active:
-                EmptyView()
+                if let seen = s.weeklyLastSeenAt {
+                    Label(Self.metaWeeklyLastSeenText(seen), systemImage: "clock.arrow.circlepath")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         case .xai(let s):
             VStack(alignment: .leading, spacing: 2) {

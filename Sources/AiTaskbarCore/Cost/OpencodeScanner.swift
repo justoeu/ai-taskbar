@@ -53,7 +53,55 @@ public struct OpencodeScan: Sendable, Equatable {
 /// 3. **The JSON path is `$.tokens.cache.read`**, not `$.tokens.read`. The
 ///    shorter path silently matches nothing and yields a scan that looks
 ///    successful and reports zero cache.
+///
+/// ## Two storage layouts (opencode 1.x and 2.x)
+///
+/// 1.x writes turns to `message`: role in `$.role`, model in `$.modelID` and
+/// `$.providerID`. 2.x (measured on v2.1.4, 2026-10-25) writes them to
+/// `session_message`: role in the `type` column, model in `$.model.id` and
+/// `$.model.providerID`; `tokens` and `cost` keep the 1.x shape and all three
+/// semantics above (re-measured: 635 of 1653 turns have `reasoning > output`,
+/// and turns with ~200k cache reads keep `input` in the hundreds). The layout
+/// is read from the database itself (`Schema.detect`), not from an installed
+/// binary's version, which need not be the one that wrote the file. Without
+/// this, a 2.x database failed `prepare` and every card silently lost its
+/// opencode rows.
 public enum OpencodeScanner {
+    /// The storage layout of the database being read.
+    enum Schema: Equatable {
+        /// opencode 1.x: `message`.
+        case v1
+        /// opencode 2.x: `session_message`.
+        case v2
+
+        /// 2.x wins when both tables exist: a database upgraded in place may
+        /// keep the old table, and reading both could count a turn twice.
+        /// nil = neither table: an unknown layout, read as unavailable.
+        static func detect(_ db: OpaquePointer?) -> Schema? {
+            let sql = "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('message', 'session_message')"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+            defer { sqlite3_finalize(stmt) }
+            var names = Set<String>()
+            var step = sqlite3_step(stmt)
+            while step == SQLITE_ROW {
+                if let name = sqlite3_column_text(stmt, 0) { names.insert(String(cString: name)) }
+                step = sqlite3_step(stmt)
+            }
+            guard step == SQLITE_DONE else { return nil }
+            if names.contains("session_message") { return .v2 }
+            if names.contains("message") { return .v1 }
+            return nil
+        }
+
+        var table: String { self == .v1 ? "message" : "session_message" }
+        var providerPath: String { self == .v1 ? "$.providerID" : "$.model.providerID" }
+        var modelPath: String { self == .v1 ? "$.modelID" : "$.model.id" }
+        var assistantFilter: String {
+            self == .v1 ? "json_extract(data, '$.role') = 'assistant'" : "type = 'assistant'"
+        }
+    }
+
     /// Why a scan did or did not produce rows. The `scan` overloads collapse
     /// both non-`scanned` cases to nil; callers that must tell "opencode is
     /// not installed" (genuinely no rows) from "the read failed" (keep what
@@ -154,6 +202,8 @@ public enum OpencodeScanner {
         let sevenDaysAgoMs = Int64(window.startOfLast7Days.timeIntervalSince1970 * 1000)
         let startOfTodayMs = Int64(window.startOfToday.timeIntervalSince1970 * 1000)
 
+        guard let schema = Schema.detect(db) else { return .unavailable }
+
         // Grouping by (model, is_today) lets one pass fill both windows. The
         // `time_created` column is used for the range rather than the JSON's
         // own `$.time.created` so the filter can be evaluated without parsing
@@ -161,8 +211,8 @@ public enum OpencodeScanner {
         let placeholders = Array(repeating: "?", count: providerIDs.count)
             .joined(separator: ", ")
         let sql = """
-            SELECT json_extract(data, '$.providerID'),
-                   json_extract(data, '$.modelID'),
+            SELECT json_extract(data, '\(schema.providerPath)'),
+                   json_extract(data, '\(schema.modelPath)'),
                    CASE WHEN time_created >= ? THEN 1 ELSE 0 END,
                    sum(coalesce(json_extract(data, '$.tokens.input'), 0)),
                    sum(coalesce(json_extract(data, '$.tokens.output'), 0)),
@@ -171,10 +221,10 @@ public enum OpencodeScanner {
                    sum(coalesce(json_extract(data, '$.tokens.cache.write'), 0)),
                    sum(coalesce(json_extract(data, '$.cost'), 0)),
                    count(*)
-            FROM message
+            FROM \(schema.table)
             WHERE time_created >= ?
-              AND json_extract(data, '$.providerID') IN (\(placeholders))
-              AND json_extract(data, '$.role') = 'assistant'
+              AND json_extract(data, '\(schema.providerPath)') IN (\(placeholders))
+              AND \(schema.assistantFilter)
             GROUP BY 1, 2, 3
         """
         var stmt: OpaquePointer?
@@ -199,7 +249,7 @@ public enum OpencodeScanner {
             guard let group = groupByProvider[provider] else { continue }
             var scan = scans[group] ?? OpencodeScan()
             let rows = Int(sqlite3_column_int64(stmt, 9))
-            // A turn with no `modelID` cannot be attributed to anything. Count
+            // A turn with no model id cannot be attributed to anything. Count
             // it rather than folding it into an arbitrary bucket.
             guard let modelC = sqlite3_column_text(stmt, 1) else {
                 scan.skippedRows += rows
