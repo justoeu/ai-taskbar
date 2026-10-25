@@ -108,6 +108,19 @@ public enum Paths {
         home.appendingPathComponent(".gemini")
     }
 
+    /// `Application Support/ai-taskbar/<name>`, created (symlinks refused):
+    /// the home of per-vendor JSON stores (`credits/`, `quota/`).
+    public static func supportSubdirectory(_ name: String) throws -> URL {
+        try supportSubdirectory(name, in: applicationSupport())
+    }
+
+    /// `root/<name>`, created (symlinks refused). Test seam.
+    static func supportSubdirectory(_ name: String, in root: URL) throws -> URL {
+        let dir = root.appendingPathComponent(name, isDirectory: true)
+        try ensureDir(dir)
+        return dir
+    }
+
     public static func ensureDir(_ url: URL) throws {
         // TOCTOU defense: refuse to use a symlinked target. If the user (or
         // an attacker with write to the parent) replaced

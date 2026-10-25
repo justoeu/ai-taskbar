@@ -1,5 +1,4 @@
 import Foundation
-import os.lock
 
 /// Pure math behind the credits progress bar.
 ///
@@ -152,76 +151,68 @@ public struct CreditBaseline: Sendable, Equatable, Codable {
 /// Persists the credit high-water mark across launches in
 /// `~/Library/Application Support/ai-taskbar/credits/<vendor>.json`.
 ///
-/// Not a secret (a remaining-credit count), so it carries no `0o600`
-/// requirement of its own; the enclosing Application Support directory is
-/// already `0700`. Failures are best-effort by design: losing the baseline
-/// costs a re-seeded bar on the next refresh, never a wrong number, so a
-/// read/write error must not fail the vendor's usage fetch.
+/// Not a secret (a remaining-credit count). Cache, lock and I/O live in
+/// `VendorJSONStore` (best-effort: losing the baseline costs a re-seeded bar,
+/// never a wrong number); this type keeps only the baseline rule.
 public final class CreditBaselineStore: Sendable {
-    public let vendor: VendorId
-    public let baseDir: URL
-    private let cached = OSAllocatedUnfairLock(initialState: CreditBaseline?.none)
-    /// Serializes the whole read-modify-write in `recordAndPeak`. `cached`
-    /// alone is not enough: it is released between the load and the save, so
-    /// two overlapping refreshes could interleave and the later, smaller
-    /// balance would overwrite a top-up — permanently under-seeding the
-    /// denominator. A plain mutex, not the unfair lock, because this one is
-    /// held across file I/O.
-    private let writeGate = NSLock()
+    private let store: VendorJSONStore<CreditBaseline>
     /// Test seam: runs inside `record` between the load and the save, so a
     /// two-actor test can park a record mid read-modify-write.
     private let afterLoadHook: (@Sendable () -> Void)?
 
+    public var vendor: VendorId { store.vendor }
+    public var baseDir: URL { store.baseDir }
+    public var fileURL: URL { store.fileURL }
+
     public init(vendor: VendorId, baseDir: URL) {
-        self.vendor = vendor
-        self.baseDir = baseDir
+        self.store = VendorJSONStore(vendor: vendor, baseDir: baseDir)
         self.afterLoadHook = nil
     }
 
     internal init(vendor: VendorId, baseDir: URL,
                   afterLoadHook: @escaping @Sendable () -> Void) {
-        self.vendor = vendor
-        self.baseDir = baseDir
+        self.store = VendorJSONStore(vendor: vendor, baseDir: baseDir)
         self.afterLoadHook = afterLoadHook
     }
 
     public static func defaultFor(_ vendor: VendorId) throws -> CreditBaselineStore {
-        let dir = try Paths.applicationSupport()
-            .appendingPathComponent("credits", isDirectory: true)
-        try Paths.ensureDir(dir)
-        return CreditBaselineStore(vendor: vendor, baseDir: dir)
-    }
-
-    public var fileURL: URL {
-        baseDir.appendingPathComponent("\(vendor.rawValue).json")
+        CreditBaselineStore(vendor: vendor, baseDir: try Paths.supportSubdirectory("credits"))
     }
 
     /// Folds an observation into the baseline and returns the denominator to
     /// use. Writes only when something actually changes, so a steadily
-    /// draining balance costs no disk I/O per refresh.
+    /// draining balance costs no disk I/O per refresh. One `update`, so two
+    /// overlapping refreshes cannot interleave and let a later, smaller
+    /// balance overwrite a top-up (permanently under-seeding the denominator).
     @discardableResult
     public func record(_ observation: CreditObservation, at now: Date = .init()) -> Double {
-        writeGate.lock()
-        defer { writeGate.unlock() }
-        let stored = load()
-        afterLoadHook?()
-        let decision = CreditBaselineMath.decide(stored: stored, observation: observation)
-        let peak = decision.adoptsObservedBalance
-            ? CreditBaselineMath.updatedPeak(stored: nil, balance: observation.balance)
-            : (stored?.peak ?? 0)
-        let updated = CreditBaseline(peak: peak,
-                                     updatedAt: decision == .keep
-                                        ? (stored?.updatedAt ?? now.timeIntervalSince1970)
-                                        : now.timeIntervalSince1970,
-                                     hadCredits: observation.hasCredits,
-                                     hadPromo: observation.hasPromo)
-        if stored != updated {
+        store.update { stored in
+            afterLoadHook?()
+            let decision = CreditBaselineMath.decide(stored: stored, observation: observation)
+            let peak = decision.adoptsObservedBalance
+                ? CreditBaselineMath.updatedPeak(stored: nil, balance: observation.balance)
+                : (stored?.peak ?? 0)
+            let updated = CreditBaseline(peak: peak,
+                                         updatedAt: decision == .keep
+                                            ? (stored?.updatedAt ?? now.timeIntervalSince1970)
+                                            : now.timeIntervalSince1970,
+                                         hadCredits: observation.hasCredits,
+                                         hadPromo: observation.hasPromo)
+            // A non-finite or negative peak would poison every percentage
+            // and fail to encode; `updatedPeak` cannot produce one, but it is
+            // neither stored nor handed back as the denominator: the stored
+            // peak stands (none → 0, which draws no bar).
+            guard updated.peak.isFinite, updated.peak >= 0 else {
+                return (write: nil, result: stored?.peak ?? 0)
+            }
+            guard stored != updated else {
+                return (write: nil, result: peak)
+            }
             if decision == .rebaseline {
                 AppLog.cost.notice("Credit grant changed (has_credits or promo); re-seeding the progress-bar baseline from the current balance.")
             }
-            save(updated)
+            return (write: updated, result: peak)
         }
-        return peak
     }
 
     /// Convenience for callers that only know the balance (tests, and any
@@ -232,32 +223,13 @@ public final class CreditBaselineStore: Sendable {
     }
 
     public func load() -> CreditBaseline? {
-        if let hit = cached.withLock({ $0 }) { return hit }
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? SharedCoders.decoder.decode(CreditBaseline.self, from: data)
-        else { return nil }
-        cached.withLock { $0 = decoded }
-        return decoded
-    }
-
-    /// Best-effort: a baseline we fail to persist is re-seeded next launch.
-    /// Internal because a non-finite `peak` would make the encode fail
-    /// silently; `recordAndPeak` is the only sanctioned entry point and it
-    /// cannot produce one.
-    internal func save(_ baseline: CreditBaseline) {
-        guard baseline.peak.isFinite, baseline.peak >= 0 else { return }
-        cached.withLock { $0 = baseline }
-        guard let data = try? SharedCoders.encoder.encode(baseline) else { return }
-        try? AtomicFileWrite.write(data, to: fileURL)
+        store.load()
     }
 
     /// Drops the baseline (both memory and disk). Used by tests and by the
-    /// "Recalibrate" affordance. Takes `writeGate` so a `record` already
-    /// between its load and save cannot re-save the old peak afterwards.
+    /// "Recalibrate" affordance. Waits for a `record` already between its
+    /// load and save, so it cannot re-save the old peak afterwards.
     public func reset() {
-        writeGate.lock()
-        defer { writeGate.unlock() }
-        cached.withLock { $0 = nil }
-        try? FileManager.default.removeItem(at: fileURL)
+        store.clear()
     }
 }
