@@ -493,4 +493,29 @@ struct OpencodeScannerTests {
                                                   dbPath: db.path)
         #expect(outcome == .unavailable)
     }
+
+    @Test("tokens are bucketed into the seven CostWindow days, oldest first")
+    func daily_series_buckets_by_local_day() throws {
+        let window = CostWindow(now: now)
+        let days = window.calendarDays()
+        func ms(_ d: Date, plus seconds: Double = 60) -> Int64 { Int64((d.timeIntervalSince1970 + seconds) * 1000) }
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: ms(days[0]), input: 11, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, cost: 0),
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: ms(days[3]), input: 33, output: 2, reasoning: 1, cacheRead: 0, cacheWrite: 0, cost: 0),
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: ms(days[6], plus: 1), input: 66, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, cost: 0),
+        ], layout: .v2)
+        let scan = try #require(OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path))
+        #expect(scan.daily.count == 7)
+        #expect(scan.daily.map(\.date) == days)
+        #expect(scan.daily[0].usageByModel["glm-5.3"]?.inputTokens == 11)
+        #expect(scan.daily[3].usageByModel["glm-5.3"]?.outputTokens == 3)   // reasoning added
+        #expect(scan.daily[6].usageByModel["glm-5.3"]?.inputTokens == 66)
+        #expect(scan.daily[1].usageByModel.isEmpty)
+        #expect(scan.todayByModel["glm-5.3"]?.inputTokens == 66)
+        #expect(scan.last7DaysByModel["glm-5.3"]?.inputTokens == 110)
+        #expect(scan.daily.allSatisfy { $0.costByModel.isEmpty })
+    }
 }

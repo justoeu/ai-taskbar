@@ -198,6 +198,20 @@ struct AnalyticsAggregatorTests {
         #expect(peak?.tokens == nil)
     }
 
+    @Test("the quota fallback reads only the selected period, not 90 days of history")
+    func peak_day_fallback_is_limited_to_period() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let september = calendar.date(byAdding: .day, value: -37, to: today)!
+        let history = [UsageHistoryStore.Sample(at: september.timeIntervalSince1970 + 60, max: 100)]
+        let weekly = AnalyticsAggregator.aggregate(timeframe: .weekly, compareWithPrevious: false,
+                                                   histories: [.zai: history])
+        #expect(weekly.vendorSummaries.first?.peakDay == nil)
+        let monthly = AnalyticsAggregator.aggregate(timeframe: .monthly, compareWithPrevious: false,
+                                                    histories: [.zai: history])
+        #expect(monthly.vendorSummaries.first?.peakDay == nil)   // 37 days > 30
+    }
+
     @Test("daily-series peak breaks a token tie by cost, then by the later day")
     func peak_day_daily_ties() {
         let calendar = Calendar.current

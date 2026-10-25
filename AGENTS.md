@@ -796,7 +796,13 @@ that came out of fixing that:
   (the series covers 7 days): weekly windows are cumulative, so every day
   after a cap reads 100% and the tie named the latest day, not the tallest
   bar (reported 2026-10-25 on Claude and Codex). The fallback breaks a tie
-  toward the EARLIEST day, the one that took the window to its peak.
+  toward the EARLIEST day, the one that took the window to its peak, and
+  reads only the selected period (the history spans 90 days; Week once named
+  a September day). `OpencodeScanner` returns a per-day series
+  (`OpencodeScan.daily`, `CostWindow` days, tokens only) and
+  `AnalyticsStore.mergingOpencode` folds it into `dailyUsage` — it used to
+  DROP the scanner's series on merge — so opencode-only vendors (Z.AI) get
+  the chart; opencode dollars still never reach a vendor's figures.
 
 - **Never use `[String: Any]`** for anything that crosses an actor boundary
   or is stored on a `Sendable` type. Use `JSONValue` (in `AiTaskbarCore/Util/`).

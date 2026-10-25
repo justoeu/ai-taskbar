@@ -14,6 +14,10 @@ public struct OpencodeScan: Sendable, Equatable {
     public var last7DaysByModel: [String: ModelUsage] = [:]
     public var costTodayByModel: [String: Double] = [:]
     public var costLast7DaysByModel: [String: Double] = [:]
+    /// Tokens per local calendar day of the 7-day window (`CostWindow`
+    /// days, oldest first), for the Analytics chart. Dollars are left out on
+    /// purpose: opencode cost is never added to a vendor's figures.
+    public var daily: [DailyModelUsage] = []
     /// Rows the scan skipped, and why. Surfaced so a silently empty card can be
     /// told apart from a card that is empty because nothing ran.
     public var skippedRows: Int = 0
@@ -231,6 +235,10 @@ public enum OpencodeScanner {
         let window = CostWindow(now: now)
         let sevenDaysAgoMs = Int64(window.startOfLast7Days.timeIntervalSince1970 * 1000)
         let startOfTodayMs = Int64(window.startOfToday.timeIntervalSince1970 * 1000)
+        // Local day starts, oldest first (DST-safe, from the one `CostWindow`).
+        let days = window.calendarDays()
+        guard days.count == 7 else { return .unavailable }
+        let dayStartsMs = days.map { Int64($0.timeIntervalSince1970 * 1000) }
 
         guard let schema = Schema.detect(db) else { return .unavailable }
 
@@ -238,13 +246,18 @@ public enum OpencodeScanner {
         // `time_created` column is used for the range rather than the JSON's
         // own `$.time.created` so the filter can be evaluated without parsing
         // every row's document.
-        // Numbered parameters: ?1 start of today, ?2 seven days ago, ?3…
-        // the provider aliases (the `.both` layout uses ?2 twice).
-        let placeholders = providerIDs.indices.map { "?\($0 + 3)" }
+        // Numbered parameters: ?1 start of today (day slot 6), ?2 seven days
+        // ago (slot 0), ?3…?7 the starts of slots 1…5, ?8… the provider
+        // aliases (the `.both` layout uses ?2 twice). Column 3 is the day
+        // slot, so one pass fills today, the week and every day.
+        let placeholders = providerIDs.indices.map { "?\($0 + 8)" }
             .joined(separator: ", ")
         let sql = """
             SELECT provider, model,
-                   CASE WHEN time_created >= ?1 THEN 1 ELSE 0 END,
+                   CASE WHEN time_created >= ?1 THEN 6 WHEN time_created >= ?7 THEN 5
+                        WHEN time_created >= ?6 THEN 4 WHEN time_created >= ?5 THEN 3
+                        WHEN time_created >= ?4 THEN 2 WHEN time_created >= ?3 THEN 1
+                        ELSE 0 END,
                    sum(coalesce(json_extract(data, '$.tokens.input'), 0)),
                    sum(coalesce(json_extract(data, '$.tokens.output'), 0)),
                    sum(coalesce(json_extract(data, '$.tokens.reasoning'), 0)),
@@ -263,10 +276,15 @@ public enum OpencodeScanner {
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_int64(stmt, 1, startOfTodayMs)
         sqlite3_bind_int64(stmt, 2, sevenDaysAgoMs)
+        for slot in 1...5 {
+            sqlite3_bind_int64(stmt, Int32(slot + 2), dayStartsMs[slot])
+        }
         for (offset, providerID) in providerIDs.enumerated() {
-            sqlite3_bind_text(stmt, Int32(offset + 3), providerID, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, Int32(offset + 8), providerID, -1, SQLITE_TRANSIENT)
         }
 
+        var dailyTotals = Dictionary(uniqueKeysWithValues:
+            providerGroups.keys.map { ($0, Array(repeating: [String: ModelUsage](), count: 7)) })
         var scans = Dictionary(uniqueKeysWithValues:
             providerGroups.keys.map { ($0, OpencodeScan()) })
         var stepResult = sqlite3_step(stmt)
@@ -286,7 +304,8 @@ public enum OpencodeScanner {
                 continue
             }
             let model = String(cString: modelC)
-            let isToday = sqlite3_column_int64(stmt, 2) == 1
+            let slot = Int(sqlite3_column_int64(stmt, 2))
+            let isToday = slot == 6
 
             let input      = Int(sqlite3_column_int64(stmt, 3))
             let output     = Int(sqlite3_column_int64(stmt, 4))
@@ -305,6 +324,10 @@ public enum OpencodeScanner {
                 cacheReadTokens: max(0, cacheRead),
                 cacheCreateTokens: max(0, cacheWrite))
 
+            if (0..<7).contains(slot) {
+                CostAggregator.add(usage, into: &dailyTotals[group, default: Array(repeating: [:], count: 7)][slot],
+                                   model: model)
+            }
             CostAggregator.add(usage, into: &scan.last7DaysByModel, model: model)
             scan.costLast7DaysByModel[model, default: 0] += cost
             if isToday {
@@ -316,6 +339,12 @@ public enum OpencodeScanner {
         // SQLITE_INTERRUPT is the expected cancellation path. Any other SQL
         // failure must also discard the partial aggregates.
         guard stepResult == SQLITE_DONE, !Task.isCancelled else { return .unavailable }
+        for group in scans.keys {
+            let slots = dailyTotals[group] ?? []
+            scans[group]?.daily = days.enumerated().map { slot, day in
+                DailyModelUsage(date: day, usageByModel: slot < slots.count ? slots[slot] : [:])
+            }
+        }
         return .scanned(scans)
     }
 }
