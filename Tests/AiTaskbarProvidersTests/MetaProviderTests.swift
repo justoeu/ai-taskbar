@@ -39,6 +39,99 @@ struct MetaProviderTests {
         return s
     }
 
+    // MARK: weekly carry (SDD-meta-muse §20)
+
+    /// Before the active fixture's weekly reset (1_792_400_000).
+    private static let beforeReset = Date(timeIntervalSince1970: 1_792_000_000)
+
+    private func carryingProvider(memory: LastSeenWindowStore, now: Date) -> MetaProvider {
+        MetaProvider(
+            credentials: FakeCredentials(resolution: .token("dca:test")),
+            cache: DiskCache(vendor: .meta, baseDir: tmpCacheDir),
+            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]),
+            weeklyMemory: memory,
+            clock: { now })
+    }
+
+    @Test("idle mint keeps showing the last live weekly reading until its reset")
+    func idle_mint_carries_weekly() async throws {
+        let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintActive200)) }
+        let live = try snapshot(await carryingProvider(memory: memory, now: Self.beforeReset)
+            .fetchUsage(forceRefresh: true))
+        #expect(live.weekly?.utilizationPercent == 12)
+        #expect(live.weeklyLastSeenAt == nil)
+
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintIdle200)) }
+        let later = Self.beforeReset.addingTimeInterval(3600)
+        let idle = try snapshot(await carryingProvider(memory: memory, now: later)
+            .fetchUsage(forceRefresh: true))
+        #expect(idle.session == nil)
+        #expect(idle.weekly?.utilizationPercent == 12)
+        #expect(idle.weekly?.resetsAt == Date(timeIntervalSince1970: 1_792_400_000))
+        #expect(idle.weeklyLastSeenAt == Self.beforeReset)
+
+        let afterReset = Date(timeIntervalSince1970: 1_792_400_001)
+        let expired = try snapshot(await carryingProvider(memory: memory, now: afterReset)
+            .fetchUsage(forceRefresh: true))
+        #expect(expired.weekly == nil)
+        #expect(expired.weeklyLastSeenAt == nil)
+    }
+
+    @Test("a reading from another plan does not carry")
+    func other_plan_does_not_carry() async throws {
+        let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
+        memory.record(UsageWindow(label: "Weekly (7d)", utilizationPercent: 100,
+                                  resetsAt: Date(timeIntervalSince1970: 1_792_400_000)),
+                      scope: "Muse Code Pro Usage", at: Self.beforeReset)
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintIdle200)) }
+        let idle = try snapshot(await carryingProvider(memory: memory, now: Self.beforeReset)
+            .fetchUsage(forceRefresh: true))
+        #expect(idle.planLabel == "Muse Code Power Usage")
+        #expect(idle.weekly == nil)
+    }
+
+    @Test("logging out forgets the last weekly reading")
+    func logout_clears_memory() async throws {
+        let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
+        memory.record(UsageWindow(label: "Weekly (7d)", utilizationPercent: 100,
+                                  resetsAt: Date(timeIntervalSince1970: 1_792_400_000)),
+                      scope: "Muse Code Power Usage", at: Self.beforeReset)
+        let p = MetaProvider(
+            credentials: FakeCredentials(resolution: .missing),
+            cache: DiskCache(vendor: .meta, baseDir: tmpCacheDir),
+            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]),
+            weeklyMemory: memory, clock: { Self.beforeReset })
+        _ = try? await p.fetchUsage(forceRefresh: true)
+        #expect(memory.load() == nil)
+    }
+
+    @Test("the cache holds only what Meta sent, never the carried window")
+    func cache_holds_live_response_only() async throws {
+        let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
+        memory.record(UsageWindow(label: "Weekly (7d)", utilizationPercent: 100,
+                                  resetsAt: Date(timeIntervalSince1970: 1_792_400_000)),
+                      scope: "Muse Code Power Usage", at: Self.beforeReset)
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintIdle200)) }
+        _ = try await carryingProvider(memory: memory, now: Self.beforeReset)
+            .fetchUsage(forceRefresh: true)
+        let cached = try #require(DiskCache(vendor: .meta, baseDir: tmpCacheDir).freshPayloadWithAge())
+        let raw = try SharedCoders.decoder.decode(MetaSnapshot.self, from: cached.0)
+        #expect(raw.weekly == nil)
+    }
+
+    @Test("a carried window is not re-recorded as a live reading")
+    func carried_window_is_not_rerecorded() async throws {
+        let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
+        memory.record(UsageWindow(label: "Weekly (7d)", utilizationPercent: 100,
+                                  resetsAt: Date(timeIntervalSince1970: 1_792_400_000)),
+                      scope: "Muse Code Power Usage", at: Self.beforeReset)
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintIdle200)) }
+        let later = Self.beforeReset.addingTimeInterval(2 * LastSeenWindowStore.refreshInterval)
+        _ = try await carryingProvider(memory: memory, now: later).fetchUsage(forceRefresh: true)
+        #expect(memory.load()?.observedAt == Self.beforeReset)
+    }
+
     // MARK: golden
 
     @Test("golden: mint response decodes field by field")
@@ -54,6 +147,7 @@ struct MetaProviderTests {
         #expect(s.weekly?.label == "Weekly (7d)")
         #expect(s.weekly?.utilizationPercent == 12.0)
         #expect(s.weekly?.resetsAt == Date(timeIntervalSince1970: 1_792_400_000))
+        #expect(s.weeklyLastSeenAt == nil)
         let vendor = VendorSnapshot.meta(s)
         #expect(vendor.windows.count == 2)
         #expect(vendor.maxUtilization == 37.5)

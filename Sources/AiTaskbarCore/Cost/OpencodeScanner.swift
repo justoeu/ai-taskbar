@@ -14,6 +14,10 @@ public struct OpencodeScan: Sendable, Equatable {
     public var last7DaysByModel: [String: ModelUsage] = [:]
     public var costTodayByModel: [String: Double] = [:]
     public var costLast7DaysByModel: [String: Double] = [:]
+    /// Tokens per local calendar day of the 7-day window (`CostWindow`
+    /// days, oldest first), for the Analytics chart. Dollars are left out on
+    /// purpose: opencode cost is never added to a vendor's figures.
+    public var daily: [DailyModelUsage] = []
     /// Rows the scan skipped, and why. Surfaced so a silently empty card can be
     /// told apart from a card that is empty because nothing ran.
     public var skippedRows: Int = 0
@@ -53,7 +57,85 @@ public struct OpencodeScan: Sendable, Equatable {
 /// 3. **The JSON path is `$.tokens.cache.read`**, not `$.tokens.read`. The
 ///    shorter path silently matches nothing and yields a scan that looks
 ///    successful and reports zero cache.
+///
+/// ## Two storage layouts (opencode 1.x and 2.x)
+///
+/// 1.x writes turns to `message`: role in `$.role`, model in `$.modelID` and
+/// `$.providerID`. 2.x (measured on v2.1.4, 2026-10-25) writes them to
+/// `session_message`: role in the `type` column, model in `$.model.id` and
+/// `$.model.providerID`; `tokens` and `cost` keep the 1.x shape and all three
+/// semantics above (re-measured: 635 of 1653 turns have `reasoning > output`,
+/// and turns with ~200k cache reads keep `input` in the hundreds). The layout
+/// is read from the database itself (`Schema.detect`), not from an installed
+/// binary's version, which need not be the one that wrote the file. Without
+/// this, a 2.x database failed `prepare` and every card silently lost its
+/// opencode rows.
 public enum OpencodeScanner {
+    /// The storage layout of the database being read.
+    enum Schema: Equatable {
+        /// opencode 1.x: `message` only.
+        case v1
+        /// opencode 2.x: `session_message` only.
+        case v2
+        /// Both tables, as an in-place upgrade may leave them. Whether 2.x
+        /// copied the old turns over is not knowable from the schema, so
+        /// `message` contributes only turns OLDER than the first
+        /// `session_message` turn: copied rows are then never counted twice,
+        /// and turns left behind in `message` are not dropped.
+        case both
+
+        /// nil = neither table: an unknown layout, read as unavailable.
+        static func detect(_ db: OpaquePointer?) -> Schema? {
+            let sql = "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('message', 'session_message')"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+            defer { sqlite3_finalize(stmt) }
+            var names = Set<String>()
+            var step = sqlite3_step(stmt)
+            while step == SQLITE_ROW {
+                if let name = sqlite3_column_text(stmt, 0) { names.insert(String(cString: name)) }
+                step = sqlite3_step(stmt)
+            }
+            guard step == SQLITE_DONE else { return nil }
+            switch (names.contains("message"), names.contains("session_message")) {
+            case (true, true): return .both
+            case (false, true): return .v2
+            case (true, false): return .v1
+            case (false, false): return nil
+            }
+        }
+
+        // Assistant turns since `?2` (seven days ago, ms) as
+        // (provider, model, time_created, data). Constant SQL only: every
+        // value is bound, nothing from the database is interpolated.
+        private static let v2Turns = """
+            SELECT json_extract(data, '$.model.providerID') AS provider,
+                   json_extract(data, '$.model.id') AS model, time_created, data
+            FROM session_message
+            WHERE time_created >= ?2 AND type = 'assistant'
+            """
+        private static let v1Turns = """
+            SELECT json_extract(data, '$.providerID') AS provider,
+                   json_extract(data, '$.modelID') AS model, time_created, data
+            FROM message
+            WHERE time_created >= ?2 AND json_extract(data, '$.role') = 'assistant'
+            """
+
+        var turnsSQL: String {
+            switch self {
+            case .v1: return Self.v1Turns
+            case .v2: return Self.v2Turns
+            case .both:
+                // `min(time_created)` is served by the time index.
+                return Self.v2Turns + "\nUNION ALL\n" + Self.v1Turns + """
+
+                      AND time_created < (SELECT coalesce(min(time_created), 9223372036854775807)
+                                          FROM session_message)
+                    """
+            }
+        }
+    }
+
     /// Why a scan did or did not produce rows. The `scan` overloads collapse
     /// both non-`scanned` cases to nil; callers that must tell "opencode is
     /// not installed" (genuinely no rows) from "the read failed" (keep what
@@ -153,17 +235,29 @@ public enum OpencodeScanner {
         let window = CostWindow(now: now)
         let sevenDaysAgoMs = Int64(window.startOfLast7Days.timeIntervalSince1970 * 1000)
         let startOfTodayMs = Int64(window.startOfToday.timeIntervalSince1970 * 1000)
+        // Local day starts, oldest first (DST-safe, from the one `CostWindow`).
+        let days = window.calendarDays()
+        guard days.count == 7 else { return .unavailable }
+        let dayStartsMs = days.map { Int64($0.timeIntervalSince1970 * 1000) }
+
+        guard let schema = Schema.detect(db) else { return .unavailable }
 
         // Grouping by (model, is_today) lets one pass fill both windows. The
         // `time_created` column is used for the range rather than the JSON's
         // own `$.time.created` so the filter can be evaluated without parsing
         // every row's document.
-        let placeholders = Array(repeating: "?", count: providerIDs.count)
+        // Numbered parameters: ?1 start of today (day slot 6), ?2 seven days
+        // ago (slot 0), ?3…?7 the starts of slots 1…5, ?8… the provider
+        // aliases (the `.both` layout uses ?2 twice). Column 3 is the day
+        // slot, so one pass fills today, the week and every day.
+        let placeholders = providerIDs.indices.map { "?\($0 + 8)" }
             .joined(separator: ", ")
         let sql = """
-            SELECT json_extract(data, '$.providerID'),
-                   json_extract(data, '$.modelID'),
-                   CASE WHEN time_created >= ? THEN 1 ELSE 0 END,
+            SELECT provider, model,
+                   CASE WHEN time_created >= ?1 THEN 6 WHEN time_created >= ?7 THEN 5
+                        WHEN time_created >= ?6 THEN 4 WHEN time_created >= ?5 THEN 3
+                        WHEN time_created >= ?4 THEN 2 WHEN time_created >= ?3 THEN 1
+                        ELSE 0 END,
                    sum(coalesce(json_extract(data, '$.tokens.input'), 0)),
                    sum(coalesce(json_extract(data, '$.tokens.output'), 0)),
                    sum(coalesce(json_extract(data, '$.tokens.reasoning'), 0)),
@@ -171,10 +265,8 @@ public enum OpencodeScanner {
                    sum(coalesce(json_extract(data, '$.tokens.cache.write'), 0)),
                    sum(coalesce(json_extract(data, '$.cost'), 0)),
                    count(*)
-            FROM message
-            WHERE time_created >= ?
-              AND json_extract(data, '$.providerID') IN (\(placeholders))
-              AND json_extract(data, '$.role') = 'assistant'
+            FROM (\(schema.turnsSQL))
+            WHERE provider IN (\(placeholders))
             GROUP BY 1, 2, 3
         """
         var stmt: OpaquePointer?
@@ -184,10 +276,15 @@ public enum OpencodeScanner {
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_int64(stmt, 1, startOfTodayMs)
         sqlite3_bind_int64(stmt, 2, sevenDaysAgoMs)
+        for slot in 1...5 {
+            sqlite3_bind_int64(stmt, Int32(slot + 2), dayStartsMs[slot])
+        }
         for (offset, providerID) in providerIDs.enumerated() {
-            sqlite3_bind_text(stmt, Int32(offset + 3), providerID, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(stmt, Int32(offset + 8), providerID, -1, SQLITE_TRANSIENT)
         }
 
+        var dailyTotals = Dictionary(uniqueKeysWithValues:
+            providerGroups.keys.map { ($0, Array(repeating: [String: ModelUsage](), count: 7)) })
         var scans = Dictionary(uniqueKeysWithValues:
             providerGroups.keys.map { ($0, OpencodeScan()) })
         var stepResult = sqlite3_step(stmt)
@@ -199,7 +296,7 @@ public enum OpencodeScanner {
             guard let group = groupByProvider[provider] else { continue }
             var scan = scans[group] ?? OpencodeScan()
             let rows = Int(sqlite3_column_int64(stmt, 9))
-            // A turn with no `modelID` cannot be attributed to anything. Count
+            // A turn with no model id cannot be attributed to anything. Count
             // it rather than folding it into an arbitrary bucket.
             guard let modelC = sqlite3_column_text(stmt, 1) else {
                 scan.skippedRows += rows
@@ -207,7 +304,8 @@ public enum OpencodeScanner {
                 continue
             }
             let model = String(cString: modelC)
-            let isToday = sqlite3_column_int64(stmt, 2) == 1
+            let slot = Int(sqlite3_column_int64(stmt, 2))
+            let isToday = slot == 6
 
             let input      = Int(sqlite3_column_int64(stmt, 3))
             let output     = Int(sqlite3_column_int64(stmt, 4))
@@ -226,6 +324,10 @@ public enum OpencodeScanner {
                 cacheReadTokens: max(0, cacheRead),
                 cacheCreateTokens: max(0, cacheWrite))
 
+            if (0..<7).contains(slot) {
+                CostAggregator.add(usage, into: &dailyTotals[group, default: Array(repeating: [:], count: 7)][slot],
+                                   model: model)
+            }
             CostAggregator.add(usage, into: &scan.last7DaysByModel, model: model)
             scan.costLast7DaysByModel[model, default: 0] += cost
             if isToday {
@@ -237,6 +339,12 @@ public enum OpencodeScanner {
         // SQLITE_INTERRUPT is the expected cancellation path. Any other SQL
         // failure must also discard the partial aggregates.
         guard stepResult == SQLITE_DONE, !Task.isCancelled else { return .unavailable }
+        for group in scans.keys {
+            let slots = dailyTotals[group] ?? []
+            scans[group]?.daily = days.enumerated().map { slot, day in
+                DailyModelUsage(date: day, usageByModel: slot < slots.count ? slots[slot] : [:])
+            }
+        }
         return .scanned(scans)
     }
 }

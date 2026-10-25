@@ -42,6 +42,13 @@ public enum AnalyticsFormatters {
 
     public static func peakDayText(_ record: PeakDayRecord) -> String {
         let dateStr = dateFormatter.string(from: record.date)
+        if let tokens = record.tokens {
+            let tokenText = "\(WeeklyModelStackedChartView.formatTokens(tokens)) \(L10n.localizedString("analytics_tokens"))"
+            let detail = record.costUSD > 0
+                ? "\(tokenText) · \(AnalyticsMoneyFormatter.format(record.costUSD))"
+                : tokenText
+            return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(detail))"
+        }
         if record.costUSD > 0 {
             return "🔥 \(L10n.localizedString("analytics_busiest_day")): \(dateStr) (\(AnalyticsMoneyFormatter.format(record.costUSD)) / \(quotaText(record.utilizationPercent)))"
         } else {

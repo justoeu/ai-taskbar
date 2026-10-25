@@ -270,6 +270,13 @@ public enum PricingTable {
     /// Moonshot / Kimi family. Consumed by Opencode and local scanners.
     /// Prices in USD per 1M tokens based on Moonshot official pricing (converted from CNY).
     public static let kimi: [String: ModelPricing] = [
+        // Kimi K3.1 Pro (2026-10-23): flat per-token pricing across its 1M
+        // window, no context tiers. Verified against
+        // kimi.ai/resources/kimi-k3-1-pro-pricing on 2026-10-25. Explicit keys
+        // matter: without them the bare `kimi` prefix below prices it at
+        // $1.65/$3.30 and understates output 3x.
+        "kimi-k3.1-pro-highspeed": ModelPricing(input: 4.00, output: 20.00, cacheRead: 0.20),
+        "kimi-k3.1-pro":      ModelPricing(input: 2.00, output: 10.00, cacheRead: 0.20),
         "kimi-k2.5":          ModelPricing(input: 2.00, output: 4.00, cacheRead: 0.20),
         "kimi-k2":            ModelPricing(input: 2.00, output: 4.00, cacheRead: 0.20),
         "kimi-k1.5":          ModelPricing(input: 1.65, output: 3.30, cacheRead: 0.15),

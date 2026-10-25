@@ -565,6 +565,28 @@ public struct VendorSectionView: View {
         return false
     }
 
+    /// The note under a carried Muse weekly bar: when it was last read live,
+    /// and why this response has none (SDD-meta-muse §20).
+    static func metaWeeklyLastSeenText(_ seen: Date) -> String {
+        let locale = L10n.effectiveLocale
+        let formatter: DateFormatter
+        if let cached = lastSeenFormatter, cached.locale.identifier == locale.identifier {
+            formatter = cached
+        } else {
+            formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.doesRelativeDateFormatting = true
+            formatter.dateStyle = .short
+            formatter.timeStyle = .short
+            lastSeenFormatter = formatter
+        }
+        return L10n.localizedString("meta_weekly_last_seen_fmt", formatter.string(from: seen))
+    }
+
+    /// Memoized per effective locale: the card body re-runs on every state
+    /// change, and a `DateFormatter` is costly to build.
+    private static var lastSeenFormatter: DateFormatter?
+
     @ViewBuilder
     private func renderSnapshot(_ snap: VendorSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -725,12 +747,30 @@ public struct VendorSectionView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             case .active where s.session == nil && s.weekly == nil:
-                Label(L10n.localizedString("meta_quota_unavailable"),
-                      systemImage: "info.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                // Unknown, not 0%: Meta omits every window while the session
+                // is idle — which a spent weekly cap causes — so say so, and
+                // point to the one place that still shows the week.
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(L10n.localizedString("meta_quota_unavailable"),
+                          systemImage: "info.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let url = VendorId.meta.dashboardURL {
+                        Button(L10n.localizedString("meta_open_usage")) {
+                            NSWorkspace.shared.open(url)
+                        }
+                        .buttonStyle(.link)
+                        .font(.subheadline)
+                    }
+                }
             case .active:
-                EmptyView()
+                if let seen = s.weeklyLastSeenAt {
+                    Label(Self.metaWeeklyLastSeenText(seen), systemImage: "clock.arrow.circlepath")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         case .xai(let s):
             VStack(alignment: .leading, spacing: 2) {

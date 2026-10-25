@@ -13,12 +13,18 @@ public struct PeakDayRecord: Sendable, Equatable {
     public let costUSD: Double
     public let utilizationPercent: Double
     public let isHistoricalPeak: Bool
+    /// The day's token total when the record comes from a scanner's daily
+    /// series. Nil for the quota-history fallback, whose percentage is a
+    /// cumulative window reading rather than that day's usage.
+    public let tokens: Int?
 
-    public init(date: Date, costUSD: Double, utilizationPercent: Double, isHistoricalPeak: Bool = false) {
+    public init(date: Date, costUSD: Double, utilizationPercent: Double,
+                isHistoricalPeak: Bool = false, tokens: Int? = nil) {
         self.date = date
         self.costUSD = costUSD
         self.utilizationPercent = utilizationPercent
         self.isHistoricalPeak = isHistoricalPeak
+        self.tokens = tokens
     }
 }
 

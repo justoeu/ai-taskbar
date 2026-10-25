@@ -101,14 +101,18 @@ public final class CostEstimator: ObservableObject {
         }
     }
 
+    /// Test seam. Muse and Gemini default to OFF, as in the public init: on,
+    /// their real scanners read this Mac's `~/.local/share/muse` and
+    /// `~/.gemini`, so tests that only stubbed Claude/Codex/opencode ran for
+    /// seconds and timed out under coverage on a machine with a lot of data.
     internal init(
         claudeEstimate: @escaping @Sendable () -> CostEstimate,
         codexEstimate: @escaping @Sendable () -> CostEstimate,
         opencodeScan: @escaping @Sendable ([String: [String]]) -> [String: OpencodeScan]?,
         museEstimate: @escaping @Sendable () -> CostEstimate = { MuseSessionScanner.estimate() },
-        museEnabled: Bool = true,
+        museEnabled: Bool = false,
         geminiEstimate: @escaping @Sendable () -> CostEstimate = { GeminiUsageScanner.estimate() },
-        geminiEnabled: Bool = true
+        geminiEnabled: Bool = false
     ) {
         self.claudeEstimate = claudeEstimate
         self.codexEstimate = codexEstimate

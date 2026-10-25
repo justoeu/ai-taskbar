@@ -134,7 +134,8 @@ struct AnalyticsAggregatorTests {
         let flatPeak = AnalyticsAggregator.computePeakDay(from: flatlineSamples, now: today)
         #expect(flatPeak == nil)
 
-        // Equal peak on multiple days picks the latest day deterministically
+        // Equal peak on multiple days picks the EARLIEST day: a cumulative
+        // weekly window stays at its peak after the day that reached it.
         let tieSamples = [
             UsageHistoryStore.Sample(at: day1.timeIntervalSince1970, max: 80.0),
             UsageHistoryStore.Sample(at: day2.timeIntervalSince1970, max: 80.0),
@@ -142,7 +143,105 @@ struct AnalyticsAggregatorTests {
         ]
         let tiePeak = AnalyticsAggregator.computePeakDay(from: tieSamples, now: today)
         #expect(tiePeak != nil)
-        #expect(tiePeak?.date == day2)
+        #expect(tiePeak?.date == day1)
+    }
+
+    @Test("busiest day follows the daily token series, not a capped quota history")
+    func peak_day_from_daily_tokens() {
+        // The reported card: the weekly quota hit 100% on Thursday and stayed
+        // there, so the quota history tied every later day at 100% and named
+        // Friday, while Thursday's bar held ~20x Friday's tokens.
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let thursday = calendar.date(byAdding: .day, value: -3, to: today)!
+        let friday = calendar.date(byAdding: .day, value: -2, to: today)!
+        let saturday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let history = [
+            UsageHistoryStore.Sample(at: thursday.timeIntervalSince1970 + 3600, max: 100),
+            UsageHistoryStore.Sample(at: friday.timeIntervalSince1970 + 3600, max: 100),
+            UsageHistoryStore.Sample(at: saturday.timeIntervalSince1970 + 3600, max: 40),
+        ]
+        let daily = [
+            DailyModelUsage(date: thursday,
+                            usageByModel: ["m": ModelUsage(inputTokens: 4_000_000_000, outputTokens: 200_000_000)],
+                            costByModel: ["m": 1_600]),
+            DailyModelUsage(date: friday,
+                            usageByModel: ["m": ModelUsage(inputTokens: 200_000_000)],
+                            costByModel: ["m": 80]),
+            DailyModelUsage(date: saturday,
+                            usageByModel: ["m": ModelUsage(inputTokens: 2_400_000_000)],
+                            costByModel: ["m": 900]),
+        ]
+        let snapshot = AnalyticsAggregator.aggregate(
+            timeframe: .weekly, compareWithPrevious: false,
+            histories: [.anthropic: history],
+            estimates: [.anthropic: CostEstimate(usdToday: 0, usdLast7Days: 2_580, dailyUsage: daily)])
+        let peak = snapshot.vendorSummaries.first?.peakDay
+        #expect(peak?.date == thursday)
+        #expect(peak?.tokens == 4_200_000_000)
+        #expect(peak?.costUSD == 1_600)
+    }
+
+    @Test("Month takes the quota history, not the 7-day series")
+    func peak_day_monthly_uses_history() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let longAgo = calendar.date(byAdding: .day, value: -20, to: today)!
+        let snapshot = AnalyticsAggregator.aggregate(
+            timeframe: .monthly, compareWithPrevious: false,
+            histories: [.anthropic: [UsageHistoryStore.Sample(at: longAgo.timeIntervalSince1970 + 60, max: 90),
+                                     UsageHistoryStore.Sample(at: today.timeIntervalSince1970 + 60, max: 10)]],
+            estimates: [.anthropic: CostEstimate(usdToday: 0, usdLast7Days: 0, dailyUsage: [
+                DailyModelUsage(date: today, usageByModel: ["m": ModelUsage(inputTokens: 5)])])])
+        let peak = snapshot.vendorSummaries.first?.peakDay
+        #expect(peak?.date == longAgo)
+        #expect(peak?.tokens == nil)
+    }
+
+    @Test("the quota fallback reads only the selected period, not 90 days of history")
+    func peak_day_fallback_is_limited_to_period() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let september = calendar.date(byAdding: .day, value: -37, to: today)!
+        let history = [UsageHistoryStore.Sample(at: september.timeIntervalSince1970 + 60, max: 100)]
+        let weekly = AnalyticsAggregator.aggregate(timeframe: .weekly, compareWithPrevious: false,
+                                                   histories: [.zai: history])
+        #expect(weekly.vendorSummaries.first?.peakDay == nil)
+        let monthly = AnalyticsAggregator.aggregate(timeframe: .monthly, compareWithPrevious: false,
+                                                    histories: [.zai: history])
+        #expect(monthly.vendorSummaries.first?.peakDay == nil)   // 37 days > 30
+    }
+
+    @Test("daily-series peak breaks a token tie by cost, then by the later day")
+    func peak_day_daily_ties() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let earlier = calendar.date(byAdding: .day, value: -2, to: today)!
+        let later = calendar.date(byAdding: .day, value: -1, to: today)!
+        let usage = ["m": ModelUsage(inputTokens: 1_000)]
+        let costTie = AnalyticsAggregator.computePeakDay(from: [
+            DailyModelUsage(date: earlier, usageByModel: usage, costByModel: ["m": 5]),
+            DailyModelUsage(date: later, usageByModel: usage, costByModel: ["m": 1]),
+        ])
+        #expect(costTie?.date == earlier)
+        let fullTie = AnalyticsAggregator.computePeakDay(from: [
+            DailyModelUsage(date: earlier, usageByModel: usage, costByModel: ["m": 1]),
+            DailyModelUsage(date: later, usageByModel: usage, costByModel: ["m": 1]),
+        ])
+        #expect(fullTie?.date == later)
+    }
+
+    @Test("a daily series with no tokens falls back to the quota history")
+    func peak_day_empty_daily_falls_back() {
+        let today = Calendar.current.startOfDay(for: Date())
+        #expect(AnalyticsAggregator.computePeakDay(from: [DailyModelUsage(date: today)]) == nil)
+        let snapshot = AnalyticsAggregator.aggregate(
+            timeframe: .weekly, compareWithPrevious: false,
+            histories: [.zai: [UsageHistoryStore.Sample(at: today.timeIntervalSince1970 + 60, max: 70)]],
+            estimates: [.zai: CostEstimate(usdToday: 0, usdLast7Days: 0, dailyUsage: [DailyModelUsage(date: today)])])
+        let peak = snapshot.vendorSummaries.first?.peakDay
+        #expect(peak?.utilizationPercent == 70)
+        #expect(peak?.tokens == nil)
     }
 
     @Test("delta comparison calculates percent change")

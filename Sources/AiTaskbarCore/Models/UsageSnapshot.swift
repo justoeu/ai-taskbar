@@ -845,19 +845,43 @@ public struct MetaSnapshot: Sendable, Equatable, Codable {
     /// from the wire, never assumed to be 5h in code.
     public let session: UsageWindow?
     public let weekly: UsageWindow?
+    /// Non-nil when `weekly` is NOT from this response but the last live
+    /// reading, carried while the mint omits `subs_usage` (idle session) and
+    /// before that window's reset. A lower bound: weekly usage only grows.
+    public let weeklyLastSeenAt: Date?
 
     public init(planLabel: String? = nil,
                 subscription: MetaSubscriptionState = .payAsYouGo,
                 session: UsageWindow? = nil,
-                weekly: UsageWindow? = nil) {
+                weekly: UsageWindow? = nil,
+                weeklyLastSeenAt: Date? = nil) {
         self.planLabel = planLabel
         self.subscription = subscription
         self.session = session
         self.weekly = weekly
+        self.weeklyLastSeenAt = weekly == nil ? nil : weeklyLastSeenAt
+    }
+
+    /// Whether this response is the idle shape a carried weekly may fill:
+    /// an active subscription whose mint omitted every window. A response
+    /// that carries a session window but no weekly is a different reading,
+    /// not an idle one, and is shown as sent.
+    public var acceptsCarriedWeekly: Bool {
+        subscription == .active && session == nil && weekly == nil
+    }
+
+    /// This snapshot with `carried` standing in for the omitted weekly
+    /// window when `acceptsCarriedWeekly`; anything else is returned
+    /// unchanged. The caller matches the reading's scope (plan) first.
+    public func carryingWeekly(_ carried: LastSeenWindow?) -> MetaSnapshot {
+        guard acceptsCarriedWeekly, let carried else { return self }
+        return MetaSnapshot(planLabel: planLabel, subscription: subscription,
+                            session: session, weekly: carried.window,
+                            weeklyLastSeenAt: carried.observedAt)
     }
 
     enum CodingKeys: String, CodingKey {
-        case planLabel, subscription, session, weekly
+        case planLabel, subscription, session, weekly, weeklyLastSeenAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -867,5 +891,7 @@ public struct MetaSnapshot: Sendable, Equatable, Codable {
                                              forKey: .subscription) ?? .payAsYouGo
         session = try c.decodeIfPresent(UsageWindow.self, forKey: .session)
         weekly = try c.decodeIfPresent(UsageWindow.self, forKey: .weekly)
+        weeklyLastSeenAt = weekly == nil
+            ? nil : try c.decodeIfPresent(Date.self, forKey: .weeklyLastSeenAt)
     }
 }

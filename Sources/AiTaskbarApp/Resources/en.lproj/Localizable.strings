@@ -427,7 +427,9 @@
 "settings_typesafe_footer" = "Off until you save an API key (create one at console.typesafe.ai). The key only lists models — it never runs a paid evaluation. Sign in to the console to add spend, balance and tokens; the login happens in a private window and only its session cookies are kept, encrypted.";
 "meta_payg" = "No subscription (pay-as-you-go)";
 "meta_billing_incomplete" = "Billing incomplete — finish setup at dev.meta.ai";
-"meta_quota_unavailable" = "Quota not included in this login response";
+"meta_quota_unavailable" = "Meta sends the weekly quota only while a session window is active — this week's usage is unknown right now";
+"meta_open_usage" = "See weekly usage on dev.meta.ai";
+"meta_weekly_last_seen_fmt" = "Weekly: last reading %@ — Meta omits quota while the session window is idle";
 "settings_meta_footer" = "Uses your Muse CLI login (run `muse login`). API keys cannot read subscription quota. The login token is read only to fetch usage windows and is never stored; token history comes from the CLI session logs on this Mac, priced as an estimate at the published Meta Model API rates.";
 "settings_meta_login" = "Muse login";
 "settings_meta_login_detected" = "Detected";

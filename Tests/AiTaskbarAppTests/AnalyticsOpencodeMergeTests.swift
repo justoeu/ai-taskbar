@@ -95,4 +95,47 @@ struct AnalyticsOpencodeMergeTests {
             opencode: [.gemini: Self.scan(model: "gemini-2.5-pro", tokens: 1_000, reportedCost: 4)])
         #expect(merged[.gemini]?.modelBreakdownToday == [:])
     }
+
+    // MARK: per-day series (Analytics chart)
+
+    private static let days: [Date] = CostWindow(now: Date()).calendarDays()
+
+    private static func daily(_ model: String, tokensPerDay: [Int], cost: Double = 0) -> [DailyModelUsage] {
+        zip(days, tokensPerDay).map { day, tokens in
+            DailyModelUsage(date: day,
+                            usageByModel: tokens > 0 ? [model: ModelUsage(inputTokens: tokens)] : [:],
+                            costByModel: tokens > 0 && cost > 0 ? [model: cost] : [:])
+        }
+    }
+
+    @Test("a vendor seen only through opencode gets opencode's daily series")
+    func opencode_only_vendor_gets_daily_series() {
+        var s = Self.scan(model: "glm-5.3", tokens: 70)
+        s.daily = Self.daily("glm-5.3", tokensPerDay: [10, 0, 0, 0, 0, 50, 10])
+        let merged = AnalyticsStore.mergingOpencode([:], opencode: [.zai: s])
+        let series = merged[.zai]?.dailyUsage ?? []
+        #expect(series.count == 7)
+        #expect(series[5].totalTokens == 50)
+        #expect(series[5].totalCostUSD == 0)
+    }
+
+    @Test("merging opencode keeps the scanner's daily series (it used to be dropped)")
+    func merge_keeps_scanner_daily_series() {
+        let scanner = CostEstimate(usdToday: 1, usdLast7Days: 7,
+                                   dailyUsage: Self.daily("gemini-4-argon", tokensPerDay: [0, 0, 0, 0, 0, 0, 100], cost: 2))
+        var s = Self.scan(model: "gemini-4-argon", tokens: 30)
+        s.daily = Self.daily("gemini-4-argon", tokensPerDay: [0, 0, 0, 0, 0, 0, 30])
+        let merged = AnalyticsStore.mergingOpencode([.gemini: scanner], opencode: [.gemini: s])
+        let today = merged[.gemini]?.dailyUsage.last
+        #expect(merged[.gemini]?.dailyUsage.count == 7)
+        #expect(today?.totalTokens == 130)       // tokens add up
+        #expect(today?.totalCostUSD == 2)        // opencode dollars never added
+    }
+
+    @Test("mergingDaily with one side empty returns the other side")
+    func merging_daily_one_side_empty() {
+        let series = Self.daily("m", tokensPerDay: [1, 2, 3, 4, 5, 6, 7])
+        #expect(AnalyticsStore.mergingDaily([], opencode: series) == series)
+        #expect(AnalyticsStore.mergingDaily(series, opencode: []) == series)
+    }
 }

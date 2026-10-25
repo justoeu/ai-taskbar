@@ -362,6 +362,21 @@ struct CostTests {
         let table = PricingTable.table(for: .kimi)
         #expect(table["kimi-k1.5"] != nil)
     }
+
+    @Test("Kimi K3.1 Pro and its highspeed variant price at the published rates, not the bare `kimi` prefix")
+    func lookup_kimi_k31_pro() {
+        let pro = PricingTable.lookup("kimi-k3.1-pro", table: PricingTable.kimi)
+        #expect(pro?.inputPer1M == 2.00)
+        #expect(pro?.outputPer1M == 10.00)
+        #expect(pro?.cacheReadPer1M == 0.20)
+        let fast = PricingTable.lookup("kimi-k3.1-pro-highspeed", table: PricingTable.kimi)
+        #expect(fast?.inputPer1M == 4.00)
+        #expect(fast?.outputPer1M == 20.00)
+        #expect(fast?.cacheReadPer1M == 0.20)
+        // A dated suffix resolves to the base model by longest prefix.
+        let dated = PricingTable.lookup("kimi-k3.1-pro-20261023", table: PricingTable.kimi)
+        #expect(dated?.outputPer1M == 10.00)
+    }
 }
 
 @Suite("CostEstimate / ModelUsage")

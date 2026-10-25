@@ -17,6 +17,28 @@ struct MetaCardTests {
         expectTrue(VendorSectionView.rendersSnapshot(snap, vendorId: .meta))
     }
 
+    @Test("carried weekly note names the reading time, in the override language")
+    @MainActor func weekly_last_seen_note() {
+        let previous = L10n.languageOverride
+        defer { L10n.languageOverride = previous }
+        L10n.languageOverride = "pt-BR"
+        let text = VendorSectionView.metaWeeklyLastSeenText(Date())
+        #expect(text.hasPrefix("Semanal: última leitura "))
+        #expect(text.contains("ociosa"))
+    }
+
+    @Test("a window-less snapshot is not plotted as 0% in the history")
+    func windowless_snapshot_records_no_sample() {
+        let idle = VendorSnapshot.meta(MetaSnapshot(planLabel: "Max", subscription: .active))
+        expectFalse(VendorViewModel.recordsHistorySample(idle))
+        let typeSafe = VendorSnapshot.typesafe(TypeSafeSnapshot())
+        expectFalse(VendorViewModel.recordsHistorySample(typeSafe))
+        let active = VendorSnapshot.meta(MetaSnapshot(
+            subscription: .active,
+            weekly: UsageWindow(label: "Weekly (7d)", utilizationPercent: 100)))
+        expectTrue(VendorViewModel.recordsHistorySample(active))
+    }
+
     @Test("cost footer supports Meta local tokens")
     @MainActor func cost_footer_supported() {
         expectTrue(CostEstimator.supportedVendors.contains(.meta))

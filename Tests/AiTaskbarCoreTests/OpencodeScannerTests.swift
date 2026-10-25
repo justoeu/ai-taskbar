@@ -13,10 +13,13 @@ import SQLite3
 private struct FixtureDB {
     let path: String
 
+    enum Layout { case v1, v2, both, neither }
+
     init(rows: [(model: String, provider: String, role: String,
                  createdMs: Int64, input: Int, output: Int, reasoning: Int,
                  cacheRead: Int, cacheWrite: Int, cost: Double)],
-         includeModelID: Bool = true) {
+         includeModelID: Bool = true,
+         layout: Layout = .v1) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("opencode-fixture-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -25,14 +28,46 @@ private struct FixtureDB {
         var db: OpaquePointer?
         sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil)
         defer { sqlite3_close(db) }
-        sqlite3_exec(db, """
-            CREATE TABLE message (
-              id text PRIMARY KEY, session_id text NOT NULL,
-              time_created integer NOT NULL, time_updated integer NOT NULL,
-              data text NOT NULL);
-            """, nil, nil, nil)
+        if layout == .v1 || layout == .both {
+            sqlite3_exec(db, """
+                CREATE TABLE message (
+                  id text PRIMARY KEY, session_id text NOT NULL,
+                  time_created integer NOT NULL, time_updated integer NOT NULL,
+                  data text NOT NULL);
+                """, nil, nil, nil)
+        }
+        if layout == .v2 || layout == .both {
+            // opencode 2.x (v2.1.4): role in `type`, model nested under `model`.
+            sqlite3_exec(db, """
+                CREATE TABLE session_message (
+                  id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL,
+                  seq integer NOT NULL, time_created integer NOT NULL,
+                  time_updated integer NOT NULL, data text NOT NULL);
+                """, nil, nil, nil)
+        }
+        if layout == .neither {
+            sqlite3_exec(db, "CREATE TABLE session (id text PRIMARY KEY);", nil, nil, nil)
+        }
 
         for (i, r) in rows.enumerated() {
+            if layout == .v2 || layout == .both {
+                let modelField = includeModelID ? "\"id\":\"\(r.model)\"," : ""
+                let json = """
+                    {"model":{\(modelField)"providerID":"\(r.provider)","variant":"max"},\
+                    "cost":\(r.cost),\
+                    "tokens":{"input":\(r.input),"output":\(r.output),\
+                    "reasoning":\(r.reasoning),\
+                    "cache":{"read":\(r.cacheRead),"write":\(r.cacheWrite)}}}
+                    """
+                let sql = "INSERT INTO session_message VALUES ('v2m\(i)','s0',?,\(i),\(r.createdMs),\(r.createdMs),?)"
+                var stmt: OpaquePointer?
+                sqlite3_prepare_v2(db, sql, -1, &stmt, nil)
+                sqlite3_bind_text(stmt, 1, r.role, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+                sqlite3_bind_text(stmt, 2, json, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+                sqlite3_step(stmt)
+                sqlite3_finalize(stmt)
+            }
+            guard layout == .v1 || layout == .both else { continue }
             let modelField = includeModelID ? "\"modelID\":\"\(r.model)\"," : ""
             let json = """
                 {"role":"\(r.role)",\(modelField)"providerID":"\(r.provider)",\
@@ -364,5 +399,123 @@ struct OpencodeScannerTests {
             expectTrue(usage.inputTokens <= (weekly?.inputTokens ?? 0))
             expectTrue(usage.outputTokens <= (weekly?.outputTokens ?? 0))
         }
+    }
+
+    // MARK: opencode 2.x (`session_message`)
+
+    @Test("2.x database: same token semantics, model and provider from `model`")
+    func v2_layout_reads_session_message() {
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: msAgo(60), input: 259, output: 163, reasoning: 393,
+             cacheRead: 208_576, cacheWrite: 10, cost: 0.057),
+        ], layout: .v2)
+        let scan = OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path)
+        let usage = scan?.last7DaysByModel["glm-5.3"]
+        #expect(usage?.inputTokens == 259)            // cache-exclusive, untouched
+        #expect(usage?.outputTokens == 163 + 393)     // reasoning is disjoint: added
+        #expect(usage?.cacheReadTokens == 208_576)
+        #expect(usage?.cacheCreateTokens == 10)
+        #expect(scan?.costLast7DaysByModel["glm-5.3"] == 0.057)
+        #expect(scan?.todayByModel["glm-5.3"]?.inputTokens == 259)
+    }
+
+    @Test("2.x database: only `type = 'assistant'` rows of the requested provider count")
+    func v2_filters_type_and_provider() {
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: msAgo(60), input: 100, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+            (model: "glm-5.3", provider: "zai", role: "user",
+             createdMs: msAgo(60), input: 9_999, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+            (model: "claude-opus-5-5", provider: "anthropic", role: "assistant",
+             createdMs: msAgo(60), input: 7, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+        ], layout: .v2)
+        let scan = OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path)
+        #expect(scan?.last7DaysByModel["glm-5.3"]?.inputTokens == 100)
+        #expect(scan?.last7DaysByModel["claude-opus-5-5"] == nil)
+    }
+
+    @Test("2.x database: a turn without `model.id` is skipped and counted")
+    func v2_missing_model_is_skipped() {
+        let db = FixtureDB(rows: [
+            (model: "x", provider: "zai", role: "assistant",
+             createdMs: msAgo(60), input: 1, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+        ], includeModelID: false, layout: .v2)
+        let scan = OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path)
+        #expect(scan?.skippedRows == 1)
+        expectTrue(scan?.isEmpty ?? false)
+    }
+
+    @Test("both layouts present: turns copied into 2.x are counted once")
+    func both_layouts_prefer_v2() {
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: msAgo(60), input: 100, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+        ], layout: .both)
+        let scan = OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path)
+        #expect(scan?.last7DaysByModel["glm-5.3"]?.inputTokens == 100)   // NOT 200
+    }
+
+    @Test("both layouts present: 1.x turns older than the first 2.x turn are kept")
+    func both_layouts_keep_old_v1_turns() throws {
+        // Upgrade without a copy: the week's older turns live only in `message`.
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: msAgo(60), input: 100, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+        ], layout: .v2)
+        var handle: OpaquePointer?
+        sqlite3_open_v2(db.path, &handle, SQLITE_OPEN_READWRITE, nil)
+        defer { sqlite3_close(handle) }
+        sqlite3_exec(handle, """
+            CREATE TABLE message (id text PRIMARY KEY, session_id text NOT NULL,
+              time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL);
+            INSERT INTO message VALUES ('old', 's0', \(msAgo(86_400)), \(msAgo(86_400)),
+              '{"role":"assistant","modelID":"glm-5.3","providerID":"zai","cost":0,"tokens":{"input":40,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}');
+            INSERT INTO message VALUES ('newer', 's0', \(msAgo(30)), \(msAgo(30)),
+              '{"role":"assistant","modelID":"glm-5.3","providerID":"zai","cost":0,"tokens":{"input":9999,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}');
+            """, nil, nil, nil)
+        let scan = OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path)
+        // 100 from 2.x + 40 from the older 1.x turn; the 1.x turn after the
+        // first 2.x turn is left to 2.x (would be a copy).
+        #expect(scan?.last7DaysByModel["glm-5.3"]?.inputTokens == 140)
+    }
+
+    @Test("an unknown layout (neither table) is unavailable, not an empty scan")
+    func unknown_layout_is_unavailable() {
+        let db = FixtureDB(rows: [], layout: .neither)
+        let outcome = OpencodeScanner.scanOutcome(now: now, providerGroups: ["zai": ["zai"]],
+                                                  dbPath: db.path)
+        #expect(outcome == .unavailable)
+    }
+
+    @Test("tokens are bucketed into the seven CostWindow days, oldest first")
+    func daily_series_buckets_by_local_day() throws {
+        let window = CostWindow(now: now)
+        let days = window.calendarDays()
+        func ms(_ d: Date, plus seconds: Double = 60) -> Int64 { Int64((d.timeIntervalSince1970 + seconds) * 1000) }
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: ms(days[0]), input: 11, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, cost: 0),
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: ms(days[3]), input: 33, output: 2, reasoning: 1, cacheRead: 0, cacheWrite: 0, cost: 0),
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: ms(days[6], plus: 1), input: 66, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, cost: 0),
+        ], layout: .v2)
+        let scan = try #require(OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path))
+        #expect(scan.daily.count == 7)
+        #expect(scan.daily.map(\.date) == days)
+        #expect(scan.daily[0].usageByModel["glm-5.3"]?.inputTokens == 11)
+        #expect(scan.daily[3].usageByModel["glm-5.3"]?.outputTokens == 3)   // reasoning added
+        #expect(scan.daily[6].usageByModel["glm-5.3"]?.inputTokens == 66)
+        #expect(scan.daily[1].usageByModel.isEmpty)
+        #expect(scan.todayByModel["glm-5.3"]?.inputTokens == 66)
+        #expect(scan.last7DaysByModel["glm-5.3"]?.inputTokens == 110)
+        #expect(scan.daily.allSatisfy { $0.costByModel.isEmpty })
     }
 }
