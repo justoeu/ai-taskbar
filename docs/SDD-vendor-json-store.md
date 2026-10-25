@@ -58,7 +58,6 @@ public final class VendorJSONStore<Value: Codable & Sendable & Equatable>: Senda
     public var fileURL: URL              // baseDir/<vendor>.json
 
     public init(vendor: VendorId, baseDir: URL)
-    public static func directory(_ name: String) throws -> URL  // App Support/<name>, ensureDir
 
     public func load() -> Value?
     @discardableResult
@@ -67,15 +66,25 @@ public final class VendorJSONStore<Value: Codable & Sendable & Equatable>: Senda
 }
 ```
 
-Regras, cada uma coberta por teste:
+O diretório vem de `Paths.supportSubdirectory(_:)` (`App Support/<name>`,
+criado, link simbólico recusado), ao lado de `Paths.applicationSupport()`,
+e não de um método estático no tipo genérico.
+
+Regras (1 a 6 cobertas por teste; a 7 é regra de uso, documentada):
 
 1. **Cache com ausência memorizada.** O primeiro `load()` lê o disco. O
    resultado é guardado, inclusive "nada gravado" e "arquivo ilegível", e as
    leituras seguintes não tocam o disco. O app é o único escritor desses
    arquivos, então não há quem os mude por fora durante a execução.
-2. **Ilegível = ausente.** Arquivo corrompido, ou valor que o próprio decoder
-   do `Value` rejeita (o `CreditBaseline` recusa pico NaN ou negativo), lê-se
-   como nada gravado. Custa uma barra re-semeada, nunca um número errado.
+2. **Inválido = ausente; ilegível ≠ ausente.** Arquivo inexistente (ENOENT,
+   ou ENOTDIR num componente do caminho), JSON corrompido, ou valor que o
+   próprio decoder do `Value` rejeita (o `CreditBaseline` recusa pico NaN ou
+   negativo) lê-se como nada gravado: custa uma barra re-semeada, nunca um
+   número errado. Já um arquivo que **existe mas não pôde ser lido**
+   (permissão, I/O) é logado, **não** é memorizado (a próxima leitura tenta
+   de novo) e **bloqueia a escrita** do `update`: o valor real é
+   desconhecido, e substituí-lo destruiria, por exemplo, o pico de créditos
+   de uma conta já 90% gasta.
 3. **`update` é o único caminho de escrita.** Ele carrega o valor atual, chama
    `body` e grava `write` se este for diferente do atual, tudo sob a mesma
    trava. Duas atualizações sobrepostas nunca se intercalam: é a garantia
@@ -84,8 +93,10 @@ Regras, cada uma coberta por teste:
 4. **Memória antes do disco.** O valor novo vai para o cache antes da gravação.
    Um diretório que não aceita escrita degrada para um valor só em memória,
    nunca para um crash (teste existente `unwritable_dir_is_survivable`).
-5. **Falha de gravação é logada, nunca engolida.** Ela não falha o fetch do
-   fornecedor (o store é best-effort), mas fica visível no log.
+5. **Falha de leitura, gravação ou remoção é logada, nunca engolida.** Ela
+   não falha o fetch do fornecedor (o store é best-effort), mas fica visível
+   no log. Um gancho interno de teste (`onFailure`) dispara junto de cada
+   log, para que um `try?` reintroduzido faça um teste falhar.
 6. **`clear()` espera um `update` em curso.** Usa a mesma trava, então um
    Recalibrate nunca é revertido por uma gravação atrasada. Apaga a memória e
    o disco; arquivo ausente não é erro.
@@ -113,16 +124,22 @@ Os dois deixam de ter lock, cache e I/O próprios.
 | `CreditBaselineStore`, arquivo ausente | relia o disco em toda leitura | ausência memorizada |
 | `CreditBaselineStore`, gravação falhou | silencioso (`try?`) | logado |
 | `CreditBaselineStore.reset()`, falha ao apagar | silencioso (`try?`) | logado; ausente não é erro |
+| Arquivo presente mas ilegível no arranque | lido como ausente → `record` re-semeava e **sobrescrevia** o pico | logado, re-tentado, nada é gravado por cima |
+| Pico rejeitado pela guarda (NaN/negativo) | não gravado, mas **devolvido** como denominador | não gravado; devolve o pico guardado (ou 0, sem barra) |
+| `load()` concorrente com `clear`/`update` no primeiro acesso | a leitura atrasada podia repor o valor apagado | o valor mais novo em memória vence |
 
 Nenhuma muda número exibido, caminho, nome de arquivo ou formato JSON.
 
 ## 6. Testes
 
 - Novo `VendorJSONStoreTests`, um teste por regra do §3: ida e volta em disco
-  entre instâncias, ausência memorizada, ilegível = ausente (incluindo valor
-  rejeitado pelo decoder), `update` sem mudança não grava, `write == nil` não
-  grava, memória sobrevive a diretório sem escrita, `clear` espera um
-  `update` estacionado, `clear` sem arquivo, `directory` cria a pasta.
+  entre instâncias, ausência memorizada, JSON corrompido e valor rejeitado
+  pelo decoder = ausente, arquivo ilegível (`chmod 000`) não é sobrescrito e
+  é relido, `update` sem mudança não grava, `write == nil` não grava, memória
+  sobrevive a diretório sem escrita, falhas de gravação e remoção são
+  reportadas e ausência não é falha, `clear` espera um `update` estacionado,
+  `clear` sem arquivo, `Paths.supportSubdirectory` cria a pasta e recusa link
+  simbólico (num diretório temporário, nunca no Application Support real).
 - `CreditBaselineTests`, `OpenAICreditsProviderTests`, `LastSeenWindowTests`
   e `MetaProviderTests` ficam **inalterados** e têm de passar: são o contrato
   da API pública.

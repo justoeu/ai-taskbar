@@ -19,39 +19,51 @@ public final class VendorJSONStore<Value: Codable & Sendable & Equatable>: Senda
     public let vendor: VendorId
     public let baseDir: URL
 
-    /// `.loaded(nil)` remembers "nothing stored" (absent or unreadable) too:
-    /// this app is the only writer, so a miss stays a miss until `update`.
+    /// `.loaded(nil)` remembers "nothing stored" (absent, or present but not
+    /// a valid `Value`) too: this app is the only writer, so a miss stays a
+    /// miss until `update`. A file that exists but cannot be READ is never
+    /// cached — see `read()`.
     private enum LoadState: Sendable { case unloaded, loaded(Value?) }
     private let cached = OSAllocatedUnfairLock(initialState: LoadState.unloaded)
     /// Serializes every read-modify-write and `clear`. A plain mutex, not the
     /// unfair lock, because it is held across file I/O.
     private let writeGate = NSLock()
+    /// Test seam: called with the operation ("read", "persist", "remove")
+    /// next to every logged failure, so tests can prove none is swallowed.
+    private let onFailure: (@Sendable (String) -> Void)?
 
     public init(vendor: VendorId, baseDir: URL) {
         self.vendor = vendor
         self.baseDir = baseDir
+        self.onFailure = nil
     }
 
-    /// `Application Support/ai-taskbar/<name>`, created (symlinks refused).
-    public static func directory(_ name: String) throws -> URL {
-        let dir = try Paths.applicationSupport()
-            .appendingPathComponent(name, isDirectory: true)
-        try Paths.ensureDir(dir)
-        return dir
+    internal init(vendor: VendorId, baseDir: URL,
+                  onFailure: @escaping @Sendable (String) -> Void) {
+        self.vendor = vendor
+        self.baseDir = baseDir
+        self.onFailure = onFailure
     }
 
     public var fileURL: URL {
         baseDir.appendingPathComponent("\(vendor.rawValue).json")
     }
 
-    /// The stored value. Reads the disk once; absent or unreadable files —
-    /// including values `Value`'s own decoder rejects — read as nil.
+    /// The stored value. Reads the disk once; an absent file, or one that is
+    /// not a valid `Value` (including values `Value`'s own decoder rejects),
+    /// reads as nil. A file that exists but cannot be read also reads as nil
+    /// this time, but is retried on the next call.
     public func load() -> Value? {
         if case .loaded(let hit) = cached.withLock({ $0 }) { return hit }
-        let decoded = (try? Data(contentsOf: fileURL))
-            .flatMap { try? SharedCoders.decoder.decode(Value.self, from: $0) }
-        cached.withLock { $0 = .loaded(decoded) }
-        return decoded
+        guard case .read(let decoded) = read() else { return nil }
+        // The read ran outside the lock: an `update` or `clear` that landed
+        // meanwhile is newer than what was read, and must win (a late read
+        // would otherwise resurrect a value `clear` removed at logout).
+        return cached.withLock { state -> Value? in
+            if case .loaded(let newer) = state { return newer }
+            state = .loaded(decoded)
+            return decoded
+        }
     }
 
     /// The only write path: loads the current value, asks `body` for the
@@ -59,13 +71,28 @@ public final class VendorJSONStore<Value: Codable & Sendable & Equatable>: Senda
     /// it differs from the current one — all under one lock, so overlapping
     /// updates never interleave (RACE-CRO-007). Memory is updated before the
     /// disk, so an unwritable directory still keeps the value this session.
+    /// When the file exists but cannot be read, `body` still runs (with nil)
+    /// for its result, but NOTHING is written: the real value on disk is
+    /// unknown, and replacing it would destroy it (a credits peak re-seeded
+    /// from a 90%-spent balance).
+    /// `body` runs under the (non-recursive) write lock: it may call `load()`,
+    /// but never `update` or `clear` on the same store — that deadlocks.
     @discardableResult
     public func update<R>(_ body: (_ current: Value?) -> (write: Value?, result: R)) -> R {
         writeGate.lock()
         defer { writeGate.unlock() }
-        let current = load()
+        let current: Value?
+        let known: Bool
+        if case .loaded(let hit) = cached.withLock({ $0 }) {
+            (current, known) = (hit, true)
+        } else if case .read(let decoded) = read() {
+            cached.withLock { $0 = .loaded(decoded) }
+            (current, known) = (decoded, true)
+        } else {
+            (current, known) = (nil, false)
+        }
         let (write, result) = body(current)
-        if let write, write != current {
+        if known, let write, write != current {
             save(write)
         }
         return result
@@ -82,9 +109,40 @@ public final class VendorJSONStore<Value: Codable & Sendable & Equatable>: Senda
         } catch CocoaError.fileNoSuchFile {
             // Nothing stored: already clear.
         } catch {
-            AppLog.lifecycle.warning(
-                "\(self.fileURL.lastPathComponent, privacy: .public) in \(self.baseDir.lastPathComponent, privacy: .public): could not remove: \(String(describing: error), privacy: .public)")
+            report("remove", error)
         }
+    }
+
+    private enum ReadOutcome { case read(Value?), unreadable }
+
+    /// Absent → `.read(nil)`; present but not a valid `Value` → `.read(nil)`
+    /// (re-seeded, never trusted); present but unreadable (permissions, I/O)
+    /// → `.unreadable`, logged, so a transient failure neither caches a miss
+    /// nor lets `update` overwrite the real value.
+    private func read() -> ReadOutcome {
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch where Self.isAbsence(error) {
+            return .read(nil)
+        } catch {
+            report("read", error)
+            return .unreadable
+        }
+        return .read(try? SharedCoders.decoder.decode(Value.self, from: data))
+    }
+
+    /// The file does not exist: no such file, or a path component that is
+    /// not a directory (ENOTDIR — nothing can exist below it). Everything
+    /// else (permissions, I/O) means a value may be there and is unknown.
+    static func isAbsence(_ error: Error) -> Bool {
+        if let cocoa = error as? CocoaError,
+           cocoa.code == .fileReadNoSuchFile || cocoa.code == .fileNoSuchFile {
+            return true
+        }
+        let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
+        guard let posix = underlying, posix.domain == NSPOSIXErrorDomain else { return false }
+        return posix.code == Int(ENOENT) || posix.code == Int(ENOTDIR)
     }
 
     private func save(_ value: Value) {
@@ -93,8 +151,13 @@ public final class VendorJSONStore<Value: Codable & Sendable & Equatable>: Senda
             let data = try SharedCoders.encoder.encode(value)
             try AtomicFileWrite.write(data, to: fileURL)
         } catch {
-            AppLog.lifecycle.warning(
-                "\(self.fileURL.lastPathComponent, privacy: .public) in \(self.baseDir.lastPathComponent, privacy: .public): could not persist: \(String(describing: error), privacy: .public)")
+            report("persist", error)
         }
+    }
+
+    private func report(_ operation: String, _ error: Error) {
+        AppLog.lifecycle.warning(
+            "\(self.baseDir.lastPathComponent, privacy: .public)/\(self.fileURL.lastPathComponent, privacy: .public): could not \(operation, privacy: .public): \(String(describing: error), privacy: .public)")
+        onFailure?(operation)
     }
 }

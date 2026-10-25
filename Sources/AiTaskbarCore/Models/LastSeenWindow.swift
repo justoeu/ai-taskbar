@@ -53,7 +53,7 @@ public final class LastSeenWindowStore: Sendable {
     }
 
     public static func defaultFor(_ vendor: VendorId) throws -> LastSeenWindowStore {
-        LastSeenWindowStore(vendor: vendor, baseDir: try VendorJSONStore<LastSeenWindow>.directory("quota"))
+        LastSeenWindowStore(vendor: vendor, baseDir: try Paths.supportSubdirectory("quota"))
     }
 
     /// Records a LIVE reading. Never call it with a cached or carried window:

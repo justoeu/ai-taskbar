@@ -144,10 +144,80 @@ final class VendorJSONStoreTests {
         expectFalse(FileManager.default.fileExists(atPath: s.fileURL.path))
     }
 
-    @Test("directory(_:) is created under Application Support")
+    @Test("Paths.supportSubdirectory creates the folder under its root")
     func directory_is_created() throws {
-        let url = try VendorJSONStore<Probe>.directory("credits")
-        #expect(url.lastPathComponent == "credits")
-        expectTrue(FileManager.default.fileExists(atPath: url.path))
+        let url = try Paths.supportSubdirectory("credits", in: dir)
+        #expect(url == dir.appendingPathComponent("credits", isDirectory: true))
+        var isDir: ObjCBool = false
+        expectTrue(FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir))
+        expectTrue(isDir.boolValue)
+    }
+
+    @Test("Paths.supportSubdirectory refuses a symlinked folder")
+    func directory_refuses_symlink() throws {
+        let target = dir.appendingPathComponent("real", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("quota"),
+                                                   withDestinationURL: target)
+        #expect(throws: (any Error).self) {
+            try Paths.supportSubdirectory("quota", in: dir)
+        }
+    }
+
+    // MARK: unreadable ≠ absent, and failures are reported (SDD §3 rules 2, 5)
+
+    private final class Failures: @unchecked Sendable {
+        private let lock = NSLock()
+        private var ops: [String] = []
+        func add(_ op: String) { lock.withLock { ops.append(op) } }
+        var all: [String] { lock.withLock { ops } }
+    }
+
+    @Test("a present but unreadable file is never overwritten, and is retried")
+    func unreadable_file_is_not_overwritten() throws {
+        set(store(), 50)
+        let url = store().fileURL
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path) }
+        let failures = Failures()
+        let s = VendorJSONStore<Probe>(vendor: .openai, baseDir: dir, onFailure: { failures.add($0) })
+        #expect(s.load() == nil)
+        let seen: Int? = s.update { current in (write: Probe(n: 5), result: current?.n) }
+        #expect(seen == nil)
+        #expect(failures.all.contains("read"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+        // Not cached as a miss, not replaced: the real value is still there.
+        #expect(s.load() == Probe(n: 50))
+    }
+
+    @Test("a failed write is reported, not swallowed")
+    func failed_write_is_reported() {
+        let failures = Failures()
+        let s = VendorJSONStore<Probe>(vendor: .openai,
+                                       baseDir: URL(fileURLWithPath: "/dev/null/nope-\(UUID().uuidString)"),
+                                       onFailure: { failures.add($0) })
+        set(s, 1)
+        #expect(failures.all == ["persist"])
+    }
+
+    @Test("a failed remove is reported, not swallowed")
+    func failed_remove_is_reported() throws {
+        set(store(), 1)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+        let failures = Failures()
+        let s = VendorJSONStore<Probe>(vendor: .openai, baseDir: dir, onFailure: { failures.add($0) })
+        s.clear()
+        #expect(failures.all == ["remove"])
+        #expect(s.load() == nil)
+    }
+
+    @Test("a missing file and a clear with nothing stored report nothing")
+    func absence_is_not_a_failure() {
+        let failures = Failures()
+        let s = VendorJSONStore<Probe>(vendor: .openai, baseDir: dir, onFailure: { failures.add($0) })
+        #expect(s.load() == nil)
+        s.clear()
+        #expect(failures.all.isEmpty)
     }
 }

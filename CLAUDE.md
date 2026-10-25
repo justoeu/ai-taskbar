@@ -399,7 +399,11 @@ changes shipped code, so it releases normally.
   **One `Codable` value per vendor on disk → `VendorJSONStore<Value>`**
   (`Cache/VendorJSONStore.swift`, `docs/SDD-vendor-json-store.md`): cache
   with a remembered miss, one lock for read-modify-write (`update`) and
-  `clear`, memory before disk, failures logged and never fatal.
+  `clear`, memory before disk, failures logged and never fatal. A file that
+  exists but cannot be READ is not a miss: it is retried and `update` writes
+  nothing over it (re-seeding there destroyed a credits peak); only ENOENT /
+  ENOTDIR and invalid JSON read as absent. Directories come from
+  `Paths.supportSubdirectory(_:)`.
   `CreditBaselineStore` and `LastSeenWindowStore` are thin domain layers over
   it; they were two copies that had already drifted. Do not hand-roll
   another lock + cache + `AtomicFileWrite` store for such a value. Not for

@@ -176,7 +176,7 @@ public final class CreditBaselineStore: Sendable {
     }
 
     public static func defaultFor(_ vendor: VendorId) throws -> CreditBaselineStore {
-        CreditBaselineStore(vendor: vendor, baseDir: try VendorJSONStore<CreditBaseline>.directory("credits"))
+        CreditBaselineStore(vendor: vendor, baseDir: try Paths.supportSubdirectory("credits"))
     }
 
     /// Folds an observation into the baseline and returns the denominator to
@@ -199,9 +199,13 @@ public final class CreditBaselineStore: Sendable {
                                          hadCredits: observation.hasCredits,
                                          hadPromo: observation.hasPromo)
             // A non-finite or negative peak would poison every percentage
-            // and fail to encode; `updatedPeak` cannot produce one, but the
-            // store must never be asked to keep it.
-            guard updated.peak.isFinite, updated.peak >= 0, stored != updated else {
+            // and fail to encode; `updatedPeak` cannot produce one, but it is
+            // neither stored nor handed back as the denominator: the stored
+            // peak stands (none → 0, which draws no bar).
+            guard updated.peak.isFinite, updated.peak >= 0 else {
+                return (write: nil, result: stored?.peak ?? 0)
+            }
+            guard stored != updated else {
                 return (write: nil, result: peak)
             }
             if decision == .rebaseline {
