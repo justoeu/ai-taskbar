@@ -450,7 +450,7 @@ struct OpencodeScannerTests {
         expectTrue(scan?.isEmpty ?? false)
     }
 
-    @Test("both layouts present: 2.x is read alone, never summed with 1.x")
+    @Test("both layouts present: turns copied into 2.x are counted once")
     func both_layouts_prefer_v2() {
         let db = FixtureDB(rows: [
             (model: "glm-5.3", provider: "zai", role: "assistant",
@@ -459,6 +459,31 @@ struct OpencodeScannerTests {
         ], layout: .both)
         let scan = OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path)
         #expect(scan?.last7DaysByModel["glm-5.3"]?.inputTokens == 100)   // NOT 200
+    }
+
+    @Test("both layouts present: 1.x turns older than the first 2.x turn are kept")
+    func both_layouts_keep_old_v1_turns() throws {
+        // Upgrade without a copy: the week's older turns live only in `message`.
+        let db = FixtureDB(rows: [
+            (model: "glm-5.3", provider: "zai", role: "assistant",
+             createdMs: msAgo(60), input: 100, output: 0, reasoning: 0,
+             cacheRead: 0, cacheWrite: 0, cost: 0),
+        ], layout: .v2)
+        var handle: OpaquePointer?
+        sqlite3_open_v2(db.path, &handle, SQLITE_OPEN_READWRITE, nil)
+        defer { sqlite3_close(handle) }
+        sqlite3_exec(handle, """
+            CREATE TABLE message (id text PRIMARY KEY, session_id text NOT NULL,
+              time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL);
+            INSERT INTO message VALUES ('old', 's0', \(msAgo(86_400)), \(msAgo(86_400)),
+              '{"role":"assistant","modelID":"glm-5.3","providerID":"zai","cost":0,"tokens":{"input":40,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}');
+            INSERT INTO message VALUES ('newer', 's0', \(msAgo(30)), \(msAgo(30)),
+              '{"role":"assistant","modelID":"glm-5.3","providerID":"zai","cost":0,"tokens":{"input":9999,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}');
+            """, nil, nil, nil)
+        let scan = OpencodeScanner.scan(now: now, provider: "zai", dbPath: db.path)
+        // 100 from 2.x + 40 from the older 1.x turn; the 1.x turn after the
+        // first 2.x turn is left to 2.x (would be a copy).
+        #expect(scan?.last7DaysByModel["glm-5.3"]?.inputTokens == 140)
     }
 
     @Test("an unknown layout (neither table) is unavailable, not an empty scan")

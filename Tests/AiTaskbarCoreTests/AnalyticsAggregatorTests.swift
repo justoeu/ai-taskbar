@@ -134,7 +134,8 @@ struct AnalyticsAggregatorTests {
         let flatPeak = AnalyticsAggregator.computePeakDay(from: flatlineSamples, now: today)
         #expect(flatPeak == nil)
 
-        // Equal peak on multiple days picks the latest day deterministically
+        // Equal peak on multiple days picks the EARLIEST day: a cumulative
+        // weekly window stays at its peak after the day that reached it.
         let tieSamples = [
             UsageHistoryStore.Sample(at: day1.timeIntervalSince1970, max: 80.0),
             UsageHistoryStore.Sample(at: day2.timeIntervalSince1970, max: 80.0),
@@ -142,7 +143,7 @@ struct AnalyticsAggregatorTests {
         ]
         let tiePeak = AnalyticsAggregator.computePeakDay(from: tieSamples, now: today)
         #expect(tiePeak != nil)
-        #expect(tiePeak?.date == day2)
+        #expect(tiePeak?.date == day1)
     }
 
     @Test("busiest day follows the daily token series, not a capped quota history")
@@ -179,6 +180,22 @@ struct AnalyticsAggregatorTests {
         #expect(peak?.date == thursday)
         #expect(peak?.tokens == 4_200_000_000)
         #expect(peak?.costUSD == 1_600)
+    }
+
+    @Test("Month takes the quota history, not the 7-day series")
+    func peak_day_monthly_uses_history() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let longAgo = calendar.date(byAdding: .day, value: -20, to: today)!
+        let snapshot = AnalyticsAggregator.aggregate(
+            timeframe: .monthly, compareWithPrevious: false,
+            histories: [.anthropic: [UsageHistoryStore.Sample(at: longAgo.timeIntervalSince1970 + 60, max: 90),
+                                     UsageHistoryStore.Sample(at: today.timeIntervalSince1970 + 60, max: 10)]],
+            estimates: [.anthropic: CostEstimate(usdToday: 0, usdLast7Days: 0, dailyUsage: [
+                DailyModelUsage(date: today, usageByModel: ["m": ModelUsage(inputTokens: 5)])])])
+        let peak = snapshot.vendorSummaries.first?.peakDay
+        #expect(peak?.date == longAgo)
+        #expect(peak?.tokens == nil)
     }
 
     @Test("daily-series peak breaks a token tie by cost, then by the later day")

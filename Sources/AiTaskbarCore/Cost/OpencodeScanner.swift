@@ -69,13 +69,17 @@ public struct OpencodeScan: Sendable, Equatable {
 public enum OpencodeScanner {
     /// The storage layout of the database being read.
     enum Schema: Equatable {
-        /// opencode 1.x: `message`.
+        /// opencode 1.x: `message` only.
         case v1
-        /// opencode 2.x: `session_message`.
+        /// opencode 2.x: `session_message` only.
         case v2
+        /// Both tables, as an in-place upgrade may leave them. Whether 2.x
+        /// copied the old turns over is not knowable from the schema, so
+        /// `message` contributes only turns OLDER than the first
+        /// `session_message` turn: copied rows are then never counted twice,
+        /// and turns left behind in `message` are not dropped.
+        case both
 
-        /// 2.x wins when both tables exist: a database upgraded in place may
-        /// keep the old table, and reading both could count a turn twice.
         /// nil = neither table: an unknown layout, read as unavailable.
         static func detect(_ db: OpaquePointer?) -> Schema? {
             let sql = "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('message', 'session_message')"
@@ -89,16 +93,42 @@ public enum OpencodeScanner {
                 step = sqlite3_step(stmt)
             }
             guard step == SQLITE_DONE else { return nil }
-            if names.contains("session_message") { return .v2 }
-            if names.contains("message") { return .v1 }
-            return nil
+            switch (names.contains("message"), names.contains("session_message")) {
+            case (true, true): return .both
+            case (false, true): return .v2
+            case (true, false): return .v1
+            case (false, false): return nil
+            }
         }
 
-        var table: String { self == .v1 ? "message" : "session_message" }
-        var providerPath: String { self == .v1 ? "$.providerID" : "$.model.providerID" }
-        var modelPath: String { self == .v1 ? "$.modelID" : "$.model.id" }
-        var assistantFilter: String {
-            self == .v1 ? "json_extract(data, '$.role') = 'assistant'" : "type = 'assistant'"
+        // Assistant turns since `?2` (seven days ago, ms) as
+        // (provider, model, time_created, data). Constant SQL only: every
+        // value is bound, nothing from the database is interpolated.
+        private static let v2Turns = """
+            SELECT json_extract(data, '$.model.providerID') AS provider,
+                   json_extract(data, '$.model.id') AS model, time_created, data
+            FROM session_message
+            WHERE time_created >= ?2 AND type = 'assistant'
+            """
+        private static let v1Turns = """
+            SELECT json_extract(data, '$.providerID') AS provider,
+                   json_extract(data, '$.modelID') AS model, time_created, data
+            FROM message
+            WHERE time_created >= ?2 AND json_extract(data, '$.role') = 'assistant'
+            """
+
+        var turnsSQL: String {
+            switch self {
+            case .v1: return Self.v1Turns
+            case .v2: return Self.v2Turns
+            case .both:
+                // `min(time_created)` is served by the time index.
+                return Self.v2Turns + "\nUNION ALL\n" + Self.v1Turns + """
+
+                      AND time_created < (SELECT coalesce(min(time_created), 9223372036854775807)
+                                          FROM session_message)
+                    """
+            }
         }
     }
 
@@ -208,12 +238,13 @@ public enum OpencodeScanner {
         // `time_created` column is used for the range rather than the JSON's
         // own `$.time.created` so the filter can be evaluated without parsing
         // every row's document.
-        let placeholders = Array(repeating: "?", count: providerIDs.count)
+        // Numbered parameters: ?1 start of today, ?2 seven days ago, ?3…
+        // the provider aliases (the `.both` layout uses ?2 twice).
+        let placeholders = providerIDs.indices.map { "?\($0 + 3)" }
             .joined(separator: ", ")
         let sql = """
-            SELECT json_extract(data, '\(schema.providerPath)'),
-                   json_extract(data, '\(schema.modelPath)'),
-                   CASE WHEN time_created >= ? THEN 1 ELSE 0 END,
+            SELECT provider, model,
+                   CASE WHEN time_created >= ?1 THEN 1 ELSE 0 END,
                    sum(coalesce(json_extract(data, '$.tokens.input'), 0)),
                    sum(coalesce(json_extract(data, '$.tokens.output'), 0)),
                    sum(coalesce(json_extract(data, '$.tokens.reasoning'), 0)),
@@ -221,10 +252,8 @@ public enum OpencodeScanner {
                    sum(coalesce(json_extract(data, '$.tokens.cache.write'), 0)),
                    sum(coalesce(json_extract(data, '$.cost'), 0)),
                    count(*)
-            FROM \(schema.table)
-            WHERE time_created >= ?
-              AND json_extract(data, '\(schema.providerPath)') IN (\(placeholders))
-              AND \(schema.assistantFilter)
+            FROM (\(schema.turnsSQL))
+            WHERE provider IN (\(placeholders))
             GROUP BY 1, 2, 3
         """
         var stmt: OpaquePointer?

@@ -581,8 +581,13 @@ Decisão:
   `MetaSnapshot.carryingWeekly` devolve a última semanal a um snapshot
   `.active` sem semanal própria, com `weeklyLastSeenAt`. O cache continua
   guardando só o que a Meta enviou.
-- Só antes do `resets_at` da própria janela; sem `resets_at`, com leitura
-  datada no futuro, ou em PAYG/cobrança pendente, não há transporte.
+- Só no formato ocioso (`acceptsCarriedWeekly`: `.active`, sem janela de
+  sessão E sem semanal) e só antes do `resets_at` da própria janela; sem
+  `resets_at`, com leitura datada no futuro, ou em PAYG/cobrança pendente,
+  não há transporte.
+- "A semanal só cresce" vale dentro de um plano de um login: a leitura é
+  gravada com o `subs_tier_name` e só é transportada sob o mesmo plano; login
+  ausente (`muse logout`) apaga a leitura (a conta seguinte tem a sua semana).
 - É um limite inferior (a semanal só cresce até o reset), por isso entra no
   `maxUtilization` e no selo fixado. O cartão diz "Semanal: última leitura
   …" com a hora, nunca a apresenta como leitura atual.

@@ -59,13 +59,55 @@ struct LastSeenWindowTests {
     func no_reset_never_carries() {
         let noReset = LastSeenWindow(window: UsageWindow(label: "Weekly", utilizationPercent: 50),
                                      observedAt: t0)
-        expectFalse(noReset.isCarriable(at: t0))
+        expectFalse(noReset.isCarriable(at: t0, scope: nil))
     }
 
     @Test("a reading stamped in the future (clock skew) does not carry")
     func future_reading_does_not_carry() {
         let skewed = LastSeenWindow(window: weekly(50), observedAt: t0.addingTimeInterval(60))
-        expectFalse(skewed.isCarriable(at: t0))
+        expectFalse(skewed.isCarriable(at: t0, scope: nil))
+    }
+
+    @Test("a reading carries only under the scope (plan) it was taken in")
+    func carried_only_in_same_scope() {
+        let store = LastSeenWindowStore(vendor: .meta, baseDir: dir)
+        store.record(weekly(100), scope: "Muse Code Pro", at: t0)
+        #expect(store.carried(at: t0, scope: "Muse Code Pro")?.window.utilizationPercent == 100)
+        #expect(store.carried(at: t0, scope: "Muse Code Max") == nil)
+        #expect(store.carried(at: t0, scope: nil) == nil)
+    }
+
+    @Test("a scope change is stored at once, even with the same window")
+    func scope_change_overwrites() {
+        let store = LastSeenWindowStore(vendor: .meta, baseDir: dir)
+        store.record(weekly(50), scope: "A", at: t0)
+        store.record(weekly(50), scope: "B", at: t0.addingTimeInterval(60))
+        #expect(store.load()?.scope == "B")
+    }
+
+    @Test("clear forgets the reading in memory and on disk")
+    func clear_forgets() {
+        let store = LastSeenWindowStore(vendor: .meta, baseDir: dir)
+        store.record(weekly(100), at: t0)
+        store.clear()
+        #expect(store.load() == nil)
+        expectFalse(FileManager.default.fileExists(atPath: store.fileURL.path))
+        #expect(LastSeenWindowStore(vendor: .meta, baseDir: dir).load() == nil)
+        store.clear()   // clearing nothing is fine
+        #expect(store.load() == nil)
+    }
+
+    @Test("a miss is remembered: no disk retry per read")
+    func miss_is_remembered() throws {
+        let store = LastSeenWindowStore(vendor: .meta, baseDir: dir)
+        #expect(store.load() == nil)
+        // Written behind the store's back: the remembered miss still answers.
+        let other = LastSeenWindowStore(vendor: .meta, baseDir: dir)
+        other.record(weekly(70), at: t0)
+        #expect(store.load() == nil)
+        // A record through the store itself replaces the remembered miss.
+        store.record(weekly(80), at: t0)
+        #expect(store.load()?.window.utilizationPercent == 80)
     }
 
     @Test("an empty or corrupt file reads as nothing stored")
@@ -94,6 +136,13 @@ struct LastSeenWindowTests {
         let billing = MetaSnapshot(subscription: .billingIncomplete).carryingWeekly(carried)
         #expect(billing.weekly == nil)
 
+        // A response with a session window but no weekly is not the idle
+        // shape: shown as sent.
+        let sessionOnly = MetaSnapshot(subscription: .active,
+                                       session: UsageWindow(label: "Session", utilizationPercent: 5))
+        expectFalse(sessionOnly.acceptsCarriedWeekly)
+        #expect(sessionOnly.carryingWeekly(carried).weekly == nil)
+
         let nothing = MetaSnapshot(subscription: .active).carryingWeekly(nil)
         #expect(nothing.weekly == nil)
         #expect(nothing.weeklyLastSeenAt == nil)
@@ -109,6 +158,14 @@ struct LastSeenWindowTests {
         let oldDecoded = try SharedCoders.decoder.decode(MetaSnapshot.self,
                                                          from: SharedCoders.encoder.encode(old))
         #expect(oldDecoded.weeklyLastSeenAt == nil)
+    }
+
+    @Test("a cache entry written before weeklyLastSeenAt existed decodes as live")
+    func pre_field_cache_literal() throws {
+        let json = #"{"planLabel":"Max","subscription":"active","weekly":{"label":"Weekly (7d)","utilizationPercent":40}}"#
+        let decoded = try SharedCoders.decoder.decode(MetaSnapshot.self, from: Data(json.utf8))
+        #expect(decoded.weekly?.utilizationPercent == 40)
+        #expect(decoded.weeklyLastSeenAt == nil)
     }
 
     @Test("a last-seen time without a weekly window is dropped")

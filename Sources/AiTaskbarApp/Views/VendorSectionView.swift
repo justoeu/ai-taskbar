@@ -568,13 +568,24 @@ public struct VendorSectionView: View {
     /// The note under a carried Muse weekly bar: when it was last read live,
     /// and why this response has none (SDD-meta-muse §20).
     static func metaWeeklyLastSeenText(_ seen: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = L10n.effectiveLocale
-        formatter.doesRelativeDateFormatting = true
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
+        let locale = L10n.effectiveLocale
+        let formatter: DateFormatter
+        if let cached = lastSeenFormatter, cached.locale.identifier == locale.identifier {
+            formatter = cached
+        } else {
+            formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.doesRelativeDateFormatting = true
+            formatter.dateStyle = .short
+            formatter.timeStyle = .short
+            lastSeenFormatter = formatter
+        }
         return L10n.localizedString("meta_weekly_last_seen_fmt", formatter.string(from: seen))
     }
+
+    /// Memoized per effective locale: the card body re-runs on every state
+    /// change, and a `DateFormatter` is costly to build.
+    private static var lastSeenFormatter: DateFormatter?
 
     @ViewBuilder
     private func renderSnapshot(_ snap: VendorSnapshot) -> some View {

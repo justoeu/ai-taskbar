@@ -78,12 +78,40 @@ struct MetaProviderTests {
         #expect(expired.weeklyLastSeenAt == nil)
     }
 
+    @Test("a reading from another plan does not carry")
+    func other_plan_does_not_carry() async throws {
+        let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
+        memory.record(UsageWindow(label: "Weekly (7d)", utilizationPercent: 100,
+                                  resetsAt: Date(timeIntervalSince1970: 1_792_400_000)),
+                      scope: "Muse Code Pro Usage", at: Self.beforeReset)
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintIdle200)) }
+        let idle = try snapshot(await carryingProvider(memory: memory, now: Self.beforeReset)
+            .fetchUsage(forceRefresh: true))
+        #expect(idle.planLabel == "Muse Code Power Usage")
+        #expect(idle.weekly == nil)
+    }
+
+    @Test("logging out forgets the last weekly reading")
+    func logout_clears_memory() async throws {
+        let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
+        memory.record(UsageWindow(label: "Weekly (7d)", utilizationPercent: 100,
+                                  resetsAt: Date(timeIntervalSince1970: 1_792_400_000)),
+                      scope: "Muse Code Power Usage", at: Self.beforeReset)
+        let p = MetaProvider(
+            credentials: FakeCredentials(resolution: .missing),
+            cache: DiskCache(vendor: .meta, baseDir: tmpCacheDir),
+            http: HTTPClient.stubbed(protocols: [StubURLProtocol.self]),
+            weeklyMemory: memory, clock: { Self.beforeReset })
+        _ = try? await p.fetchUsage(forceRefresh: true)
+        #expect(memory.load() == nil)
+    }
+
     @Test("the cache holds only what Meta sent, never the carried window")
     func cache_holds_live_response_only() async throws {
         let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
         memory.record(UsageWindow(label: "Weekly (7d)", utilizationPercent: 100,
                                   resetsAt: Date(timeIntervalSince1970: 1_792_400_000)),
-                      at: Self.beforeReset)
+                      scope: "Muse Code Power Usage", at: Self.beforeReset)
         StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintIdle200)) }
         _ = try await carryingProvider(memory: memory, now: Self.beforeReset)
             .fetchUsage(forceRefresh: true)
@@ -97,7 +125,7 @@ struct MetaProviderTests {
         let memory = LastSeenWindowStore(vendor: .meta, baseDir: tmpCacheDir)
         memory.record(UsageWindow(label: "Weekly (7d)", utilizationPercent: 100,
                                   resetsAt: Date(timeIntervalSince1970: 1_792_400_000)),
-                      at: Self.beforeReset)
+                      scope: "Muse Code Power Usage", at: Self.beforeReset)
         StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.metaMintIdle200)) }
         let later = Self.beforeReset.addingTimeInterval(2 * LastSeenWindowStore.refreshInterval)
         _ = try await carryingProvider(memory: memory, now: later).fetchUsage(forceRefresh: true)

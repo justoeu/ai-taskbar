@@ -41,8 +41,11 @@ public enum AnalyticsAggregator {
                              tokens: best.totalTokens)
     }
 
-    /// Fallback for vendors without a daily token series: the day with the
-    /// highest quota reading.
+    /// Fallback for vendors without a daily token series (and for Month,
+    /// which the 7-day series cannot cover): the day with the highest quota
+    /// reading. A tie goes to the EARLIEST such day — a cumulative weekly
+    /// window stays at its peak every day after the one that took it there,
+    /// so the latest tied day is usually an idle one.
     public static func computePeakDay(from samples: [UsageHistoryStore.Sample], now: Date = Date()) -> PeakDayRecord? {
         guard !samples.isEmpty else { return nil }
         let calendar = Calendar.current
@@ -68,7 +71,7 @@ public enum AnalyticsAggregator {
             if a.value != b.value {
                 return a.value < b.value
             }
-            return a.key < b.key
+            return a.key > b.key
         }) else { return nil }
 
         return PeakDayRecord(
@@ -186,8 +189,10 @@ public enum AnalyticsAggregator {
             totalCostUSD += cost
 
             // Peak day from the daily token series when a scanner provides
-            // one; quota history only for vendors without it.
-            let peakDay = computePeakDay(from: estimate?.dailyUsage ?? [])
+            // one; quota history for vendors without it, and for Month: the
+            // series covers 7 days and would name a day under a 30-day label.
+            let dailySeries = timeframe == .monthly ? [] : (estimate?.dailyUsage ?? [])
+            let peakDay = computePeakDay(from: dailySeries)
                 ?? computePeakDay(from: history, now: now)
 
             // Calculate usage percentage from snapshot or history

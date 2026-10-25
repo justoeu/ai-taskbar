@@ -428,11 +428,14 @@ while the week was at 100% (measured in `history/meta.jsonl`: weekly 66→100%
 over three days, back to 0 at every idle response). `MetaProvider` records
 each LIVE weekly window in `LastSeenWindowStore` (`quota/meta.json`, not a
 secret) and, on read (`decodeSnapshot`, so it expires at its own reset),
-`MetaSnapshot.carryingWeekly` puts it back for an `.active` snapshot with no
-weekly of its own, with `weeklyLastSeenAt` set; the card says "last reading
-…". A lower bound (weekly only grows until reset), so it also feeds
-`maxUtilization`. Never carried: past `resetsAt`, without a `resetsAt`, for
-PAYG/billing-incomplete, or a reading stamped in the future. The cache holds
+`MetaSnapshot.carryingWeekly` puts it back only for the idle shape
+(`acceptsCarriedWeekly`: `.active`, no session AND no weekly window), with
+`weeklyLastSeenAt` set; the card says "last reading …". A lower bound
+(weekly only grows until reset) only within one plan of one login: the
+reading is scoped to `subs_tier_name` and carries only under the same plan,
+and a missing login (`muse logout`) clears it. It feeds `maxUtilization`.
+Never carried: past `resetsAt`, without a `resetsAt`, under another plan,
+for PAYG/billing-incomplete, or a reading stamped in the future. The cache holds
 only what Meta sent; never record a cached or carried window as live. Dollars are estimated
 at the published Meta Model API rates in `PricingTable.meta` (Wonder
 $4/$20, Spark $1.25/$4.25 per 1M; Wonder Full has no public rate and is
@@ -488,9 +491,11 @@ It reads BOTH opencode layouts, chosen by `OpencodeScanner.Schema.detect` from
 one that wrote the file): 1.x `message` (`$.role`, `$.modelID`, `$.providerID`)
 and 2.x `session_message` (role in the `type` column, `$.model.id`,
 `$.model.providerID`; measured on v2.1.4, 2026-10-25, with the same
-`tokens`/`cost` shape and semantics). With both tables present 2.x is read
-alone (an in-place upgrade may keep the old table; summing would double
-count); with neither the scan is `.unavailable`. The 2.x upgrade made
+`tokens`/`cost` shape and semantics). With both tables present (an in-place
+upgrade) both are read, but `message` contributes only turns OLDER than the
+first `session_message` turn: whether 2.x copied old turns is not knowable,
+and this neither double counts a copy nor drops turns left behind (reading
+2.x alone dropped them). With neither table the scan is `.unavailable`. The 2.x upgrade made
 `prepare` fail on `FROM message`, and every card silently lost its opencode
 rows until this was added.
 
@@ -768,9 +773,11 @@ that came out of fixing that:
 - **Analytics "busiest day" comes from the daily token series**
   (`AnalyticsAggregator.computePeakDay(from: [DailyModelUsage])`: most tokens,
   then dollars, then the later day) — the series the stacked chart draws.
-  Quota history is only the fallback for vendors without one: weekly windows
-  are cumulative, so every day after a cap reads 100% and the tie named the
-  latest day, not the tallest bar (reported 2026-10-25 on Claude and Codex).
+  Quota history is only the fallback, for vendors without one and for Month
+  (the series covers 7 days): weekly windows are cumulative, so every day
+  after a cap reads 100% and the tie named the latest day, not the tallest
+  bar (reported 2026-10-25 on Claude and Codex). The fallback breaks a tie
+  toward the EARLIEST day, the one that took the window to its peak.
 
 - **Never use `[String: Any]`** for anything that crosses an actor boundary
   or is stored on a `Sendable` type. Use `JSONValue` (in `AiTaskbarCore/Util/`).

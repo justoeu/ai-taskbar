@@ -862,11 +862,19 @@ public struct MetaSnapshot: Sendable, Equatable, Codable {
         self.weeklyLastSeenAt = weekly == nil ? nil : weeklyLastSeenAt
     }
 
+    /// Whether this response is the idle shape a carried weekly may fill:
+    /// an active subscription whose mint omitted every window. A response
+    /// that carries a session window but no weekly is a different reading,
+    /// not an idle one, and is shown as sent.
+    public var acceptsCarriedWeekly: Bool {
+        subscription == .active && session == nil && weekly == nil
+    }
+
     /// This snapshot with `carried` standing in for the omitted weekly
-    /// window. Only an active subscription with no weekly reading of its own
-    /// takes one; anything else is returned unchanged.
+    /// window when `acceptsCarriedWeekly`; anything else is returned
+    /// unchanged. The caller matches the reading's scope (plan) first.
     public func carryingWeekly(_ carried: LastSeenWindow?) -> MetaSnapshot {
-        guard subscription == .active, weekly == nil, let carried else { return self }
+        guard acceptsCarriedWeekly, let carried else { return self }
         return MetaSnapshot(planLabel: planLabel, subscription: subscription,
                             session: session, weekly: carried.window,
                             weeklyLastSeenAt: carried.observedAt)
