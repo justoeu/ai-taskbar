@@ -60,7 +60,7 @@ struct VendorViewModelHistoryTests {
         return VendorViewModel(
             provider: FixedOutcomeProvider(outcome: outcome),
             defaults: defaults,
-            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) },
+            historyStoreFactory: { UsageHistoryStore(instance: $0, baseDir: dir) },
             historyLoader: loader)
     }
 

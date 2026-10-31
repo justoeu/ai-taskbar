@@ -3,6 +3,11 @@ import AiTaskbarCore
 
 public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     public let vendorId: VendorId = .anthropic
+    public let instanceKey: ProviderInstanceKey
+    public let accountLabel: String?
+    /// Extra accounts live in their own `CLAUDE_CONFIG_DIR`, so logging one
+    /// back in needs that folder; nil keeps the plain vendor command.
+    private let configDirForRelogin: URL?
     private let credentialReader: any AnthropicCredentialReading
     private let fetcher: CachedFetch
     private let http: HTTPClient
@@ -24,7 +29,13 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     public init(credentialReader: any AnthropicCredentialReading = KeychainCredentialReader(),
                 cache: DiskCache,
                 http: HTTPClient,
-                manageOAuthRefresh: Bool = false) {
+                manageOAuthRefresh: Bool = false,
+                instanceKey: ProviderInstanceKey = ProviderInstanceKey(vendor: .anthropic),
+                accountLabel: String? = nil,
+                configDirForRelogin: URL? = nil) {
+        self.instanceKey = instanceKey
+        self.accountLabel = accountLabel
+        self.configDirForRelogin = configDirForRelogin
         self.credentialReader = credentialReader
         self.fetcher = CachedFetch(cache: cache)
         self.http = http
@@ -44,6 +55,38 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
             http: http,
             manageOAuthRefresh: manageOAuthRefresh
         )
+    }
+
+    /// A non-default account, read-only like every Claude instance: its own
+    /// Keychain item, its own cache directory, and never a token refresh
+    /// (`manage_oauth_refresh` applies to the default account only).
+    public convenience init(account: ClaudeAccount,
+                            http: HTTPClient = .init(),
+                            cacheTTL: TimeInterval = 300) throws {
+        self.init(
+            credentialReader: KeychainCredentialReader(service: account.keychainService),
+            cache: try DiskCache.defaultFor(account.instanceKey, ttl: cacheTTL),
+            http: http,
+            manageOAuthRefresh: false,
+            instanceKey: account.instanceKey,
+            accountLabel: account.label,
+            configDirForRelogin: account.configDir
+        )
+    }
+
+    public var reloginCommand: String? {
+        guard let configDirForRelogin else { return vendorId.reloginCommand }
+        return "CLAUDE_CONFIG_DIR=\(Self.shellQuoted(configDirForRelogin.path)) claude auth login"
+    }
+
+    /// Single-quoted for POSIX shells (the command is shown for copy-paste).
+    static func shellQuoted(_ value: String) -> String {
+        // ASCII only: `isLetter` looks at a Character's first scalar, and a
+        // Unicode "prepend" letter merges with a following `;` into one
+        // Character that passes (U+0D4E + ";" ran an injected command).
+        let safe = value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "/._-~".contains($0)) }
+        if safe { return value }
+        return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     public func fetchUsage(forceRefresh: Bool) async throws -> FetchOutcome {

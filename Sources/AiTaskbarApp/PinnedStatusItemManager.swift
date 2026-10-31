@@ -177,6 +177,15 @@ public final class PinnedStatusItemManager: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // A multi-account card's item shows the account the card shows, so
+        // stepping through accounts redraws it.
+        store.$selectedAccounts
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.syncIfMainItemReady()
+            }
+            .store(in: &cancellables)
+
         store.$sortedVendors
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -239,11 +248,15 @@ public final class PinnedStatusItemManager: ObservableObject {
         // them in `pinnedVendorOrder` keeps the first pin next to the main
         // icon and each later pin one slot further left. Step 3 fills in
         // their content, so they are not rendered twice.
-        for vid in desiredOrder where statusItems[vid] == nil {
+        // A pin whose vendor has no instance (a provider not built this
+        // launch) keeps its saved entry but gets no item: an empty one would
+        // sit on the bar with nothing to draw.
+        for vid in desiredOrder where statusItems[vid] == nil && store.vendorVM(vid) != nil {
             statusItems[vid] = Self.makePinnedStatusItem(for: vid)
         }
 
         // 3. Update buttons for every pinned item (new and existing) in-place.
+        // `vendorVM(_:)` is the account the vendor's card is showing.
         for vid in desiredOrder {
             if let item = statusItems[vid], let vm = store.vendorVM(vid) {
                 updateButton(for: item, vm: vm, store: store)
@@ -280,6 +293,8 @@ public final class PinnedStatusItemManager: ObservableObject {
     /// next to the main icon. Measured with a standalone probe: anonymous
     /// re-add → invisible every time; named re-add → visible, leftmost of the
     /// app's items, in every sequence tried (including a relaunch).
+    /// One per vendor: a multi-account card has one item, whichever account
+    /// it shows.
     nonisolated static func autosaveName(for vendorId: VendorId) -> String {
         "ai-taskbar.pinned.\(vendorId.rawValue)"
     }
@@ -478,6 +493,7 @@ public final class PinnedStatusItemManager: ObservableObject {
         button.sendAction(on: [.leftMouseDown])
         button.toolTip = MenuBarTooltipBuilder.buildTooltip(
             vendorId: vm.vendorId,
+            accountLabel: vm.accountLabel,
             snapshot: vm.state.outcome?.snapshot,
             currentPercent: current ?? 0
         )
@@ -492,6 +508,7 @@ public final class PinnedStatusItemManager: ObservableObject {
                 ?? vm.state.outcome?.snapshot.maxUtilization ?? 0
             button.toolTip = MenuBarTooltipBuilder.buildTooltip(
                 vendorId: vid,
+                accountLabel: vm.accountLabel,
                 snapshot: vm.state.outcome?.snapshot,
                 currentPercent: current,
                 now: now

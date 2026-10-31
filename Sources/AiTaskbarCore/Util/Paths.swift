@@ -43,6 +43,15 @@ public enum Paths {
         for vendor: VendorId,
         scope: CacheScope = .usage
     ) throws -> URL {
+        try cacheDir(for: ProviderInstanceKey(vendor: vendor), scope: scope)
+    }
+
+    /// `Caches/ai-taskbar/<storageKey>/`: the single instance keeps the bare
+    /// vendor directory, an extra account gets `anthropic.<k>/`.
+    public static func cacheDir(
+        for instance: ProviderInstanceKey,
+        scope: CacheScope = .usage
+    ) throws -> URL {
         let root = try caches()
         let parent: URL
         switch scope {
@@ -52,7 +61,7 @@ public enum Paths {
             parent = root.appendingPathComponent("status", isDirectory: true)
             try ensureDir(parent)
         }
-        let dir = parent.appendingPathComponent(vendor.rawValue, isDirectory: true)
+        let dir = parent.appendingPathComponent(instance.storageKey, isDirectory: true)
         try ensureDir(dir)
         return dir
     }

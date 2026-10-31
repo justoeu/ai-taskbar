@@ -14,6 +14,9 @@ import os.lock
 /// open+seek+write+close.
 public final class UsageHistoryStore: @unchecked Sendable {
     public let vendor: VendorId
+    /// File name stem: the instance's `storageKey` (the vendor raw value for
+    /// the single instance).
+    public let fileStem: String
     public let baseDir: URL
     public let retention: TimeInterval
 
@@ -27,21 +30,32 @@ public final class UsageHistoryStore: @unchecked Sendable {
     private let state = OSAllocatedUnfairLock(initialState: LockedState())
     public static let defaultRetention: TimeInterval = 90 * 86_400 // 90 days
 
-    public init(vendor: VendorId, baseDir: URL, retention: TimeInterval = defaultRetention) {
-        self.vendor = vendor
+    public convenience init(vendor: VendorId, baseDir: URL, retention: TimeInterval = defaultRetention) {
+        self.init(instance: ProviderInstanceKey(vendor: vendor), baseDir: baseDir, retention: retention)
+    }
+
+    /// `history/<storageKey>.jsonl`: `anthropic.jsonl` for the single
+    /// instance, `anthropic.<k>.jsonl` for an extra account.
+    public init(instance: ProviderInstanceKey, baseDir: URL, retention: TimeInterval = defaultRetention) {
+        self.vendor = instance.vendor
+        self.fileStem = instance.storageKey
         self.baseDir = baseDir
         self.retention = retention
     }
 
     public static func defaultFor(_ vendor: VendorId) throws -> UsageHistoryStore {
+        try defaultFor(ProviderInstanceKey(vendor: vendor))
+    }
+
+    public static func defaultFor(_ instance: ProviderInstanceKey) throws -> UsageHistoryStore {
         let dir = try Paths.applicationSupport()
             .appendingPathComponent("history", isDirectory: true)
         try Paths.ensureDir(dir)
-        return UsageHistoryStore(vendor: vendor, baseDir: dir)
+        return UsageHistoryStore(instance: instance, baseDir: dir)
     }
 
     public var fileURL: URL {
-        baseDir.appendingPathComponent("\(vendor.rawValue).jsonl")
+        baseDir.appendingPathComponent("\(fileStem).jsonl")
     }
 
     public struct Sample: Sendable, Equatable, Codable {

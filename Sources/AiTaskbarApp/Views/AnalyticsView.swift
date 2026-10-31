@@ -16,7 +16,7 @@ public struct AnalyticsView: View {
     }
 
     private var enabledVendorIds: [VendorId] {
-        usageStore.sortedVendors.filter { !$0.isDisabled }.map(\.vendorId)
+        usageStore.vendorGroups.filter { !$0.members.allSatisfy(\.isDisabled) }.map(\.vendor)
     }
 
     public var body: some View {
@@ -50,7 +50,7 @@ public struct AnalyticsView: View {
         }
         .onChange(of: analyticsStore.syncVendorOrder) { synced in
             if synced {
-                analyticsStore.analyticsOrder = usageStore.sortedVendors.map(\.vendorId)
+                analyticsStore.analyticsOrder = usageStore.vendorGroups.map(\.vendor)
             }
         }
         .onExitCommand(perform: close)
@@ -364,9 +364,12 @@ public struct AnalyticsView: View {
                     let canUp = idx > 0
                     let canDown = idx < count - 1
                     let isTargeted = summary.vendor == analyticsStore.targetVendor
+                    let accounts = analyticsStore.accountSummaries[summary.vendor] ?? []
+                    let selectedID = analyticsStore.selectedAccount[summary.vendor] ?? AnalyticsStore.allAccountsID
+                    let shown = accounts.first(where: { $0.id == selectedID })?.summary ?? summary
 
                     VendorAnalyticsCardView(
-                        summary: summary,
+                        summary: shown,
                         timeframe: analyticsStore.timeframe,
                         compareWithPrevious: analyticsStore.compareWithPrevious,
                         comparisonOffset: analyticsStore.comparisonOffset,
@@ -385,7 +388,14 @@ public struct AnalyticsView: View {
                             } else {
                                 analyticsStore.moveVendorDown(summary.vendor, enabled: enabledVendorIds)
                             }
-                        }
+                        },
+                        accounts: accounts.count > 1 ? (
+                            chips: [AccountChip(id: AnalyticsStore.allAccountsID,
+                                                name: L10n.localizedString("account_all_label"))]
+                                + accounts.map { AccountChip(id: $0.id, name: $0.name) },
+                            selectedID: selectedID,
+                            onSelect: { analyticsStore.selectedAccount[summary.vendor] = $0 }
+                        ) : nil
                     )
                     .background(
                         ScrollToCenterView(shouldCenter: isTargeted)

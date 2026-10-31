@@ -17,13 +17,16 @@ public enum MenuBarTooltipBuilder {
     /// ```
     public static func buildTooltip(
         vendorId: VendorId,
+        accountLabel: String? = nil,
         snapshot: VendorSnapshot?,
         currentPercent: Double,
         now: Date = Date(),
         locale: Locale = L10n.effectiveLocale
     ) -> String {
+        // Two pinned Claude accounts draw the same badge; the name tells them apart.
+        let name = accountLabel.map { "\(vendorId.displayName) · \($0)" } ?? vendorId.displayName
         guard let snapshot else {
-            return "\(vendorId.displayName): \(PercentText.format(currentPercent))"
+            return "\(name): \(PercentText.format(currentPercent))"
         }
 
         let (dailyWindow, weeklyWindow) = snapshot.menuBarResetWindows
@@ -53,10 +56,10 @@ public enum MenuBarTooltipBuilder {
         }
 
         if lines.isEmpty {
-            return "\(vendorId.displayName): \(PercentText.format(currentPercent))"
+            return "\(name): \(PercentText.format(currentPercent))"
         }
 
-        return ([vendorId.displayName] + lines).joined(separator: "\n")
+        return ([name] + lines).joined(separator: "\n")
     }
 
     /// Formats the remaining time delta from `now` to `resetsAt`.

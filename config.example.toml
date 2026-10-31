@@ -58,6 +58,9 @@ notify_at = [90, 100]   # percent thresholds that trigger a notification
 [anthropic]
 enabled = true
 # keychain_service = "Claude Code-credentials"  # override (rarely needed)
+# config_dirs = ["/Volumes/work/.claude"]        # extra Claude Code accounts (CLAUDE_CONFIG_DIR folders)
+#                                                 #   outside your home; ~/.claude and every ~/.claude-*
+#                                                 #   folder are found automatically, one card per account.
 # keychain_account = "your.short.username"      # optional: pin one of multiple Claude entries.
                                                 #   Normally unneeded — the reader auto-picks the
                                                 #   freshest (unexpired) token on its own.
