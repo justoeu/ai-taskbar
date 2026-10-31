@@ -96,26 +96,36 @@ struct AccountSwitcherView: View {
         }
     }
 
-    @ViewBuilder
+    /// The current name, or while an arrow is hovered its destination.
+    /// Every variant is laid out (hidden) so the label keeps the width of
+    /// the widest: a label that grew on hover pushed the right arrow out
+    /// from under the pointer, which then flickered between hovered and not.
     private func nameLabel(index: Int) -> some View {
-        if let offset = hoveredArrow, let target = destinationChip(offset) {
-            // Preview of the arrow's destination, arrow on the side it points.
-            HStack(spacing: 3) {
-                if offset < 0 { Image(systemName: "arrow.left") }
-                Text(target.name)
-                if offset > 0 { Image(systemName: "arrow.right") }
+        let current = chips.indices.contains(index) ? chips[index].name : ""
+        return ZStack(alignment: .leading) {
+            labelText(current, offset: nil).hidden()
+            labelText(destinationChip(-1)?.name ?? "", offset: -1).hidden()
+            labelText(destinationChip(1)?.name ?? "", offset: 1).hidden()
+            if let offset = hoveredArrow, let target = destinationChip(offset) {
+                labelText(target.name, offset: offset)
+            } else {
+                labelText(current, offset: nil)
             }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(Color.accentColor)
-            .lineLimit(1)
-            .truncationMode(.middle)
-        } else {
-            Text(chips.indices.contains(index) ? chips[index].name : "")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
         }
+        .lineLimit(1)
+        .fixedSize()
+    }
+
+    /// A name; with an offset, the arrow's destination styled as a preview,
+    /// the arrow glyph on the side it points.
+    private func labelText(_ name: String, offset: Int?) -> some View {
+        HStack(spacing: 3) {
+            if offset == -1 { Image(systemName: "arrow.left") }
+            Text(name)
+            if offset == 1 { Image(systemName: "arrow.right") }
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(offset == nil ? Color.secondary : Color.accentColor)
     }
 
     private func arrow(_ offset: Int) -> some View {

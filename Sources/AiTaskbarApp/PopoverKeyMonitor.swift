@@ -62,10 +62,12 @@ final class PopoverKeyMonitor {
     func handle(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, windowNumber: Int) -> Bool {
         guard let window, window.windowNumber == windowNumber else { return false }
         if let offset = AccountSwitcherKeyboard.offset(keyCode: keyCode, modifiers: modifiers) {
-            // ← / → step a card's accounts, unless they belong to a text
-            // field being edited (Settings) or a modal is up.
+            // ← / → step a card's accounts, unless a focused control uses
+            // them itself: a text field being edited (Settings), or with
+            // Full Keyboard Access a segmented picker, slider… Or a modal.
             guard Self.arrowsDriveSwitcher(modalShown: modalShown,
-                                           editingText: window.firstResponder is NSText) else { return false }
+                                           focusedControl: Self.usesArrowKeys(window.firstResponder))
+            else { return false }
             return AccountSwitcherKeyboard.shared.step(by: offset)
         }
         guard Self.isPlainEscape(keyCode: keyCode, modifiers: modifiers) else { return false }
@@ -78,8 +80,15 @@ final class PopoverKeyMonitor {
         }
     }
 
-    nonisolated static func arrowsDriveSwitcher(modalShown: Bool, editingText: Bool) -> Bool {
-        !modalShown && !editingText
+    nonisolated static func arrowsDriveSwitcher(modalShown: Bool, focusedControl: Bool) -> Bool {
+        !modalShown && !focusedControl
+    }
+
+    /// A first responder that handles ← / → on its own. With nothing
+    /// focused it is the window or SwiftUI's hosting view, neither of which
+    /// is an `NSText` or an `NSControl`.
+    static func usesArrowKeys(_ responder: NSResponder?) -> Bool {
+        responder is NSText || responder is NSControl
     }
 
     nonisolated static func isPlainEscape(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {

@@ -93,17 +93,36 @@ struct AccountSwitcherKeyboardTests {
         #expect(log.steps.isEmpty)
     }
 
-    @Test("arrows are left to a text field being edited and to modals")
+    @Test("arrows are left to a focused control and to modals")
     func popover_guard() {
-        expectTrue(PopoverKeyMonitor.arrowsDriveSwitcher(modalShown: false, editingText: false))
-        expectFalse(PopoverKeyMonitor.arrowsDriveSwitcher(modalShown: false, editingText: true))
-        expectFalse(PopoverKeyMonitor.arrowsDriveSwitcher(modalShown: true, editingText: false))
+        expectTrue(PopoverKeyMonitor.arrowsDriveSwitcher(modalShown: false, focusedControl: false))
+        expectFalse(PopoverKeyMonitor.arrowsDriveSwitcher(modalShown: false, focusedControl: true))
+        expectFalse(PopoverKeyMonitor.arrowsDriveSwitcher(modalShown: true, focusedControl: false))
     }
 
-    @Test("an arrow aimed at another window is not consumed")
-    func other_window() {
+    @Test("text fields and controls keep their arrows; the window and plain views do not")
+    func controls_using_arrows() {
+        expectTrue(PopoverKeyMonitor.usesArrowKeys(NSTextView()))
+        expectTrue(PopoverKeyMonitor.usesArrowKeys(NSSegmentedControl()))
+        expectTrue(PopoverKeyMonitor.usesArrowKeys(NSSlider()))
+        expectFalse(PopoverKeyMonitor.usesArrowKeys(NSView()))
+        expectFalse(PopoverKeyMonitor.usesArrowKeys(nil))
+    }
+
+    @Test("the popover window's arrow drives the switcher; another window's does not")
+    func window_scoping() {
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 50, height: 50),
+                              styleMask: .borderless, backing: .buffered, defer: true)
         let monitor = PopoverKeyMonitor()
-        expectFalse(monitor.handle(keyCode: 124, modifiers: [], windowNumber: 42))
+        monitor.window = window
+        let log = Box()
+        let h = handle(log)
+        AccountSwitcherKeyboard.shared.register(h, enabled: true)
+        defer { AccountSwitcherKeyboard.shared.unregister(h) }
+        expectFalse(monitor.handle(keyCode: 124, modifiers: [], windowNumber: window.windowNumber + 1))
+        #expect(log.steps.isEmpty)
+        expectTrue(monitor.handle(keyCode: 124, modifiers: [], windowNumber: window.windowNumber))
+        #expect(log.steps == [1])
     }
 
     @Test("arrow destinations wrap around both ends")

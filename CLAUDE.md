@@ -495,8 +495,12 @@ path, `/Users/example/.claude-work` → `dd1118a7`, never a real one).
   slow tooltip read as nothing. ← / → go through `PopoverKeyMonitor` to
   `AccountSwitcherKeyboard`: only ENABLED switchers count (home cards stay
   mounted, disabled, under Analytics), target = hovered, else last used,
-  else the only one; ambiguous → the key is left alone. Never while a text
-  field is being edited (`firstResponder is NSText`) or a modal is up.
+  else the only one; ambiguous → the key is left alone. Never while a
+  focused control uses the arrows itself (`firstResponder` is an `NSText`
+  or, with Full Keyboard Access, an `NSControl` such as the segmented
+  timeframe picker) or a modal is up. The name label reserves the width of
+  its widest variant, so the hover preview never moves the right arrow out
+  from under the pointer.
 - **Cost:** `ClaudeSessionScanner.estimate(roots:)` scans every account's
   `projects/` (whenever any non-default account exists — with `~/.claude`
   logged out the single card is an extra's), attributes lines per folder and
