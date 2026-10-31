@@ -349,6 +349,12 @@ The `.app` and both DMGs are built, signed, **notarized** and published
    (Or `export` both first.) `APPLE_ID` + `APPLE_TEAM_ID` + `APPLE_PASSWORD`
    work in place of `NOTARY_PROFILE`.
 
+After a successful publish, `make prune-old-releases` (run by `publish`)
+deletes older `ai-taskbar-*.dmg` / `checksums-*.txt` from the repo root, so
+only the current version's are kept locally (all gitignored; older ones stay
+on their GitHub release). It runs only once the release is live, so a failed
+publish never removes the last good build.
+
 Related targets: `make publish` is the second half alone (tag already exists
 locally); `make release` builds + notarizes both DMGs without uploading;
 `make dmg` is an unsigned ad-hoc local build for testing only.

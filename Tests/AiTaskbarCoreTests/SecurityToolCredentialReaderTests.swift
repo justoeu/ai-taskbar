@@ -30,8 +30,8 @@ struct SecurityToolCodecTests {
     @Test("arguments are exact-match service + account, -w, then keychain paths")
     func arguments_full() {
         let args = SecurityToolCredentialReader.arguments(
-            service: "Claude Code-credentials", account: "justoeu", keychainPaths: ["/tmp/k.keychain"])
-        #expect(args == ["find-generic-password", "-s", "Claude Code-credentials", "-a", "justoeu", "-w", "/tmp/k.keychain"])
+            service: "Claude Code-credentials", account: "alice", keychainPaths: ["/tmp/k.keychain"])
+        #expect(args == ["find-generic-password", "-s", "Claude Code-credentials", "-a", "alice", "-w", "/tmp/k.keychain"])
     }
 
     @Test("nil account is passed as -a \"\" so the legacy account-less item stays an exact match")
@@ -197,10 +197,10 @@ struct KeychainCredentialReaderFallbackTests {
     func blocked_read_uses_fallback() throws {
         let fake = try FakeSecurityTool(); defer { fake.cleanup() }
         let service = "ai-taskbar-fb-\(UUID().uuidString)"
-        addItem(service: service, account: "justoeu", token: "direct")
+        addItem(service: service, account: "alice", token: "direct")
         // The fake echoes its arguments back so the test can pin exact-match targeting.
         let exe = try fake.script("""
-        [ "$1" = find-generic-password ] && [ "$3" = '\(service)' ] && [ "$5" = justoeu ] || exit 99
+        [ "$1" = find-generic-password ] && [ "$3" = '\(service)' ] && [ "$5" = alice ] || exit 99
         printf '%s\\n' '\(claudeJSON(token: "tool"))'
         """)
         let fallback = SecurityToolCredentialReader(executable: exe, timeout: 5)
@@ -215,7 +215,7 @@ struct KeychainCredentialReaderFallbackTests {
     func locked_keychain_skips_fallback() throws {
         let fake = try FakeSecurityTool(); defer { fake.cleanup() }
         let service = "ai-taskbar-fb-\(UUID().uuidString)"
-        addItem(service: service, account: "justoeu", token: "direct")
+        addItem(service: service, account: "alice", token: "direct")
         let exe = try fake.script("printf '%s\\n' '\(claudeJSON(token: "tool"))'")
         let reader = KeychainCredentialReader(
             service: service, searchList: [keychain.reference],
@@ -234,7 +234,7 @@ struct KeychainCredentialReaderFallbackTests {
     func fallback_receives_item_keychain_path() throws {
         let fake = try FakeSecurityTool(); defer { fake.cleanup() }
         let service = "ai-taskbar-fb-\(UUID().uuidString)"
-        addItem(service: service, account: "justoeu", token: "direct")
+        addItem(service: service, account: "alice", token: "direct")
         // $7 is the first keychain path argument; the fake records it.
         let argFile = fake.directory.appendingPathComponent("arg7")
         let exe = try fake.script("""
@@ -257,7 +257,7 @@ struct KeychainCredentialReaderFallbackTests {
     func blocked_read_without_working_fallback() throws {
         let fake = try FakeSecurityTool(); defer { fake.cleanup() }
         let service = "ai-taskbar-fb-\(UUID().uuidString)"
-        addItem(service: service, account: "justoeu", token: "direct")
+        addItem(service: service, account: "alice", token: "direct")
         let exe = try fake.script("exit 44")
         let fallback = SecurityToolCredentialReader(executable: exe, timeout: 5)
         let reader = KeychainCredentialReader(
@@ -270,7 +270,7 @@ struct KeychainCredentialReaderFallbackTests {
     @Test("no fallback configured keeps the historical ACL error")
     func blocked_read_no_fallback() throws {
         let service = "ai-taskbar-fb-\(UUID().uuidString)"
-        addItem(service: service, account: "justoeu", token: "direct")
+        addItem(service: service, account: "alice", token: "direct")
         let reader = KeychainCredentialReader(
             service: service, searchList: [keychain.reference],
             secItemRead: { _, _ in errSecAuthFailed })
@@ -282,7 +282,7 @@ struct KeychainCredentialReaderFallbackTests {
     func direct_read_skips_fallback() throws {
         let fake = try FakeSecurityTool(); defer { fake.cleanup() }
         let service = "ai-taskbar-fb-\(UUID().uuidString)"
-        addItem(service: service, account: "justoeu", token: "direct")
+        addItem(service: service, account: "alice", token: "direct")
         let exe = try fake.script("printf '%s\\n' '\(claudeJSON(token: "tool"))'")
         let reader = KeychainCredentialReader(
             service: service, searchList: [keychain.reference],
@@ -300,10 +300,10 @@ struct KeychainCredentialReaderFallbackTests {
         let service = "ai-taskbar-real-\(UUID().uuidString)"
         let payload = claudeJSON(token: "real-tool")
         try runSecurity(["unlock-keychain", "-p", keychain.password, keychain.path])
-        try runSecurity(["add-generic-password", "-s", service, "-a", "justoeu", "-w", payload, keychain.path])
+        try runSecurity(["add-generic-password", "-s", service, "-a", "alice", "-w", payload, keychain.path])
 
         let fallback = SecurityToolCredentialReader(timeout: 10)
-        let data = try fallback.read(service: service, account: "justoeu", keychainPaths: [keychain.path])
+        let data = try fallback.read(service: service, account: "alice", keychainPaths: [keychain.path])
         #expect(String(decoding: data, as: UTF8.self) == payload)
 
         // No paths on the instance: the reader must hand over the item's keychain.
