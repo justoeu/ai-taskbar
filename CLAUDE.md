@@ -356,6 +356,20 @@ gitignored; older ones stay on their GitHub release). It never deletes a
 newer one: publishing an old tag must not remove a newer local build. It runs only once the release is live, so a failed
 publish never removes the last good build.
 
+`publish` waits for the CI's draft release before uploading
+(`scripts/wait-for-release-draft.sh`: wall-clock 30 min cap; only gh's
+"release not found" is retried — gh missing, logged out or any other error
+fails at once with gh's message; self-tested against a fake `gh` by both
+`validate.sh` and `ci.yml`, every case bounded so a broken waiter goes red
+instead of hanging). The CI drafts only after re-validating the tag (~10 min);
+on v0.32.0 the notarized DMGs were ready first and the upload died with
+"release not found". To resume a failed upload, `make publish-upload` reuses
+the notarized DMGs instead of rebuilding — but only those `release` built on
+this exact clean tagged commit: `release` writes `.release-$(VERSION).stamp`
+(commit, "dirty" if it was, both DMGs' SHA-256) and `publish-upload` refuses
+on any mismatch, since the gitignored DMGs are named by VERSION alone and a
+later commit builds the same names.
+
 Related targets: `make publish` is the second half alone (tag already exists
 locally); `make release` builds + notarizes both DMGs without uploading;
 `make dmg` is an unsigned ad-hoc local build for testing only.
@@ -377,6 +391,7 @@ git checkout v0.16.1 && make publish && git checkout main
 | Release job fails on a tag that CI passed | `ci.yml` and `release.yml` selected Swift independently and drifted (6.2.4 vs 6.0) | both call `.github/actions/select-swift`, which requires >= 6.2 |
 | Universal DMG that is arm64-only | `make dmg` writes a host-arch app to `$(DMG)`, the universal name `UpdateChecker.pickDMGAsset` serves to Intel Macs | `universal-check` asserts x86_64 + arm64 and gates `release-universal` |
 | Release notes missing the actual feature | the changelog spans previous-tag..this-tag; a tag that never produced a release swallows everything before it | regenerate with `gh release edit <tag> --notes-file` over the right range |
+| `gh release upload` → "release not found" after both DMGs were notarized (v0.32.0) | `ship` waited for the TAG, but the CI drafts the release only after re-validating it (~10 min), and the build finished first | `publish-upload` waits for the draft (`scripts/wait-for-release-draft.sh`); resume a failed upload with `make publish-upload`, no rebuild |
 | A merged CI-action bump cuts a release | a Dependabot `github-actions` PR changes no shipped code, but without the marker its merge is an ordinary push to `main` | `.github/dependabot.yml` sets that ecosystem's commit prefix to `ci(deps) [skip release]`; keep the marker if you edit the prefix |
 
 **Squash merges inherit every commit's `[skip release]`.** GitHub's default

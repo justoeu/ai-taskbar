@@ -47,6 +47,8 @@ jobs:
           # self-test.
           scripts/source-ratchet-selftest.sh
           scripts/check-source-ratchets.sh
+          # The release waiter `make publish` relies on, against a fake gh.
+          scripts/wait-for-release-draft-selftest.sh
 
       - name: Warnings ratchet
         # `2>&1` is load-bearing: SwiftPM writes compiler diagnostics to

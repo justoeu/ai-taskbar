@@ -165,6 +165,13 @@ if ! selftest_out=$(scripts/source-ratchet-selftest.sh 2>&1); then
     fail "source-ratchet self-test failed — the gate itself is broken"
 fi
 ok "source-ratchet self-test (planted forms caught, allowed forms pass)"
+# The release waiter `make publish` relies on, proven against a fake gh: it
+# must wait for a late draft and give up on a missing one.
+if ! waiter_out=$(scripts/wait-for-release-draft-selftest.sh 2>&1); then
+    echo "$waiter_out"
+    fail "wait-for-release-draft self-test failed — publish could race the CI draft again"
+fi
+ok "wait-for-release-draft self-test (late draft awaited, missing one times out, other gh errors fail fast)"
 scripts/check-source-ratchets.sh \
     || fail "source ratchet — use expectTrue/expectFalse / Int(saturating:) / Int(checkedTruncating:) / %ld"
 
