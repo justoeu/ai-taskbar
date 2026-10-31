@@ -596,3 +596,31 @@ struct KeychainMemoryCacheBufferTests {
         #expect(c.isExpired(buffer: KeychainCredentialReader.memoryCacheBuffer))
     }
 }
+
+/// The discovery probe against an isolated keychain: attributes only, no
+/// secret read, no prompt.
+@Suite("KeychainItemPresenceProbe", .serialized)
+struct KeychainItemPresenceProbeTests {
+    private let keychain: TemporaryKeychain
+    init() throws { keychain = try TemporaryKeychain() }
+
+    @Test("a present item reports present; an absent one reports missing")
+    func presence() throws {
+        let service = "ai-taskbar-presence-\(UUID().uuidString)"
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecUseKeychain as String: keychain.reference,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: "acct",
+            kSecValueData as String: Data("secret".utf8),
+        ]
+        try #require(SecItemAdd(query as CFDictionary, nil) == errSecSuccess)
+        let probe = KeychainItemPresenceProbe(searchList: [keychain.reference])
+        guard case .present(let modified) = probe.presence(service: service) else {
+            Issue.record("expected the item to be present")
+            return
+        }
+        #expect(modified != nil)
+        #expect(probe.presence(service: service + "-absent") == .missing)
+    }
+}

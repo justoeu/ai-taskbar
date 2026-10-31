@@ -51,7 +51,7 @@ public struct StatusPanelView: View {
         .onExitCommand(perform: onClose)
     }
 
-    private var homeOrder: [VendorId] { usageStore.sortedVendors.map(\.vendorId) }
+    private var homeOrder: [VendorId] { usageStore.vendorGroups.map(\.vendor) }
 
     /// Synced: moving here reorders the home screen too (same as Analytics).
     private func move(_ id: VendorId, up: Bool) {

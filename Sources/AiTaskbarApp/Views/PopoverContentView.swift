@@ -16,6 +16,7 @@ public struct PopoverContentView: View {
     @EnvironmentObject var cost: CostEstimator
     @EnvironmentObject var analyticsStore: AnalyticsStore
     @EnvironmentObject var configWatcher: ConfigWatcher
+    @EnvironmentObject var claudeAccountWatcher: ClaudeAccountWatcher
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @EnvironmentObject var updates: UpdateChecker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -35,7 +36,7 @@ public struct PopoverContentView: View {
 
     /// The first LLM card, or the top anchor when the list is empty.
     private var firstCardID: AnyHashable {
-        store.sortedVendors.first.map { AnyHashable($0.vendorId) } ?? AnyHashable(Self.scrollTopID)
+        store.vendorGroups.first.map { AnyHashable($0.vendor) } ?? AnyHashable(Self.scrollTopID)
     }
 
     public var body: some View {
@@ -50,7 +51,8 @@ public struct PopoverContentView: View {
             VStack(spacing: 0) {
                 headerBar
                 Divider()
-                if configWatcher.configChanged || settingsViewModel.didSaveSuccessfully {
+                if configWatcher.configChanged || settingsViewModel.didSaveSuccessfully
+                    || claudeAccountWatcher.accountsChanged {
                     configChangedBanner
                     Divider()
                 }
@@ -63,42 +65,46 @@ public struct PopoverContentView: View {
                         // Fallback anchor when the list is empty.
                         Color.clear.frame(height: 0).id(Self.scrollTopID)
                         VStack(alignment: .leading, spacing: 12) {
-                            if store.sortedVendors.isEmpty {
+                            if store.vendorGroups.isEmpty {
                                 emptyState
                             } else {
                                 // Reorder with ↑/↓ on each card. Drag-and-drop does
                                 // not work reliably inside MenuBarExtra windows.
-                                ForEach(store.sortedVendors) { vm in
+                                // One card per vendor; several accounts of one
+                                // vendor share it behind a switcher.
+                                ForEach(store.vendorGroups) { group in
                                     VendorSectionView(
-                                        vm: vm,
+                                        vm: store.selectedMember(of: group),
                                         thresholds: store.thresholds,
                                         cost: cost,
                                         onOpenAnalytics: { vendorId in
                                             analyticsStore.targetVendor = vendorId
                                             overlay = .analytics
-                                        }
+                                        },
+                                        group: group
                                     )
-                                    .id(vm.vendorId)
+                                    .id(group.vendor)
                                 }
                             }
                         }
                         .padding(12)
-                        .animation(.easeInOut(duration: 0.15), value: store.sortedVendors.map(\.id))
+                        .animation(.easeInOut(duration: 0.15), value: store.vendorGroups.map(\.id))
                     }
                     .onChange(of: store.focusedVendor) { target in
                         guard let target else { return }
                         overlay = nil
-                        if let vm = store.vendorVM(target), !vm.isExpanded {
+                        if let vm = store.vendorVM(instance: target), !vm.isExpanded {
                             vm.isExpanded = true
                         }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                proxy.scrollTo(target, anchor: .top)
+                                proxy.scrollTo(target.vendor, anchor: .top)
                             }
                         }
                     }
                     .onAppear {
                         store.isPopoverPresented = true
+                        claudeAccountWatcher.check()
                         // An accessory app is not activated by opening its
                         // menu-bar window, so keys (Esc) would go to the
                         // previous app. Activate, then listen for Esc.
@@ -127,10 +133,10 @@ public struct PopoverContentView: View {
                             return
                         }
                         overlay = nil
-                        if let vm = store.vendorVM(focused), !vm.isExpanded {
+                        if let vm = store.vendorVM(instance: focused), !vm.isExpanded {
                             vm.isExpanded = true
                         }
-                        let target = AnyHashable(focused)
+                        let target = AnyHashable(focused.vendor)
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 proxy.scrollTo(target, anchor: .top)
@@ -415,7 +421,8 @@ public struct PopoverContentView: View {
         HStack(spacing: 8) {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.yellow)
-            L10n.text("config_changed_banner")
+            L10n.text(claudeAccountWatcher.accountsChanged && !configWatcher.configChanged
+                      ? "claude_accounts_changed_banner" : "config_changed_banner")
                 .font(.subheadline)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -429,6 +436,7 @@ public struct PopoverContentView: View {
             .controlSize(.small)
             Button {
                 configWatcher.dismiss()
+                claudeAccountWatcher.dismiss()
             } label: {
                 Image(systemName: "xmark")
             }

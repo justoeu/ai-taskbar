@@ -10,11 +10,18 @@ public final class AppEnvironment {
     /// The TypeSafe console session, shared by the provider and the in-app
     /// login so a sign-in applies without a relaunch.
     public let typeSafeSession: TypeSafeSessionStore
+    /// Claude Code accounts found at launch (`ClaudeAccountDiscovery`). Empty
+    /// means "none discovered": the single default provider is built exactly
+    /// as before multi-account existed. Injected so tests never read the
+    /// real home folder or Keychain.
+    public let claudeAccounts: [ClaudeAccount]
 
-    public init(http: HTTPClient, configLoader: ConfigLoader, config: AppConfig) {
+    public init(http: HTTPClient, configLoader: ConfigLoader, config: AppConfig,
+                claudeAccounts: [ClaudeAccount] = []) {
         self.http = http
         self.configLoader = configLoader
         self.config = config
+        self.claudeAccounts = claudeAccounts
         self.typeSafeSession = TypeSafeSessionStore(TypeSafeConsoleSession(config: config.typesafe))
     }
 
@@ -36,7 +43,8 @@ public final class AppEnvironment {
             } else {
                 http = HTTPClient()
             }
-            return AppEnvironment(http: http, configLoader: loader, config: cfg)
+            return AppEnvironment(http: http, configLoader: loader, config: cfg,
+                                  claudeAccounts: discoverClaudeAccounts(cfg))
         } catch {
             AppLog.lifecycle.error("config load failed (\(String(describing: error), privacy: .public)) — using defaults")
             // Fallback to a temp-path config so the app still launches.
@@ -44,10 +52,56 @@ public final class AppEnvironment {
             let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent("ai-taskbar-config.toml")
             let loader = ConfigLoader(path: tmp)
+            // Discover with the defaults too: the watcher does, and an empty
+            // launch set would raise a false "accounts changed" banner.
+            let config = AppConfig()
             return AppEnvironment(http: HTTPClient(),
                                   configLoader: loader,
-                                  config: AppConfig())
+                                  config: config,
+                                  claudeAccounts: discoverClaudeAccounts(config))
         }
+    }
+
+    /// Every Claude Code login on this Mac. Reads Keychain ATTRIBUTES only
+    /// (no secret, no prompt) and each folder's `accountUuid`.
+    /// `log: false` for the watcher's re-checks, which run on every popover
+    /// open.
+    nonisolated static func discoverClaudeAccounts(_ config: AppConfig, log: Bool = true) -> [ClaudeAccount] {
+        guard config.anthropic.enabled else { return [] }
+        let accounts = ClaudeAccountDiscovery(
+            extraDirs: config.anthropic.configDirs,
+            defaultService: config.anthropic.keychainService ?? ClaudeAccountDiscovery.baseService,
+            probe: KeychainItemPresenceProbe()).discover()
+        if log { AppLog.lifecycle.notice("Claude accounts discovered: \(accounts.count, privacy: .public)") }
+        return accounts
+    }
+
+    /// The Claude providers: the default account exactly as before, plus one
+    /// read-only provider per extra account. With nothing discovered, the
+    /// default alone (it surfaces its own "run Claude Code" error); with
+    /// extras only (the default folder logged out), no default card.
+    func makeClaudeProviders(cacheTTL ttl: TimeInterval) -> [any UsageProvider] {
+        var out: [any UsageProvider] = []
+        if claudeAccounts.isEmpty || claudeAccounts.contains(where: \.isDefault) {
+            do {
+                out.append(try AnthropicProvider(
+                    http: http,
+                    keychainService: config.anthropic.keychainService ?? ClaudeAccountDiscovery.baseService,
+                    keychainAccount: config.anthropic.keychainAccount,
+                    manageOAuthRefresh: config.anthropic.manageOAuthRefresh,
+                    cacheTTL: ttl))
+            } catch {
+                AppLog.lifecycle.error("anthropic init failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        for account in claudeAccounts where !account.isDefault {
+            do {
+                out.append(try AnthropicProvider(account: account, http: http, cacheTTL: ttl))
+            } catch {
+                AppLog.lifecycle.error("anthropic account init failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        return out
     }
 
     /// Tops up the user's file with any sections added since they first ran
@@ -122,17 +176,7 @@ public final class AppEnvironment {
         let ttl = max(15, config.ui.refreshIntervalSeconds - 5)
         var out: [any UsageProvider] = []
         if config.anthropic.enabled {
-            do {
-                let p = try AnthropicProvider(
-                    http: http,
-                    keychainService: config.anthropic.keychainService ?? "Claude Code-credentials",
-                    keychainAccount: config.anthropic.keychainAccount,
-                    manageOAuthRefresh: config.anthropic.manageOAuthRefresh,
-                    cacheTTL: ttl)
-                out.append(p)
-            } catch {
-                AppLog.lifecycle.error("anthropic init failed: \(String(describing: error), privacy: .public)")
-            }
+            out.append(contentsOf: makeClaudeProviders(cacheTTL: ttl))
         }
         if config.openai.enabled {
             do {

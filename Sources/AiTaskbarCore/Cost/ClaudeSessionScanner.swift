@@ -21,6 +21,35 @@ public enum ClaudeSessionScanner {
         estimate(now: now, projectsDir: projectsDir, memo: memo)
     }
 
+    /// One account's transcripts: `key` is the account's `storageKey`.
+    public struct Root: Sendable, Equatable {
+        public let key: String
+        public let projectsDir: URL
+        public init(key: String, projectsDir: URL) {
+            self.key = key
+            self.projectsDir = projectsDir
+        }
+    }
+
+    /// Machine-wide total plus the same figures per account.
+    public struct MultiEstimate: Sendable {
+        public let total: CostEstimate
+        public let byAccount: [String: CostEstimate]
+        public init(total: CostEstimate, byAccount: [String: CostEstimate]) {
+            self.total = total
+            self.byAccount = byAccount
+        }
+    }
+
+    /// Scans every account's `projects/` in one pass. Each line is
+    /// attributed to the account whose folder holds it; responses are
+    /// deduped by `(message.id, requestId)` ACROSS roots too, so a copy of
+    /// the same response in two folders is billed once (to the root of the
+    /// copy that was kept).
+    public static func estimate(now: Date = .init(), roots: [Root]) -> MultiEstimate {
+        estimate(now: now, roots: roots, memo: memo)
+    }
+
     /// Memo seam: tests pass their own `ScanMemo` so they can observe what a
     /// scan keeps or evicts without racing other suites on the shared one.
     internal static func estimate(now: Date,
@@ -29,6 +58,112 @@ public enum ClaudeSessionScanner {
         let projects: URL = projectsDir ?? FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects")
+        return estimate(now: now, roots: [Root(key: VendorId.anthropic.rawValue, projectsDir: projects)],
+                        memo: memo).total
+    }
+
+    internal static func estimate(now: Date, roots: [Root], memo: ScanMemo) -> MultiEstimate {
+        let window = CostWindow(now: now)
+        var total = Accumulator()
+        var perRoot: [String: Accumulator] = [:]
+        // Responses keyed by (message.id, requestId), deduped across every
+        // file of every root in the window — memo replays included — before
+        // aggregation. The value remembers which root kept the response.
+        var keyedAll: [String: (root: String, record: ScanMemo.KeyedUsage)] = [:]
+        var seenPaths = Set<String>()
+        var anyRootPresent = false
+        var enumerationFailed = false
+
+        for root in roots {
+            if Task.isCancelled { break }
+            var acc = perRoot[root.key] ?? Accumulator()
+            switch walk(root.projectsDir, window: window, memo: memo, into: &acc, seenPaths: &seenPaths) {
+            case .missing: break
+            case .unreadable: anyRootPresent = true; enumerationFailed = true
+            case .scanned: anyRootPresent = true
+            }
+            // Keys are already unique within a root; across roots the copy
+            // with the larger output wins, and a tie keeps the earlier root.
+            for (key, record) in acc.keyed {
+                if let kept = keyedAll[key], kept.record.usage.outputTokens >= record.usage.outputTokens {
+                    continue
+                }
+                keyedAll[key] = (root.key, record)
+            }
+            acc.keyed = [:]
+            total.absorbUnkeyed(acc)
+            perRoot[root.key] = acc
+        }
+        // Files that aged out of the window stop being tracked. Only after a
+        // complete walk: a cancelled one saw a partial set, and pruning to it
+        // would evict every file it had not reached yet (LEAK-FAN-002).
+        if !Task.isCancelled { memo.retain(paths: seenPaths) }
+        for (_, kept) in keyedAll {
+            total.fold(kept.record)
+            perRoot[kept.root]?.fold(kept.record)
+        }
+
+        // The old wording names `~/.claude`, true only for the default
+        // account alone; an extra account's folder is somewhere else.
+        let folder = roots.count == 1 && roots[0].key == VendorId.anthropic.rawValue
+            ? "~/.claude/projects" : "Claude projects"
+        let emptyNote: String? = enumerationFailed && total.filesScanned == 0
+            ? "Could not enumerate \(folder)."
+            : (anyRootPresent ? nil : "No \(folder) directory.")
+        let totalEstimate = emptyNote.map {
+            CostEstimate(usdToday: 0, usdLast7Days: 0, isApproximate: true, note: $0)
+        } ?? makeEstimate(total, now: now, window: window)
+        var byAccount: [String: CostEstimate] = [:]
+        for root in roots {
+            byAccount[root.key] = makeEstimate(perRoot[root.key] ?? Accumulator(), now: now, window: window)
+        }
+        return MultiEstimate(total: totalEstimate, byAccount: byAccount)
+    }
+
+    /// Running totals for one scope (the machine, or one account).
+    private struct Accumulator {
+        var totalsToday: [String: ModelUsage] = [:]
+        var totalsLast7: [String: ModelUsage] = [:]
+        var dailyTotals: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
+        var keyed: [String: ScanMemo.KeyedUsage] = [:]
+        var filesScanned = 0
+        var unparseableTimestamps = 0
+
+        mutating func add(today: [String: ModelUsage], week: [String: ModelUsage],
+                          daily: [[String: ModelUsage]]) {
+            for (model, usage) in today { CostAggregator.add(usage, into: &totalsToday, model: model) }
+            for (model, usage) in week { CostAggregator.add(usage, into: &totalsLast7, model: model) }
+            for (slot, models) in daily.enumerated() where slot < 7 {
+                for (model, usage) in models {
+                    CostAggregator.add(usage, into: &dailyTotals[slot], model: model)
+                }
+            }
+        }
+
+        /// Everything but the keyed responses, which are folded only after
+        /// the cross-root dedupe.
+        mutating func absorbUnkeyed(_ other: Accumulator) {
+            add(today: other.totalsToday, week: other.totalsLast7, daily: other.dailyTotals)
+            filesScanned += other.filesScanned
+            unparseableTimestamps += other.unparseableTimestamps
+        }
+
+        mutating func fold(_ record: ScanMemo.KeyedUsage) {
+            if record.inToday { CostAggregator.add(record.usage, into: &totalsToday, model: record.model) }
+            if record.inWeek { CostAggregator.add(record.usage, into: &totalsLast7, model: record.model) }
+            if record.dayOffset >= 0 && record.dayOffset <= 6 && dailyTotals.count == 7 {
+                CostAggregator.add(record.usage, into: &dailyTotals[6 - Int(record.dayOffset)], model: record.model)
+            }
+        }
+    }
+
+    private enum WalkResult { case missing, unreadable, scanned }
+
+    /// Walks one `projects/` folder into `acc`: unkeyed lines are added to
+    /// the totals, keyed responses land in `acc.keyed` (deduped within the
+    /// folder) for the caller's cross-root dedupe.
+    private static func walk(_ projects: URL, window: CostWindow, memo: ScanMemo,
+                             into acc: inout Accumulator, seenPaths: inout Set<String>) -> WalkResult {
         // `FileManager.enumerator` hands back a NON-nil enumerator that yields
         // zero items for a missing directory, so a bare `guard let` on it is
         // dead code: the "never ran Claude Code" user fell through to the same
@@ -39,34 +174,18 @@ public enum ClaudeSessionScanner {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: projects.path, isDirectory: &isDir),
               isDir.boolValue else {
-            return CostEstimate(usdToday: 0, usdLast7Days: 0,
-                                isApproximate: true,
-                                note: "No ~/.claude/projects directory.")
+            return .missing
         }
         guard let walker = FileManager.default.enumerator(
             at: projects,
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else {
-            return CostEstimate(usdToday: 0, usdLast7Days: 0,
-                                isApproximate: true,
-                                note: "Could not enumerate ~/.claude/projects.")
+            return .unreadable
         }
-
-        let window = CostWindow(now: now)
         let startOfToday = window.startOfToday
         let sevenDaysAgo = window.startOfLast7Days
 
-        var totalsToday: [String: ModelUsage] = [:]
-        var totalsLast7: [String: ModelUsage] = [:]
-        var dailyTotals: [[String: ModelUsage]] = Array(repeating: [:], count: 7)
-        var filesScanned = 0
-        var unparseableTimestamps = 0
-        // Responses keyed by (message.id, requestId), deduped across every
-        // file in the window — memo replays included — before aggregation.
-        var keyedAll: [String: ScanMemo.KeyedUsage] = [:]
-
-        var seenPaths = Set<String>()
         for case let url as URL in walker {
             // Cooperate with cancellation. A full scan is 2-6 s of CPU over
             // hundreds of files; without this a refresh that the scheduler
@@ -81,7 +200,7 @@ public enum ClaudeSessionScanner {
             if let mtime = attrs?.contentModificationDate, mtime < sevenDaysAgo {
                 continue
             }
-            filesScanned += 1
+            acc.filesScanned += 1
             seenPaths.insert(url.path)
 
             // Replay the memo when the file is byte-for-byte the same as last
@@ -91,18 +210,8 @@ public enum ClaudeSessionScanner {
                let size = attrs?.fileSize,
                let hit = memo.lookup(path: url.path, size: size,
                                      mtime: mtime, day: startOfToday) {
-                for (model, usage) in hit.today {
-                    CostAggregator.add(usage, into: &totalsToday, model: model)
-                }
-                for (model, usage) in hit.week {
-                    CostAggregator.add(usage, into: &totalsLast7, model: model)
-                }
-                for (slot, models) in hit.daily.enumerated() where slot < 7 {
-                    for (model, usage) in models {
-                        CostAggregator.add(usage, into: &dailyTotals[slot], model: model)
-                    }
-                }
-                for (key, record) in hit.keyed { mergeKeyed(record, key: key, into: &keyedAll) }
+                acc.add(today: hit.today, week: hit.week, daily: hit.daily)
+                for (key, record) in hit.keyed { mergeKeyed(record, key: key, into: &acc.keyed) }
                 continue
             }
 
@@ -120,19 +229,9 @@ public enum ClaudeSessionScanner {
                       totalsLast7: &fileWeek,
                       dailyTotals: &fileDaily,
                       keyed: &fileKeyed,
-                      unparseableTimestamps: &unparseableTimestamps)
-            for (key, record) in fileKeyed { mergeKeyed(record, key: key, into: &keyedAll) }
-            for (model, usage) in fileToday {
-                CostAggregator.add(usage, into: &totalsToday, model: model)
-            }
-            for (model, usage) in fileWeek {
-                CostAggregator.add(usage, into: &totalsLast7, model: model)
-            }
-            for (slot, models) in fileDaily.enumerated() where slot < 7 {
-                for (model, usage) in models {
-                    CostAggregator.add(usage, into: &dailyTotals[slot], model: model)
-                }
-            }
+                      unparseableTimestamps: &acc.unparseableTimestamps)
+            for (key, record) in fileKeyed { mergeKeyed(record, key: key, into: &acc.keyed) }
+            acc.add(today: fileToday, week: fileWeek, daily: fileDaily)
             if let mtime = attrs?.contentModificationDate, let size = attrs?.fileSize {
                 memo.store(path: url.path,
                            entry: ScanMemo.Entry(size: size, mtime: mtime,
@@ -142,38 +241,36 @@ public enum ClaudeSessionScanner {
                                                  keyed: fileKeyed))
             }
         }
-        // Files that aged out of the window stop being tracked. Only after a
-        // complete walk: a cancelled one saw a partial set, and pruning to it
-        // would evict every file it had not reached yet (LEAK-FAN-002).
-        if !Task.isCancelled { memo.retain(paths: seenPaths) }
-        fold(keyedAll, totalsToday: &totalsToday, totalsLast7: &totalsLast7, dailyTotals: &dailyTotals)
+        return .scanned
+    }
 
-        let (usdToday, breakdownToday) = CostAggregator.price(totals: totalsToday, table: PricingTable.anthropic)
-        let (usdWeek, breakdownLast7) = CostAggregator.price(totals: totalsLast7, table: PricingTable.anthropic)
+    private static func makeEstimate(_ acc: Accumulator, now: Date, window: CostWindow) -> CostEstimate {
+        let (usdToday, breakdownToday) = CostAggregator.price(totals: acc.totalsToday, table: PricingTable.anthropic)
+        let (usdWeek, breakdownLast7) = CostAggregator.price(totals: acc.totalsLast7, table: PricingTable.anthropic)
         let calendarDays = window.calendarDays()
         var dailyUsage: [DailyModelUsage] = []
         for (slot, day) in calendarDays.enumerated() {
-            let dayModels = slot < dailyTotals.count ? dailyTotals[slot] : [:]
+            let dayModels = slot < acc.dailyTotals.count ? acc.dailyTotals[slot] : [:]
             let (_, dayBreakdown) = CostAggregator.price(totals: dayModels, table: PricingTable.anthropic)
             dailyUsage.append(DailyModelUsage(date: day, usageByModel: dayModels, costByModel: dayBreakdown))
         }
 
-        let unpricedToday = Set(totalsToday.keys.filter {
+        let unpricedToday = Set(acc.totalsToday.keys.filter {
             PricingTable.lookup($0, table: PricingTable.anthropic) == nil
         })
-        let unpricedLast7 = Set(totalsLast7.keys.filter {
+        let unpricedLast7 = Set(acc.totalsLast7.keys.filter {
             PricingTable.lookup($0, table: PricingTable.anthropic) == nil
         })
         let note: String?
-        if filesScanned == 0 {
+        if acc.filesScanned == 0 {
             note = "No recent Claude sessions found."
         } else {
             var details: [String] = []
             if !unpricedLast7.isEmpty {
                 details.append("price unavailable for \(unpricedLast7.sorted().joined(separator: ", ")); those turns are excluded from cost totals")
             }
-            if unparseableTimestamps > 0 {
-                details.append("\(unparseableTimestamps) records had unparseable timestamps (counted into today)")
+            if acc.unparseableTimestamps > 0 {
+                details.append("\(acc.unparseableTimestamps) records had unparseable timestamps (counted into today)")
             }
             if details.isEmpty { details.append("based on pricing table") }
             note = "Approximate — \(details.joined(separator: "; ")). " +
@@ -184,7 +281,7 @@ public enum ClaudeSessionScanner {
             usdLast7Days: usdWeek,
             modelBreakdownToday: breakdownToday,
             modelBreakdownLast7Days: breakdownLast7,
-            totalsByModel: totalsToday,
+            totalsByModel: acc.totalsToday,
             computedAt: now,
             isApproximate: true,
             note: note,

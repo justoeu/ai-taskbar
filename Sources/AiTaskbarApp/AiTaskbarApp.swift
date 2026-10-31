@@ -12,6 +12,7 @@ struct AiTaskbarApp: App {
     @StateObject private var cost: CostEstimator
     @StateObject private var updates: UpdateChecker
     @StateObject private var configWatcher: ConfigWatcher
+    @StateObject private var claudeAccountWatcher: ClaudeAccountWatcher
     @StateObject private var settingsViewModel: SettingsViewModel
     @StateObject private var analyticsStore: AnalyticsStore
     private let env: AppEnvironment
@@ -25,6 +26,10 @@ struct AiTaskbarApp: App {
                 .appendingPathComponent("ai-taskbar-config.toml")
         let configWatcher = ConfigWatcher(path: watcherPath)
         _configWatcher = StateObject(wrappedValue: configWatcher)
+        let launchConfig = env.config
+        _claudeAccountWatcher = StateObject(wrappedValue: ClaudeAccountWatcher(
+            launchAccounts: env.claudeAccounts,
+            discover: { AppEnvironment.discoverClaudeAccounts(launchConfig, log: false) }))
         // Wire ConfigLoader's post-save hook so the ConfigWatcher doesn't
         // surface a "Config changed — relaunch" banner for writes the
         // Settings UI itself just made (it surfaces the banner via
@@ -67,7 +72,13 @@ struct AiTaskbarApp: App {
         let costEstimator = CostEstimator(
             museSessionsDir: AppEnvironment.museSessionsDir(for: env.config.meta),
             museEnabled: env.config.meta.enabled,
-            geminiEnabled: env.config.gemini.enabled)
+            geminiEnabled: env.config.gemini.enabled,
+            // Any non-default account: with `~/.claude` logged out and one
+            // extra left, the single card is that extra's and must scan its
+            // folder, not `~/.claude/projects`.
+            claudeRoots: env.claudeAccounts.contains(where: { !$0.isDefault })
+                ? env.claudeAccounts.map { .init(key: $0.instanceKey.storageKey, projectsDir: $0.projectsDir) }
+                : [])
         costEstimator.refresh()
         _cost = StateObject(wrappedValue: costEstimator)
         let scheduler = RefreshScheduler(store: store,
@@ -101,6 +112,7 @@ struct AiTaskbarApp: App {
             .environmentObject(analyticsStore)
             .environmentObject(updates)
             .environmentObject(configWatcher)
+            .environmentObject(claudeAccountWatcher)
             .environmentObject(settingsViewModel)
             .frame(width: 420, height: 540)
         } label: {

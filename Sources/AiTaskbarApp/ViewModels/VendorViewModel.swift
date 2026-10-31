@@ -51,11 +51,17 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         }
     }
 
-    // `id` is nonisolated because the underlying `vendorId` is a `let` and
+    // `id` is nonisolated because the underlying `instanceKey` is a `let` and
     // `Identifiable` requirement is itself nonisolated. Silences a Swift 6
-    // strict-concurrency conformance warning.
-    public nonisolated var id: VendorId { vendorId }
+    // strict-concurrency conformance warning. It is the INSTANCE, not the
+    // vendor: two Claude accounts are two view models of one vendor.
+    public nonisolated var id: ProviderInstanceKey { instanceKey }
+    /// Presentation: name, icon, pricing, status page, card order.
     public nonisolated let vendorId: VendorId
+    /// Identity: cache, history, pins and notifications.
+    public nonisolated let instanceKey: ProviderInstanceKey
+    /// The account's name when the vendor has several; nil otherwise.
+    public nonisolated let accountLabel: String?
     public let provider: any UsageProvider
     let openAIReset = OpenAIResetController()
 
@@ -178,10 +184,12 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     public init(provider: any UsageProvider,
                 notifications: NotificationService? = nil,
                 defaults: UserDefaults = .standard,
-                historyStoreFactory: (VendorId) throws -> UsageHistoryStore = UsageHistoryStore.defaultFor,
+                historyStoreFactory: (ProviderInstanceKey) throws -> UsageHistoryStore = UsageHistoryStore.defaultFor,
                 historyLoader: @escaping HistoryLoader = VendorViewModel.detachedHistoryLoad,
                 clock: @escaping @MainActor () -> Date = { Date.now }) {
         self.vendorId = provider.vendorId
+        self.instanceKey = provider.instanceKey
+        self.accountLabel = provider.accountLabel
         self.clock = clock
         self.provider = provider
         self.notifications = notifications
@@ -192,10 +200,10 @@ public final class VendorViewModel: ObservableObject, Identifiable {
         // vanish silently: log it and expose the flag (BEST-ATE-006).
         var store: UsageHistoryStore?
         do {
-            store = try historyStoreFactory(provider.vendorId)
+            store = try historyStoreFactory(provider.instanceKey)
         } catch {
             AppLog.lifecycle.error(
-                "history store unavailable for \(provider.vendorId.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
+                "history store unavailable for \(provider.instanceKey.storageKey, privacy: .public): \(String(describing: error), privacy: .public)")
         }
         self.historyStore = store
         self.historyUnavailable = store == nil
@@ -290,7 +298,8 @@ public final class VendorViewModel: ObservableObject, Identifiable {
                 if Self.isNetworkOutcome(outcome) {
                     self.lastNetworkFetch = self.clock()   // one time source (CQ-MAE-019)
                 }
-                self.notifications?.observe(vendor: self.vendorId, snapshot: outcome.snapshot)
+                self.notifications?.observe(instance: self.instanceKey, accountLabel: self.accountLabel,
+                                            snapshot: outcome.snapshot)
                 // Only a real network reading is a new sample. A stale
                 // fallback or a cache replay re-serves an old number, and
                 // stamping it `now` would plot a pre-outage percent past a
