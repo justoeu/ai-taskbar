@@ -51,7 +51,7 @@ endif
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
         sign-developer sign-developer-universal dmg-signed notarize staple \
         release release-arm64 release-universal publish ship universal-check icon \
-        release-assets-check
+        release-assets-check prune-old-releases
 
 all: app
 
@@ -342,6 +342,24 @@ publish:
 	$(MAKE) release-assets-check
 	$(GH) release edit "v$(VERSION)" --draft=false
 	@echo "✓ Published v$(VERSION): $(DMG_ARM64) + $(DMG) + checksums"
+	$(MAKE) prune-old-releases
+
+# Removes DMGs and checksums of versions OLDER than this VERSION from the repo
+# root (all gitignored local artifacts; older ones stay downloadable from their
+# GitHub release). Never a newer one: publishing an old tag (`git checkout vX
+# && make publish`) must not delete a newer local build. Run by `publish` only
+# after the release is live, so a failed publish never removes the last good
+# build.
+prune-old-releases:
+	@for f in ai-taskbar-*.dmg checksums-*.txt; do \
+		[ -e "$$f" ] || continue; \
+		v="$${f#ai-taskbar-}"; v="$${v#checksums-}"; \
+		v="$${v%-arm64.dmg}"; v="$${v%.dmg}"; v="$${v%.txt}"; \
+		[ "$$v" = "$(VERSION)" ] && continue; \
+		lowest="$$(printf '%s\n%s\n' "$$v" "$(VERSION)" | sort -V | head -n 1)"; \
+		[ "$$lowest" = "$$v" ] || continue; \
+		rm -f -- "$$f" && echo "  removed old $$f"; \
+	done
 
 # Refuses unless the GitHub release for v$(VERSION) lists both DMGs and the
 # checksums file. The in-app updater fails closed without a checksums line

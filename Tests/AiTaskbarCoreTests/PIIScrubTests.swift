@@ -34,7 +34,7 @@ struct PIIScrubTests {
     /// sentence — so JSON scrubbing alone would let an address through.
     @Test("redacts emails in non-JSON diagnostics")
     func redacts_plain_text_email() {
-        let out = PIIScrub.scrub(diagnostic: "403 for user justo.eu+tag@example.co.uk on host")
+        let out = PIIScrub.scrub(diagnostic: "403 for user first.last+tag@example.co.uk on host")
         expectFalse(out.contains("@example.co.uk"))
         expectTrue(out.contains("<redacted-email>"))
         expectTrue(out.contains("403"))
