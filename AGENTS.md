@@ -490,7 +490,13 @@ path, `/Users/example/.claude-work` → `dd1118a7`, never a real one).
   status page stay per vendor; folding the card folds every account, and the
   menu-bar % folds every account of an open card. `@Published` emits in
   willSet, so the sibling-expansion sync carries a reentrancy guard (without
-  it two accounts overflowed the stack).
+  it two accounts overflowed the stack). Hovering an arrow highlights it and
+  turns the name into its destination ("← main"): the bare chevron with a
+  slow tooltip read as nothing. ← / → go through `PopoverKeyMonitor` to
+  `AccountSwitcherKeyboard`: only ENABLED switchers count (home cards stay
+  mounted, disabled, under Analytics), target = hovered, else last used,
+  else the only one; ambiguous → the key is left alone. Never while a text
+  field is being edited (`firstResponder is NSText`) or a modal is up.
 - **Cost:** `ClaudeSessionScanner.estimate(roots:)` scans every account's
   `projects/` (whenever any non-default account exists — with `~/.claude`
   logged out the single card is an extra's), attributes lines per folder and

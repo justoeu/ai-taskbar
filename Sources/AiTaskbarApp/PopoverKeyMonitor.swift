@@ -14,7 +14,8 @@ enum PopoverEscape: Equatable {
     }
 }
 
-/// Closes the popover on Esc from any screen. SwiftUI's `onExitCommand`
+/// Closes the popover on Esc from any screen, and sends ← / → to the account
+/// switcher (`AccountSwitcherKeyboard`). SwiftUI's `onExitCommand`
 /// alone can't: on the home screen no control holds focus, so Esc reached
 /// nothing. A local key monitor sees the key before the view hierarchy, and
 /// acts only on events sent to the popover's own window — never the TypeSafe
@@ -59,8 +60,15 @@ final class PopoverKeyMonitor {
 
     /// True when the event was consumed.
     func handle(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, windowNumber: Int) -> Bool {
-        guard Self.isPlainEscape(keyCode: keyCode, modifiers: modifiers),
-              let window, window.windowNumber == windowNumber else { return false }
+        guard let window, window.windowNumber == windowNumber else { return false }
+        if let offset = AccountSwitcherKeyboard.offset(keyCode: keyCode, modifiers: modifiers) {
+            // ← / → step a card's accounts, unless they belong to a text
+            // field being edited (Settings) or a modal is up.
+            guard Self.arrowsDriveSwitcher(modalShown: modalShown,
+                                           editingText: window.firstResponder is NSText) else { return false }
+            return AccountSwitcherKeyboard.shared.step(by: offset)
+        }
+        guard Self.isPlainEscape(keyCode: keyCode, modifiers: modifiers) else { return false }
         switch PopoverEscape.action(modalShown: modalShown) {
         case .passToModal:
             return false
@@ -68,6 +76,10 @@ final class PopoverKeyMonitor {
             PinnedStatusItemManager.shared.closeMainPopover()
             return true
         }
+    }
+
+    nonisolated static func arrowsDriveSwitcher(modalShown: Bool, editingText: Bool) -> Bool {
+        !modalShown && !editingText
     }
 
     nonisolated static func isPlainEscape(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
