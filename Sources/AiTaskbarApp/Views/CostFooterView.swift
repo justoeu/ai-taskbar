@@ -8,16 +8,21 @@ import AiTaskbarCore
 /// still render a separately attributed opencode breakdown.
 public struct CostFooterView: View {
     private let vendorId: VendorId
+    /// The account the card shows. With several Claude accounts each card
+    /// prices its own folder; opencode traffic (a client, not an account)
+    /// stays on the default account's card only.
+    private let instanceKey: ProviderInstanceKey?
     @ObservedObject private var cost: CostEstimator
 
-    public init(vendorId: VendorId, cost: CostEstimator) {
+    public init(vendorId: VendorId, cost: CostEstimator, instanceKey: ProviderInstanceKey? = nil) {
         self.vendorId = vendorId
+        self.instanceKey = instanceKey
         self.cost = cost
     }
 
     public var body: some View {
-        let estimate = cost.byVendor[vendorId]
-        let opencodeScan = cost.opencode[vendorId]
+        let estimate = instanceKey.flatMap { cost.byInstance[$0.storageKey] } ?? cost.byVendor[vendorId]
+        let opencodeScan = instanceKey?.account == nil ? cost.opencode[vendorId] : nil
         let hasData = estimate?.hasDisplayData == true
         let supportsLocal = CostEstimator.supportedVendors.contains(vendorId)
         // Render the footer when we already have data, OR while we're loading

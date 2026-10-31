@@ -201,6 +201,10 @@ public final class SettingsViewModel: ObservableObject {
             out.append(.bool(section: "anthropic", key: "manage_oauth_refresh",
                              value: new.anthropic.manageOAuthRefresh))
         }
+        if old.anthropic.configDirs != new.anthropic.configDirs {
+            out.append(.stringArray(section: "anthropic", key: "config_dirs",
+                                    value: new.anthropic.configDirs))
+        }
 
         // [openai]
         if old.openai.enabled != new.openai.enabled {

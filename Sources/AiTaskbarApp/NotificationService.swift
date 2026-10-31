@@ -110,19 +110,28 @@ public final class NotificationService {
         center.requestAuthorizationIfNeeded()
     }
 
+    /// Single-instance vendors (every vendor but a multi-account Claude).
     public func observe(vendor: VendorId, snapshot: VendorSnapshot) {
+        observe(instance: ProviderInstanceKey(vendor: vendor), accountLabel: nil, snapshot: snapshot)
+    }
+
+    /// Dedupe, identifiers and parking are per INSTANCE, so two Claude
+    /// accounts crossing the same window both notify and never replace each
+    /// other's delivered notification.
+    public func observe(instance: ProviderInstanceKey, accountLabel: String?,
+                        snapshot: VendorSnapshot) {
         // Skip entirely on runtimes where the usernotifications XPC handshake
         // is known to crash this binary (Tahoe / macOS 26 until the release
         // pipeline rebuilds against the matching SDK). Surfacing the guard
         // here keeps `observe()` cheap in the common path.
         guard config.enabled, !runtimeIncompatible else { return }
-        recheckDeniedAuthorization(for: vendor)
+        recheckDeniedAuthorization(for: instance)
         let sortedThresholds = config.notifyAt.sorted()
-        for crossing in tracker.crossings(vendor: vendor, windows: snapshot.windows,
+        for crossing in tracker.crossings(vendor: instance, windows: snapshot.windows,
                                           sortedThresholds: sortedThresholds) {
             ensureAuthorizedBeforeSend()
-            send(vendor: vendor, window: crossing.window, threshold: crossing.threshold,
-                 token: crossing.token)
+            send(instance: instance, accountLabel: accountLabel, window: crossing.window,
+                 threshold: crossing.threshold, token: crossing.token)
         }
     }
 
@@ -130,9 +139,9 @@ public final class NotificationService {
     /// permission (BUG-MAE-013). Asks the OS again when this vendor has a
     /// parked crossing: one settings query per such vendor per tick, no
     /// `add()` and no log. A grant re-arms them for the next snapshot.
-    private func recheckDeniedAuthorization(for vendor: VendorId) {
+    private func recheckDeniedAuthorization(for instance: ProviderInstanceKey) {
         guard authorizationKnownDenied, !authorizationRecheckInFlight,
-              tracker.hasParked(vendor: vendor) else { return }
+              tracker.hasParked(vendor: instance) else { return }
         authorizationRecheckInFlight = true
         center.authorizationStatus { [weak self] status in
             guard let self else { return }
@@ -147,7 +156,8 @@ public final class NotificationService {
         tracker.rearmParked()
     }
 
-    private func send(vendor: VendorId, window: UsageWindow, threshold: Double, token: UInt64) {
+    private func send(instance: ProviderInstanceKey, accountLabel: String?, window: UsageWindow,
+                      threshold: Double, token: UInt64) {
         // Defense in depth: never reach `UNUserNotificationCenter` on a
         // runtime known to crash the XPC handshake. `observe()` already
         // filters this, but `send()` is private and could be reused later.
@@ -157,12 +167,12 @@ public final class NotificationService {
             content.title = L10n.localizedString("notif_discreet_title")
             content.body  = L10n.localizedString("notif_discreet_body_fmt", Int(saturating: threshold))
         } else {
-            content.title = Self.title(vendor: vendor, window: window)
+            content.title = Self.title(vendor: instance.vendor, accountLabel: accountLabel, window: window)
             content.body  = thresholdMessage(threshold: threshold, window: window)
         }
         content.sound = .default
         let req = UNNotificationRequest(
-            identifier: "ai-taskbar.\(vendor.rawValue).\(window.label).\(Int(saturating: threshold))",
+            identifier: Self.identifier(instance: instance, window: window, threshold: threshold),
             content: content,
             trigger: nil
         )
@@ -170,7 +180,7 @@ public final class NotificationService {
         center.add(req) { [weak self] error in
             let failure = error.map { String(describing: $0) }
             Task { @MainActor in
-                self?.deliveryFinished(failure: failure, vendor: vendor, label: label,
+                self?.deliveryFinished(failure: failure, instance: instance, label: label,
                                        threshold: threshold, token: token)
             }
         }
@@ -181,35 +191,42 @@ public final class NotificationService {
     /// still pending and `add()` fails with `notificationsNotAllowed`
     /// (CQ-MAE-012). Not when the permission is denied: no retry can succeed
     /// then (PERF-MAE-004), so it is parked until permission comes back.
-    private func deliveryFinished(failure: String?, vendor: VendorId, label: String,
+    private func deliveryFinished(failure: String?, instance: ProviderInstanceKey, label: String,
                                   threshold: Double, token: UInt64) {
         guard let failure else {
-            tracker.delivered(vendor: vendor, label: label, threshold: threshold, token: token)
+            tracker.delivered(vendor: instance, label: label, threshold: threshold, token: token)
             if authorizationKnownDenied { clearKnownDenialAndRearm() }
             return
         }
         AppLog.lifecycle.error("notification delivery failed: \(failure, privacy: .public)")
         guard !authorizationKnownDenied else {
-            tracker.park(vendor: vendor, label: label, threshold: threshold, token: token)
+            tracker.park(vendor: instance, label: label, threshold: threshold, token: token)
             return
         }
         center.authorizationStatus { [weak self] status in
             guard let self else { return }
             if status == .denied {
                 self.authorizationKnownDenied = true
-                self.tracker.park(vendor: vendor, label: label, threshold: threshold, token: token)
+                self.tracker.park(vendor: instance, label: label, threshold: threshold, token: token)
                 return
             }
-            self.tracker.unmark(vendor: vendor, label: label, threshold: threshold, token: token)
+            self.tracker.unmark(vendor: instance, label: label, threshold: threshold, token: token)
         }
     }
 
     /// Non-discreet title, e.g. "Claude — 5h at 92%". Localized: it was a
     /// hard-coded English sentence while the body beside it was not
     /// (CQ-MAE-012). The window label is shown as the card shows it.
-    static func title(vendor: VendorId, window: UsageWindow) -> String {
-        L10n.localizedString("notif_title_fmt", vendor.displayName, window.label,
-                             PercentText.whole(window.utilizationPercent))
+    static func title(vendor: VendorId, accountLabel: String? = nil, window: UsageWindow) -> String {
+        let name = accountLabel.map { "\(vendor.displayName) · \($0)" } ?? vendor.displayName
+        return L10n.localizedString("notif_title_fmt", name, window.label,
+                                    PercentText.whole(window.utilizationPercent))
+    }
+
+    /// `ai-taskbar.<storageKey>.<window>.<threshold>`: unchanged for a
+    /// single-instance vendor, distinct per Claude account.
+    static func identifier(instance: ProviderInstanceKey, window: UsageWindow, threshold: Double) -> String {
+        "ai-taskbar.\(instance.storageKey).\(window.label).\(Int(saturating: threshold))"
     }
 
     /// Built once. The locale is captured at first use, which is after
@@ -243,7 +260,7 @@ public final class NotificationService {
 /// it is testable on runtimes where the service itself is short-circuited.
 struct NotificationThresholdTracker {
     struct Key: Hashable {
-        let vendor: VendorId
+        let vendor: ProviderInstanceKey
         let label: String
     }
 
@@ -289,7 +306,7 @@ struct NotificationThresholdTracker {
     /// would restore this one restores what this one replaced instead, so a
     /// mark that was never delivered is never put back (RACE-MAE-003). A
     /// reset since the crossing (no pending entry) must not be undone.
-    mutating func unmark(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
+    mutating func unmark(vendor: ProviderInstanceKey, label: String, threshold: Double, token: UInt64) {
         let key = Key(vendor: vendor, label: label)
         guard isCurrent(key, threshold, token),
               let failed = pending[key]?.removeValue(forKey: threshold) else { return }
@@ -304,7 +321,7 @@ struct NotificationThresholdTracker {
     }
 
     /// The crossing's delivery was confirmed: its mark is final.
-    mutating func delivered(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
+    mutating func delivered(vendor: ProviderInstanceKey, label: String, threshold: Double, token: UInt64) {
         let key = Key(vendor: vendor, label: label)
         guard isCurrent(key, threshold, token) else { return }
         pending[key]?.removeValue(forKey: threshold)
@@ -313,13 +330,13 @@ struct NotificationThresholdTracker {
 
     /// Keeps a crossing that failed while permission is denied marked, to be
     /// re-armed by `rearmParked()` once permission is granted (BUG-MAE-013).
-    mutating func park(vendor: VendorId, label: String, threshold: Double, token: UInt64) {
+    mutating func park(vendor: ProviderInstanceKey, label: String, threshold: Double, token: UInt64) {
         let key = Key(vendor: vendor, label: label)
         guard isCurrent(key, threshold, token) else { return }
         pending[key]?[threshold]?.parked = true
     }
 
-    func hasParked(vendor: VendorId) -> Bool {
+    func hasParked(vendor: ProviderInstanceKey) -> Bool {
         pending.contains { key, byThreshold in
             key.vendor == vendor && byThreshold.values.contains { $0.parked }
         }
@@ -356,7 +373,7 @@ struct NotificationThresholdTracker {
 
     /// Folds one snapshot's windows in and returns the crossings to notify.
     /// Each stays pending until `delivered` or `unmark`.
-    mutating func crossings(vendor: VendorId, windows: [UsageWindow],
+    mutating func crossings(vendor: ProviderInstanceKey, windows: [UsageWindow],
                             sortedThresholds: [Double]) -> [Crossing] {
         guard let minThreshold = sortedThresholds.first else { return [] }
         var fired: [Crossing] = []

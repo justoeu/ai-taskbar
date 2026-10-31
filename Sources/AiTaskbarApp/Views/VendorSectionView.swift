@@ -14,27 +14,49 @@ public struct VendorSectionView: View {
     /// shared `CostEstimator` flips `isLoading` / `byVendor`.
     public let cost: CostEstimator
     public let onOpenAnalytics: ((VendorId) -> Void)?
+    /// The card's accounts when the vendor has several (two Claude logins);
+    /// nil or a single member draws no switcher.
+    public let group: VendorGroup?
 
-    /// Tracks an in-progress CLI re-login triggered by `reloginAffordance`.
-    /// Flips true on click, back to false once the vendor recovers
-    /// (`needsReauth` clears) or after a timeout — whichever comes first.
-    @State private var reloginPending = false
-    /// Set when the login process couldn't even be spawned (very rare —
-    /// `/bin/zsh` missing); surfaces a copy-the-command fallback.
-    @State private var reloginSpawnFailed = false
+    /// Re-login and Authorize progress, per ACCOUNT: a multi-account card
+    /// keeps its view identity while the switcher changes `vm`, so one
+    /// account's pending re-login or denied authorization must not show
+    /// under another's banner.
+    private struct AccountActionState {
+        /// An in-progress CLI re-login triggered by `reloginAffordance`.
+        /// Flips true on click, back to false once the vendor recovers
+        /// (`needsReauth` clears) or after a timeout — whichever comes first.
+        var reloginPending = false
+        /// Set when the login process couldn't even be spawned (very rare —
+        /// `/bin/zsh` missing); surfaces a copy-the-command fallback.
+        var reloginSpawnFailed = false
+        /// In-flight flag for the one-time Keychain authorization (the native
+        /// password dialog blocks until dismissed).
+        var keychainAuthPending = false
+        /// Non-nil after a failed authorization attempt — rendered under the
+        /// banner so the user sees why (canceling sets nothing).
+        var keychainAuthError: String?
+    }
+    @State private var actionStates: [ProviderInstanceKey: AccountActionState] = [:]
 
-    /// In-flight flag for the one-time Keychain authorization (the native
-    /// password dialog blocks until dismissed).
-    @State private var keychainAuthPending = false
-    /// Non-nil after a failed authorization attempt — rendered under the
-    /// banner so the user sees why (canceling sets nothing).
-    @State private var keychainAuthError: String?
+    private var reloginPending: Bool { actionStates[vm.instanceKey]?.reloginPending ?? false }
+    private var reloginSpawnFailed: Bool { actionStates[vm.instanceKey]?.reloginSpawnFailed ?? false }
+    private var keychainAuthPending: Bool { actionStates[vm.instanceKey]?.keychainAuthPending ?? false }
+    private var keychainAuthError: String? { actionStates[vm.instanceKey]?.keychainAuthError }
+
+    /// Updates one account's state; async callers pass the key captured when
+    /// they started, so a reply lands on that account even after a switch.
+    private func updateActions(_ key: ProviderInstanceKey, _ change: (inout AccountActionState) -> Void) {
+        change(&actionStates[key, default: AccountActionState()])
+    }
 
     public init(vm: VendorViewModel,
                 thresholds: ThresholdsConfig,
                 cost: CostEstimator,
-                onOpenAnalytics: ((VendorId) -> Void)? = nil) {
+                onOpenAnalytics: ((VendorId) -> Void)? = nil,
+                group: VendorGroup? = nil) {
         self.vm = vm
+        self.group = group
         self.thresholds = thresholds
         self.cost = cost
         self.onOpenAnalytics = onOpenAnalytics
@@ -54,6 +76,17 @@ public struct VendorSectionView: View {
         let state = vm.state
         VStack(alignment: .leading, spacing: 8) {
             header(state: state)
+            if let group, group.hasAccounts {
+                AccountSwitcherView(
+                    chips: group.members.map {
+                        AccountChip(id: $0.instanceKey.storageKey, name: $0.accountDisplayName,
+                                    needsAttention: $0.needsAttention(thresholds: thresholds))
+                    },
+                    selectedID: vm.instanceKey.storageKey,
+                    onSelect: { raw in
+                        if let key = ProviderInstanceKey(storageKey: raw) { store.selectAccount(key) }
+                    })
+            }
             if effectiveExpanded {
                 content(state: state)
                 // A vendor with no utilization (TypeSafe) has no % to plot or
@@ -61,7 +94,7 @@ public struct VendorSectionView: View {
                 if vm.vendorId.reportsUtilization, !vm.history.isEmpty {
                     SparklineView(samples: vm.history, thresholds: thresholds)
                 }
-                CostFooterView(vendorId: vm.vendorId, cost: cost)
+                CostFooterView(vendorId: vm.vendorId, cost: cost, instanceKey: vm.instanceKey)
                 if vm.vendorId.reportsUtilization {
                     pinToMenuBarSlice
                 }
@@ -421,9 +454,12 @@ public struct VendorSectionView: View {
     }
 
     private func runKeychainAuthorization() {
-        keychainAuthPending = true
-        keychainAuthError = nil
         let vm = self.vm
+        let key = vm.instanceKey
+        updateActions(key) {
+            $0.keychainAuthPending = true
+            $0.keychainAuthError = nil
+        }
         let provider = vm.provider
         Task {
             // The native dialog blocks until the user answers;
@@ -433,22 +469,26 @@ public struct VendorSectionView: View {
             do { result = .success(try await provider.authorizeCredentialsOffPool()) }
             catch { result = .failure(error) }
             await MainActor.run {
-                keychainAuthPending = false
+                var message: String?
                 switch result {
                 case .success(let authorized):
                     if authorized { vm.refresh(forceRefresh: true) }
                 case .failure(let error):
                     if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
                        failure == .authorizationDenied {
-                        keychainAuthError = L10n.localizedString(
+                        message = L10n.localizedString(
                             vm.vendorId == .meta ? "keychain_auth_denied_muse" : "keychain_auth_denied")
                     } else if let failure = error as? KeychainAccessAuthorizer.AuthorizationFailure,
                               failure == .permissionNotPersistent {
-                        keychainAuthError = L10n.localizedString("keychain_auth_not_persistent")
+                        message = L10n.localizedString("keychain_auth_not_persistent")
                     } else {
-                        keychainAuthError = (error as? LocalizedError)?.errorDescription
+                        message = (error as? LocalizedError)?.errorDescription
                             ?? String(describing: error)
                     }
+                }
+                updateActions(key) {
+                    $0.keychainAuthPending = false
+                    $0.keychainAuthError = message
                 }
             }
         }
@@ -461,7 +501,7 @@ public struct VendorSectionView: View {
     /// monitor never rotates the shared refresh_token itself.
     @ViewBuilder
     private var reloginAffordance: some View {
-        if let command = vm.vendorId.reloginCommand {
+        if let command = vm.provider.reloginCommand {
             HStack(spacing: 8) {
                 Image(systemName: reloginPending
                       ? "person.badge.key.fill"
@@ -530,23 +570,24 @@ public struct VendorSectionView: View {
     /// fragile under ad-hoc signing: TCC dropped the grant on every rebuild).
     /// `scheduleReauthRetry()` re-checks the token afterwards.
     private func runRelogin(command: String) {
-        reloginSpawnFailed = false
+        let key = vm.instanceKey
+        updateActions(key) { $0.reloginSpawnFailed = false }
         do {
             // Tracked on the view model: a retry terminates the previous
             // login child instead of stacking another one (LEAK-FAN-005).
             try vm.reloginProcess.start(command: command)
         } catch {
-            reloginSpawnFailed = true
+            updateActions(key) { $0.reloginSpawnFailed = true }
             return
         }
-        reloginPending = true
+        updateActions(key) { $0.reloginPending = true }
         vm.scheduleReauthRetry()
         // Re-arm the button after a grace window so the user can retry if the
         // browser flow never completed. Cleared earlier by the view when the
         // vendor recovers (needsReauth flips false → affordance vanishes).
         let pendingReset = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 120 * 1_000_000_000)
-            if !Task.isCancelled { reloginPending = false }
+            if !Task.isCancelled { updateActions(key) { $0.reloginPending = false } }
         }
         // If the view goes away, cancel the reset (harmless either way).
         _ = pendingReset

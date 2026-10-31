@@ -87,7 +87,7 @@ struct VendorViewModelRateLimitTests {
         let dir = tmp
         let vm = VendorViewModel(
             provider: provider, defaults: defaults,
-            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) })
+            historyStoreFactory: { UsageHistoryStore(instance: $0, baseDir: dir) })
 
         vm.refresh(forceRefresh: true)
         await waitUntil { isFailed(vm) }
@@ -116,7 +116,7 @@ struct VendorViewModelRateLimitTests {
         let clock = ManualClock(start)
         let vm = VendorViewModel(
             provider: provider, defaults: defaults,
-            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) },
+            historyStoreFactory: { UsageHistoryStore(instance: $0, baseDir: dir) },
             clock: { clock.now })
 
         vm.refresh(forceRefresh: true, now: start)
@@ -139,7 +139,7 @@ struct VendorViewModelRateLimitTests {
         let stamp = Date(timeIntervalSince1970: 1_000_000)
         let vm = VendorViewModel(
             provider: NetworkOutcomeProvider(), defaults: defaults,
-            historyStoreFactory: { UsageHistoryStore(vendor: $0, baseDir: dir) },
+            historyStoreFactory: { UsageHistoryStore(instance: $0, baseDir: dir) },
             clock: { stamp })
 
         vm.refresh(forceRefresh: true, now: stamp)

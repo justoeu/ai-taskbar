@@ -135,15 +135,7 @@ public final class VendorJSONStore<Value: Codable & Sendable & Equatable>: Senda
     /// The file does not exist: no such file, or a path component that is
     /// not a directory (ENOTDIR — nothing can exist below it). Everything
     /// else (permissions, I/O) means a value may be there and is unknown.
-    static func isAbsence(_ error: Error) -> Bool {
-        if let cocoa = error as? CocoaError,
-           cocoa.code == .fileReadNoSuchFile || cocoa.code == .fileNoSuchFile {
-            return true
-        }
-        let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
-        guard let posix = underlying, posix.domain == NSPOSIXErrorDomain else { return false }
-        return posix.code == Int(ENOENT) || posix.code == Int(ENOTDIR)
-    }
+    static func isAbsence(_ error: Error) -> Bool { FileAbsence.isAbsence(error) }
 
     private func save(_ value: Value) {
         cached.withLock { $0 = .loaded(value) }
@@ -159,5 +151,20 @@ public final class VendorJSONStore<Value: Codable & Sendable & Equatable>: Senda
         AppLog.lifecycle.warning(
             "\(self.baseDir.lastPathComponent, privacy: .public)/\(self.fileURL.lastPathComponent, privacy: .public): could not \(operation, privacy: .public): \(String(describing: error), privacy: .public)")
         onFailure?(operation)
+    }
+}
+
+/// Whether a file-read error means the file does not exist: no such file, or
+/// a path component that is not a directory (ENOTDIR — nothing can exist
+/// below it). Everything else (permissions, I/O) means it may be there.
+enum FileAbsence {
+    static func isAbsence(_ error: Error) -> Bool {
+        if let cocoa = error as? CocoaError,
+           cocoa.code == .fileReadNoSuchFile || cocoa.code == .fileNoSuchFile {
+            return true
+        }
+        let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
+        guard let posix = underlying, posix.domain == NSPOSIXErrorDomain else { return false }
+        return posix.code == Int(ENOENT) || posix.code == Int(ENOTDIR)
     }
 }

@@ -68,9 +68,16 @@ public struct DiskCache: Sendable {
     public static func defaultFor(_ vendor: VendorId,
                                   scope: CacheScope = .usage,
                                   ttl: TimeInterval = 300) throws -> DiskCache {
-        let dir = try Paths.cacheDir(for: vendor, scope: scope)
+        try defaultFor(ProviderInstanceKey(vendor: vendor), scope: scope, ttl: ttl)
+    }
+
+    /// Per-instance cache (`Caches/ai-taskbar/<storageKey>/`).
+    public static func defaultFor(_ instance: ProviderInstanceKey,
+                                  scope: CacheScope = .usage,
+                                  ttl: TimeInterval = 300) throws -> DiskCache {
+        let dir = try Paths.cacheDir(for: instance, scope: scope)
         return DiskCache(
-            vendor: vendor,
+            vendor: instance.vendor,
             baseDir: dir,
             ttl: ttl,
             maxStale: scope.defaultMaxStale

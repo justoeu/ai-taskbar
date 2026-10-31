@@ -315,15 +315,21 @@ public struct AnthropicConfig: Codable, Sendable, Equatable {
     /// cold cache with no prior snapshot the fetch surfaces the error instead).
     /// Opt in only if you run the app standalone without the CLI.
     public var manageOAuthRefresh: Bool = false
+    /// Extra Claude Code config folders (`CLAUDE_CONFIG_DIR` values) outside
+    /// the home directory. `~/.claude` and every `~/.claude-*` folder are
+    /// found without this; see `ClaudeAccountDiscovery`.
+    public var configDirs: [String] = []
 
     public init(enabled: Bool = true,
                 keychainService: String? = nil,
                 keychainAccount: String? = nil,
-                manageOAuthRefresh: Bool = false) {
+                manageOAuthRefresh: Bool = false,
+                configDirs: [String] = []) {
         self.enabled = enabled
         self.keychainService = keychainService
         self.keychainAccount = keychainAccount
         self.manageOAuthRefresh = manageOAuthRefresh
+        self.configDirs = configDirs
     }
 
     public init(from decoder: Decoder) throws {
@@ -332,6 +338,7 @@ public struct AnthropicConfig: Codable, Sendable, Equatable {
         keychainService = try c.decodeIfPresent(String.self, forKey: .keychainService)
         keychainAccount = try c.decodeIfPresent(String.self, forKey: .keychainAccount)
         manageOAuthRefresh = try c.decodeIfPresent(Bool.self, forKey: .manageOAuthRefresh) ?? false
+        configDirs = try c.decodeIfPresent([String].self, forKey: .configDirs) ?? []
     }
 
     enum CodingKeys: String, CodingKey {
@@ -339,6 +346,7 @@ public struct AnthropicConfig: Codable, Sendable, Equatable {
         case keychainService = "keychain_service"
         case keychainAccount = "keychain_account"
         case manageOAuthRefresh = "manage_oauth_refresh"
+        case configDirs = "config_dirs"
     }
 }
 

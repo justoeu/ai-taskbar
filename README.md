@@ -187,6 +187,33 @@ minutes after an ordinary failure), is skipped while the keychain is locked
 credential comes from the fallback the app also never rotates the OAuth token,
 even with `manage_oauth_refresh = true`. Authorize still works and restores the direct path.
 
+### Several Claude accounts on one Mac
+
+Claude Code keeps each account in its own config folder: `~/.claude` for the
+default login, and the folder in `CLAUDE_CONFIG_DIR` for every other one
+(for example `CLAUDE_CONFIG_DIR=~/.claude-work claude`). AI Taskbar finds them
+on its own: every `~/.claude-<name>` (also `_` or `.` as the separator) that
+holds a logged-in config and whose Keychain item exists becomes an account.
+Folders elsewhere go in `config_dirs` under `[anthropic]`.
+
+The accounts share the Claude card, with ‹ › arrows and dots to switch
+between them; a dot ringed in orange is a hidden account that needs a look
+(error, Authorize, expired login, or usage at the warning threshold). Each
+account has its own usage bars, cost, history and notifications. Pinning
+the card pins one menu-bar item that shows the account the card is showing:
+switch accounts and the pinned % switches with it. The Analytics card offers
+**All** (every account's cost and tokens; usage % and history from the most
+used account, since percentages don't add up) plus one view per account. The
+default account is named "main" and the others after their folder
+(`.claude-work` → "work").
+
+Discovery reads no secret: it checks that each account's Keychain item
+exists from its attributes only, and reads the account id from the config
+file. Leftover Keychain items from deleted folders and copied backup folders
+are ignored. An account added or logged out while the app is running shows a
+"relaunch" banner. Every account is read-only; `manage_oauth_refresh`,
+`keychain_service` and `keychain_account` apply to the default account only.
+
 ### Claude `429 rate_limit_error`
 
 When the warning tooltip contains Anthropic's JSON with
@@ -539,6 +566,7 @@ notify_at = [90, 100]                # percent thresholds that trigger a notific
 
 [anthropic]
 enabled = true
+# config_dirs = ["/Volumes/work/.claude"]   # extra accounts outside ~; ~/.claude-* are found automatically
 # keychain_account = "your.short.username"   # pin if you have multiple Claude entries
 # manage_oauth_refresh = false   # default false: read-only, lets Claude Code own token renewal
 

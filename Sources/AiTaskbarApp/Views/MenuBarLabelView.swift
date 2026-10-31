@@ -71,7 +71,7 @@ public struct MenuBarLabelView: View {
             Image(systemName: symbolName(for: percent))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
-            Text("\(shortLabel(for: vm.vendorId)) \(PercentText.format(percent))")
+            Text("\(Self.shortLabel(for: vm.vendorId, accountLabel: vm.accountLabel)) \(PercentText.format(percent))")
                 .font(.system(size: 14.0, weight: .bold, design: .monospaced))
                 .foregroundStyle(isFull ? .primary : SeverityColor.tint(forPercent: percent, thresholds: store.thresholds))
             if isFull {
@@ -103,7 +103,15 @@ public struct MenuBarLabelView: View {
         return !snapshot.windows.isEmpty
     }
 
-    private func shortLabel(for v: VendorId) -> String {
+    /// An extra account reads "Cl·w" (vendor + account initial) so two
+    /// Claude logins never show the same rotating label.
+    nonisolated static func shortLabel(for v: VendorId, accountLabel: String?) -> String {
+        let base = shortLabel(for: v)
+        guard let initial = accountLabel?.first else { return base }
+        return "\(base)·\(initial)"
+    }
+
+    nonisolated static func shortLabel(for v: VendorId) -> String {
         switch v {
         case .anthropic:  return "Cl"
         case .openai:     return "GPT"

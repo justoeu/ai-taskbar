@@ -3,6 +3,13 @@ import AiTaskbarCore
 
 public protocol UsageProvider: Sendable {
     var vendorId: VendorId { get }
+    /// Which card this provider feeds. Every provider but a multi-account
+    /// Claude login is the single instance of its vendor.
+    var instanceKey: ProviderInstanceKey { get }
+    /// The account's name when a vendor has several (nil otherwise).
+    var accountLabel: String? { get }
+    /// Shell command that logs this instance back in, if one exists.
+    var reloginCommand: String? { get }
     var displayName: String { get }
     /// Fetches a snapshot. If `forceRefresh` is false and the disk cache is
     /// fresh, returns the cached snapshot without a network call. On network
@@ -22,6 +29,9 @@ public protocol UsageProvider: Sendable {
 }
 
 public extension UsageProvider {
+    var instanceKey: ProviderInstanceKey { ProviderInstanceKey(vendor: vendorId) }
+    var accountLabel: String? { nil }
+    var reloginCommand: String? { vendorId.reloginCommand }
     var displayName: String { vendorId.displayName }
     var credentialFileURL: URL? { nil }
     @discardableResult
