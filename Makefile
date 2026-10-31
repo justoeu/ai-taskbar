@@ -51,7 +51,7 @@ endif
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
         sign-developer sign-developer-universal dmg-signed notarize staple \
         release release-arm64 release-universal publish ship universal-check icon \
-        release-assets-check prune-old-releases
+        release-assets-check prune-old-releases publish-upload
 
 all: app
 
@@ -337,7 +337,24 @@ publish:
 		echo "  (or APPLE_ID + APPLE_TEAM_ID + APPLE_PASSWORD)"; \
 		exit 1; }
 	$(MAKE) release
+	$(MAKE) publish-upload
+
+# Second half of `publish`, on DMGs `release` already notarized: checksums,
+# wait for the CI's draft release, upload, verify, flip to published, prune.
+# Runnable alone to resume a publish whose upload failed, without paying for
+# another build + notarization. The CI drafts the release only after
+# re-validating the tag (~10 min), so the build usually wins the race: the
+# wait (scripts/wait-for-release-draft.sh) is what made v0.32.0's
+# "release not found" impossible.
+publish-upload:
+	@test -z "$$(git status --porcelain)" || { echo "✗ working tree not clean — commit or stash first"; exit 1; }
+	@git tag --points-at HEAD | grep -qx "v$(VERSION)" || { echo "✗ HEAD is not tagged v$(VERSION)"; exit 1; }
+	@for f in $(DMG) $(DMG_ARM64); do \
+		test -f "$$f" || { echo "✗ $$f missing — run make publish (or make release) first"; exit 1; }; \
+		xcrun stapler validate -q "$$f" || { echo "✗ $$f is not notarized + stapled"; exit 1; }; \
+	done
 	shasum -a 256 $(DMG) $(DMG_ARM64) > checksums-$(VERSION).txt
+	GH="$(GH)" scripts/wait-for-release-draft.sh "v$(VERSION)"
 	$(GH) release upload "v$(VERSION)" $(DMG) $(DMG_ARM64) checksums-$(VERSION).txt --clobber
 	$(MAKE) release-assets-check
 	$(GH) release edit "v$(VERSION)" --draft=false

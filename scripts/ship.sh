@@ -14,8 +14,9 @@
 #      stale skipped run): a conclusion of "skipped" ([skip release] /
 #      chore(release) head) means no release was cut — abort gracefully; a
 #      failure aborts loudly. No matching run yet → keep polling.
-#   4. make publish (builds, signs, notarizes and uploads both DMGs, then
-#      flips the draft release to published).
+#   4. make publish (builds, signs, notarizes both DMGs, WAITS for the CI's
+#      draft release — drafted only after the tag is re-validated, which the
+#      build can outrun — then uploads and flips it to published).
 #
 # Required env (same as make publish):
 #   DEVELOPER_ID                          Developer ID Application identity
