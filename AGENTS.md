@@ -350,9 +350,10 @@ The `.app` and both DMGs are built, signed, **notarized** and published
    work in place of `NOTARY_PROFILE`.
 
 After a successful publish, `make prune-old-releases` (run by `publish`)
-deletes older `ai-taskbar-*.dmg` / `checksums-*.txt` from the repo root, so
-only the current version's are kept locally (all gitignored; older ones stay
-on their GitHub release). It runs only once the release is live, so a failed
+deletes `ai-taskbar-*.dmg` / `checksums-*.txt` of versions OLDER than
+`VERSION` (`sort -V`) from the repo root, so the latest is what stays (all
+gitignored; older ones stay on their GitHub release). It never deletes a
+newer one: publishing an old tag must not remove a newer local build. It runs only once the release is live, so a failed
 publish never removes the last good build.
 
 Related targets: `make publish` is the second half alone (tag already exists
