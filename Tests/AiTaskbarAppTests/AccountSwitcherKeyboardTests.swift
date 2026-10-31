@@ -7,13 +7,47 @@ import AppKit
 @MainActor
 @Suite("Account switcher keyboard", .serialized)
 struct AccountSwitcherKeyboardTests {
+    /// A switcher over accounts a, b, c showing `a`; `log.steps` records the
+    /// offset each selection represents relative to `a` (+1 = b, -1 = c), so
+    /// the routing tests read as steps.
     private func handle(_ log: Box) -> AccountSwitcherHandle {
         let h = AccountSwitcherHandle()
-        h.step = { log.steps.append($0) }
+        h.update(ids: ["a", "b", "c"], selectedID: "a") { id in
+            log.selected.append(id)
+            log.steps.append(id == "b" ? 1 : (id == "c" ? -1 : 0))
+        }
         return h
     }
 
-    final class Box { var steps: [Int] = [] }
+    final class Box {
+        var steps: [Int] = []
+        var selected: [String] = []
+    }
+
+    @Test("a step resolves from the CURRENT selection, after a click changed it")
+    func step_uses_live_selection() {
+        // The bug: the key path held the selection from before a click, so
+        // → after clicking › re-selected the account already shown.
+        let log = Box()
+        let h = AccountSwitcherHandle()
+        let select: (String) -> Void = { log.selected.append($0) }
+        h.update(ids: ["main", "work"], selectedID: "main", onSelect: select)
+        h.update(ids: ["main", "work"], selectedID: "work", onSelect: select)   // clicked ›
+        h.step(1)
+        #expect(log.selected == ["main"])
+        h.update(ids: ["main", "work"], selectedID: "main", onSelect: select)
+        h.step(-1)
+        #expect(log.selected == ["main", "work"])
+    }
+
+    @Test("a handle with no accounts does nothing")
+    func empty_handle() {
+        let log = Box()
+        let h = AccountSwitcherHandle()
+        h.update(ids: [], selectedID: "", onSelect: { log.selected.append($0) })
+        h.step(1)
+        #expect(log.selected.isEmpty)
+    }
 
     @Test("plain ← and → map to -1 and +1; arrows carry numericPad/function")
     func offsets() {

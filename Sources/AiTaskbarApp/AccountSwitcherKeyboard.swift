@@ -1,11 +1,31 @@
 import AppKit
 
-/// One `AccountSwitcherView` as the keyboard sees it. A class, so the view
-/// can refresh `step` (it captures the current chips and selection) without
-/// re-registering.
+/// One `AccountSwitcherView` as the keyboard sees it: the switcher's CURRENT
+/// accounts, selection and action, refreshed on every render. The view used
+/// to rebuild a captured closure from `onChange(of: selectedID)`, but on
+/// macOS 13 that action runs with the PREVIOUS view value, so after a click
+/// the closure still held the old selection and → re-selected the account
+/// already shown — the keys looked dead (reproduced: click ›, press →, no
+/// change). Resolving the destination at key time from live state cannot go
+/// stale.
 @MainActor
 final class AccountSwitcherHandle {
-    var step: (Int) -> Void = { _ in }
+    private(set) var ids: [String] = []
+    private(set) var selectedID = ""
+    private var onSelect: (String) -> Void = { _ in }
+
+    func update(ids: [String], selectedID: String, onSelect: @escaping (String) -> Void) {
+        self.ids = ids
+        self.selectedID = selectedID
+        self.onSelect = onSelect
+    }
+
+    /// Selects the account `offset` positions away, wrapping around.
+    func step(_ offset: Int) {
+        guard !ids.isEmpty else { return }
+        let index = ids.firstIndex(of: selectedID) ?? 0
+        onSelect(ids[AccountSwitcherView.destination(from: index, by: offset, count: ids.count)])
+    }
 }
 
 /// Routes ← / → to an account switcher while the popover is open.

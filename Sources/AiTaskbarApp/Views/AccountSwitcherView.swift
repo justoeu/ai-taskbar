@@ -36,6 +36,8 @@ struct AccountSwitcherView: View {
 
     var body: some View {
         let index = currentIndex
+        // Live state for the keyboard, on every render (see the handle).
+        let _ = handle.update(ids: chips.map(\.id), selectedID: selectedID, onSelect: onSelect)
         HStack(spacing: 6) {
             arrow(-1)
             HStack(spacing: 4) {
@@ -50,18 +52,15 @@ struct AccountSwitcherView: View {
             Spacer(minLength: 0)
         }
         .onHover { AccountSwitcherKeyboard.shared.setHovered(handle, $0) }
-        .onAppear {
-            refreshHandle()
-            AccountSwitcherKeyboard.shared.register(handle, enabled: isEnabled)
-        }
+        .onAppear { AccountSwitcherKeyboard.shared.register(handle, enabled: isEnabled) }
         .onDisappear {
             AccountSwitcherKeyboard.shared.unregister(handle)
             if hoveredArrow != nil { NSCursor.pop() }
             hoveredArrow = nil
         }
+        // The new value comes in the argument; `self` may still be the
+        // previous view here on macOS 13, so nothing else is read from it.
         .onChange(of: isEnabled) { AccountSwitcherKeyboard.shared.register(handle, enabled: $0) }
-        .onChange(of: selectedID) { _ in refreshHandle() }
-        .onChange(of: chips) { _ in refreshHandle() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.localizedString("account_switcher_accessibility_fmt",
                                                  chips.indices.contains(index) ? chips[index].name : "",
@@ -83,17 +82,6 @@ struct AccountSwitcherView: View {
     private func select(_ id: String) {
         AccountSwitcherKeyboard.shared.markUsed(handle)
         onSelect(id)
-    }
-
-    /// The keyboard calls the latest selection, not the one at first render.
-    private func refreshHandle() {
-        let chips = chips
-        let index = currentIndex
-        let onSelect = onSelect
-        handle.step = { offset in
-            guard !chips.isEmpty else { return }
-            onSelect(chips[Self.destination(from: index, by: offset, count: chips.count)].id)
-        }
     }
 
     /// The current name, or while an arrow is hovered its destination.
