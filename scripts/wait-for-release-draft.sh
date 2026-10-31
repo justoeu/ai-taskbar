@@ -10,28 +10,50 @@
 # upload, keeps the build running in parallel with CI and only waits for
 # what is actually missing.
 #
+# Only gh's "release not found" means "not there yet". Anything else (gh
+# missing, logged out, wrong repo, network) fails at once with gh's own
+# message: retrying it would turn a clear error into a silent 30 min wait.
+#
 # Env (overridable so the self-test runs in seconds against a fake gh):
-#   GH                    gh binary              (default: gh)
-#   RELEASE_WAIT_SECONDS  give up after          (default: 1800)
-#   RELEASE_POLL_SECONDS  between two checks     (default: 20)
+#   GH                    gh command, arguments allowed (default: gh)
+#   RELEASE_WAIT_SECONDS  give up after, wall clock    (default: 1800)
+#   RELEASE_POLL_SECONDS  between two checks           (default: 20)
 set -euo pipefail
 
 TAG=${1:?usage: wait-for-release-draft.sh <tag>}
-GH=${GH:-gh}
+read -r -a GH_CMD <<< "${GH:-gh}"
 WAIT=${RELEASE_WAIT_SECONDS:-1800}
 POLL=${RELEASE_POLL_SECONDS:-20}
+for pair in "RELEASE_WAIT_SECONDS=$WAIT" "RELEASE_POLL_SECONDS=$POLL"; do
+    case "${pair#*=}" in
+        ''|*[!0-9]*) echo "✗ ${pair%%=*} must be a whole number of seconds (got '${pair#*=}')" >&2; exit 2 ;;
+    esac
+done
 
-waited=0
+hint() {
+    echo "  the notarized DMGs are kept: once fixed, run make publish-upload" >&2
+}
+
+# Wall-clock deadline: counting sleeps alone never advances with POLL=0 and
+# ignores the time each gh call takes.
+deadline=$((SECONDS + WAIT))
 announced=0
 while :; do
-    # Any failure (not found yet, a network blip) means "not there yet".
-    if "$GH" release view "$TAG" --json tagName --jq .tagName >/dev/null 2>&1; then
+    if err=$("${GH_CMD[@]}" release view "$TAG" --json tagName --jq .tagName 2>&1 >/dev/null); then
         echo "✓ release $TAG exists"
         exit 0
     fi
-    if [ "$waited" -ge "$WAIT" ]; then
-        echo "✗ release $TAG still missing after ${WAIT}s — check the Auto Tag & Release run in the Actions tab;" >&2
-        echo "  the notarized DMGs are kept, so once the draft exists run: make publish-upload" >&2
+    case "$err" in
+        *"release not found"*) ;;
+        *)
+            echo "✗ gh could not look up release $TAG:" >&2
+            printf '  %s\n' "${err:-(no output)}" >&2
+            hint
+            exit 1 ;;
+    esac
+    if [ "$SECONDS" -ge "$deadline" ]; then
+        echo "✗ release $TAG still missing after ${WAIT}s — check the Auto Tag & Release run in the Actions tab" >&2
+        hint
         exit 1
     fi
     if [ "$announced" -eq 0 ]; then
@@ -39,5 +61,4 @@ while :; do
         announced=1
     fi
     sleep "$POLL"
-    waited=$((waited + POLL))
 done

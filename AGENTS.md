@@ -357,12 +357,18 @@ newer one: publishing an old tag must not remove a newer local build. It runs on
 publish never removes the last good build.
 
 `publish` waits for the CI's draft release before uploading
-(`scripts/wait-for-release-draft.sh`, 30 min cap, self-tested by
-`validate.sh` against a fake `gh`): the CI drafts only after re-validating the
-tag (~10 min), and on v0.32.0 the notarized DMGs were ready first and the
-upload died with "release not found". If an upload still fails, resume with
-`make publish-upload` — it reuses the notarized DMGs (checks they are stapled)
-instead of rebuilding.
+(`scripts/wait-for-release-draft.sh`: wall-clock 30 min cap; only gh's
+"release not found" is retried — gh missing, logged out or any other error
+fails at once with gh's message; self-tested against a fake `gh` by both
+`validate.sh` and `ci.yml`, every case bounded so a broken waiter goes red
+instead of hanging). The CI drafts only after re-validating the tag (~10 min);
+on v0.32.0 the notarized DMGs were ready first and the upload died with
+"release not found". To resume a failed upload, `make publish-upload` reuses
+the notarized DMGs instead of rebuilding — but only those `release` built on
+this exact clean tagged commit: `release` writes `.release-$(VERSION).stamp`
+(commit, "dirty" if it was, both DMGs' SHA-256) and `publish-upload` refuses
+on any mismatch, since the gitignored DMGs are named by VERSION alone and a
+later commit builds the same names.
 
 Related targets: `make publish` is the second half alone (tag already exists
 locally); `make release` builds + notarizes both DMGs without uploading;

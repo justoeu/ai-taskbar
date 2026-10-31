@@ -171,7 +171,7 @@ if ! waiter_out=$(scripts/wait-for-release-draft-selftest.sh 2>&1); then
     echo "$waiter_out"
     fail "wait-for-release-draft self-test failed — publish could race the CI draft again"
 fi
-ok "wait-for-release-draft self-test (late draft awaited, missing draft times out)"
+ok "wait-for-release-draft self-test (late draft awaited, missing one times out, other gh errors fail fast)"
 scripts/check-source-ratchets.sh \
     || fail "source ratchet — use expectTrue/expectFalse / Int(saturating:) / Int(checkedTruncating:) / %ld"
 

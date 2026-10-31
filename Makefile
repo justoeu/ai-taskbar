@@ -13,6 +13,8 @@ DMG        := ai-taskbar-$(VERSION).dmg
 # size). UpdateChecker.pickDMGAsset matches on the "-arm64.dmg" suffix —
 # keep the naming in sync if you ever change it.
 DMG_ARM64  := ai-taskbar-$(VERSION)-arm64.dmg
+# Written by `release`: the commit and both DMGs' SHA-256 (see publish-upload).
+RELEASE_STAMP := .release-$(VERSION).stamp
 # Signing identity for local `app` / `app-universal` builds. Ad-hoc ("-")
 # changes the binary's cdhash on every rebuild, so a dev build could never
 # keep silent access to the Claude Code-credentials Keychain item (its ACL
@@ -51,7 +53,7 @@ endif
 .PHONY: all build app app-universal dmg dmg-universal run clean test validate \
         sign-developer sign-developer-universal dmg-signed notarize staple \
         release release-arm64 release-universal publish ship universal-check icon \
-        release-assets-check prune-old-releases publish-upload
+        release-assets-check prune-old-releases publish-upload release-stamp
 
 all: app
 
@@ -198,7 +200,7 @@ validate:
 	@scripts/with-test-toolchain.sh scripts/validate.sh
 
 clean:
-	rm -rf .build $(BUILD_DIR) $(DMG) $(DMG_ARM64) checksums-*.txt .swiftpm Package.resolved
+	rm -rf .build $(BUILD_DIR) $(DMG) $(DMG_ARM64) checksums-*.txt .release-*.stamp .swiftpm Package.resolved
 
 # ─── Code signing for distribution ──────────────────────────────────────────
 # These targets require a paid Apple Developer ID. Without one, `make app`
@@ -311,7 +313,14 @@ release-universal: sign-developer-universal
 # Both notarized DMGs. Serial on purpose: each release-* rebuilds $(APP_DIR)
 # for its architecture set, so they must not interleave.
 release: release-arm64 release-universal
+	$(MAKE) release-stamp
 	@echo "✓ Release-ready: $(DMG_ARM64) (Apple Silicon) + $(DMG) (universal)"
+
+# Records what `release` just built: the commit ("dirty" appended if the tree
+# was), then both DMGs' SHA-256. `publish-upload` refuses without a match.
+release-stamp:
+	@{ git rev-parse HEAD; test -z "$$(git status --porcelain)" || echo dirty; \
+	   shasum -a 256 $(DMG) $(DMG_ARM64); } > $(RELEASE_STAMP)
 
 # Upload both notarized DMGs (+ checksums) to the GitHub Release for the
 # current VERSION and flip it from draft to published. Guards: clean tree and
@@ -346,6 +355,14 @@ publish:
 # re-validating the tag (~10 min), so the build usually wins the race: the
 # wait (scripts/wait-for-release-draft.sh) is what made v0.32.0's
 # "release not found" impossible.
+#
+# The DMGs are gitignored and named only by VERSION, so the clean-tree and
+# tag guards alone would upload a DMG built from ANY commit that carried this
+# VERSION (e.g. `make release` on a later main, then the documented
+# `git checkout vX && make publish-upload`). `release` writes
+# $(RELEASE_STAMP) — the commit (and "dirty" if the tree was) plus both DMGs'
+# SHA-256 — and this refuses unless it names HEAD, a clean tree and the very
+# bytes about to be uploaded.
 publish-upload:
 	@test -z "$$(git status --porcelain)" || { echo "✗ working tree not clean — commit or stash first"; exit 1; }
 	@git tag --points-at HEAD | grep -qx "v$(VERSION)" || { echo "✗ HEAD is not tagged v$(VERSION)"; exit 1; }
@@ -353,6 +370,10 @@ publish-upload:
 		test -f "$$f" || { echo "✗ $$f missing — run make publish (or make release) first"; exit 1; }; \
 		xcrun stapler validate -q "$$f" || { echo "✗ $$f is not notarized + stapled"; exit 1; }; \
 	done
+	@test -f $(RELEASE_STAMP) || { echo "✗ $(RELEASE_STAMP) missing — these DMGs were not built by make release; run make publish"; exit 1; }
+	@expected="$$( { git rev-parse HEAD; shasum -a 256 $(DMG) $(DMG_ARM64); } )"; \
+	[ "$$(cat $(RELEASE_STAMP))" = "$$expected" ] || { \
+		echo "✗ $(DMG) / $(DMG_ARM64) were not built from a clean v$(VERSION) checkout (stamp mismatch) — run make publish"; exit 1; }
 	shasum -a 256 $(DMG) $(DMG_ARM64) > checksums-$(VERSION).txt
 	GH="$(GH)" scripts/wait-for-release-draft.sh "v$(VERSION)"
 	$(GH) release upload "v$(VERSION)" $(DMG) $(DMG_ARM64) checksums-$(VERSION).txt --clobber
@@ -368,10 +389,10 @@ publish-upload:
 # after the release is live, so a failed publish never removes the last good
 # build.
 prune-old-releases:
-	@for f in ai-taskbar-*.dmg checksums-*.txt; do \
+	@for f in ai-taskbar-*.dmg checksums-*.txt .release-*.stamp; do \
 		[ -e "$$f" ] || continue; \
-		v="$${f#ai-taskbar-}"; v="$${v#checksums-}"; \
-		v="$${v%-arm64.dmg}"; v="$${v%.dmg}"; v="$${v%.txt}"; \
+		v="$${f#ai-taskbar-}"; v="$${v#checksums-}"; v="$${v#.release-}"; \
+		v="$${v%-arm64.dmg}"; v="$${v%.dmg}"; v="$${v%.txt}"; v="$${v%.stamp}"; \
 		[ "$$v" = "$(VERSION)" ] && continue; \
 		lowest="$$(printf '%s\n%s\n' "$$v" "$(VERSION)" | sort -V | head -n 1)"; \
 		[ "$$lowest" = "$$v" ] || continue; \
