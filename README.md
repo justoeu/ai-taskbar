@@ -23,7 +23,7 @@
 
 A gauge icon in your menu bar showing the **highest utilization** across your LLM providers. It reflects only the **expanded (open) cards** in the popover — collapse a provider's card to drop it out of the gauge, so you can focus the number on the subscriptions you actually care about. Click it for a per-provider breakdown:
 
-- **Plan label** ("Claude Max 20x", "ChatGPT Plus", "GLM Lite")
+- **Plan label** ("Claude Ultra", "ChatGPT Plus", "GLM Lite")
 - **Per-window utilization** with color thresholds (green → yellow → red) — for Claude this includes the 5-hour session, 7-day weekly, any **per-model weekly windows** (e.g. Fable), and a **usage-credits** meter (shown with the money spent/limit, e.g. `R$556.68 / R$600.00`). Model windows are parsed generically from the API's `limits[]`, so a newly-launched model appears without an app update.
 - **Reset countdown** ("resets 4 hrs, 12 min"; once the reset passes it shows "reset due — awaiting auto-refresh…" instead of counting back up)
 - **24-hour sparkline** with dashed threshold lines, current value, and peak marker (one sample per live network reading; cached or stale replays are not re-plotted)
@@ -405,7 +405,7 @@ Prices per million tokens. **Fast mode** keeps the same model id, so it is detec
 
 **opencode 1.x and 2.x** are both read: the scanner checks which layout the database has (1.x `message`, 2.x `session_message`) rather than trusting an installed binary's version, so cards keep their opencode rows across the upgrade. When an upgrade leaves both tables, the old one contributes only turns from before the first 2.x turn, so nothing is counted twice or lost.
 
-**Gemini 4 Argon** (`gemini-4-argon`) is priced at Google's introductory rate ($2 / $10 per 1M in/out, cached input $0.10), valid through 2026-11-30; the standard rate from 2026-12-01 is $4 / $20 (cached $0.20). Other Gemini 4 variants fall back to a `gemini-4` prefix at the same introductory tier.
+**Gemini 4 Argon** (`gemini-4-argon`) is priced at Google's introductory rate ($2 / $10 per 1M in/out, cached input $0.10), valid through 2026-11-30; the standard rate from 2026-12-01 is $4 / $20 (cached $0.20). **Gemini 4 Carbon** (`gemini-4-carbon`, launched 2026-10-28 to a restricted group; the API ID is not published yet and follows Argon's naming) carries the same introductory rate ($2 / $10, cached $0.10) on its own key, because its standard $4 / $20 has no announced start date. Other Gemini 4 variants fall back to a `gemini-4` prefix at the same introductory tier.
 
 ---
 

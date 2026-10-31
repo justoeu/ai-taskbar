@@ -1132,6 +1132,10 @@ section("PricingTable lookup") {
     expect(gemini4?.inputPer1M == 2, "Gemini 4 Argon introductory input price ($2/MTok)")
     expect(gemini4?.outputPer1M == 10, "Gemini 4 Argon introductory output price ($10/MTok)")
     expect(gemini4?.cacheReadPer1M == 0.1, "Gemini 4 Argon cached input 95% off ($0.10/MTok)")
+    let carbon = PricingTable.lookup("gemini-4-carbon", table: PricingTable.gemini)
+    expect(carbon?.inputPer1M == 2, "Gemini 4 Carbon introductory input price ($2/MTok)")
+    expect(carbon?.outputPer1M == 10, "Gemini 4 Carbon introductory output price ($10/MTok)")
+    expect(carbon?.cacheReadPer1M == 0.1, "Gemini 4 Carbon cached input 95% off ($0.10/MTok)")
     var fastOpus = ModelUsage(inputTokens: 1_000_000, outputTokens: 1_000_000)
     fastOpus.fastInputTokens = 1_000_000
     fastOpus.fastOutputTokens = 1_000_000
@@ -1319,11 +1323,11 @@ section("B1: OpenAIProvider memoizes plan label") {
 
 section("B2: AnthropicProvider plan label mapping") {
     expect(AnthropicProvider.credLabel(subscriptionType: "max",
-                                       rateLimit: "default_claude_max_5x") == "Claude Max 5x",
-           "Claude Max 5x tier")
+                                       rateLimit: "default_claude_max_5x") == "Claude Max",
+           "max_5x tier is now sold as Max")
     expect(AnthropicProvider.credLabel(subscriptionType: "max",
-                                       rateLimit: "default_claude_max_20x") == "Claude Max 20x",
-           "Claude Max 20x tier")
+                                       rateLimit: "default_claude_max_20x") == "Claude Ultra",
+           "max_20x tier is now sold as Ultra")
     expect(AnthropicProvider.credLabel(subscriptionType: "max",
                                        rateLimit: nil) == "Claude Max",
            "Max without tier suffix falls back")

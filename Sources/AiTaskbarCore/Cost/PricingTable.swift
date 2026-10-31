@@ -221,6 +221,14 @@ public enum PricingTable {
         // left to the `gemini-4` prefix below, so that flip cannot
         // silently reprice other Gemini 4 variants.
         "gemini-4-argon":     ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),
+        // Gemini 4 Carbon — Google blog launch post (2026-10-28): same
+        // introductory $2 / $10, cached input 95% off (= $0.10); standard
+        // $4 / $20 "after the introductory period", with NO date given
+        // (unlike Argon), so it gets its own key and flips on its own.
+        // Rollout is restricted (cyber defenders, Fairwind) and the API ID
+        // is not published yet: `gemini-4-carbon` follows the Argon naming,
+        // and longest-prefix lookup also covers a `-preview` / effort suffix.
+        "gemini-4-carbon":    ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),
         // Conservative catch-all for other Gemini 4 variants at Argon's
         // introductory tier.
         "gemini-4":           ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),

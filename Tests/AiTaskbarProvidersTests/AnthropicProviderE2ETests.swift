@@ -119,7 +119,7 @@ struct AnthropicProviderE2ETests {
             Issue.record("expected anthropic snapshot")
             return
         }
-        #expect(snap.planLabel == "Claude Max 5x")
+        #expect(snap.planLabel == "Claude Max")
         #expect(snap.session != nil)
         // No refresh was needed → writeBack not called.
         #expect(mock.writeBackCalls.isEmpty)

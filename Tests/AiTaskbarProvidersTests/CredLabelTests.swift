@@ -3,18 +3,25 @@ import Testing
 
 @Suite("AnthropicProvider.credLabel mapping")
 struct CredLabelTests {
-    @Test("Max + 20x rate limit → Claude Max 20x")
+    @Test("Max + 20x rate limit → Claude Ultra (renamed tier)")
     func max_20x() {
         let label = AnthropicProvider.credLabel(
-            subscriptionType: "max", rateLimit: "max_20x")
-        #expect(label == "Claude Max 20x")
+            subscriptionType: "max", rateLimit: "default_claude_max_20x")
+        #expect(label == "Claude Ultra")
     }
 
-    @Test("Max + 5x rate limit → Claude Max 5x")
+    @Test("Max + 5x rate limit → Claude Max (renamed tier)")
     func max_5x() {
         let label = AnthropicProvider.credLabel(
-            subscriptionType: "max", rateLimit: "max_5x")
-        #expect(label == "Claude Max 5x")
+            subscriptionType: "max", rateLimit: "default_claude_max_5x")
+        #expect(label == "Claude Max")
+    }
+
+    @Test("an ultra subscription id, if Anthropic ever sends one → Claude Ultra")
+    func ultra_subscription() {
+        let label = AnthropicProvider.credLabel(
+            subscriptionType: "ultra", rateLimit: nil)
+        #expect(label == "Claude Ultra")
     }
 
     @Test("Max with unknown rate limit → bare Claude Max")

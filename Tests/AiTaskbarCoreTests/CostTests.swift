@@ -325,9 +325,10 @@ struct CostTests {
         #expect(withTier == ["claude-haiku-5-5", "claude-haiku-5.5"])
     }
 
-    @Test("Gemini 4 Argon prices at the introductory rate; prefix covers other variants")
+    @Test("Gemini 4 Argon and Carbon price at the introductory rate; prefix covers other variants")
     func lookup_gemini4() {
-        for id in ["gemini-4", "gemini-4-argon", "gemini-4-pro-preview"] {
+        for id in ["gemini-4", "gemini-4-argon", "gemini-4-carbon", "gemini-4-carbon-preview",
+                   "gemini-4-pro-preview"] {
             let m = PricingTable.lookup(id, table: PricingTable.gemini)
             #expect(m?.inputPer1M == 2.0)
             #expect(m?.outputPer1M == 10.0)
@@ -338,6 +339,10 @@ struct CostTests {
         // The shipped model ID has an explicit key, so the Dec 1 rate flip
         // cannot leak into other Gemini 4 variants via the prefix.
         expectTrue(PricingTable.table(for: .gemini)["gemini-4-argon"] != nil)
+        // Carbon's standard rate has no date yet, so it flips on its own key.
+        expectTrue(PricingTable.table(for: .gemini)["gemini-4-carbon"] != nil)
+        // Antigravity routes Gemini through the same table.
+        #expect(PricingTable.lookup("gemini-4-carbon-high", table: PricingTable.antigravity)?.outputPer1M == 10.0)
         expectTrue(PricingTable.table(for: .gemini)["gemini-4"] != nil)
     }
 
