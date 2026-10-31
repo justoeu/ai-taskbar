@@ -1,5 +1,6 @@
 import Testing
 import AppKit
+import SwiftUI
 @testable import AiTaskbarApp
 
 /// ← / → on the account switcher: which keys count, which switcher they
@@ -24,10 +25,43 @@ struct AccountSwitcherKeyboardTests {
         var selected: [String] = []
     }
 
-    @Test("a step resolves from the CURRENT selection, after a click changed it")
+    /// Renders the real view in a window and drives it through the shared
+    /// registry, the same path a key press takes. This is what catches the
+    /// wiring regression: refreshing the handle from `onChange(of:
+    /// selectedID)` (or only `onAppear`) left it holding the pre-click
+    /// selection on macOS 13, and → re-selected the account already shown.
+    @Test("hosted switcher: after the selection changes, → steps from the new one")
+    func hosted_view_steps_from_current_selection() {
+        let log = Box()
+        let ids = ["main", "work"]
+        func view(_ selected: String) -> AccountSwitcherView {
+            AccountSwitcherView(chips: ids.map { AccountChip(id: $0, name: $0) },
+                                selectedID: selected,
+                                onSelect: { log.selected.append($0) })
+        }
+        let host = NSHostingView(rootView: view("main"))
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 320, height: 40),
+                              styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = host
+        func settle() {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        settle()
+        expectTrue(AccountSwitcherKeyboard.shared.step(by: 1))
+        #expect(log.selected == ["work"])
+        // The selection changes (a click on ›, or the key above landing).
+        host.rootView = view("work")
+        settle()
+        expectTrue(AccountSwitcherKeyboard.shared.step(by: 1))
+        #expect(log.selected == ["work", "main"])
+        window.contentView = nil
+        settle()
+        expectFalse(AccountSwitcherKeyboard.shared.step(by: 1))   // unregistered on disappear
+    }
+
+    @Test("a handle steps from the selection it was last given")
     func step_uses_live_selection() {
-        // The bug: the key path held the selection from before a click, so
-        // → after clicking › re-selected the account already shown.
         let log = Box()
         let h = AccountSwitcherHandle()
         let select: (String) -> Void = { log.selected.append($0) }
