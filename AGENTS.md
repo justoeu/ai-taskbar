@@ -422,6 +422,73 @@ changes shipped code, so it releases normally.
   runs `agy` with a 35 s budget, closed stdin, stdout capped at 4 MiB (a larger
   answer is rejected, not parsed) and only the first 64 KiB of stderr kept.
 
+### Several Claude accounts — one card, one instance per account
+
+`docs/SDD-claude-multi-account.md`. Measured on 2026-10-30, not documented by
+Anthropic: a Claude Code account is a config FOLDER — `~/.claude` (config file
+`~/.claude.json`, outside the folder) or a `CLAUDE_CONFIG_DIR` folder (config
+file inside) — with one Keychain item per folder: `Claude Code-credentials`,
+or `Claude Code-credentials-<first 8 hex of SHA-256(absolute folder path)>`
+(rule checked against the real CLI; the tests freeze it on a fictitious
+path, `/Users/example/.claude-work` → `dd1118a7`, never a real one).
+
+- **Discovery** (`ClaudeAccountDiscovery`, at launch in
+  `AppEnvironment.live()`): candidates are `~/.claude`, every
+  `~/.claude[-_.]<suffix>` DIRECTORY (symlinks skipped: the CLI hashes the
+  path it was given), `CLAUDE_CONFIG_DIR`, and `[anthropic] config_dirs`. An
+  account needs a logged-in config (only `oauthAccount.accountUuid` is
+  decoded) AND its Keychain item present — asked by ATTRIBUTES only
+  (`KeychainItemPresenceProbe`: no `kSecReturnData`, suppressed, `UIFail`).
+  Build discovery from the folders, never from the Keychain: it piles up
+  suffixed items for folders that no longer exist (agents run with throwaway
+  `CLAUDE_CONFIG_DIR`s), and a copied backup folder can carry a config but
+  no item.
+  Deduped by `accountUuid` (default folder wins). A config that exists but
+  cannot be read (permissions, over 16 MiB, invalid JSON mid-rewrite) is
+  `.unknown`, never "logged out": it is logged and not memoized, and the
+  default account is kept on its Keychain item alone (as before
+  multi-account); only a missing file or valid JSON without a login is
+  logged out. `CLAUDE_CONFIG_DIR=~/.claude` is not a second account. Labels
+  are unique (`work`, `work 2`); a folder named `.claude` takes its parent's
+  name. Tests inject the probe; never point discovery at the real home in a
+  test.
+- **Identity vs presentation.** `ProviderInstanceKey` (vendor + account) is
+  the card's identity: cache dir, history file, notification identifiers
+  and dedupe, Re-login/Authorize view state. `VendorId` stays presentation
+  (name, icon, pricing, status page, card order) and owns the PIN: one
+  menu-bar item per vendor (`pinned_menu_bar_vendors` holds vendor ids,
+  `autosaveName` `ai-taskbar.pinned.<vendor>`) that draws the account the
+  card shows (`UsageStore.vendorVM(_:)`) and redraws on `selectedAccounts`,
+  so stepping through accounts switches the pinned %. Per-account values a
+  build of PR #55 stored (`anthropic.<k>`) fold into their vendor. The default account's
+  `storageKey` is the bare `anthropic`, so a one-account user migrates
+  nothing; extras are `anthropic.<first 8 hex of SHA-256(accountUuid)>` (the
+  UUID itself is never stored or logged).
+- **One card per vendor** (`UsageStore.vendorGroups`): accounts sit behind an
+  `AccountSwitcherView` (‹ • • name ›, dots ringed orange for a hidden account
+  that needs a look) on the home card and on the Analytics card ("All" + one
+  position per account, each from the same `AnalyticsAggregator` run as if
+  it were the vendor's only instance). "All" sums cost and tokens, but a
+  quota % is not summable: its snapshot AND history come from one account,
+  the most used (`AnalyticsStore.quotaAccount`), never one account's % with
+  another's history. Order, `expanded_<vendor>` and the
+  status page stay per vendor; folding the card folds every account, and the
+  menu-bar % folds every account of an open card. `@Published` emits in
+  willSet, so the sibling-expansion sync carries a reentrancy guard (without
+  it two accounts overflowed the stack).
+- **Cost:** `ClaudeSessionScanner.estimate(roots:)` scans every account's
+  `projects/` (whenever any non-default account exists — with `~/.claude`
+  logged out the single card is an extra's), attributes lines per folder and
+  dedupes responses ACROSS
+  folders; `CostEstimator.byInstance` holds each account, `byVendor` the sum.
+  opencode rows show on the default account's card only.
+- **Providers** are read-only for every account; `manage_oauth_refresh`,
+  `keychain_service` and `keychain_account` apply to the default account only.
+  An extra account's re-login is `CLAUDE_CONFIG_DIR=<folder> claude auth
+  login` (folder single-quoted when needed). Providers are built once: an
+  account added or logged out later raises the "relaunch" banner
+  (`ClaudeAccountWatcher`, checked when the popover opens).
+
 ### Cost scanners — token semantics differ per source, do not generalize
 
 Each scanner reads a different vendor's local records, and the same-sounding
@@ -917,8 +984,12 @@ that came out of fixing that:
   2026-10-14 dropped the grant: the tool, a separate process outside this
   suppressor, then raised its own password dialog. A partition entry seen
   once is not a guarantee: only an item its CLI writes WITH
-  `/usr/bin/security` (the Claude item) keeps the tool trusted across
-  rewrites. Never extend the fallback to another item on a one-off dump.
+  `/usr/bin/security` keeps the tool trusted across rewrites — the Claude
+  items: `Claude Code-credentials` AND its per-config-folder siblings
+  `Claude Code-credentials-<h>` (extra accounts), written by the same CLI
+  with the same tool; their ACLs (trusted app `/usr/bin/security`, partition
+  `apple-tool:`) were verified identical on 2026-10-30, after the CLI had
+  rewritten both. Never extend the fallback to another item on a one-off dump.
   Rules: exact-match arguments only (`-s` is exact, verified; `-a ""` for the
   legacy account-less item), the item's own keychain file is passed and must
   be **unlocked** (a locked keychain fast-fails with the same code and the

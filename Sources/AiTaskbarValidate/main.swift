@@ -1321,6 +1321,15 @@ section("B1: OpenAIProvider memoizes plan label") {
            "returns nil for garbage token")
 }
 
+section("B3: Claude multi-account naming") {
+    expect(ClaudeAccountDiscovery.keychainService(forConfigDir: "/Users/example/.claude-work")
+           == "Claude Code-credentials-dd1118a7", "CLI service name for a config folder (golden, fictitious path)")
+    expect(ProviderInstanceKey(vendor: .anthropic).storageKey == "anthropic",
+           "single instance keeps the legacy storage key")
+    expect(ProviderInstanceKey(storageKey: "anthropic.1a2b3c4d")?.account == "1a2b3c4d",
+           "account storage key round-trips")
+}
+
 section("B2: AnthropicProvider plan label mapping") {
     expect(AnthropicProvider.credLabel(subscriptionType: "max",
                                        rateLimit: "default_claude_max_5x") == "Claude Max",

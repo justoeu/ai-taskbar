@@ -5,6 +5,9 @@ import AiTaskbarCore
 @MainActor
 public final class CostEstimator: ObservableObject {
     @Published public private(set) var byVendor: [VendorId: CostEstimate] = [:]
+    /// Claude cost per account (`storageKey`) when several are discovered;
+    /// `byVendor[.anthropic]` stays their deduped sum.
+    @Published public private(set) var byInstance: [String: CostEstimate] = [:]
     @Published public private(set) var lastComputedAt: Date?
     /// Drives the spinner / "Loading…" UI in the Models section. Mirrors
     /// `inFlight` but is `@Published` so views observe transitions.
@@ -16,7 +19,7 @@ public final class CostEstimator: ObservableObject {
 
     /// Scanner seams keep the refresh state machine independently testable
     /// from the size and contents of the current user's on-disk histories.
-    private let claudeEstimate: @Sendable () -> CostEstimate
+    private let claudeEstimate: @Sendable () -> ClaudeSessionScanner.MultiEstimate
     private let codexEstimate: @Sendable () -> CostEstimate
     private let museEstimate: @Sendable () -> CostEstimate
     /// Meta disabled means no scan at all (SDD-meta-muse §4.3): the seam
@@ -75,9 +78,17 @@ public final class CostEstimator: ObservableObject {
     /// failure it prevents is silent.
     private var generation: UInt64 = 0
 
+    /// `claudeRoots`: one `projects/` per discovered Claude account; empty
+    /// scans `~/.claude/projects` alone, as before multi-account.
     public init(museSessionsDir: URL? = nil, museEnabled: Bool = false,
-                geminiEnabled: Bool = false) {
-        self.claudeEstimate = { ClaudeSessionScanner.estimate() }
+                geminiEnabled: Bool = false,
+                claudeRoots: [ClaudeSessionScanner.Root] = []) {
+        self.claudeEstimate = {
+            guard !claudeRoots.isEmpty else {
+                return ClaudeSessionScanner.MultiEstimate(total: ClaudeSessionScanner.estimate(), byAccount: [:])
+            }
+            return ClaudeSessionScanner.estimate(roots: claudeRoots)
+        }
         self.codexEstimate = { CodexCost.estimate() }
         self.museEstimate = { MuseSessionScanner.estimate(sessionsDir: museSessionsDir) }
         self.museEnabled = museEnabled
@@ -112,9 +123,12 @@ public final class CostEstimator: ObservableObject {
         museEstimate: @escaping @Sendable () -> CostEstimate = { MuseSessionScanner.estimate() },
         museEnabled: Bool = false,
         geminiEstimate: @escaping @Sendable () -> CostEstimate = { GeminiUsageScanner.estimate() },
-        geminiEnabled: Bool = false
+        geminiEnabled: Bool = false,
+        claudeByAccount: @escaping @Sendable () -> [String: CostEstimate] = { [:] }
     ) {
-        self.claudeEstimate = claudeEstimate
+        self.claudeEstimate = {
+            ClaudeSessionScanner.MultiEstimate(total: claudeEstimate(), byAccount: claudeByAccount())
+        }
         self.codexEstimate = codexEstimate
         self.opencodeScan = opencodeScan
         self.museEstimate = museEstimate
@@ -187,7 +201,11 @@ public final class CostEstimator: ObservableObject {
                 // @Published dictionary fired every subscriber twice per scan
                 // (PERF-FLU-001).
                 var updated = self.byVendor
-                updated[.anthropic] = claudeEstimate
+                updated[.anthropic] = claudeEstimate.total
+                // Set before `byVendor`, which emits on every scan: listeners
+                // react to `$byVendor` and read this, so one scan is one
+                // recompute.
+                self.byInstance = claudeEstimate.byAccount
                 updated[.openai] = codexEstimate
                 updated[.meta] = museEstimate
                 updated[.gemini] = geminiEstimate

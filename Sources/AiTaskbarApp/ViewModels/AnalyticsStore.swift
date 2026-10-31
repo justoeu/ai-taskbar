@@ -60,6 +60,33 @@ public final class AnalyticsStore: ObservableObject {
     /// Transient vendor to scroll to and focus when transitioning from the home screen.
     @Published public var targetVendor: VendorId?
 
+    /// One account's analytics inside a multi-account vendor card.
+    public struct AccountSummary: Identifiable {
+        public let id: String          // storageKey
+        public let name: String
+        public let summary: VendorAnalyticsSummary
+    }
+
+    /// What `accountSummaries` is built from, per account of a vendor that
+    /// has several (two Claude logins).
+    public struct AccountInput {
+        public let key: ProviderInstanceKey
+        public let name: String
+        public let estimate: CostEstimate?
+        public let snapshot: VendorSnapshot?
+    }
+
+    /// Per-account summaries for vendors with several accounts; the card's
+    /// "All" position is the vendor summary in `snapshot`.
+    @Published public private(set) var accountSummaries: [VendorId: [AccountSummary]] = [:]
+    /// The account each multi-account analytics card shows (`storageKey`, or
+    /// `allAccountsID`). View state: it resets to "All" on relaunch.
+    @Published public var selectedAccount: [VendorId: String] = [:]
+    public static let allAccountsID = "all"
+    private let accountsProvider: () -> [AccountInput]
+    private let accountHistoryProvider: @Sendable (ProviderInstanceKey) -> [UsageHistoryStore.Sample]
+    private var accountHistories: [ProviderInstanceKey: [UsageHistoryStore.Sample]] = [:]
+
     private let estimatesProvider: () -> [VendorId: CostEstimate]
     private let snapshotsProvider: () -> [VendorId: VendorSnapshot]
     private let historyProvider: @Sendable (VendorId) -> [UsageHistoryStore.Sample]
@@ -74,8 +101,12 @@ public final class AnalyticsStore: ObservableObject {
         estimatesProvider: @escaping () -> [VendorId: CostEstimate] = { [:] },
         snapshotsProvider: @escaping () -> [VendorId: VendorSnapshot] = { [:] },
         historyProvider: @escaping @Sendable (VendorId) -> [UsageHistoryStore.Sample] = { _ in [] },
+        accountsProvider: @escaping () -> [AccountInput] = { [] },
+        accountHistoryProvider: @escaping @Sendable (ProviderInstanceKey) -> [UsageHistoryStore.Sample] = { _ in [] },
         defaults: UserDefaults = .standard
     ) {
+        self.accountsProvider = accountsProvider
+        self.accountHistoryProvider = accountHistoryProvider
         self.estimatesProvider = estimatesProvider
         self.snapshotsProvider = snapshotsProvider
         self.historyProvider = historyProvider
@@ -165,16 +196,41 @@ public final class AnalyticsStore: ObservableObject {
         mergingOpencode(byVendor, opencode: opencode)
     }
 
-    /// Latest good snapshot per vendor, as the popover currently shows it.
+    /// Latest good snapshot per vendor, as the popover currently shows it:
+    /// for a multi-account vendor, the account its card is showing.
     static func currentSnapshots(_ usageStore: UsageStore?) -> [VendorId: VendorSnapshot] {
         guard let usageStore else { return [:] }
         var dict: [VendorId: VendorSnapshot] = [:]
-        for v in usageStore.vendors {
-            if let outcome = v.state.outcome {
-                dict[v.vendorId] = outcome.snapshot
+        for vendor in Set(usageStore.vendors.map(\.vendorId)) {
+            if let outcome = usageStore.vendorVM(vendor)?.state.outcome {
+                dict[vendor] = outcome.snapshot
             }
         }
         return dict
+    }
+
+    /// Every account of every multi-account vendor, with its own cost and
+    /// snapshot.
+    static func accountInputs(_ usageStore: UsageStore?, _ cost: CostEstimator?) -> [AccountInput] {
+        guard let usageStore else { return [] }
+        return usageStore.vendorGroups.filter(\.hasAccounts).flatMap { group in
+            group.members.map { vm in
+                AccountInput(key: vm.instanceKey, name: vm.accountDisplayName,
+                             estimate: cost?.byInstance[vm.instanceKey.storageKey],
+                             snapshot: vm.state.outcome?.snapshot)
+            }
+        }
+    }
+
+    /// Production per-account history: the instance's own JSONL, 90 days.
+    public nonisolated static func diskHistory(instance: ProviderInstanceKey) -> [UsageHistoryStore.Sample] {
+        do {
+            return try UsageHistoryStore.defaultFor(instance).load(since: Date().addingTimeInterval(-90 * 86_400))
+        } catch {
+            AppLog.lifecycle.error(
+                "analytics history unavailable for \(instance.storageKey, privacy: .public): \(String(describing: error), privacy: .public)")
+            return []
+        }
     }
 
     /// Production history source: the vendor's on-disk JSONL, last 90 days.
@@ -218,11 +274,18 @@ public final class AnalyticsStore: ObservableObject {
             snapshotsProvider: { [weak usageStore] in
                 AnalyticsStore.currentSnapshots(usageStore)
             },
-            historyProvider: historyProvider
+            historyProvider: historyProvider,
+            accountsProvider: { [weak usageStore, weak costEstimator] in
+                AnalyticsStore.accountInputs(usageStore, costEstimator)
+            },
+            accountHistoryProvider: { AnalyticsStore.diskHistory(instance: $0) }
         )
         self.usageStore = usageStore
         self.costEstimator = costEstimator
 
+        // Also covers `byInstance`: the estimator assigns it just before
+        // `byVendor` in the same main-actor block, so a second sink on it ran
+        // every aggregation twice per scan.
         costEstimator.$byVendor
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -273,7 +336,19 @@ public final class AnalyticsStore: ObservableObject {
     @discardableResult
     private func publishSnapshot() -> Set<VendorId> {
         let estimates = estimatesProvider()
-        let snapshots = snapshotsProvider()
+        var snapshots = snapshotsProvider()
+        var histories = self.histories
+        let accounts = accountsProvider()
+        // "All" of a multi-account vendor: cost and tokens are every
+        // account's sum, but a quota percentage is not summable. Snapshot
+        // AND history come from one account, the most used one, so the
+        // position never under-reports nor mixes one account's percentage
+        // with another's history.
+        for (vendor, inputs) in Dictionary(grouping: accounts, by: \.key.vendor) {
+            guard let pick = Self.quotaAccount(inputs) else { continue }
+            snapshots[vendor] = pick.snapshot
+            histories[vendor] = accountHistories[pick.key] ?? []
+        }
         let vendors = Set(estimates.keys).union(snapshots.keys)
         self.snapshot = AnalyticsAggregator.aggregate(
             timeframe: timeframe,
@@ -284,23 +359,71 @@ public final class AnalyticsStore: ObservableObject {
             estimates: estimates,
             snapshots: snapshots
         )
+        publishAccountSummaries(accounts)
         return vendors
+    }
+
+    /// The account whose quota stands for a multi-account vendor's "All":
+    /// the highest current utilization, the first (default) on a tie or
+    /// with no snapshot at all.
+    static func quotaAccount(_ inputs: [AccountInput]) -> AccountInput? {
+        inputs.enumerated().max { a, b in
+            let ua = a.element.snapshot?.maxUtilization ?? -1
+            let ub = b.element.snapshot?.maxUtilization ?? -1
+            return ua != ub ? ua < ub : a.offset > b.offset
+        }?.element
+    }
+
+    /// Runs the same aggregation once per account, each as if it were the
+    /// vendor's only instance, so every chart and figure of the card exists
+    /// per account with no second code path.
+    private func publishAccountSummaries(_ accounts: [AccountInput]) {
+        var out: [VendorId: [AccountSummary]] = [:]
+        let now = Date()
+        for input in accounts {
+            let vendor = input.key.vendor
+            let result = AnalyticsAggregator.aggregate(
+                timeframe: timeframe,
+                compareWithPrevious: compareWithPrevious,
+                comparisonOffset: comparisonOffset,
+                now: now,
+                histories: accountHistories[input.key].map { [vendor: $0] } ?? [:],
+                estimates: input.estimate.map { [vendor: $0] } ?? [:],
+                snapshots: input.snapshot.map { [vendor: $0] } ?? [:])
+            if let summary = result.vendorSummaries.first(where: { $0.vendor == vendor }) {
+                out[vendor, default: []].append(AccountSummary(id: input.key.storageKey,
+                                                               name: input.name, summary: summary))
+            }
+        }
+        accountSummaries = out
     }
 
     private func reloadHistories(for vendors: Set<VendorId>) {
         historyReloadTask?.cancel()
         isLoading = true
         let provider = historyProvider
+        let accountKeys = accountsProvider().map(\.key)
+        let accountProvider = accountHistoryProvider
         historyReloadTask = Task { @MainActor [weak self] in
             // A synchronous burst of triggers cancels this before it runs.
             guard !Task.isCancelled else { return }
-            let load = Task.detached(priority: .utility) { () -> [VendorId: [UsageHistoryStore.Sample]]? in
+            let load = Task.detached(priority: .utility) {
+                () -> (vendors: [VendorId: [UsageHistoryStore.Sample]],
+                       accounts: [ProviderInstanceKey: [UsageHistoryStore.Sample]])? in
                 var loaded: [VendorId: [UsageHistoryStore.Sample]] = [:]
                 for vendor in vendors {
                     if Task.isCancelled { return nil }
                     loaded[vendor] = provider(vendor)
                 }
-                return loaded
+                var accounts: [ProviderInstanceKey: [UsageHistoryStore.Sample]] = [:]
+                for key in accountKeys {
+                    if Task.isCancelled { return nil }
+                    // The default account's file IS the vendor's file.
+                    accounts[key] = key.account == nil
+                        ? loaded[key.vendor] ?? provider(key.vendor)
+                        : accountProvider(key)
+                }
+                return (loaded, accounts)
             }
             let loaded = await withTaskCancellationHandler {
                 await load.value
@@ -308,7 +431,8 @@ public final class AnalyticsStore: ObservableObject {
                 load.cancel()
             }
             guard let loaded, !Task.isCancelled, let self else { return }
-            self.histories = loaded
+            self.histories = loaded.vendors
+            self.accountHistories = loaded.accounts
             self.isLoading = false
             self.publishSnapshot()
         }

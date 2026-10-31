@@ -422,3 +422,49 @@ public enum CredentialReconciliation {
         }
     }
 }
+
+/// Production `ClaudeKeychainProbing`: asks whether an item exists from its
+/// ATTRIBUTES only (`kSecReturnAttributes`, never `kSecReturnData`), so it
+/// reads no secret, and runs suppressed with `UIFail` like every other
+/// Keychain call here, so it cannot raise a dialog. Lives in this file
+/// because `kSecUseAuthenticationUI` is an allowlisted deprecation only here.
+/// `@unchecked Sendable`: the only state is an immutable search list of
+/// `SecKeychain` references, which Security treats as thread-safe handles.
+public final class KeychainItemPresenceProbe: ClaudeKeychainProbing, @unchecked Sendable {
+    private let searchList: [SecKeychain]?
+
+    public init() { self.searchList = nil }
+
+    /// Test seam: an isolated keychain instead of the login keychain.
+    internal init(searchList: [SecKeychain]) { self.searchList = searchList }
+
+    public func presence(service: String) -> ClaudeKeychainPresence {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
+        ]
+        if let searchList { query[kSecMatchSearchList as String] = searchList }
+        var result: CFTypeRef?
+        let status = KeychainPromptSuppressor.withPromptsSuppressed {
+            SecItemCopyMatching(query as CFDictionary, &result)
+        }
+        switch status {
+        case errSecSuccess:
+            let items = result as? [[String: Any]] ?? []
+            let newest = items.compactMap { $0[kSecAttrModificationDate as String] as? Date }.max()
+            return .present(modified: newest)
+        case errSecItemNotFound:
+            return .missing
+        case _ where KeychainCredentialReader.isACLBlockedStatus(status):
+            // The item exists; only its access is gated. Reading it is the
+            // provider's job, which drives the Authorize banner.
+            return .present(modified: nil)
+        default:
+            AppLog.keychain.error("Keychain presence probe for \(service, privacy: .public) failed (OSStatus \(status, privacy: .public))")
+            return .missing
+        }
+    }
+}

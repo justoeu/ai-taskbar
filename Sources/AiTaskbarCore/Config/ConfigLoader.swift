@@ -440,6 +440,7 @@ public struct ConfigLoader: Sendable {
 
         [anthropic]
         enabled = true
+        # config_dirs = ["/Volumes/work/.claude"]   # extra accounts outside ~; ~/.claude-* are found automatically
         # keychain_account = "your.short.username"   # pin if you have multiple Claude entries
         # manage_oauth_refresh = false   # default false: read-only, let Claude Code own token renewal.
         #                                 # Set true ONLY if you run the app without the Claude Code CLI;

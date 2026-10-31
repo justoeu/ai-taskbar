@@ -449,3 +449,10 @@
 "analytics_tokens" = "tokens";
 "analytics_models_count" = "(%ld mod.)";
 
+/* Claude multi-account switcher */
+"account_default_label" = "principal";
+"account_previous_help" = "Conta anterior";
+"account_next_help" = "Próxima conta";
+"account_switcher_accessibility_fmt" = "Conta %1$@, %2$ld de %3$ld";
+"account_all_label" = "Todas";
+"claude_accounts_changed_banner" = "As contas do Claude mudaram neste Mac. Reinicie para mostrá-las.";

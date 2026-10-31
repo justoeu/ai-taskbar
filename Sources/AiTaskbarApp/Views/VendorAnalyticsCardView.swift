@@ -12,6 +12,9 @@ public struct VendorAnalyticsCardView: View {
     public let canMoveDown: Bool
     public let onMoveUp: (() -> Void)?
     public let onMoveDown: (() -> Void)?
+    /// Account navigation drawn under the header for a vendor with several
+    /// accounts ("All" plus one position per account).
+    let accounts: (chips: [AccountChip], selectedID: String, onSelect: (String) -> Void)?
 
     @State private var isExpanded: Bool = true
 
@@ -25,6 +28,23 @@ public struct VendorAnalyticsCardView: View {
         onMoveUp: (() -> Void)? = nil,
         onMoveDown: (() -> Void)? = nil
     ) {
+        self.init(summary: summary, timeframe: timeframe, compareWithPrevious: compareWithPrevious,
+                  comparisonOffset: comparisonOffset, canMoveUp: canMoveUp, canMoveDown: canMoveDown,
+                  onMoveUp: onMoveUp, onMoveDown: onMoveDown, accounts: nil)
+    }
+
+    init(
+        summary: VendorAnalyticsSummary,
+        timeframe: AnalyticsTimeframe,
+        compareWithPrevious: Bool,
+        comparisonOffset: Int,
+        canMoveUp: Bool,
+        canMoveDown: Bool,
+        onMoveUp: (() -> Void)?,
+        onMoveDown: (() -> Void)?,
+        accounts: (chips: [AccountChip], selectedID: String, onSelect: (String) -> Void)?
+    ) {
+        self.accounts = accounts
         self.summary = summary
         self.timeframe = timeframe
         self.compareWithPrevious = compareWithPrevious
@@ -136,6 +156,10 @@ public struct VendorAnalyticsCardView: View {
                     .help(L10n.localizedString("move_vendor_down_help"))
                 }
                 .foregroundStyle(.secondary)
+            }
+            if let accounts {
+                AccountSwitcherView(chips: accounts.chips, selectedID: accounts.selectedID,
+                                    onSelect: accounts.onSelect)
             }
 
             // Accordion Content

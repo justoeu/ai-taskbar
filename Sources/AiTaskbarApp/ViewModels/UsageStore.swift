@@ -42,6 +42,12 @@ public final class UsageStore: ObservableObject {
     /// providers appear before unconfigured, alpha within each bucket.
     /// Recomputed in `recomputeAggregates` / after drag-reorder.
     @Published public private(set) var sortedVendors: [VendorViewModel] = []
+    /// One card per vendor, in display order; a multi-account vendor (two
+    /// Claude logins) holds several instances behind one card with an
+    /// account switcher. `sortedVendors` is these members flattened.
+    @Published public private(set) var vendorGroups: [VendorGroup] = []
+    /// The account each multi-account card shows, persisted per vendor.
+    @Published public private(set) var selectedAccounts: [VendorId: ProviderInstanceKey] = [:]
 
     public let thresholds: ThresholdsConfig
     /// Configured scheduler cadence in seconds — surfaced here so views can
@@ -51,10 +57,17 @@ public final class UsageStore: ObservableObject {
     /// effect (same as RefreshScheduler itself), so a `let` is honest.
     public let refreshIntervalSeconds: TimeInterval
     private var subscriptions: Set<AnyCancellable> = []
+    private var isSyncingExpansion = false
     /// User-preferred card order (empty = automatic configured-first sort).
     private var preferredOrder: [VendorId]
 
     public static let pinnedDefaultsKey = "pinned_menu_bar_vendors"
+
+    /// UserDefaults key holding the `storageKey` a multi-account card shows.
+    public static func selectedAccountKey(for vendor: VendorId) -> String {
+        "selected_account_\(vendor.rawValue)"
+    }
+    private let defaults: UserDefaults
 
     public struct PinLimitAlertInfo: Identifiable, Equatable, Sendable {
         public let id = UUID()
@@ -67,7 +80,9 @@ public final class UsageStore: ObservableObject {
         }
     }
 
-    /// Pinned vendors in explicit user insertion order.
+    /// Pinned vendors in explicit user insertion order. A pin belongs to the
+    /// CARD, not to an account: a multi-account vendor gets one menu-bar item
+    /// that shows whichever account the card is showing (`selectedAccounts`).
     @Published public private(set) var pinnedVendorOrder: [VendorId] = []
 
     /// Set of vendors pinned to the macOS menu bar for O(1) membership lookup.
@@ -76,23 +91,31 @@ public final class UsageStore: ObservableObject {
     /// Alert presented when pinning an item exceeds available menu bar space or hard limits.
     @Published public var pinLimitAlert: PinLimitAlertInfo?
 
-    /// Transient vendor focused and scrolled to when clicking a pinned menu bar item.
-    @Published public var focusedVendor: VendorId?
+    /// Transient instance focused and scrolled to when clicking a pinned menu bar item.
+    @Published public var focusedVendor: ProviderInstanceKey?
 
     /// Whether the popover / main MenuBarExtra window is currently presented.
     /// Not @Published so transitions do not invalidate SwiftUI views.
     public var isPopoverPresented: Bool = false
 
-    public func focusVendor(_ id: VendorId) {
+    /// Focuses a vendor's card at the account it is showing (a pinned item's
+    /// click: the item shows that same account).
+    public func focusVendor(_ vendor: VendorId) {
+        guard let vm = vendorVM(vendor) else { return }
+        focusVendor(vm.instanceKey)
+    }
+
+    public func focusVendor(_ id: ProviderInstanceKey) {
         focusedVendor = id
-        if let vm = vendorVM(id), !vm.isExpanded {
+        if vendorVM(instance: id) != nil { selectAccount(id) }
+        if let vm = vendorVM(instance: id), !vm.isExpanded {
             vm.isExpanded = true
         }
     }
 
     /// Safely retrieves and clears transient `focusedVendor` so subsequent popover opens
     /// do not reuse a stale focus target.
-    public func consumeFocusedVendor() -> VendorId? {
+    public func consumeFocusedVendor() -> ProviderInstanceKey? {
         let v = focusedVendor
         focusedVendor = nil
         return v
@@ -109,20 +132,29 @@ public final class UsageStore: ObservableObject {
                 thresholds: ThresholdsConfig = .init(),
                 refreshIntervalSeconds: TimeInterval = 300,
                 preferredOrder: [VendorId] = VendorOrder.load(),
+                defaults: UserDefaults = .standard,
                 pinSpaceCheck: @escaping PinSpaceCheck = { count in
                     PinnedStatusItemManager.shared.canAddPinnedStatusItem(currentPinnedCount: count)
                 }) {
         self.vendors = vendors
+        self.defaults = defaults
         self.pinSpaceCheck = pinSpaceCheck
         self.primary = primary
         self.thresholds = thresholds
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.preferredOrder = preferredOrder
-        let savedPinned = (UserDefaults.standard.stringArray(forKey: Self.pinnedDefaultsKey) ?? [])
-            .compactMap(VendorId.init(rawValue:))
-            .filter(\.reportsUtilization)
+        let savedPinned = Self.pinnedVendors(fromStored: defaults.stringArray(forKey: Self.pinnedDefaultsKey) ?? [])
         self.pinnedVendorOrder = savedPinned
         self.pinnedVendorIds = Set(savedPinned)
+        var selected: [VendorId: ProviderInstanceKey] = [:]
+        for vendor in Set(vendors.map(\.vendorId)) {
+            if let raw = defaults.string(forKey: Self.selectedAccountKey(for: vendor)),
+               let key = ProviderInstanceKey(storageKey: raw),
+               vendors.contains(where: { $0.instanceKey == key }) {
+                selected[vendor] = key
+            }
+        }
+        self.selectedAccounts = selected
         wireUpAggregates()
     }
 
@@ -152,9 +184,33 @@ public final class UsageStore: ObservableObject {
                       latest: true)
             .sink { [weak self] _ in self?.recomputeAggregates() }
             .store(in: &subscriptions)
-        // Seed `sortedVendors` so the first render uses the right order
-        // (before any state stream fires).
-        sortedVendors = vendors
+        // One card per vendor: folding it folds every account behind it, so
+        // a hidden account never keeps feeding the menu-bar percentage.
+        // `@Published` emits in willSet, before the new value is stored, so a
+        // sibling's own sink would see this one still holding the old value
+        // and propagate back forever (it overflowed the stack). One sync at a
+        // time; the nested emissions it causes are ignored.
+        for vm in vendors {
+            let siblings = vendors.filter { $0.vendorId == vm.vendorId && $0 !== vm }
+            guard !siblings.isEmpty else { continue }
+            vm.$isExpanded.dropFirst()
+                .sink { [weak self] expanded in
+                    guard let self, !self.isSyncingExpansion else { return }
+                    self.isSyncingExpansion = true
+                    defer { self.isSyncingExpansion = false }
+                    for sibling in siblings where sibling.isExpanded != expanded {
+                        sibling.isExpanded = expanded
+                    }
+                }
+                .store(in: &subscriptions)
+        }
+        // Seed the cards so the first render uses the right order (before
+        // any state stream fires). Seeding `sortedVendors` alone left
+        // `vendorGroups` empty: `applySortedOrder` then saw "same order" and
+        // never assigned the groups, so the popover drew no card at all.
+        let groups = Self.groups(vendors, preferred: preferredOrder)
+        vendorGroups = groups
+        sortedVendors = groups.flatMap(\.members)
         recomputeAggregates()
     }
 
@@ -171,40 +227,85 @@ public final class UsageStore: ObservableObject {
         applySortedOrder()
     }
 
-    /// Recompute `sortedVendors` from `preferredOrder` + current vendor set.
+    /// Recompute `vendorGroups` / `sortedVendors` from `preferredOrder` and
+    /// the current vendor set. Order is per VENDOR (one card each); members
+    /// keep the order the providers were built in (default account first).
     private func applySortedOrder() {
-        let ids = VendorOrder.ordered(
-            entries: vendors.map { ($0.vendorId, Self.isUnconfigured($0)) },
-            preferred: preferredOrder
-        )
-        let byId = Dictionary(uniqueKeysWithValues: vendors.map { ($0.vendorId, $0) })
-        let newlySorted = ids.compactMap { byId[$0] }
+        let groups = Self.groups(vendors, preferred: preferredOrder)
+        let newlySorted = groups.flatMap(\.members)
         let sameOrder = newlySorted.count == sortedVendors.count
             && zip(newlySorted, sortedVendors).allSatisfy { $0.id == $1.id }
         if !sameOrder {
+            vendorGroups = groups
             sortedVendors = newlySorted
             persistPinned()
         }
     }
 
-    /// True iff the vendor is in the no-credentials `.failed(.disabled)`
-    /// state. Without a custom order, such vendors sink to the bottom.
-    private static func isUnconfigured(_ vm: VendorViewModel) -> Bool {
-        vm.isDisabled
+    /// Pure grouping, exposed for tests.
+    static func groups(_ vendors: [VendorViewModel], preferred: [VendorId]) -> [VendorGroup] {
+        var membersByVendor: [VendorId: [VendorViewModel]] = [:]
+        var firstSeen: [VendorId] = []
+        for vm in vendors {
+            if membersByVendor[vm.vendorId] == nil { firstSeen.append(vm.vendorId) }
+            membersByVendor[vm.vendorId, default: []].append(vm)
+        }
+        // A card sinks as unconfigured only when every account behind it is.
+        let ids = VendorOrder.ordered(
+            entries: firstSeen.map { vendor in
+                (vendor, membersByVendor[vendor]?.allSatisfy(\.isDisabled) ?? true)
+            },
+            preferred: preferred
+        )
+        return ids.compactMap { vendor in
+            membersByVendor[vendor].map { VendorGroup(vendor: vendor, members: $0) }
+        }
     }
 
     // MARK: - Public surface used by views
 
-    public var providerIds: [VendorId] { vendors.map(\.vendorId) }
+    public var providerIds: [VendorId] { vendorGroups.map(\.vendor) }
     public var providers: [any UsageProvider] { vendors.map(\.provider) }
 
+    /// The card's instance for a vendor: the selected account when it has
+    /// several, its only instance otherwise.
     public func vendorVM(_ id: VendorId) -> VendorViewModel? {
-        vendors.first(where: { $0.vendorId == id })
+        if let key = selectedAccounts[id], let vm = vendorVM(instance: key) { return vm }
+        return vendors.first(where: { $0.vendorId == id })
+    }
+
+    public func vendorVM(instance key: ProviderInstanceKey) -> VendorViewModel? {
+        vendors.first(where: { $0.instanceKey == key })
+    }
+
+    /// The instance a group's card shows.
+    public func selectedMember(of group: VendorGroup) -> VendorViewModel {
+        if let key = selectedAccounts[group.vendor],
+           let vm = group.members.first(where: { $0.instanceKey == key }) {
+            return vm
+        }
+        return group.members[0]
+    }
+
+    /// Shows `key`'s account in its vendor's card and remembers the choice.
+    public func selectAccount(_ key: ProviderInstanceKey) {
+        guard vendorVM(instance: key) != nil, selectedAccounts[key.vendor] != key else { return }
+        selectedAccounts[key.vendor] = key
+        defaults.set(key.storageKey, forKey: Self.selectedAccountKey(for: key.vendor))
+    }
+
+    /// Steps a multi-account card to the next (`+1`) or previous (`-1`)
+    /// account, wrapping around.
+    public func cycleAccount(_ vendor: VendorId, by step: Int) {
+        guard let group = vendorGroups.first(where: { $0.vendor == vendor }), group.members.count > 1,
+              let index = group.members.firstIndex(where: { $0 === selectedMember(of: group) }) else { return }
+        let count = group.members.count
+        selectAccount(group.members[((index + step) % count + count) % count].instanceKey)
     }
 
     /// Move one step toward the top of the popover list. No-op when already first.
     public func moveVendorUp(_ id: VendorId) {
-        let current = sortedVendors.map(\.vendorId)
+        let current = vendorGroups.map(\.vendor)
         guard let idx = current.firstIndex(of: id), idx > 0 else { return }
         var next = current
         next.swapAt(idx, idx - 1)
@@ -215,7 +316,7 @@ public final class UsageStore: ObservableObject {
 
     /// Move one step toward the bottom of the popover list. No-op when already last.
     public func moveVendorDown(_ id: VendorId) {
-        let current = sortedVendors.map(\.vendorId)
+        let current = vendorGroups.map(\.vendor)
         guard let idx = current.firstIndex(of: id), idx < current.count - 1 else { return }
         var next = current
         next.swapAt(idx, idx + 1)
@@ -226,16 +327,25 @@ public final class UsageStore: ObservableObject {
 
     /// Index of `id` in the current display order, or nil if absent.
     public func displayIndex(of id: VendorId) -> Int? {
-        sortedVendors.firstIndex(where: { $0.vendorId == id })
+        vendorGroups.firstIndex(where: { $0.vendor == id })
     }
 
-    public var displayCount: Int { sortedVendors.count }
+    public var displayCount: Int { vendorGroups.count }
 
     public func isPinned(_ id: VendorId) -> Bool {
         pinnedVendorIds.contains(id)
     }
 
-    public func togglePinned(_ id: VendorId, defaults: UserDefaults = .standard) {
+    /// Stored pins read back as vendors, in order, once each. Values written
+    /// by per-account builds (`anthropic.<k>`) fold into their vendor.
+    static func pinnedVendors(fromStored raw: [String]) -> [VendorId] {
+        var seen: Set<VendorId> = []
+        return raw.compactMap { ProviderInstanceKey(storageKey: $0)?.vendor }
+            .filter { $0.reportsUtilization && seen.insert($0).inserted }
+    }
+
+    public func togglePinned(_ id: VendorId, defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? self.defaults
         if pinnedVendorIds.contains(id) {
             pinnedVendorIds.remove(id)
             pinnedVendorOrder.removeAll(where: { $0 == id })
@@ -261,8 +371,8 @@ public final class UsageStore: ObservableObject {
         }
     }
 
-    private func persistPinned(defaults: UserDefaults = .standard) {
-        defaults.set(pinnedVendorOrder.map(\.rawValue), forKey: Self.pinnedDefaultsKey)
+    private func persistPinned(defaults: UserDefaults? = nil) {
+        (defaults ?? self.defaults).set(pinnedVendorOrder.map(\.rawValue), forKey: Self.pinnedDefaultsKey)
     }
 
     public func refreshAll(forceRefresh: Bool = false) {
@@ -326,6 +436,15 @@ public final class UsageStore: ObservableObject {
             for store in stores { store.compact() }
         }
     }
+}
+
+/// One card in the popover: a vendor and the instance(s) behind it.
+public struct VendorGroup: Identifiable {
+    public let vendor: VendorId
+    /// Never empty; the default account first.
+    public let members: [VendorViewModel]
+    public var id: VendorId { vendor }
+    public var hasAccounts: Bool { members.count > 1 }
 }
 
 /// Pure aggregation logic extracted from `UsageStore.recomputeAggregates()`.

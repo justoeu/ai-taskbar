@@ -65,6 +65,8 @@ struct SettingsViewModelDiffTests {
             expected: .string(section: "anthropic", key: "keychain_account", value: "acct")),
         Row(section: "anthropic", field: "manageOAuthRefresh", mutate: { $0.anthropic.manageOAuthRefresh = true },
             expected: .bool(section: "anthropic", key: "manage_oauth_refresh", value: true)),
+        Row(section: "anthropic", field: "configDirs", mutate: { $0.anthropic.configDirs = ["/Volumes/work/.claude"] },
+            expected: .stringArray(section: "anthropic", key: "config_dirs", value: ["/Volumes/work/.claude"])),
         // [openai]
         Row(section: "openai", field: "enabled", mutate: { $0.openai.enabled = false },
             expected: .bool(section: "openai", key: "enabled", value: false)),
