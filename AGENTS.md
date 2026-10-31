@@ -804,6 +804,16 @@ that came out of fixing that:
   DROP the scanner's series on merge — so opencode-only vendors (Z.AI) get
   the chart; opencode dollars still never reach a vendor's figures.
 
+- **Claude plan names are not the credential ids.** Anthropic renamed the
+  consumer tiers (verified on claude.com/pricing, 2026-10-30): Max 20x is now
+  **Ultra** ($200) and Max 5x is now **Max** ($100). The OAuth credential
+  still says `subscriptionType: "max"` + `rateLimitTier:
+  "default_claude_max_20x"` / `…_5x`, while Claude Code's own
+  `planDisplayName` reads "Ultra". `AnthropicProvider.credLabel` maps the ids
+  to the current names; do not bring back "Max 20x" / "Max 5x". Ultra drops
+  the 5-hour limit for verified accounts: `five_hour` is optional and a
+  missing one simply hides the session bar.
+
 - **Never use `[String: Any]`** for anything that crosses an actor boundary
   or is stored on a `Sendable` type. Use `JSONValue` (in `AiTaskbarCore/Util/`).
 - **All files containing secrets must be `0o600`** at write time, not via

@@ -293,7 +293,7 @@ struct OAuthKeychainConcurrencyTests {
             Issue.record("expected anthropic snapshot")
             return
         }
-        #expect(snap.planLabel == "Claude Max 20x")
+        #expect(snap.planLabel == "Claude Ultra")
     }
 
     /// PERF-MAE-003: the label priming read ran on every non-forced fetch,
@@ -321,7 +321,7 @@ struct OAuthKeychainConcurrencyTests {
             Issue.record("expected anthropic snapshot")
             return
         }
-        #expect(snap.planLabel == "Claude Max 20x")
+        #expect(snap.planLabel == "Claude Ultra")
     }
 
     // MARK: BEST-ATE-001

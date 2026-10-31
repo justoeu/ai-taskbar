@@ -197,12 +197,16 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         labelLock.unlock()
     }
 
+    /// The credential still carries the pre-rename ids (`max` +
+    /// `default_claude_max_20x` / `…_5x`, verified 2026-10-30), but Anthropic
+    /// now sells those tiers as Ultra ($200) and Max ($100): Claude Code's own
+    /// `planDisplayName` reads "Ultra" for a `max_20x` account.
     public static func credLabel(subscriptionType: String?, rateLimit: String?) -> String? {
         switch subscriptionType?.lowercased() {
         case "max":
-            if rateLimit?.contains("20x") == true { return "Claude Max 20x" }
-            if rateLimit?.contains("5x")  == true { return "Claude Max 5x" }
+            if rateLimit?.contains("20x") == true { return "Claude Ultra" }
             return "Claude Max"
+        case "ultra":      return "Claude Ultra"
         case "pro":        return "Claude Pro"
         case "team":       return "Claude Team"
         case "enterprise": return "Claude Enterprise"
