@@ -490,7 +490,23 @@ path, `/Users/example/.claude-work` → `dd1118a7`, never a real one).
   status page stay per vendor; folding the card folds every account, and the
   menu-bar % folds every account of an open card. `@Published` emits in
   willSet, so the sibling-expansion sync carries a reentrancy guard (without
-  it two accounts overflowed the stack).
+  it two accounts overflowed the stack). Hovering an arrow highlights it and
+  turns the name into its destination ("← main"): the bare chevron with a
+  slow tooltip read as nothing. ← / → go through `PopoverKeyMonitor` to
+  `AccountSwitcherKeyboard`: only ENABLED switchers count (home cards stay
+  mounted, disabled, under Analytics), target = hovered, else last used,
+  else the only one; ambiguous → the key is left alone. Never while a
+  focused control uses the arrows itself (`firstResponder` is an `NSText`
+  or, with Full Keyboard Access, an `NSControl` such as the segmented
+  timeframe picker) or a modal is up. The name label reserves the width of
+  its widest variant, so the hover preview never moves the right arrow out
+  from under the pointer. The keyboard resolves the destination at key time
+  from `AccountSwitcherHandle`'s live state (ids, selection, action),
+  refreshed on every render: rebuilding a captured closure in
+  `onChange(of: selectedID)` went stale, because on macOS 13 that action runs
+  with the PREVIOUS view value — after a click, → re-selected the account
+  already shown and the keys looked dead. Reproduced in the running app
+  (click ›, press →: no change) and fixed there, not just in tests.
 - **Cost:** `ClaudeSessionScanner.estimate(roots:)` scans every account's
   `projects/` (whenever any non-default account exists — with `~/.claude`
   logged out the single card is an extra's), attributes lines per folder and

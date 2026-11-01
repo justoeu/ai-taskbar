@@ -197,8 +197,10 @@ holds a logged-in config and whose Keychain item exists becomes an account.
 Folders elsewhere go in `config_dirs` under `[anthropic]`.
 
 The accounts share the Claude card, with ‹ › arrows and dots to switch
-between them; a dot ringed in orange is a hidden account that needs a look
-(error, Authorize, expired login, or usage at the warning threshold). Each
+between them (hovering an arrow shows the account it leads to; the ← / →
+keys switch too, on the home and Analytics pages); a dot ringed in orange is
+a hidden account that needs a look (error, Authorize, expired login, or
+usage at the warning threshold). Each
 account has its own usage bars, cost, history and notifications. Pinning
 the card pins one menu-bar item that shows the account the card is showing:
 switch accounts and the pinned % switches with it. The Analytics card offers

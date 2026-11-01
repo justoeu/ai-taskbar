@@ -451,8 +451,8 @@
 
 /* Claude multi-account switcher */
 "account_default_label" = "principal";
-"account_previous_help" = "Cuenta anterior";
-"account_next_help" = "Cuenta siguiente";
+"account_previous_help_fmt" = "Cuenta anterior: %@ (←)";
+"account_next_help_fmt" = "Cuenta siguiente: %@ (→)";
 "account_switcher_accessibility_fmt" = "Cuenta %1$@, %2$ld de %3$ld";
 "account_all_label" = "Todas";
 "claude_accounts_changed_banner" = "Las cuentas de Claude cambiaron en este Mac. Reinicia para mostrarlas.";

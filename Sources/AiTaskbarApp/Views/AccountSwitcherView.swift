@@ -21,52 +21,123 @@ public struct AccountChip: Identifiable, Equatable {
 /// selects its account directly. A dot ringed in orange marks a hidden
 /// account that needs attention, so a spent account never hides behind the
 /// switcher.
+///
+/// Hovering an arrow highlights it and turns the name into the account it
+/// leads to ("← main"): a bare chevron with a slow tooltip read as nothing.
+/// ← / → drive it from the keyboard (`AccountSwitcherKeyboard`).
 struct AccountSwitcherView: View {
     let chips: [AccountChip]
     let selectedID: String
     let onSelect: (String) -> Void
 
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var handle = AccountSwitcherHandle()
+    @State private var hoveredArrow: Int?
+
     var body: some View {
-        let index = chips.firstIndex(where: { $0.id == selectedID }) ?? 0
+        let index = currentIndex
+        // Live state for the keyboard, on every render (see the handle).
+        let _ = handle.update(ids: chips.map(\.id), selectedID: selectedID, onSelect: onSelect)
         HStack(spacing: 6) {
-            arrow("chevron.left", help: "account_previous_help") { step(from: index, by: -1) }
+            arrow(-1)
             HStack(spacing: 4) {
                 ForEach(chips) { chip in
-                    Button { onSelect(chip.id) } label: { dot(chip, selected: chip.id == selectedID) }
+                    Button { select(chip.id) } label: { dot(chip, selected: chip.id == selectedID) }
                         .buttonStyle(.plain)
                         .help(chip.name)
                 }
             }
-            Text(chips.indices.contains(index) ? chips[index].name : "")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            arrow("chevron.right", help: "account_next_help") { step(from: index, by: 1) }
+            nameLabel(index: index)
+            arrow(1)
             Spacer(minLength: 0)
         }
+        .onHover { AccountSwitcherKeyboard.shared.setHovered(handle, $0) }
+        .onAppear { AccountSwitcherKeyboard.shared.register(handle, enabled: isEnabled) }
+        .onDisappear {
+            AccountSwitcherKeyboard.shared.unregister(handle)
+            if hoveredArrow != nil { NSCursor.pop() }
+            hoveredArrow = nil
+        }
+        // The new value comes in the argument; `self` may still be the
+        // previous view here on macOS 13, so nothing else is read from it.
+        .onChange(of: isEnabled) { AccountSwitcherKeyboard.shared.register(handle, enabled: $0) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.localizedString("account_switcher_accessibility_fmt",
                                                  chips.indices.contains(index) ? chips[index].name : "",
                                                  index + 1, chips.count))
     }
 
-    private func step(from index: Int, by offset: Int) {
-        guard !chips.isEmpty else { return }
-        let count = chips.count
-        onSelect(chips[((index + offset) % count + count) % count].id)
+    private var currentIndex: Int { chips.firstIndex(where: { $0.id == selectedID }) ?? 0 }
+
+    /// Where an arrow leads from the current account, wrapping around.
+    static func destination(from index: Int, by offset: Int, count: Int) -> Int {
+        ((index + offset) % count + count) % count
     }
 
-    private func arrow(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
+    private func destinationChip(_ offset: Int) -> AccountChip? {
+        guard !chips.isEmpty else { return nil }
+        return chips[Self.destination(from: currentIndex, by: offset, count: chips.count)]
+    }
+
+    private func select(_ id: String) {
+        AccountSwitcherKeyboard.shared.markUsed(handle)
+        onSelect(id)
+    }
+
+    /// The current name, or while an arrow is hovered its destination.
+    /// Every variant is laid out (hidden) so the label keeps the width of
+    /// the widest: a label that grew on hover pushed the right arrow out
+    /// from under the pointer, which then flickered between hovered and not.
+    private func nameLabel(index: Int) -> some View {
+        let current = chips.indices.contains(index) ? chips[index].name : ""
+        return ZStack(alignment: .leading) {
+            labelText(current, offset: nil).hidden()
+            labelText(destinationChip(-1)?.name ?? "", offset: -1).hidden()
+            labelText(destinationChip(1)?.name ?? "", offset: 1).hidden()
+            if let offset = hoveredArrow, let target = destinationChip(offset) {
+                labelText(target.name, offset: offset)
+            } else {
+                labelText(current, offset: nil)
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+    }
+
+    /// A name; with an offset, the arrow's destination styled as a preview,
+    /// the arrow glyph on the side it points.
+    private func labelText(_ name: String, offset: Int?) -> some View {
+        HStack(spacing: 3) {
+            if offset == -1 { Image(systemName: "arrow.left") }
+            Text(name)
+            if offset == 1 { Image(systemName: "arrow.right") }
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(offset == nil ? Color.secondary : Color.accentColor)
+    }
+
+    private func arrow(_ offset: Int) -> some View {
+        let hovered = hoveredArrow == offset
+        let helpKey = offset < 0 ? "account_previous_help_fmt" : "account_next_help_fmt"
+        return Button {
+            guard let target = destinationChip(offset) else { return }
+            select(target.id)
+        } label: {
+            Image(systemName: offset < 0 ? "chevron.left" : "chevron.right")
                 .font(.caption2.weight(.bold))
-                .frame(width: 16, height: 16)
-                .contentShape(Rectangle())
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Color.accentColor.opacity(hovered ? 0.18 : 0)))
+                .contentShape(Circle())
         }
         .buttonStyle(.borderless)
-        .foregroundStyle(.secondary)
-        .help(L10n.localizedString(help))
+        .foregroundStyle(hovered ? Color.accentColor : Color.secondary)
+        .help(L10n.localizedString(helpKey, destinationChip(offset)?.name ?? ""))
+        .onHover { inside in
+            if inside, hoveredArrow == nil { NSCursor.pointingHand.push() }
+            if !inside, hoveredArrow == offset { NSCursor.pop() }
+            hoveredArrow = inside ? offset : (hoveredArrow == offset ? nil : hoveredArrow)
+        }
+        .animation(.easeOut(duration: 0.12), value: hovered)
     }
 
     private func dot(_ chip: AccountChip, selected: Bool) -> some View {
