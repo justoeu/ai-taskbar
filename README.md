@@ -407,7 +407,7 @@ Clicking any row in the status window opens the provider's official status page 
 
 ## Pinned LLMs in the menu bar
 
-Expand a provider's card and turn on **Pin to menu bar**. The provider gets its own item — its icon plus the current %, or weekly and session % stacked for providers that report both — rendered in the same system menu-bar font as the main gauge.
+Expand a provider's card and turn on **Pin to menu bar**. The provider gets its own item — its icon plus the current %, or weekly and session % stacked for providers that report both (a plan with no session window — e.g. Claude Ultra, which has no 5-hour limit — shows the weekly % alone, never the same figure twice) — rendered in the same system menu-bar font as the main gauge.
 
 - **Order:** the first pin sits immediately left of the main gauge; each later pin goes one slot further left. Unpinning and re-pinning puts the provider back at the end of that sequence.
 - **Click** a pinned item to open the popover focused on that provider's card; click it again to close.

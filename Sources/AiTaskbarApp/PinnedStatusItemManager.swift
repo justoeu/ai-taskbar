@@ -60,17 +60,30 @@ public struct StatusItemButtonFinder: NSViewRepresentable {
 
 public struct PinnedStatusBadgeView: View {
     public let vendorId: VendorId
+    /// Top line when set; nil for a vendor without a weekly window.
     public let weekly: Double?
-    /// Nil renders the icon alone: a snapshot that legitimately has no
+    /// Session / 5h / daily line. Nil beside a weekly draws the weekly alone
+    /// (Claude Ultra has no session window — never repeat the weekly here).
+    /// Both nil renders the icon alone: a snapshot that legitimately has no
     /// windows (e.g. Meta pay-as-you-go) must not pin as a fake "0%".
     public let current: Double?
+    /// Worst window of the snapshot (`maxUtilization`). Drives only the
+    /// flame, so a capped model-scoped or credits window still warns even
+    /// though it is not one of the drawn figures.
+    public let peak: Double?
     public let thresholds: ThresholdsConfig
 
-    public init(vendorId: VendorId, weekly: Double?, current: Double?, thresholds: ThresholdsConfig) {
+    public init(vendorId: VendorId, weekly: Double?, current: Double?,
+                peak: Double? = nil, thresholds: ThresholdsConfig) {
         self.vendorId = vendorId
         self.weekly = weekly
         self.current = current
+        self.peak = peak
         self.thresholds = thresholds
+    }
+
+    private var severityPercent: Double {
+        max(weekly ?? 0, current ?? 0, peak ?? 0)
     }
 
     /// The standard menu-bar font (13 pt regular) — what the system draws
@@ -79,13 +92,11 @@ public struct PinnedStatusBadgeView: View {
     private static let menuBarFont = Font(NSFont.menuBarFont(ofSize: 0))
 
     private var isFull: Bool {
-        let maxVal = max(weekly ?? 0, current ?? 0)
-        return SeverityColor.showsFlame(forPercent: maxVal, thresholds: thresholds)
+        SeverityColor.showsFlame(forPercent: severityPercent, thresholds: thresholds)
     }
 
     private var flameColor: Color {
-        let maxVal = max(weekly ?? 0, current ?? 0)
-        return SeverityColor.flameTint(forPercent: maxVal, thresholds: thresholds)
+        SeverityColor.flameTint(forPercent: severityPercent, thresholds: thresholds)
     }
 
     /// Percentages always render in `.primary`, even at warning/critical
@@ -453,15 +464,18 @@ public final class PinnedStatusItemManager: ObservableObject {
 
         let snapshot = vm.state.outcome?.snapshot
         let percentages = snapshot?.menuBarDisplayPercentages
-        // A snapshot with no windows has no honest percent to pin.
-        let weekly = percentages?.weekly
-        let current: Double? = (snapshot?.windows.isEmpty ?? true)
-            ? nil : (percentages?.current ?? snapshot?.maxUtilization ?? 0)
+        // A snapshot with no windows has no honest percent to pin. A nil
+        // `current` beside a weekly means the vendor has no session window
+        // (Claude Ultra): the weekly line alone, never the weekly twice.
+        let hasWindows = !(snapshot?.windows.isEmpty ?? true)
+        let weekly = hasWindows ? percentages?.weekly : nil
+        let current = hasWindows ? percentages?.current : nil
 
         let badgeView = PinnedStatusBadgeView(
             vendorId: vm.vendorId,
             weekly: weekly,
             current: current,
+            peak: hasWindows ? snapshot?.maxUtilization : nil,
             thresholds: store.thresholds
         )
 
@@ -495,7 +509,7 @@ public final class PinnedStatusItemManager: ObservableObject {
             vendorId: vm.vendorId,
             accountLabel: vm.accountLabel,
             snapshot: vm.state.outcome?.snapshot,
-            currentPercent: current ?? 0
+            currentPercent: current ?? weekly ?? 0
         )
     }
 
@@ -504,8 +518,8 @@ public final class PinnedStatusItemManager: ObservableObject {
         let now = Date()
         for (vid, item) in statusItems {
             guard let button = item.button, let vm = store.vendorVM(vid) else { continue }
-            let current = vm.state.outcome?.snapshot.menuBarDisplayPercentages.current
-                ?? vm.state.outcome?.snapshot.maxUtilization ?? 0
+            let percentages = vm.state.outcome?.snapshot.menuBarDisplayPercentages
+            let current = percentages?.current ?? percentages?.weekly ?? 0
             button.toolTip = MenuBarTooltipBuilder.buildTooltip(
                 vendorId: vid,
                 accountLabel: vm.accountLabel,
