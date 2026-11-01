@@ -98,7 +98,11 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
             // OpenAI primary = session (5h), secondary = weekly (7d)
             return Self.dual(weekly: s.secondary, current: s.primary, fallback: maxUtilization)
         case .gemini(let s):
-            return Self.dual(weekly: s.weekly, current: s.fiveHour, fallback: maxUtilization)
+            // Antigravity can omit the Gemini 5h group (a spent bucket's
+            // zero fraction is dropped by proto3); the third-party 5h window
+            // is still a session-like limit.
+            return Self.dual(weekly: s.weekly, current: s.fiveHour ?? s.thirdParty5Hour,
+                             fallback: maxUtilization)
         case .zai(let s):
             return Self.dual(weekly: s.weekly, current: s.session, fallback: maxUtilization)
         case .openrouter(let s):
@@ -132,7 +136,7 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
         case .openai(let s):
             return (s.primary, s.secondary)
         case .gemini(let s):
-            return (s.fiveHour, s.weekly)
+            return (s.fiveHour ?? s.thirdParty5Hour, s.weekly)
         case .zai(let s):
             return (s.session, s.weekly)
         case .openrouter(let s):

@@ -920,7 +920,9 @@ that came out of fixing that:
   missing one simply hides the session bar AND the pinned badge's second line
   (`menuBarDisplayPercentages.current` is nil whenever a weekly exists without
   a session-like window — falling back to `maxUtilization` there drew the
-  weekly twice, "77% / 77%", reported 2026-11-01).
+  weekly twice, "77% / 77%", reported 2026-11-01). The badge's flame reads
+  `peak` (`maxUtilization`), not the drawn figures, so a capped scoped /
+  credits window still warns with only the weekly drawn.
 
 - **Never use `[String: Any]`** for anything that crosses an actor boundary
   or is stored on a `Sendable` type. Use `JSONValue` (in `AiTaskbarCore/Util/`).

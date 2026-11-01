@@ -169,6 +169,22 @@ struct SnapshotModelTests {
         }
     }
 
+    @Test("Gemini without its own 5h group uses the third-party 5h as the session line")
+    func menu_bar_gemini_third_party_five_hour() {
+        let wWeek = UsageWindow(label: "Weekly", utilizationPercent: 30)
+        let third5h = UsageWindow(label: "Third-party (5h)", utilizationPercent: 95)
+        let gemini = VendorSnapshot.gemini(.init(weekly: wWeek, thirdParty5Hour: third5h))
+        #expect(gemini.menuBarDisplayPercentages.weekly == 30)
+        #expect(gemini.menuBarDisplayPercentages.current == 95)
+        #expect(gemini.menuBarResetWindows.dailyOrSession == third5h)
+
+        let own5h = UsageWindow(label: "Gemini (5h)", utilizationPercent: 10)
+        let both = VendorSnapshot.gemini(.init(fiveHour: own5h, weekly: wWeek,
+                                               thirdParty5Hour: third5h))
+        #expect(both.menuBarDisplayPercentages.current == 10)
+        #expect(both.menuBarResetWindows.dailyOrSession == own5h)
+    }
+
     @Test("Without a weekly, a missing session still falls back to the worst window")
     func menu_bar_no_weekly_falls_back_to_max() {
         let wOther = UsageWindow(label: "Credits", utilizationPercent: 55)
