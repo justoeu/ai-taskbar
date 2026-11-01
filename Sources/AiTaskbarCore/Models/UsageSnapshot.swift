@@ -85,27 +85,41 @@ public enum VendorSnapshot: Sendable, Equatable, Codable {
 
     /// Weekly and current utilization percentages for menu-bar dual display.
     /// `weekly`: 7-day quota utilization, if tracked by the vendor.
-    /// `current`: session / 5h / daily / balance utilization.
-    public var menuBarDisplayPercentages: (weekly: Double?, current: Double) {
+    /// `current`: session / 5h / daily / balance utilization. nil when the
+    /// vendor reports a weekly window but no session-like one (Claude Ultra
+    /// has no 5-hour limit; an idle Muse session carries only the weekly):
+    /// falling back to `maxUtilization` there drew the weekly figure twice,
+    /// stacked as if it were also the session's.
+    public var menuBarDisplayPercentages: (weekly: Double?, current: Double?) {
         switch self {
         case .anthropic(let s):
-            return (s.weekly?.utilizationPercent, s.session?.utilizationPercent ?? maxUtilization)
+            return Self.dual(weekly: s.weekly, current: s.session, fallback: maxUtilization)
         case .openai(let s):
             // OpenAI primary = session (5h), secondary = weekly (7d)
-            return (s.secondary?.utilizationPercent, s.primary?.utilizationPercent ?? maxUtilization)
+            return Self.dual(weekly: s.secondary, current: s.primary, fallback: maxUtilization)
         case .gemini(let s):
-            return (s.weekly?.utilizationPercent, s.fiveHour?.utilizationPercent ?? maxUtilization)
+            return Self.dual(weekly: s.weekly, current: s.fiveHour, fallback: maxUtilization)
         case .zai(let s):
-            return (s.weekly?.utilizationPercent, s.session?.utilizationPercent ?? maxUtilization)
+            return Self.dual(weekly: s.weekly, current: s.session, fallback: maxUtilization)
         case .openrouter(let s):
-            return (s.weekly?.utilizationPercent, s.daily?.utilizationPercent ?? maxUtilization)
+            return Self.dual(weekly: s.weekly, current: s.daily, fallback: maxUtilization)
         case .xai(let s):
             return (nil, s.weekly?.utilizationPercent ?? maxUtilization)
         case .meta(let s):
-            return (s.weekly?.utilizationPercent, s.session?.utilizationPercent ?? maxUtilization)
+            return Self.dual(weekly: s.weekly, current: s.session, fallback: maxUtilization)
         case .kimi, .deepseek, .typesafe:
             return (nil, maxUtilization)
         }
+    }
+
+    /// The worst-case fallback only stands in for a missing session window
+    /// when there is no weekly line to show; with one, the weekly line alone
+    /// is the honest badge.
+    private static func dual(weekly: UsageWindow?, current: UsageWindow?,
+                             fallback: Double) -> (weekly: Double?, current: Double?) {
+        let weeklyPct = weekly?.utilizationPercent
+        let currentPct = current?.utilizationPercent ?? (weeklyPct == nil ? fallback : nil)
+        return (weeklyPct, currentPct)
     }
 
     /// Quota windows tracked for menu-bar dual display and reset countdowns.

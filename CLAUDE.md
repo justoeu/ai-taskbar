@@ -917,7 +917,10 @@ that came out of fixing that:
   `planDisplayName` reads "Ultra". `AnthropicProvider.credLabel` maps the ids
   to the current names; do not bring back "Max 20x" / "Max 5x". Ultra drops
   the 5-hour limit for verified accounts: `five_hour` is optional and a
-  missing one simply hides the session bar.
+  missing one simply hides the session bar AND the pinned badge's second line
+  (`menuBarDisplayPercentages.current` is nil whenever a weekly exists without
+  a session-like window — falling back to `maxUtilization` there drew the
+  weekly twice, "77% / 77%", reported 2026-11-01).
 
 - **Never use `[String: Any]`** for anything that crosses an actor boundary
   or is stored on a `Sendable` type. Use `JSONValue` (in `AiTaskbarCore/Util/`).

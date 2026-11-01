@@ -453,10 +453,12 @@ public final class PinnedStatusItemManager: ObservableObject {
 
         let snapshot = vm.state.outcome?.snapshot
         let percentages = snapshot?.menuBarDisplayPercentages
-        // A snapshot with no windows has no honest percent to pin.
-        let weekly = percentages?.weekly
-        let current: Double? = (snapshot?.windows.isEmpty ?? true)
-            ? nil : (percentages?.current ?? snapshot?.maxUtilization ?? 0)
+        // A snapshot with no windows has no honest percent to pin. A nil
+        // `current` beside a weekly means the vendor has no session window
+        // (Claude Ultra): the weekly line alone, never the weekly twice.
+        let hasWindows = !(snapshot?.windows.isEmpty ?? true)
+        let weekly = hasWindows ? percentages?.weekly : nil
+        let current = hasWindows ? percentages?.current : nil
 
         let badgeView = PinnedStatusBadgeView(
             vendorId: vm.vendorId,
@@ -495,7 +497,7 @@ public final class PinnedStatusItemManager: ObservableObject {
             vendorId: vm.vendorId,
             accountLabel: vm.accountLabel,
             snapshot: vm.state.outcome?.snapshot,
-            currentPercent: current ?? 0
+            currentPercent: current ?? weekly ?? 0
         )
     }
 
@@ -504,8 +506,8 @@ public final class PinnedStatusItemManager: ObservableObject {
         let now = Date()
         for (vid, item) in statusItems {
             guard let button = item.button, let vm = store.vendorVM(vid) else { continue }
-            let current = vm.state.outcome?.snapshot.menuBarDisplayPercentages.current
-                ?? vm.state.outcome?.snapshot.maxUtilization ?? 0
+            let percentages = vm.state.outcome?.snapshot.menuBarDisplayPercentages
+            let current = percentages?.current ?? percentages?.weekly ?? 0
             button.toolTip = MenuBarTooltipBuilder.buildTooltip(
                 vendorId: vid,
                 accountLabel: vm.accountLabel,

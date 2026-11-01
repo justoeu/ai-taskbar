@@ -136,6 +136,51 @@ struct SnapshotModelTests {
         #expect(deepseek.menuBarResetWindows.dailyOrSession == nil)
         #expect(deepseek.menuBarResetWindows.weekly == nil)
     }
+
+    @Test("Claude Ultra (no 5-hour window) pins the weekly alone, not twice")
+    func menu_bar_ultra_has_no_session_line() {
+        // Reported 2026-11-01: an Ultra account showed "77% / 77%" — the
+        // missing session fell back to maxUtilization, i.e. the weekly.
+        let wWeek = UsageWindow(label: "Weekly (7d)", utilizationPercent: 77)
+        let fable = UsageWindow(label: "Fable (7d)", utilizationPercent: 90)
+        let ultra = VendorSnapshot.anthropic(.init(planLabel: "Claude Ultra",
+                                                   weekly: wWeek, scoped: [fable]))
+        #expect(ultra.menuBarDisplayPercentages.weekly == 77)
+        #expect(ultra.menuBarDisplayPercentages.current == nil)
+        #expect(ultra.menuBarResetWindows.dailyOrSession == nil)
+        #expect(ultra.menuBarResetWindows.weekly == wWeek)
+    }
+
+    @Test("Every dual vendor drops the session line when only the weekly exists")
+    func menu_bar_weekly_only_across_vendors() {
+        let wWeek = UsageWindow(label: "Weekly", utilizationPercent: 78)
+        let wOther = UsageWindow(label: "Other", utilizationPercent: 95)
+        let snapshots: [VendorSnapshot] = [
+            .anthropic(.init(weekly: wWeek, credits: wOther)),
+            .openai(.init(secondary: wWeek)),
+            .gemini(.init(weekly: wWeek, thirdPartyWeekly: wOther)),
+            .zai(.init(weekly: wWeek, mcp: wOther)),
+            .openrouter(.init(weekly: wWeek, monthly: wOther)),
+            .meta(MetaSnapshot(subscription: .active, weekly: wWeek)),
+        ]
+        for snap in snapshots {
+            #expect(snap.menuBarDisplayPercentages.weekly == 78, "\(snap.vendorId)")
+            #expect(snap.menuBarDisplayPercentages.current == nil, "\(snap.vendorId)")
+        }
+    }
+
+    @Test("Without a weekly, a missing session still falls back to the worst window")
+    func menu_bar_no_weekly_falls_back_to_max() {
+        let wOther = UsageWindow(label: "Credits", utilizationPercent: 55)
+        let anthropic = VendorSnapshot.anthropic(.init(credits: wOther))
+        #expect(anthropic.menuBarDisplayPercentages.weekly == nil)
+        #expect(anthropic.menuBarDisplayPercentages.current == 55)
+
+        let wSession = UsageWindow(label: "Session", utilizationPercent: 42)
+        let sessionOnly = VendorSnapshot.zai(.init(session: wSession, mcp: wOther))
+        #expect(sessionOnly.menuBarDisplayPercentages.weekly == nil)
+        #expect(sessionOnly.menuBarDisplayPercentages.current == 42)
+    }
 }
 
 @Suite("FetchOutcome")
