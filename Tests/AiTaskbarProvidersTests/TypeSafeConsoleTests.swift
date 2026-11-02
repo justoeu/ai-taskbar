@@ -34,6 +34,27 @@ struct TypeSafeConsoleParsingTests {
         #expect(b.credits[0].expiresAt == ISO8601Parsing.parse("2027-09-29T00:00:00Z"))
     }
 
+    @Test("golden: billing JSON endpoint decodes field by field")
+    func golden_billing_json() throws {
+        let b = try TypeSafeConsoleParsing.billing(fromJSON: Data(Fixtures.typesafeBillingOverviewJSON200.utf8))
+        #expect(b.spentUSD == 0.03)
+        #expect(b.balanceUSD == 29.96)
+        expectTrue(b.purchasedUSD == 29.96)
+        expectTrue(b.freeCreditsRemainingUSD == 0)
+        #expect(b.plan == "pay_as_you_go")
+        #expect(b.cycleLabel == "November 2026")
+        expectTrue(b.cycleEndsInDays == 29)
+        #expect(b.credits.count == 1)
+        #expect(b.credits[0].remainingUSD == 29.96)
+        #expect(b.credits[0].reason == "purchased_credits")
+    }
+
+    @Test("billing JSON: not JSON or no billing key is a schema error")
+    func billing_json_failures() {
+        #expect(throws: AppError.self) { try TypeSafeConsoleParsing.billing(fromJSON: Data("<html>".utf8)) }
+        #expect(throws: AppError.self) { try TypeSafeConsoleParsing.billing(fromJSON: Data("{}".utf8)) }
+    }
+
     @Test("personal fields in the billing response are never kept")
     func billing_drops_pii() throws {
         let b = try TypeSafeConsoleParsing.billing(fromRSC: Fixtures.typesafeBillingRSC200)
@@ -279,6 +300,34 @@ struct TypeSafeConsoleProviderTests {
         expectTrue(s.usage?.todayOutputTokens == 163)
         expectTrue(s.usage?.todayRequests == 4)
         expectTrue(s.usage?.weekRequests == 4)
+    }
+
+    @Test("JSON billing endpoint: used first, no page or chunk is downloaded")
+    func billing_json_endpoint() async throws {
+        defer { StubURLProtocol.reset(); try? FileManager.default.removeItem(at: tmpCacheDir) }
+        let base = Self.console()
+        StubURLProtocol.handler = { req in
+            if req.url?.path == "/api/billing/overview" {
+                return .init(data: Fixtures.data(Fixtures.typesafeBillingOverviewJSON200))
+            }
+            return base(req)
+        }
+        let s = try snapshot(try await provider(session: Self.validSession).fetchUsage(forceRefresh: true))
+        #expect(s.console == .connected(expiresAt: Self.validSession.expiresAt))
+        expectTrue(s.billing?.balanceUSD == 29.96)
+        #expect(consoleRequests().filter { $0.url?.path == "/settings/billing" }.count == 0)
+        #expect(consoleRequests().filter { $0.url?.path.hasSuffix(".js") == true }.count == 0)
+    }
+
+    @Test("JSON billing endpoint signed out reads as expired")
+    func billing_json_expired() async throws {
+        defer { StubURLProtocol.reset(); try? FileManager.default.removeItem(at: tmpCacheDir) }
+        let base = Self.console()
+        StubURLProtocol.handler = { req in
+            req.url?.path == "/api/billing/overview" ? .init(status: 401, data: Data()) : base(req)
+        }
+        let s = try snapshot(try await provider(session: Self.validSession).fetchUsage(forceRefresh: true))
+        #expect(s.console == .expired)
     }
 
     @Test("the cookie goes only to console pages; chunks and the API never get it")

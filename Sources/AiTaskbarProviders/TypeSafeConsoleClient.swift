@@ -58,7 +58,29 @@ public final class TypeSafeConsoleClient: @unchecked Sendable {
 
     // MARK: billing
 
+    static let billingOverviewURL = URL(string: TypeSafeConsoleParsing.origin + "/api/billing/overview")!
+
     public func fetchBilling(cookie: String) async throws -> TypeSafeBilling {
+        // Current console: a plain JSON endpoint. A 404 means an older console
+        // that still serves the billing page's server action.
+        let (data, resp) = try await send(
+            request(Self.billingOverviewURL, cookie: cookie, accept: "application/json", timeout: 6),
+            maxBytes: Self.resultBytes)
+        if resp.statusCode != 404 {
+            try classify(resp, body: String(decoding: data.prefix(4096), as: UTF8.self))
+            do {
+                return try TypeSafeConsoleParsing.billing(fromJSON: data)
+            } catch {
+                if TypeSafeConsoleParsing.isLoginLanding(String(decoding: data, as: UTF8.self)) {
+                    throw TypeSafeConsoleError.sessionExpired
+                }
+                throw TypeSafeConsoleError.unavailable("billing format changed")
+            }
+        }
+        return try await fetchBillingViaServerAction(cookie: cookie)
+    }
+
+    private func fetchBillingViaServerAction(cookie: String) async throws -> TypeSafeBilling {
         var id = try await actionID(cookie: cookie, forceDiscovery: false)
         for attempt in 0..<2 {
             var req = request(Self.billingURL, cookie: cookie, accept: "text/x-component", timeout: 6)

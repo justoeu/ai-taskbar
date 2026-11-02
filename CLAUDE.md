@@ -694,7 +694,10 @@ Measured with a real key on 2026-09-29 (`docs/SDD-typesafe-jev.md`):
     session, host `console.typesafe.ai` only, every redirect refused. Never
     spoof a browser UA or reuse `cf_clearance`/`__cf_bm`; a Cloudflare
     interstitial reads as "unavailable", not as "signed out".
-  - Billing = the page's own read-only server action (`getBillingOverviewResult`,
+  - Billing = `GET /api/billing/overview` (plain JSON, `{billing:{…}}`; since
+    2026-11-01 — the console removed the server action and `/billing` 404s, which
+    left the card on "console not responding" with `billing action id not found`).
+    Only on a 404 does it fall back to the old server action (`getBillingOverviewResult`,
     id discovered from same-origin chunks, cached 12 h, rediscovered once on
     `x-nextjs-action-not-found`). A failed discovery is remembered for 1 h, and
     one discovery is capped at 16 MiB of chunks / 30 s. Usage =

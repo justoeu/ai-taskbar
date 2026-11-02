@@ -77,6 +77,18 @@ public enum TypeSafeConsoleParsing {
         throw AppError.schema("typesafe billing: no result record")
     }
 
+    /// The billing overview from `GET /api/billing/overview` (plain JSON,
+    /// `{"billing":{…},…}`; replaced the server action in Nov 2026). The same
+    /// `billing` object the action returned, so the same allow-list decoder.
+    public static func billing(fromJSON data: Data) throws -> TypeSafeBilling {
+        struct Envelope: Decodable { let billing: BillingWire? }
+        guard let envelope = try? SharedCoders.decoder.decode(Envelope.self, from: data) else {
+            throw AppError.schema("typesafe billing: not JSON")
+        }
+        guard let billing = envelope.billing else { throw AppError.schema("typesafe billing: no billing") }
+        return try billing.toModel()
+    }
+
     private struct RSCResult: Decodable {
         let ok: Bool
         let data: DataField?
