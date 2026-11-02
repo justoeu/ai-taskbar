@@ -1155,6 +1155,13 @@ public enum Fixtures {
 1:{"ok":true,"data":{"billing":{"plan":"pay_as_you_go","spent":0,"freeCreditsRemaining":0,"balance":30,"purchased":30,"resetsInDays":2,"cycleLabel":"September 2026","paymentMethod":{"brand":"Visa","expMonth":1,"expYear":2030,"last4":"0000"},"autoPay":null,"credits":[{"id":"cred_00000000","amount":30,"remaining":30,"createdAt":"2026-09-29T20:03:11.935000Z","expiresAt":"2027-09-29T00:00:00Z","reason":"purchased_credits","payment":{"id":"redacted","invoiceUrl":"redacted","createdAt":"redacted","reason":"redacted","description":"redacted","amount":30,"status":"redacted"}}],"invoiceEmail":"user@example.com","billingAddress":{"name":"Example Org","line1":null,"line2":null,"city":null,"state":null,"postal_code":null,"country":"BR"},"billingAddressValid":true},"payments":[],"hasMore":false,"credits":"$1:data:billing:credits"}}
 """#
 
+    /// `GET console.typesafe.ai/api/billing/overview` (plain JSON; replaced the
+    /// server action, captured 2026-11-01, anonymized: e-mail, card, ids and
+    /// invoice URL are placeholders). Same `billing` object as the action.
+    public static let typesafeBillingOverviewJSON200 = #"""
+    {"billing":{"plan":"pay_as_you_go","spent":0.03,"freeCreditsRemaining":0,"balance":29.96,"purchased":29.96,"resetsInDays":29,"cycleLabel":"November 2026","paymentMethod":{"kind":"card","createdAt":"2026-09-29T00:00:00Z","brand":"Visa","last4":"0000","expMonth":4,"expYear":2034},"autoPay":null,"credits":[{"id":"cred-0000","amount":30,"remaining":29.96,"createdAt":"2026-09-29T00:00:00Z","expiresAt":"2027-09-29T00:00:00Z","reason":"purchased_credits","metronomeInvoiceId":"inv-0000","payment":{"id":"pay-0000","invoiceUrl":"https://example.invalid/invoice","createdAt":"2026-09-29T00:00:00Z","reason":"x","description":"x","amount":30,"status":"paid","metronomeInvoiceId":"inv-0000"}}],"invoiceEmail":"someone@example.invalid","billingAddress":{"name":"Someone","line1":null,"line2":null,"city":null,"state":null,"postal_code":null,"country":"BR"},"billingAddressValid":true,"taxId":null},"payments":[],"hasMore":false,"credits":[]}
+    """#
+
     /// `GET console.typesafe.ai/api/usage?granularity=hour`, anonymized
     /// (key id and name are placeholders; `userEmail`/`userId` never decoded).
     public static let typesafeUsageHour200 = #"""
