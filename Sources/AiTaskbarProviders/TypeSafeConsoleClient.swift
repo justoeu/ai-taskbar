@@ -85,7 +85,6 @@ public final class TypeSafeConsoleClient: @unchecked Sendable {
         for attempt in 0..<2 {
             var req = request(Self.billingURL, cookie: cookie, accept: "text/x-component", timeout: 6)
             req.httpMethod = "POST"
-            req.setValue(TypeSafeConsoleParsing.origin, forHTTPHeaderField: "Origin")
             req.setValue(id, forHTTPHeaderField: "Next-Action")
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = Data("[]".utf8)
@@ -175,6 +174,8 @@ public final class TypeSafeConsoleClient: @unchecked Sendable {
     private func request(_ url: URL, cookie: String, accept: String, timeout: TimeInterval) -> URLRequest {
         var req = URLRequest(url: url, timeoutInterval: timeout)
         req.setValue(cookie, forHTTPHeaderField: "Cookie")
+        // The console checks Origin on JSON GETs too, not only server actions.
+        req.setValue(TypeSafeConsoleParsing.origin, forHTTPHeaderField: "Origin")
         req.setValue(accept, forHTTPHeaderField: "Accept")
         req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         return req
@@ -198,6 +199,12 @@ public final class TypeSafeConsoleClient: @unchecked Sendable {
         let status = resp.statusCode
         if TypeSafeConsoleParsing.isCloudflareChallenge(status: status, headers: resp.allHeaderFields, body: body) {
             throw TypeSafeConsoleError.unavailable("cloudflare challenge")
+        }
+        // A refused origin says nothing about the validity of the session.
+        if status == 403,
+           let error = try? SharedCoders.decoder.decode([String: String].self, from: Data(body.utf8)),
+           error["detail"] == "Cross-origin request refused" {
+            throw TypeSafeConsoleError.unavailable("console origin refused")
         }
         switch status {
         case 200..<300: return
