@@ -307,6 +307,10 @@ struct TypeSafeConsoleProviderTests {
         defer { StubURLProtocol.reset(); try? FileManager.default.removeItem(at: tmpCacheDir) }
         let base = Self.console()
         StubURLProtocol.handler = { req in
+            if req.url?.host == "console.typesafe.ai",
+               req.value(forHTTPHeaderField: "Origin") != "https://console.typesafe.ai" {
+                return .init(status: 403, data: Data(#"{"detail":"Cross-origin request refused"}"#.utf8))
+            }
             if req.url?.path == "/api/billing/overview" {
                 return .init(data: Fixtures.data(Fixtures.typesafeBillingOverviewJSON200))
             }
@@ -317,6 +321,20 @@ struct TypeSafeConsoleProviderTests {
         expectTrue(s.billing?.balanceUSD == 29.96)
         #expect(consoleRequests().filter { $0.url?.path == "/settings/billing" }.count == 0)
         #expect(consoleRequests().filter { $0.url?.path.hasSuffix(".js") == true }.count == 0)
+    }
+
+    @Test("origin refusal is unavailable, never an expired session")
+    func origin_refused() async throws {
+        defer { StubURLProtocol.reset(); try? FileManager.default.removeItem(at: tmpCacheDir) }
+        let base = Self.console()
+        StubURLProtocol.handler = { req in
+            if req.url?.host == "console.typesafe.ai" {
+                return .init(status: 403, data: Data(#"{"detail":"Cross-origin request refused"}"#.utf8))
+            }
+            return base(req)
+        }
+        let s = try snapshot(try await provider(session: Self.validSession).fetchUsage(forceRefresh: true))
+        #expect(s.console == .unavailable(since: Self.now))
     }
 
     @Test("JSON billing endpoint signed out reads as expired")
