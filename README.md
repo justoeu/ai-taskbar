@@ -421,6 +421,8 @@ Daily and 7-day costs are computed **locally** from the CLI transcripts (`~/.cla
 
 | Claude model | Input | Output | Cache write 5m / 1h | Cache read | Fast mode (in / out) |
 |---|---|---|---|---|---|
+| Fable 5.2 · Mythos 5.2 | $8 | $40 | $10 / $16 | $0.20 | $16 / $80 |
+| Fable 5.1 · Mythos 5.1 | $10 | $50 | $12.50 / $20 | $0.25 | — |
 | Opus 5.5 | $4 | $20 | $5 / $8 | $0.20 | $8 / $40 |
 | Opus 5 · Opus 4.8 | $5 | $25 | $6.25 / $10 | $0.50 | $10 / $50 |
 | Sonnet 5.5 | $2 | $10 | $2.50 / $4 | $0.10 | — |

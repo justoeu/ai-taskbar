@@ -1,7 +1,7 @@
 import Foundation
 
 /// USD price per 1 million tokens. Values reflect the public price lists as of
-/// 2026-09-05; intentionally conservative when a model isn't listed. Update as
+/// 2026-09-05 (Claude: 2026-11-09); intentionally conservative when a model isn't listed. Update as
 /// new models ship.
 ///
 /// The runtime-consulted tables are the ones a local log scanner prices
@@ -58,6 +58,21 @@ public struct ModelPricing: Sendable, Equatable {
 public enum PricingTable {
     /// Anthropic — Claude family. Consumed by `ClaudeSessionScanner`.
     public static let anthropic: [String: ModelPricing] = [
+        // Fable/Mythos 5.2 — CHEAPER than 5.1: $8 in / $40 out, cache writes
+        // $10 (5m) / $16 (1h), cache hits at 0.025x base ($0.20). The first
+        // Fable with fast mode: $16/$80, exactly 2x. Verified against
+        // platform.claude.com/docs/en/about-claude/pricing on 2026-11-09.
+        // Explicit keys are essential: the `claude-fable-5` prefix below
+        // otherwise matches and bills every 5.2 turn at $10/$50 with cache
+        // reads at $1 (5x too high).
+        "claude-fable-5-2":      ModelPricing(input: 8,  output: 40, cacheRead: 0.2, cacheCreate: 10, cacheCreate1h: 16,
+                                              fastModeMultiplier: 2),
+        "claude-fable-5.2":      ModelPricing(input: 8,  output: 40, cacheRead: 0.2, cacheCreate: 10, cacheCreate1h: 16,
+                                              fastModeMultiplier: 2),
+        "claude-mythos-5-2":     ModelPricing(input: 8,  output: 40, cacheRead: 0.2, cacheCreate: 10, cacheCreate1h: 16,
+                                              fastModeMultiplier: 2),
+        "claude-mythos-5.2":     ModelPricing(input: 8,  output: 40, cacheRead: 0.2, cacheCreate: 10, cacheCreate1h: 16,
+                                              fastModeMultiplier: 2),
         // Fable/Mythos 5.1 retain the $10/$50 token prices from 5.0 but cut
         // cache reads from $1 to $0.25/MTok. Explicit keys are essential: the
         // older `claude-fable-5` prefix below otherwise matches first and
@@ -86,8 +101,9 @@ public enum PricingTable {
         // Opus 4.5–4.8 — repriced to $5 in / $25 out (down from the 4.0/4.1 tier).
         // Each version is listed explicitly so the `claude-opus-4` prefix below
         // (which still serves the legacy 4.0/4.1 at $15/$75) doesn't shadow them.
-        // Fast mode exists only on Opus 5.5, Opus 5 and Opus 4.8: $8/$40 on
-        // 5.5 and $10/$50 on the other two — exactly 2x their standard rates.
+        // Among Opus, fast mode exists only on Opus 5.5, Opus 5 and Opus 4.8:
+        // $8/$40 on 5.5 and $10/$50 on the other two — exactly 2x their
+        // standard rates. (Fable/Mythos 5.2 above have it too.)
         // Opus 4.7 rejects `speed: "fast"`; Opus 4.6 runs it at standard
         // speed and standard price, so neither carries a multiplier.
         "claude-opus-4-8":       ModelPricing(input: 5,  output: 25, cacheRead: 0.5, cacheCreate: 6.25, cacheCreate1h: 10,

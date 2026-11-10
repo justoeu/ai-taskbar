@@ -645,8 +645,8 @@ the long-context fields: they carry only the premium, so visible token totals
 are never double-counted), and `CostMath` adds
 `(fastModeMultiplier − 1) × standard rate` for every category, cache reads and
 writes included — Anthropic stacks the caching multipliers on top of the fast
-price. Only Opus 5.5 ($8/$40), Opus 5 and Opus 4.8 ($10/$50) have fast mode —
-2x their standard rates. Opus 4.7 rejects it and Opus 4.6 runs it at standard
+price. Only Fable/Mythos 5.2 ($16/$80), Opus 5.5 ($8/$40), Opus 5 and Opus 4.8
+($10/$50) have fast mode — 2x their standard rates. Opus 4.7 rejects it and Opus 4.6 runs it at standard
 price, so a model with no `fastModeMultiplier` bills a fast-tagged request at
 standard rates; do not give it one. As of 2026-09-28 no local transcript
 carried `"speed":"fast"` (all 109k were `"standard"`); the `"fast"` value
