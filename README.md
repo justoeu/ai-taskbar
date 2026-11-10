@@ -28,7 +28,7 @@ A gauge icon in your menu bar showing the **highest utilization** across your LL
 - **Reset countdown** ("resets 4 hrs, 12 min"; once the reset passes it shows "reset due — awaiting auto-refresh…" instead of counting back up)
 - **24-hour sparkline** with dashed threshold lines, current value, and peak marker (one sample per live network reading; cached or stale replays are not re-plotted)
 - **Daily + 7-day cost estimates** computed locally from your CLI logs (7 days = today plus the six previous local days, the same window for every source)
-- **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245"), priced from the official per-model rates — including prompt-cache reads/writes and the **fast-mode premium** on Opus 5.5, Opus 5 and Opus 4.8 (see [Cost estimates](#cost-estimates--claude-pricing))
+- **Per-model breakdown** ("opus-4-7 $1850 / haiku-4-5 $245"), priced from the official per-model rates — including prompt-cache reads/writes and the **fast-mode premium** on Fable 5.2, Opus 5.5, Opus 5 and Opus 4.8 (see [Cost estimates](#cost-estimates--claude-pricing))
 - **Pin LLMs to the menu bar** — each pinned provider gets its own icon + % next to the main gauge, with reset countdowns in its tooltip; click it to jump to that card (see [Pinned LLMs](#pinned-llms-in-the-menu-bar))
 - **Update banner** — a background check at every launch (at most once per 5 minutes) and once per calendar day while running shows "New version available" in the popover, with one-click download
 - **opencode usage attributed to the vendor that billed it** — opencode is a client, not a provider, so its traffic shows up under OpenAI or xAI with its own line. Subscription traffic (ChatGPT-plan models) shows tokens rather than dollars, because no money moves; pay-per-token traffic shows the cost opencode itself recorded, as a breakdown of the total the vendor's API already reports — never added on top of it
@@ -417,10 +417,12 @@ Expand a provider's card and turn on **Pin to menu bar**. The provider gets its 
 
 ## Cost estimates & Claude pricing
 
-Daily and 7-day costs are computed **locally** from the CLI transcripts (`~/.claude/projects`, `~/.codex/sessions`, opencode's database) and the per-model price table in `PricingTable.swift`, checked against the vendors' published rates (Claude: [platform.claude.com pricing](https://platform.claude.com/docs/en/about-claude/pricing), last verified 2026-10-10).
+Daily and 7-day costs are computed **locally** from the CLI transcripts (`~/.claude/projects`, `~/.codex/sessions`, opencode's database) and the per-model price table in `PricingTable.swift`, checked against the vendors' published rates (Claude: [platform.claude.com pricing](https://platform.claude.com/docs/en/about-claude/pricing), last verified 2026-11-09).
 
 | Claude model | Input | Output | Cache write 5m / 1h | Cache read | Fast mode (in / out) |
 |---|---|---|---|---|---|
+| Fable 5.2 · Mythos 5.2 | $8 | $40 | $10 / $16 | $0.20 | $16 / $80 |
+| Fable 5.1 · Mythos 5.1 | $10 | $50 | $12.50 / $20 | $0.25 | — |
 | Opus 5.5 | $4 | $20 | $5 / $8 | $0.20 | $8 / $40 |
 | Opus 5 · Opus 4.8 | $5 | $25 | $6.25 / $10 | $0.50 | $10 / $50 |
 | Sonnet 5.5 | $2 | $10 | $2.50 / $4 | $0.10 | — |
