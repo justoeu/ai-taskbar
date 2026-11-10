@@ -43,6 +43,29 @@ struct CostTests {
         }
     }
 
+    /// Every date suffix starts with "20", so `claude-fable-5-2` is textually
+    /// a prefix of a dated 5.0 id. It must not capture it.
+    @Test("a dated Fable/Mythos 5.0 id stays on the 5.0 tier, not 5.2")
+    func lookup_dated_fable50_not_52() {
+        for id in ["claude-fable-5-20260801", "claude-mythos-5-20260801"] {
+            let m = PricingTable.lookup(id, table: PricingTable.anthropic)
+            #expect(m?.inputPer1M == 10)
+            #expect(m?.outputPer1M == 50)
+            #expect(m?.cacheReadPer1M == 1.0)
+            expectTrue(m?.fastModeMultiplier == nil)
+        }
+    }
+
+    @Test("a key ending in a digit never matches in the middle of a number")
+    func lookup_rejects_split_number() {
+        let table = ["m-1": ModelPricing(input: 1, output: 1),
+                     "m-1-2": ModelPricing(input: 2, output: 2)]
+        #expect(PricingTable.lookup("m-1-2-x", table: table)?.inputPer1M == 2)
+        #expect(PricingTable.lookup("m-1-25", table: table)?.inputPer1M == 1)
+        #expect(PricingTable.lookup("m-1.5", table: table)?.inputPer1M == 1)
+        expectTrue(PricingTable.lookup("m-12", table: table) == nil)
+    }
+
     @Test("Fable 5.2 fast mode bills $16/$80 per 1M")
     func fast_mode_fable52() throws {
         let pricing = try #require(PricingTable.lookup("claude-fable-5-2", table: PricingTable.anthropic))

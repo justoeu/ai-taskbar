@@ -360,9 +360,19 @@ public enum PricingTable {
         // dictionary order is undefined. Pick the most specific (longest) key.
         // Two distinct matching keys are both prefixes of `model`, so they
         // never tie on length. Single pass, no intermediate dictionary.
+        //
+        // A key must not end in the middle of a number: `claude-fable-5-2` is
+        // textually a prefix of the dated 5.0 id `claude-fable-5-20260801`
+        // (every date suffix starts with "20"), and matching it billed a 5.0
+        // turn at the 5.2 tier. A key ending in a digit therefore matches
+        // only when the next character of `model` is not a digit.
         var best: (length: Int, pricing: ModelPricing)?
         for (key, pricing) in table where model.hasPrefix(key) {
             let length = key.count
+            if key.last?.isNumber == true,
+               model[model.index(model.startIndex, offsetBy: length)...].first?.isNumber == true {
+                continue
+            }
             if length > (best?.length ?? -1) { best = (length, pricing) }
         }
         return best?.pricing
