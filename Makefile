@@ -419,5 +419,9 @@ release-assets-check:
 # One-shot release: push main → wait for CI to bump/tag/draft → pull the bump
 # commit → make publish. Aborts cleanly when the head commit opted out via
 # [skip release]. Same env as publish (DEVELOPER_ID + NOTARY_PROFILE/APPLE_*).
+# DEVELOPER_ID is handed over explicitly: the auto-detection above sets a make
+# variable, which is not exported, and ship.sh reads its environment. Without
+# this, `make ship` refused with "DEVELOPER_ID not set" while `make publish`
+# detected the same certificate (v0.34.0).
 ship:
-	@scripts/ship.sh
+	@DEVELOPER_ID="$(DEVELOPER_ID)" scripts/ship.sh
