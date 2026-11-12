@@ -273,6 +273,128 @@ final class UpdateCheckerDownloadTests {
         expectFalse(FileManager.default.fileExists(atPath: dest(in: dir).path))
         #expect(!OffPlatformRedirectDMGProtocol.requestedHosts.contains("evil.example"))
     }
+
+    // MARK: - Open DMG (mount + quit)
+
+    @MainActor
+    private final class OpenRecorder {
+        var opened: [URL] = []
+        var quits = 0
+        var failWith: Error?
+    }
+
+    private struct OpenFailed: Error {}
+
+    private func makeOpeningChecker(_ recorder: OpenRecorder) -> UpdateChecker {
+        let defaults = UserDefaults(suiteName: defaultsSuite)!
+        return UpdateChecker(
+            config: UpdatesConfig(enabled: true, ownerRepo: "o/r", includePrereleases: false),
+            currentVersion: "1.0.0",
+            http: .stubbed(protocols: [FixedDMGProtocol.self]),
+            userDefaults: defaults,
+            downloadsDirectory: dir,
+            revealInFinder: { _ in },
+            openDMG: { url, done in
+                recorder.opened.append(url)
+                done(recorder.failWith)
+            },
+            quit: { recorder.quits += 1 },
+            dmgVerifier: StubVerifier(accept: true))
+    }
+
+    /// Waits for the open Task to quit or fail.
+    private func settleOpening(_ checker: UpdateChecker, _ recorder: OpenRecorder) async {
+        for _ in 0..<500 where recorder.quits == 0 && checker.isOpeningDownload && !isFailed(checker.status) {
+            try? await Task.sleep(nanoseconds: 10_000_000) // polling; cancellation irrelevant
+        }
+    }
+
+    @Test("Open DMG mounts the verified file and then quits the app")
+    func open_mounts_and_quits() async throws {
+        let recorder = OpenRecorder()
+        let checker = makeOpeningChecker(recorder)
+        checker.download(release(sha: Self.bodySHA))
+        expectTrue(isDownloaded(await settle(checker)))
+        checker.openDownloadedUpdate()
+        await settleOpening(checker, recorder)
+        #expect(recorder.opened == [dest(in: dir)])
+        #expect(recorder.quits == 1)
+    }
+
+    @Test("a failed open keeps the verified download, says why, and keeps the app running")
+    func open_failure_does_not_quit() async throws {
+        let recorder = OpenRecorder()
+        recorder.failWith = OpenFailed()
+        let checker = makeOpeningChecker(recorder)
+        checker.download(release(sha: Self.bodySHA))
+        expectTrue(isDownloaded(await settle(checker)))
+        checker.openDownloadedUpdate()
+        for _ in 0..<500 where checker.isOpeningDownload {
+            try? await Task.sleep(nanoseconds: 10_000_000) // polling; cancellation irrelevant
+        }
+        expectTrue(isDownloaded(checker.status))
+        expectTrue(checker.openError != nil)
+        #expect(recorder.quits == 0)
+        expectFalse(checker.isOpeningDownload)
+        // A retry clears the error and opens the same verified file.
+        recorder.failWith = nil
+        checker.openDownloadedUpdate()
+        expectTrue(checker.openError == nil)
+        await settleOpening(checker, recorder)
+        #expect(recorder.opened == [dest(in: dir), dest(in: dir)])
+        #expect(recorder.quits == 1)
+    }
+
+    @Test("a double click opens and quits once")
+    func double_click_opens_once() async throws {
+        let recorder = OpenRecorder()
+        let checker = makeOpeningChecker(recorder)
+        checker.download(release(sha: Self.bodySHA))
+        expectTrue(isDownloaded(await settle(checker)))
+        checker.openDownloadedUpdate()
+        checker.openDownloadedUpdate()
+        await settleOpening(checker, recorder)
+        try? await Task.sleep(nanoseconds: 100_000_000) // let a second open, if any, land
+        #expect(recorder.opened.count == 1)
+        #expect(recorder.quits == 1)
+    }
+
+    @Test("a DMG changed after verification is never opened")
+    func tampered_dmg_is_not_opened() async throws {
+        let recorder = OpenRecorder()
+        let checker = makeOpeningChecker(recorder)
+        checker.download(release(sha: Self.bodySHA))
+        expectTrue(isDownloaded(await settle(checker)))
+        try Data("swapped".utf8).write(to: dest(in: dir))
+        checker.openDownloadedUpdate()
+        await settleOpening(checker, recorder)
+        expectTrue(isFailed(checker.status))
+        #expect(recorder.opened.isEmpty)
+        #expect(recorder.quits == 0)
+    }
+
+    @Test("a DMG deleted after download fails instead of quitting")
+    func missing_dmg_is_not_opened() async throws {
+        let recorder = OpenRecorder()
+        let checker = makeOpeningChecker(recorder)
+        checker.download(release(sha: Self.bodySHA))
+        expectTrue(isDownloaded(await settle(checker)))
+        try FileManager.default.removeItem(at: dest(in: dir))
+        checker.openDownloadedUpdate()
+        await settleOpening(checker, recorder)
+        expectTrue(isFailed(checker.status))
+        #expect(recorder.opened.isEmpty)
+        #expect(recorder.quits == 0)
+    }
+
+    @Test("Open DMG does nothing before a download finished")
+    func open_without_download_is_noop() {
+        let recorder = OpenRecorder()
+        let checker = makeOpeningChecker(recorder)
+        checker.openDownloadedUpdate()
+        expectFalse(checker.isOpeningDownload)
+        #expect(recorder.opened.isEmpty)
+    }
 }
 
 @Suite("TeamSignatureDMGVerifier")

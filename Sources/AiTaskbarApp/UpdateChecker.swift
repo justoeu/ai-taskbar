@@ -72,6 +72,12 @@ public final class UpdateChecker: ObservableObject {
 
     @Published public private(set) var status: Status = .idle
     @Published public private(set) var dismissedTag: String?
+    /// True between the "Open DMG" click and the app quitting (or failing).
+    @Published public private(set) var isOpeningDownload = false
+    /// Why the last "Open DMG" failed to mount. The verified download is
+    /// kept (status stays `.downloaded`) so the banner stays and a retry
+    /// needs no new download; cleared on the next click.
+    @Published public private(set) var openError: String?
 
     public let config: UpdatesConfig
     public let currentVersion: String
@@ -80,6 +86,11 @@ public final class UpdateChecker: ObservableObject {
     /// Where the DMG lands; nil → the user's ~/Downloads (tests inject a temp dir).
     private let downloadsDirectory: URL?
     private let revealInFinder: @MainActor (URL) -> Void
+    /// Mounts the DMG (Finder shows its window, Gatekeeper assesses the
+    /// quarantined image) and reports whether the open was handed off.
+    private let openDMG: @MainActor (URL, @escaping @Sendable (Error?) -> Void) -> Void
+    /// Quits the app so the user can replace it in /Applications.
+    private let quit: @MainActor () -> Void
     private let dmgVerifier: any DMGVerifying
     /// Local calendar and clock the daily cadence is judged against
     /// (UPDATE-SCHED-001). Tests inject a fixed time zone and a fake clock.
@@ -96,6 +107,12 @@ public final class UpdateChecker: ObservableObject {
                 revealInFinder: @escaping @MainActor (URL) -> Void = {
                     NSWorkspace.shared.activateFileViewerSelecting([$0])
                 },
+                openDMG: @escaping @MainActor (URL, @escaping @Sendable (Error?) -> Void) -> Void = { url, done in
+                    NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                        done(error)
+                    }
+                },
+                quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) },
                 dmgVerifier: any DMGVerifying = TeamSignatureDMGVerifier(),
                 calendar: Calendar = .autoupdatingCurrent,
                 now: @escaping @MainActor () -> Date = { Date() }) {
@@ -105,6 +122,8 @@ public final class UpdateChecker: ObservableObject {
         self.userDefaults = userDefaults
         self.downloadsDirectory = downloadsDirectory
         self.revealInFinder = revealInFinder
+        self.openDMG = openDMG
+        self.quit = quit
         self.dmgVerifier = dmgVerifier
         self.calendar = calendar
         self.now = now
@@ -498,6 +517,58 @@ public final class UpdateChecker: ObservableObject {
         let data = try Data(contentsOf: url, options: [.mappedIfSafe])
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// "Open DMG": mounts the verified image and quits, because the running
+    /// app cannot be replaced in /Applications while it is open. This is the
+    /// explicit user gesture the download path waits for (it only reveals the
+    /// file): the bytes are re-hashed first, so a DMG that changed between
+    /// verification and the click is not opened (a same-user process could
+    /// still swap it after the hash; such a process can already run code).
+    /// Gatekeeper still assesses the quarantined image and the app copied
+    /// out of it.
+    public func openDownloadedUpdate() {
+        guard case .downloaded(let localURL, let release) = status, !isOpeningDownload else { return }
+        guard let want = release.dmgSHA256?.lowercased(), !want.isEmpty else {
+            status = .failed(message: L10n.localizedString("updates_open_changed"))
+            return
+        }
+        isOpeningDownload = true
+        openError = nil
+        Task { [weak self] in
+            let have: String
+            do {
+                have = try await OffPool.run { try Self.sha256Hex(ofFileAt: localURL) }
+            } catch {
+                AppLog.updates.error("downloaded DMG unreadable: \(String(describing: error), privacy: .public)")
+                self?.failOpening(L10n.localizedString("updates_open_changed"))
+                return
+            }
+            guard let self else { return }
+            guard have == want else {
+                AppLog.updates.error("downloaded DMG changed since verification; not opening")
+                self.failOpening(L10n.localizedString("updates_open_changed"))
+                return
+            }
+            self.openDMG(localURL) { error in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let error {
+                        // The file is still the verified one: keep it, say why.
+                        AppLog.updates.error("open DMG failed: \(String(describing: error), privacy: .public)")
+                        self.isOpeningDownload = false
+                        self.openError = L10n.localizedString("updates_open_failed_fmt", error.localizedDescription)
+                        return
+                    }
+                    self.quit()
+                }
+            }
+        }
+    }
+
+    private func failOpening(_ message: String) {
+        isOpeningDownload = false
+        status = .failed(message: message)
     }
 
     public func openReleasePage(_ release: Release) {

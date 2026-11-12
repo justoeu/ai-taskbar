@@ -485,18 +485,28 @@ public struct PopoverContentView: View {
                     .frame(maxWidth: 80)
                 Spacer(minLength: 4)
 
-            case .downloaded(let localURL, _):
-                L10n.text("update_banner_ready")
-                    .font(.subheadline)
-                    .lineLimit(1)
+            case .downloaded:
+                if let openError = updates.openError {
+                    Text(openError)
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                        .help(openError)
+                } else {
+                    L10n.text("update_banner_ready")
+                        .font(.subheadline)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 4)
                 Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([localURL])
+                    updates.openDownloadedUpdate()
                 } label: {
                     L10n.text("update_banner_open")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+                .disabled(updates.isOpeningDownload)
+                .help(L10n.localizedString("update_banner_open_help"))
 
                 Button {
                     updates.dismissCurrentUpdate()

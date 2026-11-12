@@ -332,6 +332,21 @@ public struct AboutView: View {
                           systemImage: "tray.and.arrow.down.fill")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.green)
+                    Button {
+                        updates.openDownloadedUpdate()
+                    } label: {
+                        Label(L10n.localizedString("update_banner_open"),
+                              systemImage: "externaldrive.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(updates.isOpeningDownload)
+                    if let openError = updates.openError {
+                        Text(openError)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.center)
+                    }
                     L10n.text("updates_drag_to_applications")
                         .font(.caption2)
                         .foregroundStyle(.secondary)

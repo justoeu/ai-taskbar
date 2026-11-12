@@ -103,7 +103,7 @@
 "updates_view_release" = "Notas da versão";
 "updates_downloading_fmt" = "Baixando %@…";
 "updates_downloaded_fmt" = "Baixado %@";
-"updates_drag_to_applications" = "DMG aberto no Finder — arraste AI Taskbar.app para /Applications e reabra o app.";
+"updates_drag_to_applications" = "Abrir DMG fecha o AI Taskbar para você arrastar o novo AI Taskbar.app para /Applications e reabri-lo.";
 "updates_failed" = "Falha ao verificar atualização";
 "updates_retry" = "Tentar novamente";
 "updates_disabled" = "A verificação está desativada no config (`[updates] enabled = false`).";
@@ -398,6 +398,9 @@
 "update_banner_downloading" = "Baixando atualização…";
 "update_banner_ready" = "Atualização baixada";
 "update_banner_open" = "Abrir DMG";
+"updates_open_failed_fmt" = "Não foi possível abrir o DMG: %@";
+"updates_open_changed" = "O DMG baixado mudou ou sumiu desde a verificação. Baixe de novo.";
+"update_banner_open_help" = "Monta o DMG e fecha o AI Taskbar para a nova versão substituí-lo em /Applications.";
 "update_banner_dismiss" = "Dispensar";
 
 // Tooltips dos itens fixados na barra de menus
