@@ -111,8 +111,11 @@ The org UUID and grant id are validated before they reach the URL/body. All
 three reset calls use `HTTPClient.sendBounded` (same-origin HTTPS redirects
 only): a 307 to another host would re-send the POST and its answer would be
 read as the claim result. A check that finishes while the popover is closed
-re-presents its confirmation when the card reappears, and the next click
-always re-arms it.
+leaves a confirmation the view never presented; the next click clears it and
+presents again. It is deliberately NOT re-presented on `onAppear`: the card
+rebuilds when its state flips between `.ok` and `.failed`, and a second
+`present` cancels the open request (whose `onCancel` clears the attempt), so
+Confirm would do nothing.
 
 ## 6. Tests
 
