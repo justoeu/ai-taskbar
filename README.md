@@ -304,6 +304,26 @@ cross-process lock prevent separate local app instances from replacing a pending
 attempt. See the [implementation SDD](docs/SDD-native-authorization-and-openai-reset.md)
 for the protocol, security boundaries, tests and manual acceptance checks.
 
+### Claude — limit resets (Fable, weekly, 5-hour, full)
+
+Claude Code now hands out earned **limit resets** (its `/limit-reset
+[fable|full|5-hour|weekly]`): a *weekly reset* clears the weekly limit, a
+*Fable reset* gives back to the weekly limit what Fable used. The Claude card
+offers them under the **same rule as OpenAI**: a current, healthy snapshot
+with a window **above 90%** that the reset refills, and at least one usable
+reset of that kind. Each kind gets its own button (e.g. **Use Fable reset (1)**,
+**Use weekly reset (1)**); clicking re-reads the grants, then an in-window,
+click-only confirmation names the account, the reset and how many remain.
+
+Anthropic serves resets only to the Claude Code CLI surface at a recent
+version, so the reset calls (the status read, made only while a window is
+above 90%, and the claim) identify as the **installed** Claude Code
+(`claude-cli/<version> (external, cli)`, version read from its install
+folder). Without Claude Code installed the buttons never appear. The credential
+stays read-only: nothing is refreshed or written back. A lost response can be
+retried with the same request id, which the server dedupes. See
+[docs/SDD-claude-limit-reset.md](docs/SDD-claude-limit-reset.md).
+
 ### xAI (Grok) — SuperGrok CLI monitoring & API team billing
 
 > ⚠️ **Important requirement:** xAI does **not** provide a public REST API for querying individual SuperGrok / grok.com quotas or token balances. To monitor your SuperGrok usage and quota, you **must have the official Grok CLI installed and authenticated locally** (`grok login`).

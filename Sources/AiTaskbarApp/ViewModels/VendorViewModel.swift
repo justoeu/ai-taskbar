@@ -64,6 +64,9 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     public nonisolated let accountLabel: String?
     public let provider: any UsageProvider
     let openAIReset = OpenAIResetController()
+    /// Claude limit resets for THIS account; nil for every other vendor.
+    lazy var claudeReset: ClaudeResetController? = (provider as? AnthropicProvider)
+        .map { ClaudeResetController(service: $0.limitResets) }
 
     @Published public private(set) var state: State = .idle
     /// When the in-flight refresh started, on the clock of whoever started

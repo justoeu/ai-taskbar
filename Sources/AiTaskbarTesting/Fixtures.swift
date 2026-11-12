@@ -22,6 +22,50 @@ public enum Fixtures {
     }
     """#
 
+    /// `GET /api/oauth/usage?cedar_ember=1` as the Claude Code CLI surface,
+    /// shape copied from a real Max account on 2026-11-12 (weekly raised to
+    /// 95% so the reset rule fires; `event_props` kept to prove it is never
+    /// decoded). Grant 3 is malformed and grant 4 paused: both are dropped.
+    public static let anthropicUsageWithResets200 = #"""
+    {
+      "five_hour": null,
+      "seven_day": { "utilization": 95.0, "resets_at": "2026-11-19T06:59:59.638773+00:00" },
+      "seven_day_opus": null,
+      "limits": [
+        { "kind": "weekly_all", "group": "weekly", "percent": 95, "resets_at": "2026-11-19T06:59:59.638773+00:00",
+          "scope": null, "is_active": true },
+        { "kind": "weekly_scoped", "group": "weekly", "percent": 40, "resets_at": "2026-11-19T07:00:00+00:00",
+          "scope": { "model": { "id": null, "display_name": "Fable" } }, "is_active": false }
+      ],
+      "extra_usage": null,
+      "cedar_ember": {
+        "eligible": true, "ineligible_reason": null, "at_limit": false, "exhausted": [],
+        "grants": [
+          { "id": "launch-2610-fable", "label": "New model launch: one Fable reset",
+            "resets_total": 1, "resets_left": 1, "starts_at": "2026-11-09T18:00:00+00:00",
+            "ends_at": "2027-03-09T07:59:00+00:00", "clears": ["seven_day_overage_included"],
+            "paused": false, "usable_now": true, "use_requires_limit": false,
+            "percent_used": { "seven_day_overage_included": 40 }, "blocking": [], "arm": null,
+            "type": "full", "unavailable_reason": null, "gives_back_weekly": true },
+          { "id": "full-reset-2611", "label": "One full limit reset (November 2026)",
+            "resets_total": 1, "resets_left": 1, "starts_at": "2026-11-10T21:30:00+00:00",
+            "ends_at": "2026-12-10T22:00:00+00:00", "clears": ["seven_day", "seven_day_overage_included"],
+            "paused": false, "usable_now": true, "use_requires_limit": false,
+            "percent_used": { "seven_day": 95 }, "blocking": [], "arm": null,
+            "type": "weekly", "unavailable_reason": null, "gives_back_weekly": false },
+          { "id": "Bad Id!", "resets_left": 1, "clears": ["five_hour"] },
+          { "id": "paused-grant", "resets_left": 2, "clears": ["five_hour"], "paused": true, "type": "session" }
+        ],
+        "next_grant_id": "full-reset-2611",
+        "weekly_resets_at": "2026-11-19T07:00:00+00:00",
+        "cooldown_until": null,
+        "event_props": { "surface": "claude_code_cli", "tier": "claude_max_20x", "tenure_bucket": "14-29",
+                         "billing_path": "stripe", "billing_period": "unknown", "extra_usage_state": "not_configured" },
+        "paused_held": false
+      }
+    }
+    """#
+
     public static let openaiUsage200 = #"""
     {
       "user_id": "u_abc",

@@ -19,6 +19,15 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     /// `AnthropicConfig.manageOauthRefresh` for the full rationale.
     private let manageOAuthRefresh: Bool
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    /// Same payload plus the `cedar_ember` reset block.
+    private static let usageWithResetsURL = URL(string: "https://api.anthropic.com/api/oauth/usage?cedar_ember=1")!
+    private let cliVersion: @Sendable () -> String?
+    /// Whether the last payload had a window above 90%: the next fetch then
+    /// asks for the reset status in its one call instead of two.
+    private let wantsResetStatus = NSLock()
+    private var lastWasNearLimit = false
+    /// User-clicked resets for this account (`docs/SDD-claude-limit-reset.md`).
+    public let limitResets: ClaudeLimitResetService
 
     // Memoize the plan label so we don't make a `SecItemCopyMatching`
     // syscall (read + JSON decode of the credentials blob) on every cache
@@ -32,7 +41,11 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
                 manageOAuthRefresh: Bool = false,
                 instanceKey: ProviderInstanceKey = ProviderInstanceKey(vendor: .anthropic),
                 accountLabel: String? = nil,
-                configDirForRelogin: URL? = nil) {
+                configDirForRelogin: URL? = nil,
+                cliVersion: @escaping @Sendable () -> String? = { ClaudeCLIVersion.installed() }) {
+        self.cliVersion = cliVersion
+        self.limitResets = ClaudeLimitResetService(credentialReader: credentialReader, http: http,
+                                                   cliVersion: cliVersion)
         self.instanceKey = instanceKey
         self.accountLabel = accountLabel
         self.configDirForRelogin = configDirForRelogin
@@ -109,7 +122,7 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
                 primeLabelCache(subscriptionType: credentials.subscriptionType,
                                 rateLimit: credentials.rateLimitTier)
                 do {
-                    return try await requestUsage(using: credentials)
+                    return try await requestUsageWithResetStatus(using: credentials)
                 } catch let error as AppError where error.isUnauthorized {
                     // Claude Code can rotate/revoke an access token before its
                     // advertised expiry. Drop the process cache and re-read
@@ -121,7 +134,7 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
                     let reloaded = try await loadCredentials()
                     primeLabelCache(subscriptionType: reloaded.subscriptionType,
                                     rateLimit: reloaded.rateLimitTier)
-                    return try await requestUsage(using: reloaded)
+                    return try await requestUsageWithResetStatus(using: reloaded)
                 }
             }
         )
@@ -176,14 +189,54 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
         }
     }
 
-    private func requestUsage(using credentials: AnthropicCredentials) async throws -> Data {
-        var req = URLRequest(url: Self.usageURL)
+    /// The reset status is asked for only while some window is above 90% —
+    /// the only time a reset can be offered — and only as the installed
+    /// Claude Code CLI, the one surface Anthropic serves it to. Below that
+    /// the call is exactly the plain one it always was.
+    private func requestUsageWithResetStatus(using credentials: AnthropicCredentials) async throws -> Data {
+        let wanted = wantsResetStatus.withLock { lastWasNearLimit }
+        let agent: String? = wanted ? try await resetStatusUserAgent() : nil
+        var payload = try await requestUsage(using: credentials, resetStatusAgent: agent)
+        var nearLimit = Self.isNearLimit(payload)
+        if agent == nil, nearLimit, let lateAgent = try await resetStatusUserAgent() {
+            // Crossed 90% on this fetch: one more call for the status. Its
+            // failure costs only the reset button, never the usage numbers.
+            do {
+                payload = try await requestUsage(using: credentials, resetStatusAgent: lateAgent)
+                nearLimit = Self.isNearLimit(payload)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                AppLog.network.error("anthropic reset status: \(String(describing: error), privacy: .public)")
+            }
+        }
+        wantsResetStatus.withLock { lastWasNearLimit = nearLimit }
+        return payload
+    }
+
+    /// Installed CLI version, read off the cooperative pool (file metadata).
+    private func resetStatusUserAgent() async throws -> String? {
+        let cliVersion = self.cliVersion
+        let version = try await OffPool.run { cliVersion() }
+        return version.flatMap(ClaudeCLIVersion.userAgent(version:))
+    }
+
+    static func isNearLimit(_ payload: Data) -> Bool {
+        guard let parsed = try? SharedCoders.decoder.decode(AnthropicUsageResponse.self, from: payload) else {
+            return false // the decode path reports schema drift itself
+        }
+        return parsed.toSnapshot(planLabel: nil).hasWindowAboveResetThreshold
+    }
+
+    private func requestUsage(using credentials: AnthropicCredentials,
+                              resetStatusAgent: String? = nil) async throws -> Data {
+        var req = URLRequest(url: resetStatusAgent == nil ? Self.usageURL : Self.usageWithResetsURL)
         req.timeoutInterval = 10
         req.setValue("Bearer \(credentials.accessToken)",
                      forHTTPHeaderField: "Authorization")
         req.setValue(AnthropicOAuth.betaHeader,
                      forHTTPHeaderField: "anthropic-beta")
-        req.setValue(AnthropicOAuth.userAgent,
+        req.setValue(resetStatusAgent ?? AnthropicOAuth.userAgent,
                      forHTTPHeaderField: "User-Agent")
         let payload = try await http.fetchPayload(req)
         try Task.checkCancellation()
