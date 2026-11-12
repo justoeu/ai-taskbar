@@ -104,7 +104,7 @@
 "updates_view_release" = "Release notes";
 "updates_downloading_fmt" = "Downloading %@…";
 "updates_downloaded_fmt" = "Downloaded %@";
-"updates_drag_to_applications" = "DMG opened in Finder — drag AI Taskbar.app to /Applications, then relaunch.";
+"updates_drag_to_applications" = "Open DMG quits AI Taskbar so you can drag the new AI Taskbar.app into /Applications, then reopen it.";
 "updates_failed" = "Update check failed";
 "updates_retry" = "Retry";
 "updates_disabled" = "Update checks are disabled in config (`[updates] enabled = false`).";
@@ -399,6 +399,9 @@
 "update_banner_downloading" = "Downloading update…";
 "update_banner_ready" = "Update downloaded";
 "update_banner_open" = "Open DMG";
+"updates_open_failed_fmt" = "Could not open the DMG: %@";
+"updates_open_changed" = "The downloaded DMG changed or is gone since it was verified. Download it again.";
+"update_banner_open_help" = "Mounts the DMG and quits AI Taskbar so the new version can replace it in /Applications.";
 "update_banner_dismiss" = "Dismiss";
 
 // Pinned menu bar item tooltips

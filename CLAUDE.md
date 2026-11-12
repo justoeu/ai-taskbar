@@ -276,6 +276,13 @@ cleanly on `[skip release]` heads.
   requires the DMG's `.app` to be signed by the running app's Developer ID
   team (skipped on ad-hoc builds), and sets `com.apple.quarantine` so
   Gatekeeper assesses it. See `UpdateChecker.download` + `DMGVerifier.swift`.
+  The download only REVEALS the DMG; mounting needs the user's **Open DMG**
+  click (`UpdateChecker.openDownloadedUpdate`), which re-hashes the file
+  against the release checksum (a DMG swapped in ~/Downloads is never
+  opened), mounts it with `NSWorkspace.open` and then quits the app — a
+  running app cannot be replaced in /Applications. The button used to call
+  `activateFileViewerSelecting` only, which from a menu-bar app looked like
+  nothing happened.
   The release JSON (2 MiB) and checksums file (64 KiB) are read with
   `HTTPClient.sendBounded`; the checksums redirect and the DMG download's
   redirect (`HTTPClient.download(_:allowRedirect:)`) are followed only to
