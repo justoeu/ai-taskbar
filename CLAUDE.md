@@ -278,9 +278,11 @@ cleanly on `[skip release]` heads.
   Gatekeeper assesses it. See `UpdateChecker.download` + `DMGVerifier.swift`.
   The download only REVEALS the DMG; mounting needs the user's **Open DMG**
   click (`UpdateChecker.openDownloadedUpdate`), which re-hashes the file
-  against the release checksum (a DMG swapped in ~/Downloads is never
-  opened), mounts it with `NSWorkspace.open` and then quits the app — a
-  running app cannot be replaced in /Applications. The button used to call
+  against the release checksum (a DMG that changed between verification
+  and the click is not opened; a mismatch or missing file is `.failed`),
+  mounts it with `NSWorkspace.open` and then quits the app — a running app
+  cannot be replaced in /Applications. A failed mount keeps `.downloaded`
+  and shows `openError` on the banner, so a retry needs no new download. The button used to call
   `activateFileViewerSelecting` only, which from a menu-bar app looked like
   nothing happened.
   The release JSON (2 MiB) and checksums file (64 KiB) are read with

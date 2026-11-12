@@ -486,9 +486,17 @@ public struct PopoverContentView: View {
                 Spacer(minLength: 4)
 
             case .downloaded:
-                L10n.text("update_banner_ready")
-                    .font(.subheadline)
-                    .lineLimit(1)
+                if let openError = updates.openError {
+                    Text(openError)
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                        .help(openError)
+                } else {
+                    L10n.text("update_banner_ready")
+                        .font(.subheadline)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 4)
                 Button {
                     updates.openDownloadedUpdate()

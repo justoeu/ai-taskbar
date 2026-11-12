@@ -74,6 +74,10 @@ public final class UpdateChecker: ObservableObject {
     @Published public private(set) var dismissedTag: String?
     /// True between the "Open DMG" click and the app quitting (or failing).
     @Published public private(set) var isOpeningDownload = false
+    /// Why the last "Open DMG" failed to mount. The verified download is
+    /// kept (status stays `.downloaded`) so the banner stays and a retry
+    /// needs no new download; cleared on the next click.
+    @Published public private(set) var openError: String?
 
     public let config: UpdatesConfig
     public let currentVersion: String
@@ -518,9 +522,11 @@ public final class UpdateChecker: ObservableObject {
     /// "Open DMG": mounts the verified image and quits, because the running
     /// app cannot be replaced in /Applications while it is open. This is the
     /// explicit user gesture the download path waits for (it only reveals the
-    /// file): the bytes are re-hashed first, so a DMG swapped in ~/Downloads
-    /// after verification is never opened. Gatekeeper still assesses the
-    /// quarantined image and the app copied out of it.
+    /// file): the bytes are re-hashed first, so a DMG that changed between
+    /// verification and the click is not opened (a same-user process could
+    /// still swap it after the hash; such a process can already run code).
+    /// Gatekeeper still assesses the quarantined image and the app copied
+    /// out of it.
     public func openDownloadedUpdate() {
         guard case .downloaded(let localURL, let release) = status, !isOpeningDownload else { return }
         guard let want = release.dmgSHA256?.lowercased(), !want.isEmpty else {
@@ -528,6 +534,7 @@ public final class UpdateChecker: ObservableObject {
             return
         }
         isOpeningDownload = true
+        openError = nil
         Task { [weak self] in
             let have: String
             do {
@@ -547,8 +554,10 @@ public final class UpdateChecker: ObservableObject {
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     if let error {
+                        // The file is still the verified one: keep it, say why.
                         AppLog.updates.error("open DMG failed: \(String(describing: error), privacy: .public)")
-                        self.failOpening(L10n.localizedString("updates_open_failed_fmt", error.localizedDescription))
+                        self.isOpeningDownload = false
+                        self.openError = L10n.localizedString("updates_open_failed_fmt", error.localizedDescription)
                         return
                     }
                     self.quit()

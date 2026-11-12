@@ -341,6 +341,12 @@ public struct AboutView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(updates.isOpeningDownload)
+                    if let openError = updates.openError {
+                        Text(openError)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.center)
+                    }
                     L10n.text("updates_drag_to_applications")
                         .font(.caption2)
                         .foregroundStyle(.secondary)

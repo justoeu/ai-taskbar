@@ -321,7 +321,7 @@ final class UpdateCheckerDownloadTests {
         #expect(recorder.quits == 1)
     }
 
-    @Test("a failed open reports it and keeps the app running")
+    @Test("a failed open keeps the verified download, says why, and keeps the app running")
     func open_failure_does_not_quit() async throws {
         let recorder = OpenRecorder()
         recorder.failWith = OpenFailed()
@@ -329,10 +329,34 @@ final class UpdateCheckerDownloadTests {
         checker.download(release(sha: Self.bodySHA))
         expectTrue(isDownloaded(await settle(checker)))
         checker.openDownloadedUpdate()
-        await settleOpening(checker, recorder)
-        expectTrue(isFailed(checker.status))
+        for _ in 0..<500 where checker.isOpeningDownload {
+            try? await Task.sleep(nanoseconds: 10_000_000) // polling; cancellation irrelevant
+        }
+        expectTrue(isDownloaded(checker.status))
+        expectTrue(checker.openError != nil)
         #expect(recorder.quits == 0)
         expectFalse(checker.isOpeningDownload)
+        // A retry clears the error and opens the same verified file.
+        recorder.failWith = nil
+        checker.openDownloadedUpdate()
+        expectTrue(checker.openError == nil)
+        await settleOpening(checker, recorder)
+        #expect(recorder.opened == [dest(in: dir), dest(in: dir)])
+        #expect(recorder.quits == 1)
+    }
+
+    @Test("a double click opens and quits once")
+    func double_click_opens_once() async throws {
+        let recorder = OpenRecorder()
+        let checker = makeOpeningChecker(recorder)
+        checker.download(release(sha: Self.bodySHA))
+        expectTrue(isDownloaded(await settle(checker)))
+        checker.openDownloadedUpdate()
+        checker.openDownloadedUpdate()
+        await settleOpening(checker, recorder)
+        try? await Task.sleep(nanoseconds: 100_000_000) // let a second open, if any, land
+        #expect(recorder.opened.count == 1)
+        #expect(recorder.quits == 1)
     }
 
     @Test("a DMG changed after verification is never opened")
@@ -518,5 +542,4 @@ struct TeamSignatureDMGVerifierDetachTests {
         }
         #expect(fake.detachTargets.map { URL(fileURLWithPath: $0).lastPathComponent } == ["dmg.XyZ"])
     }
-
 }
