@@ -159,6 +159,11 @@ public enum PricingTable {
     public static let openai: [String: ModelPricing] = [
         // GPT-6 Astra — current flagship.
         "gpt-6-astra":     ModelPricing(input: 10, output: 50, cacheRead: 1, cacheCreate: 12.5, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
+        // GPT-6.1 Sol — verified against developers.openai.com/api/docs/pricing
+        // and the model page on 2026-11-12: $2 / $10, cache read $0.10, cache
+        // write $2.50 (30 min tier); prompts over 272K bill 2x input/cache and
+        // 1.5x output for the whole request. Codex writes this id verbatim.
+        "gpt-6.1-sol":     ModelPricing(input: 2, output: 10, cacheRead: 0.1, cacheCreate: 2.5, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
         // GPT-5.6 — Sol/Terra/Luna plus the restricted Cyber model.
         // Verified against developers.openai.com/api/docs/pricing on
         // 2026-09-05. The bare `gpt-5.6` alias routes to Sol; there is no
