@@ -31,6 +31,8 @@ Sequência normal: snapshot elegível → clique → `initialize` → `initializ
 
 `accountId` retornado pelo servidor deve corresponder exatamente à conta confirmada, inclusive em repetição. Ausência de identidade falha fechada. Repetição usa o mesmo `idempotencyKey`; não gera outro UUID após resposta perdida. Falhas anteriores ao envio não são classificadas como resgate ambíguo. Resultados conhecidos: `reset`, `alreadyRedeemed`, `nothingToReset`, `noCredit`. Falha na atualização posterior não converte resgate já confirmado em falha de resgate.
 
+Confirmação nunca apresentada: se a verificação termina com o popover fechado, `isConfirming` fica `true` sem que a view tenha visto a mudança, e o `onChange` não dispara mais (true → true) — o botão parecia morto. Por isso `beginPreparing` zera `isConfirming` a cada clique e `OpenAIResetControls` reapresenta a confirmação pendente no `onAppear`. Mesmo tratamento no reset do Claude.
+
 ## 4. Segurança e isolamento
 
 - O monitor lê `auth.json`, mas não grava nem renova o refresh token compartilhado. Apenas access token e account ID seguem por stdin ao subprocesso; id token e refresh token não são enviados.

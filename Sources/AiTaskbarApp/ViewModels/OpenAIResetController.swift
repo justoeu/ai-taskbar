@@ -47,6 +47,9 @@ final class OpenAIResetController: ObservableObject {
     /// providing immediate visual feedback to the user on button click.
     func beginPreparing() {
         guard !isBusy, !inFlight else { return }
+        // A confirmation the view never presented (popover closed while
+        // checking) must not swallow this click: `onChange` needs a change.
+        isConfirming = false
         isBusy = true
         activity = .checking
         message = nil
