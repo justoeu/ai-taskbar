@@ -286,6 +286,30 @@
 "reset_submission_uncertain" = "Could not confirm the result. Retry this same attempt; its key is preserved across app restarts.";
 "reset_attempt_in_progress" = "Another reset attempt is pending or running. Try again to recover that attempt.";
 
+/* Claude limit resets (cedar_ember) */
+"claude_reset_kind_session" = "5-hour reset";
+"claude_reset_kind_weekly" = "weekly reset";
+"claude_reset_kind_fable" = "Fable reset";
+"claude_reset_kind_full" = "full reset";
+"claude_reset_button" = "Use %1$@ (%2$ld)";
+"claude_reset_retry" = "Retry %@";
+"claude_reset_checking_status" = "Checking available Claude resets…";
+"claude_reset_applying_status" = "Applying Claude limit reset…";
+"claude_reset_waiting_response" = "Awaiting response from Anthropic…";
+"claude_reset_confirm_title" = "Use a Claude limit reset?";
+"claude_reset_confirm_message" = "Account: %1$@\nReset: %2$@\n%3$@\nAvailable: %4$ld\nThis consumes one reset. A retry reuses the same attempt and cannot spend a second one.";
+"claude_reset_done" = "Reset applied. Updating usage…";
+"claude_reset_already_used" = "This reset was already applied. Updating usage…";
+"claude_reset_not_limited" = "Anthropic reports no limit to reset right now.";
+"claude_reset_cooldown" = "Anthropic asks to wait a minute before using another reset.";
+"claude_reset_unavailable" = "No Claude reset is available for usage above 90% right now.";
+"claude_reset_cli_unavailable" = "Install or update Claude Code to use resets here.";
+"claude_reset_account_changed" = "The Claude account changed. Switch back to the account in the confirmation before retrying.";
+"claude_reset_auth_required" = "Sign in again with Claude Code. AI Taskbar does not renew its shared credential.";
+"claude_reset_rate_limited" = "Anthropic is rate limiting requests. Try again in a minute.";
+"claude_reset_failed" = "Could not apply the reset. Check the connection and try again.";
+"claude_reset_submission_uncertain" = "Could not confirm the result. Retry this same attempt; it cannot spend a second reset.";
+
 // Codex credits. The wire value is a QUANTITY (no currency symbol), so no
 // string here may introduce one.
 "credits_label" = "Credits";

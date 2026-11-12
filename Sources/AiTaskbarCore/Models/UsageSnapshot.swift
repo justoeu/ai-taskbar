@@ -176,23 +176,29 @@ public struct AnthropicSnapshot: Sendable, Equatable, Codable {
     /// credits utilization, `detail` carries the money range ("R$556.68 /
     /// R$600.00"). nil when the account has no credits enabled.
     public let credits: UsageWindow?
+    /// Earned limit resets (wire `cedar_ember`), server's next grant first,
+    /// then by expiry. Empty unless the account is eligible AND the reset
+    /// status was read (only while a window is above 90%).
+    public let resetGrants: [ClaudeResetGrant]
 
     public init(planLabel: String? = nil,
                 session: UsageWindow? = nil,
                 weekly: UsageWindow? = nil,
                 opus: UsageWindow? = nil,
                 scoped: [UsageWindow] = [],
-                credits: UsageWindow? = nil) {
+                credits: UsageWindow? = nil,
+                resetGrants: [ClaudeResetGrant] = []) {
         self.planLabel = planLabel
         self.session = session
         self.weekly = weekly
         self.opus = opus
         self.scoped = scoped
         self.credits = credits
+        self.resetGrants = resetGrants
     }
 
     enum CodingKeys: String, CodingKey {
-        case planLabel, session, weekly, opus, scoped, credits
+        case planLabel, session, weekly, opus, scoped, credits, resetGrants
     }
 
     // Custom decoder so history persisted before `scoped`/`credits` existed
@@ -209,6 +215,7 @@ public struct AnthropicSnapshot: Sendable, Equatable, Codable {
         opus = try c.decodeIfPresent(UsageWindow.self, forKey: .opus)
         scoped = try c.decodeIfPresent([UsageWindow].self, forKey: .scoped) ?? []
         credits = try c.decodeIfPresent(UsageWindow.self, forKey: .credits)
+        resetGrants = try c.decodeIfPresent([ClaudeResetGrant].self, forKey: .resetGrants) ?? []
     }
 }
 

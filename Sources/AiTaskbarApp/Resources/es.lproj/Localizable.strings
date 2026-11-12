@@ -285,6 +285,30 @@
 "reset_submission_uncertain" = "No se pudo confirmar el resultado. Reintenta esta misma operación; la clave se conserva al reiniciar la app.";
 "reset_attempt_in_progress" = "Hay otra operación de reset pendiente o en curso. Inténtalo de nuevo para recuperarla.";
 
+/* Claude limit resets (cedar_ember) */
+"claude_reset_kind_session" = "reset de 5 horas";
+"claude_reset_kind_weekly" = "reset semanal";
+"claude_reset_kind_fable" = "reset de Fable";
+"claude_reset_kind_full" = "reset completo";
+"claude_reset_button" = "Usar %1$@ (%2$ld)";
+"claude_reset_retry" = "Reintentar: %@";
+"claude_reset_checking_status" = "Comprobando los resets de Claude disponibles…";
+"claude_reset_applying_status" = "Aplicando reset de límite de Claude…";
+"claude_reset_waiting_response" = "Esperando respuesta de Anthropic…";
+"claude_reset_confirm_title" = "¿Usar un reset de límite de Claude?";
+"claude_reset_confirm_message" = "Cuenta: %1$@\nReset: %2$@\n%3$@\nDisponibles: %4$ld\nEsto consume un reset. Un reintento reutiliza la misma operación y no puede gastar un segundo.";
+"claude_reset_done" = "Reset aplicado. Actualizando el uso…";
+"claude_reset_already_used" = "Este reset ya se había aplicado. Actualizando el uso…";
+"claude_reset_not_limited" = "Anthropic indica que no hay ningún límite que resetear ahora.";
+"claude_reset_cooldown" = "Anthropic pide esperar un minuto antes de usar otro reset.";
+"claude_reset_unavailable" = "No hay ningún reset de Claude disponible para un uso superior al 90% ahora.";
+"claude_reset_cli_unavailable" = "Instala o actualiza Claude Code para usar resets aquí.";
+"claude_reset_account_changed" = "La cuenta de Claude cambió. Vuelve a la cuenta de la confirmación antes de reintentar.";
+"claude_reset_auth_required" = "Inicia sesión de nuevo con Claude Code. AI Taskbar no renueva la credencial compartida.";
+"claude_reset_rate_limited" = "Anthropic está limitando las solicitudes. Inténtalo de nuevo en un minuto.";
+"claude_reset_failed" = "No se pudo aplicar el reset. Revisa la conexión e inténtalo de nuevo.";
+"claude_reset_submission_uncertain" = "No se pudo confirmar el resultado. Reintenta esta misma operación; no puede gastar un segundo reset.";
+
 // Créditos de Codex. El valor de la API es CANTIDAD (sin símbolo de moneda),
 // así que ninguna cadena aquí debe introducir uno.
 "credits_label" = "Créditos";

@@ -686,6 +686,20 @@ section("Wire types: OpenAI earned reset summary") {
                            availableResetCount: 1).canOfferRateLimitReset, "90 percent exactly does not offer reset")
 }
 
+section("Wire types: Claude limit resets (cedar_ember)") {
+    let s = try SharedCoders.decoder.decode(AnthropicUsageResponse.self,
+        from: Fixtures.data(Fixtures.anthropicUsageWithResets200)).toSnapshot(planLabel: nil)
+    expect(s.resetGrants.map(\.id) == ["full-reset-2611", "launch-2610-fable"], "next grant first; bad id and paused dropped")
+    expect(s.resetGrants.map(\.kind) == [.weekly, .fable], "weekly + Fable kinds")
+    let now = ISO8601Parsing.parse("2026-11-12T12:00:00Z")!
+    expect(s.limitResetOffers(now: now).map(\.kind) == [.weekly, .fable], "weekly at 95% offers both")
+    let at90 = AnthropicSnapshot(weekly: UsageWindow(label: "Weekly (7d)", utilizationPercent: 90),
+                                 resetGrants: s.resetGrants)
+    expect(at90.limitResetOffers(now: now).isEmpty, "90 percent exactly does not offer a Claude reset")
+    expect(ClaudeCLIVersion.userAgent(version: "2.1.322") == "claude-cli/2.1.322 (external, cli)", "CLI user agent")
+    expect(ClaudeCLIVersion.userAgent(version: "2.1.3\r\n") == nil, "header-unsafe version refused")
+}
+
 section("Wire types: OpenAI fixture") {
     let parsed = try SharedCoders.decoder.decode(
         OpenAIUsageResponse.self,

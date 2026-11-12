@@ -692,8 +692,10 @@ public struct VendorSectionView: View {
         switch snap {
         case .anthropic:
             // Usage credits + model-scoped windows (e.g. Fable) now render as
-            // regular rows via `VendorSnapshot.windows`; no extra label needed.
-            EmptyView()
+            // regular rows via `VendorSnapshot.windows`; only resets add UI.
+            if let reset = vm.claudeReset {
+                ClaudeResetControls(vm: vm, reset: reset)
+            }
         case .openai(let s):
             OpenAIResetControls(vm: vm, reset: vm.openAIReset)
             if let credits = s.credits, credits.isWorthShowing {

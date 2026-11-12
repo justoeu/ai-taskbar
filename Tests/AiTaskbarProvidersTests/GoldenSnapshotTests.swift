@@ -47,6 +47,8 @@ struct GoldenSnapshotTests {
         #expect(snap.credits?.label == "Usage credits")
         #expect(Int((snap.credits?.utilizationPercent ?? 0).rounded()) == 12)
         #expect(snap.credits?.detail == "$2.45 / $20.00")
+        // No `cedar_ember` block → no reset grants (see ClaudeLimitResetTests).
+        #expect(snap.resetGrants.isEmpty)
     }
 
     // MARK: - OpenAI

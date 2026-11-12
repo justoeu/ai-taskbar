@@ -520,6 +520,29 @@ path, `/Users/example/.claude-work` → `dd1118a7`, never a real one).
   account added or logged out later raises the "relaunch" banner
   (`ClaudeAccountWatcher`, checked when the popover opens).
 
+### Claude limit resets — the CLI surface, same rule as OpenAI
+
+`docs/SDD-claude-limit-reset.md`. Claude Code's `/limit-reset` (program
+`cedar_ember`, measured 2026-11-12): status in `GET /api/oauth/usage?cedar_ember=1`,
+claim `POST /api/organizations/{org}/reset_rate_limits` with
+`{program, grant_id, request_id}`. Anthropic marks the status `eligible` only
+for `claude-cli/<recent version> (external, cli)`; by the maintainer's
+decision the reset calls (and only they) send the INSTALLED CLI's version
+(`ClaudeCLIVersion`, read from install folders, never by running it, digits
+only). No CLI → no status read, no button. Kinds follow Claude Code
+(`gives_back_weekly` → Fable, else `type`, else `clears`).
+`AnthropicSnapshot.limitResetOffers` = OpenAI's rule: a usable grant AND a
+window it refills strictly above 90%, not awaiting reset; the controller adds
+the 5-minute freshness gate. The provider reads the status only while a window
+is above 90%; any status failure falls back to the plain call and pauses
+status reads for 1 h, a reshaped `cedar_ember` is ignored on its own, and the
+cached payload keeps only the decoded allow-list (no `event_props`). Reset
+calls use `sendBounded` (same-origin redirects only). The org comes from
+`/api/oauth/profile` for the same token, decoding only the two UUIDs. Only a
+transport failure / 5xx / unreadable 2xx on the claim is `submissionUncertain`
+and resumable with the same `request_id`; never read an unknown `result` as a
+reset. Read-only credential: never refresh or write back for a reset.
+
 ### Cost scanners — token semantics differ per source, do not generalize
 
 Each scanner reads a different vendor's local records, and the same-sounding

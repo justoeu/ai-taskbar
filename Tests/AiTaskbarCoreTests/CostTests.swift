@@ -113,6 +113,18 @@ struct CostTests {
         #expect(m?.cacheCreatePer1M == 12.5)
     }
 
+    /// Codex rollouts carried `gpt-6.1-sol` with no table entry, so the card
+    /// read "price unavailable" for every Sol turn.
+    @Test("GPT-6.1 Sol has explicit current pricing")
+    func lookup_gpt61_sol() {
+        let m = PricingTable.lookup("gpt-6.1-sol", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 2)
+        #expect(m?.outputPer1M == 10)
+        #expect(m?.cacheReadPer1M == 0.1)
+        #expect(m?.cacheCreatePer1M == 2.5)
+        #expect(m?.longContextThresholdTokens == 272_000)
+    }
+
     /// Codex's auto-review alias has no published rate; an explicit estimate
     /// beats `nil`, which would silently price every review turn at $0.
     @Test("codex-auto-review is priced rather than silently dropped")

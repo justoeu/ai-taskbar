@@ -13,9 +13,170 @@ public struct AnthropicUsageResponse: Decodable {
     /// here as `weekly_scoped` entries carrying a `scope.model.display_name` —
     /// the flat `seven_day_*` fields for those models now come back `null`.
     public let limits: [AnthropicLimit]?
+    /// Earned limit resets. Sent only when asked (`?cedar_ember=1`) and
+    /// filled only for the Claude Code CLI surface; see
+    /// `docs/SDD-claude-limit-reset.md`.
+    public let cedar_ember: AnthropicResetStatus?
 
     enum CodingKeys: String, CodingKey {
-        case five_hour, seven_day, seven_day_opus, extra_usage, limits
+        case five_hour, seven_day, seven_day_opus, extra_usage, limits, cedar_ember
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        five_hour = try c.decodeIfPresent(AnthropicWindow.self, forKey: .five_hour)
+        seven_day = try c.decodeIfPresent(AnthropicWindow.self, forKey: .seven_day)
+        seven_day_opus = try c.decodeIfPresent(AnthropicWindow.self, forKey: .seven_day_opus)
+        extra_usage = try c.decodeIfPresent(AnthropicExtraUsage.self, forKey: .extra_usage)
+        limits = try c.decodeIfPresent([AnthropicLimit].self, forKey: .limits)
+        // The reset block is only fetched while a window is above 90%: a
+        // reshaped block must cost the reset buttons, never the usage card.
+        do {
+            cedar_ember = try c.decodeIfPresent(AnthropicResetStatus.self, forKey: .cedar_ember)
+        } catch {
+            AppLog.network.error("anthropic cedar_ember ignored: \(String(describing: error), privacy: .public)")
+            cedar_ember = nil
+        }
+    }
+}
+
+/// The `cedar_ember` block. Allow-list: `event_props` (tier, tenure, billing
+/// path) and the counters the app does not use are never decoded. A
+/// malformed grant is dropped on its own, as Claude Code does, instead of
+/// failing the whole usage payload.
+public struct AnthropicResetStatus: Decodable {
+    public let eligible: Bool?
+    public let next_grant_id: String?
+    public let grants: [AnthropicResetGrant]
+
+    enum CodingKeys: String, CodingKey { case eligible, next_grant_id, grants }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        eligible = try? c.decodeIfPresent(Bool.self, forKey: .eligible)
+        next_grant_id = try? c.decodeIfPresent(String.self, forKey: .next_grant_id)
+        let lossy = (try? c.decodeIfPresent([LossyGrant].self, forKey: .grants)) ?? []
+        grants = lossy.compactMap(\.value)
+    }
+
+    private struct LossyGrant: Decodable {
+        let value: AnthropicResetGrant?
+        init(from decoder: Decoder) {
+            do {
+                value = try AnthropicResetGrant(from: decoder)
+            } catch {
+                value = nil
+            }
+        }
+    }
+
+    static let grantFields: Set<String> = ["id", "label", "resets_left", "starts_at", "ends_at", "clears",
+                                           "paused", "type", "gives_back_weekly", "unavailable_reason"]
+
+    /// The payload with `cedar_ember` reduced to the decoded allow-list
+    /// (`eligible`, `next_grant_id`, and per grant `grantFields`), so the raw
+    /// `event_props` (tier, tenure, billing path) is never written to the
+    /// cache. A payload without the block is returned untouched.
+    public static func sanitizedPayload(_ data: Data) throws -> Data {
+        let value: JSONValue
+        do {
+            value = try SharedCoders.decoder.decode(JSONValue.self, from: data)
+        } catch {
+            throw AppError.schema("anthropic usage is not JSON: \(error)")
+        }
+        guard case .object(var root) = value, let block = root["cedar_ember"], block != .null else { return data }
+        if case .object(let status) = block {
+            var kept: [String: JSONValue] = [:]
+            if let eligible = status["eligible"] { kept["eligible"] = eligible }
+            if let next = status["next_grant_id"] { kept["next_grant_id"] = next }
+            if case .array(let grants) = status["grants"] {
+                kept["grants"] = .array(grants.map { grant in
+                    guard case .object(let fields) = grant else { return .null }
+                    return .object(fields.filter { grantFields.contains($0.key) })
+                })
+            }
+            root["cedar_ember"] = .object(kept)
+        } else {
+            root["cedar_ember"] = nil
+        }
+        do {
+            return try JSONEncoder().encode(JSONValue.object(root))
+        } catch {
+            throw AppError.schema("anthropic usage re-encode: \(error)")
+        }
+    }
+
+    /// Grants the app may offer, server's next grant first, then by expiry.
+    /// An ineligible account yields none even if it lists grants.
+    public func toGrants() -> [ClaudeResetGrant] {
+        guard eligible == true else { return [] }
+        let mapped = grants.compactMap { $0.toGrant() }
+        return mapped.enumerated().sorted { lhs, rhs in
+            let lNext = lhs.element.id == next_grant_id, rNext = rhs.element.id == next_grant_id
+            if lNext != rNext { return lNext }
+            switch (lhs.element.endsAt, rhs.element.endsAt) {
+            case let (l?, r?) where l != r: return l < r
+            case (.some, nil): return true
+            case (nil, .some): return false
+            default: return lhs.offset < rhs.offset
+            }
+        }.map(\.element)
+    }
+}
+
+public struct AnthropicResetGrant: Decodable {
+    public let id: String
+    public let label: String?
+    public let resets_left: Double?
+    public let starts_at: String?
+    public let ends_at: String?
+    public let clears: [String]?
+    public let paused: Bool?
+    public let type: String?
+    public let gives_back_weekly: Bool?
+    public let unavailable_reason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, label, resets_left, starts_at, ends_at, clears, paused, type,
+             gives_back_weekly, unavailable_reason
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        label = try? c.decodeIfPresent(String.self, forKey: .label)
+        resets_left = c.flexibleDoubleIfPresent(forKey: .resets_left)
+        starts_at = try? c.decodeIfPresent(String.self, forKey: .starts_at)
+        ends_at = try? c.decodeIfPresent(String.self, forKey: .ends_at)
+        clears = try? c.decodeIfPresent([String].self, forKey: .clears)
+        paused = try? c.decodeIfPresent(Bool.self, forKey: .paused)
+        type = try? c.decodeIfPresent(String.self, forKey: .type)
+        gives_back_weekly = try? c.decodeIfPresent(Bool.self, forKey: .gives_back_weekly)
+        unavailable_reason = try? c.decodeIfPresent(String.self, forKey: .unavailable_reason)
+    }
+
+    /// Claude Code refuses to claim an id outside this pattern; so do we.
+    static func isValidID(_ id: String) -> Bool {
+        (1...40).contains(id.count)
+            && id.unicodeScalars.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "_" || $0 == "-" }
+    }
+
+    /// nil for a grant that can never be offered: bad id, paused, none left,
+    /// or one the server marks unavailable.
+    func toGrant() -> ClaudeResetGrant? {
+        guard Self.isValidID(id), paused != true, unavailable_reason == nil,
+              let left = resets_left.flatMap({ Int(checkedTruncating: $0) }), left > 0 else { return nil }
+        let clears = clears ?? []
+        let givesBack = gives_back_weekly ?? false
+        return ClaudeResetGrant(
+            id: id,
+            label: String((label ?? "").prefix(160)),
+            kind: ClaudeResetGrant.classify(type: type, clears: clears, givesBackWeekly: givesBack),
+            resetsLeft: left,
+            clears: clears,
+            givesBackWeekly: givesBack,
+            startsAt: starts_at.flatMap(ISO8601Parsing.parse),
+            endsAt: ends_at.flatMap(ISO8601Parsing.parse))
     }
 }
 
@@ -199,7 +360,8 @@ extension AnthropicUsageResponse {
             weekly:  weekly,
             opus:    opus,
             scoped:  scoped,
-            credits: credits
+            credits: credits,
+            resetGrants: cedar_ember?.toGrants() ?? []
         )
     }
 }
