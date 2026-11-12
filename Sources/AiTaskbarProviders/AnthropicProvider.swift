@@ -26,6 +26,11 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     /// asks for the reset status in its one call instead of two.
     private let wantsResetStatus = NSLock()
     private var lastWasNearLimit = false
+    /// A failed status call pauses status reads for an hour, so a server
+    /// that refuses the variant neither fails the card nor doubles the calls.
+    private var resetStatusPausedUntil: Date?
+    static let resetStatusPause: TimeInterval = 3600
+    private let now: @Sendable () -> Date
     /// User-clicked resets for this account (`docs/SDD-claude-limit-reset.md`).
     public let limitResets: ClaudeLimitResetService
 
@@ -42,8 +47,10 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
                 instanceKey: ProviderInstanceKey = ProviderInstanceKey(vendor: .anthropic),
                 accountLabel: String? = nil,
                 configDirForRelogin: URL? = nil,
-                cliVersion: @escaping @Sendable () -> String? = { ClaudeCLIVersion.installed() }) {
+                cliVersion: @escaping @Sendable () -> String? = { ClaudeCLIVersion.installed() },
+                now: @escaping @Sendable () -> Date = { Date() }) {
         self.cliVersion = cliVersion
+        self.now = now
         self.limitResets = ClaudeLimitResetService(credentialReader: credentialReader, http: http,
                                                    cliVersion: cliVersion)
         self.instanceKey = instanceKey
@@ -194,24 +201,62 @@ public final class AnthropicProvider: UsageProvider, @unchecked Sendable {
     /// Claude Code CLI, the one surface Anthropic serves it to. Below that
     /// the call is exactly the plain one it always was.
     private func requestUsageWithResetStatus(using credentials: AnthropicCredentials) async throws -> Data {
-        let wanted = wantsResetStatus.withLock { lastWasNearLimit }
-        let agent: String? = wanted ? try await resetStatusUserAgent() : nil
-        var payload = try await requestUsage(using: credentials, resetStatusAgent: agent)
-        var nearLimit = Self.isNearLimit(payload)
-        if agent == nil, nearLimit, let lateAgent = try await resetStatusUserAgent() {
-            // Crossed 90% on this fetch: one more call for the status. Its
-            // failure costs only the reset button, never the usage numbers.
+        let (wanted, paused) = wantsResetStatus.withLock {
+            (lastWasNearLimit, resetStatusPausedUntil.map { $0 > now() } ?? false)
+        }
+        let probed = wanted && !paused
+        let agent: String? = probed ? try await resetStatusUserAgent() : nil
+        var payload: Data
+        if let agent {
             do {
-                payload = try await requestUsage(using: credentials, resetStatusAgent: lateAgent)
-                nearLimit = Self.isNearLimit(payload)
+                payload = try await requestStatusPayload(using: credentials, agent: agent)
+            } catch let error as AppError where error.isUnauthorized {
+                throw error // the caller re-reads the credential once
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                AppLog.network.error("anthropic reset status: \(String(describing: error), privacy: .public)")
+                // The status variant failed: the usage numbers must not.
+                pauseResetStatus(after: error)
+                payload = try await requestUsage(using: credentials)
+            }
+        } else {
+            payload = try await requestUsage(using: credentials)
+        }
+        if !probed, !paused, Self.isNearLimit(payload), let lateAgent = try await resetStatusUserAgent() {
+            // Crossed 90% on this fetch: one more call for the status. Its
+            // failure costs only the reset button, never the usage numbers.
+            do {
+                payload = try await requestStatusPayload(using: credentials, agent: lateAgent)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                pauseResetStatus(after: error)
             }
         }
+        let nearLimit = Self.isNearLimit(payload)
         wantsResetStatus.withLock { lastWasNearLimit = nearLimit }
         return payload
+    }
+
+    /// The status variant, accepted only if it decodes, and cached with
+    /// `cedar_ember` cut down to the fields the app reads (`event_props` —
+    /// tier, tenure, billing path — never reaches the disk cache).
+    private func requestStatusPayload(using credentials: AnthropicCredentials, agent: String) async throws -> Data {
+        let raw = try await requestUsage(using: credentials, resetStatusAgent: agent)
+        let payload = try AnthropicResetStatus.sanitizedPayload(raw)
+        do {
+            _ = try SharedCoders.decoder.decode(AnthropicUsageResponse.self, from: payload)
+        } catch {
+            throw AppError.schema("anthropic reset status decode: \(error)")
+        }
+        return payload
+    }
+
+    private func pauseResetStatus(after error: Error) {
+        AppLog.network.error(
+            "anthropic reset status failed, paused for 1 h: \(String(describing: error), privacy: .public)")
+        let until = now().addingTimeInterval(Self.resetStatusPause)
+        wantsResetStatus.withLock { resetStatusPausedUntil = until }
     }
 
     /// Installed CLI version, read off the cooperative pool (file metadata).

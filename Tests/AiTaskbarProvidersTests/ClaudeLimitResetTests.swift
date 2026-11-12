@@ -27,7 +27,7 @@ private let profileJSON = #"""
 /// Inside both grants' validity and before the weekly window resets.
 private let now = ISO8601Parsing.parse("2026-11-12T12:00:00Z")!
 
-private func body(of request: URLRequest) -> [String: String] {
+private func body(of request: URLRequest) throws -> [String: String] {
     var data = request.httpBody ?? Data()
     if data.isEmpty, let stream = request.httpBodyStream {
         stream.open()
@@ -39,7 +39,7 @@ private func body(of request: URLRequest) -> [String: String] {
             data.append(buffer, count: read)
         }
     }
-    return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+    return try JSONDecoder().decode([String: String].self, from: data)
 }
 
 private func resetsSnapshot(weekly: Double = 95, fable: Double = 40) throws -> AnthropicSnapshot {
@@ -90,6 +90,36 @@ struct ClaudeLimitResetWireTests {
                                             from: Fixtures.data(Fixtures.anthropicUsage200))
             .toSnapshot(planLabel: nil)
         #expect(snap.resetGrants.isEmpty)
+    }
+
+    @Test("a reshaped cedar_ember costs the grants, never the usage windows")
+    func reshapedBlock() throws {
+        for shape in ["false", "[]", #""soon""#, #"{"eligible":"yes","grants":7}"#] {
+            let json = Fixtures.anthropicUsageWithResets200.replacingOccurrences(
+                of: #""cedar_ember": {"#, with: #""cedar_ember": \#(shape), "unused": {"#)
+            #expect(json != Fixtures.anthropicUsageWithResets200)
+            let snap = try JSONDecoder().decode(AnthropicUsageResponse.self, from: Fixtures.data(json))
+                .toSnapshot(planLabel: nil)
+            #expect(snap.weekly?.utilizationPercent == 95)
+            #expect(snap.resetGrants.isEmpty)
+        }
+    }
+
+    @Test("the cached payload keeps only the decoded allow-list of cedar_ember")
+    func sanitizedPayload() throws {
+        let raw = Fixtures.data(Fixtures.anthropicUsageWithResets200)
+        let clean = try AnthropicResetStatus.sanitizedPayload(raw)
+        let text = String(decoding: clean, as: UTF8.self)
+        for gone in ["event_props", "claude_max_20x", "tenure_bucket", "billing_path", "percent_used",
+                     "usable_now", "weekly_resets_at", "ineligible_reason"] {
+            expectFalse(text.contains(gone))
+        }
+        let before = try JSONDecoder().decode(AnthropicUsageResponse.self, from: raw).toSnapshot(planLabel: nil)
+        let after = try JSONDecoder().decode(AnthropicUsageResponse.self, from: clean).toSnapshot(planLabel: nil)
+        #expect(after == before)
+        let plain = Fixtures.data(Fixtures.anthropicUsage200)
+        #expect(try AnthropicResetStatus.sanitizedPayload(plain) == plain)
+        #expect(throws: AppError.self) { try AnthropicResetStatus.sanitizedPayload(Data("<html>".utf8)) }
     }
 
     @Test("classification follows Claude Code")
@@ -297,7 +327,7 @@ struct ClaudeLimitResetServiceTests {
                 == "https://api.anthropic.com/api/organizations/\(orgUUID.lowercased())/reset_rate_limits")
         #expect(claim.value(forHTTPHeaderField: "Content-Type") == "application/json")
         #expect(claim.value(forHTTPHeaderField: "User-Agent") == "claude-cli/2.1.322 (external, cli)")
-        #expect(body(of: claim) == ["program": "cedar_ember", "grant_id": "launch-2610-fable",
+        #expect(try body(of: claim) == ["program": "cedar_ember", "grant_id": "launch-2610-fable",
                                     "request_id": attempt.id.uuidString.lowercased()])
         #expect(StubURLProtocol.captured.map { $0.url?.path ?? "" }
                 == ["/api/oauth/profile", "/api/oauth/usage",
@@ -311,7 +341,7 @@ struct ClaudeLimitResetServiceTests {
         let receipt = try await service().consume(attempt, retry: true)
         #expect(receipt.outcome == .alreadyUsed)
         expectFalse(StubURLProtocol.captured.map { $0.url?.path ?? "" }.contains("/api/oauth/usage"))
-        #expect(body(of: try #require(StubURLProtocol.captured.last))["request_id"] == attempt.id.uuidString.lowercased())
+        #expect(try body(of: try #require(StubURLProtocol.captured.last))["request_id"] == attempt.id.uuidString.lowercased())
     }
 
     @Test("another account behind the credential stops the claim")
@@ -358,6 +388,16 @@ struct ClaudeLimitResetServiceTests {
         }
     }
 
+    @Test("a claim redirected to another host is never followed")
+    func claimRedirect() async {
+        route(claim: .init(status: 307, data: Data(),
+                           redirectURL: URL(string: "https://evil.example/api/organizations/x/reset_rate_limits")))
+        await #expect(throws: ClaudeLimitResetError.self) {
+            try await service().consume(attempt(), retry: true)
+        }
+        expectFalse(StubURLProtocol.captured.contains { $0.url?.host == "evil.example" })
+    }
+
     @Test("an unknown result is never read as a reset")
     func unknownResult() async throws {
         route(claim: .init(data: Data(#"{"result":"brand_new"}"#.utf8)))
@@ -377,6 +417,10 @@ struct ClaudeLimitResetServiceTests {
 }
 
 // MARK: - Provider
+
+private final class Clock: @unchecked Sendable {
+    var now = ISO8601Parsing.parse("2026-11-12T12:00:00Z")!
+}
 
 @Suite("AnthropicProvider asks for reset status only near the limit", .serialized)
 struct AnthropicProviderResetStatusTests {
@@ -436,6 +480,53 @@ struct AnthropicProviderResetStatusTests {
         guard case .anthropic(let snap) = outcome.snapshot else { Issue.record("not anthropic"); return }
         #expect(snap.weekly?.utilizationPercent == 95)
         #expect(outcome.lastError == nil)
+    }
+
+    @Test("above 90%, a failing status call falls back to the plain call and pauses for an hour")
+    func steadyStateFailure() async throws {
+        let clock = Clock()
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.anthropicUsageWithResets200)) }
+        let provider = AnthropicProvider(credentialReader: FixedReader(),
+                                         cache: DiskCache(vendor: .anthropic, baseDir: tmpCache),
+                                         http: .stubbed(protocols: [StubURLProtocol.self]),
+                                         cliVersion: { "2.1.322" }, now: { clock.now })
+        _ = try await provider.fetchUsage(forceRefresh: true)   // crosses: plain + status
+        StubURLProtocol.reset()
+        StubURLProtocol.handler = { request in
+            request.url?.query == "cedar_ember=1"
+                ? .init(status: 400, data: Data("{}".utf8))
+                : .init(data: Fixtures.data(Fixtures.anthropicUsageWithResets200))
+        }
+        let outcome = try await provider.fetchUsage(forceRefresh: true)
+        guard case .anthropic(let snap) = outcome.snapshot else { Issue.record("not anthropic"); return }
+        #expect(snap.weekly?.utilizationPercent == 95)
+        #expect(outcome.lastError == nil)
+        #expect(StubURLProtocol.captured.map { $0.url?.query ?? "" } == ["cedar_ember=1", ""])
+
+        StubURLProtocol.reset()
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.anthropicUsageWithResets200)) }
+        _ = try await provider.fetchUsage(forceRefresh: true)    // paused: plain only
+        #expect(StubURLProtocol.captured.map { $0.url?.query ?? "" } == [""])
+
+        clock.now = clock.now.addingTimeInterval(AnthropicProvider.resetStatusPause + 1)
+        StubURLProtocol.reset()
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.anthropicUsageWithResets200)) }
+        _ = try await provider.fetchUsage(forceRefresh: true)    // pause over: status again
+        #expect(StubURLProtocol.captured.map { $0.url?.query ?? "" } == ["cedar_ember=1"])
+    }
+
+    @Test("the status payload reaches the disk cache without event_props")
+    func cacheIsSanitized() async throws {
+        StubURLProtocol.handler = { _ in .init(data: Fixtures.data(Fixtures.anthropicUsageWithResets200)) }
+        let cache = DiskCache(vendor: .anthropic, baseDir: tmpCache)
+        let provider = AnthropicProvider(credentialReader: FixedReader(), cache: cache,
+                                         http: .stubbed(protocols: [StubURLProtocol.self]),
+                                         cliVersion: { "2.1.322" })
+        _ = try await provider.fetchUsage(forceRefresh: true)
+        let cached = String(decoding: try #require(cache.anyPayload()), as: UTF8.self)
+        expectFalse(cached.contains("event_props"))
+        expectFalse(cached.contains("claude_max_20x"))
+        expectTrue(cached.contains("launch-2610-fable"))
     }
 
     @Test("without Claude Code installed the provider never presents itself as the CLI")

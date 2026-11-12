@@ -52,6 +52,9 @@ final class ClaudeResetController: ObservableObject {
 
     func beginPreparing(kind: ClaudeResetKind) {
         guard !isBusy, !inFlight else { return }
+        // A confirmation the view never presented (popover closed while
+        // checking) must not swallow this click: `onChange` needs a change.
+        isConfirming = false
         isBusy = true
         activity = .checking
         activeKind = kind
@@ -143,9 +146,9 @@ final class ClaudeResetController: ObservableObject {
             }
             return true
         } catch {
-            if error as? ClaudeLimitResetError == .submissionUncertain {
-                pendingAttempt = attempt
-            }
+            // Only an uncertain claim keeps its request_id; any definitive
+            // answer (even on a retry) ends it, so the fresh offers return.
+            pendingAttempt = error as? ClaudeLimitResetError == .submissionUncertain ? attempt : nil
             message = Self.errorMessage(error)
             isSuccess = false
             return false

@@ -61,6 +61,13 @@ struct ClaudeResetControls: View {
         }
         .animation(.easeInOut(duration: 0.2), value: reset.isBusy)
         .animation(.easeInOut(duration: 0.2), value: reset.message)
+        // A check that finished while the popover was closed left a
+        // confirmation pending: show it when the card comes back.
+        .onAppear {
+            if reset.isConfirming, reset.attempt != nil {
+                ConfirmationCenter.shared.present(Self.confirmation(reset: reset, vm: vm))
+            }
+        }
         // In-window, not `.alert`: a native alert closes the popover.
         .onChange(of: reset.isConfirming) { confirming in
             guard confirming else { return }

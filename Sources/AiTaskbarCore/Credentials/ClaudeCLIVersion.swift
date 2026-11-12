@@ -60,10 +60,17 @@ public enum ClaudeCLIVersion {
 
     private struct Manifest: Decodable { let version: String? }
 
+    static let maximumManifestBytes = 256 * 1024
+
+    /// Best-effort probe (an absent or odd manifest just means "not this
+    /// install"). Regular files only, and the cap is enforced on the bytes
+    /// actually read, not on a size checked beforehand.
     static func packageVersion(_ url: URL) -> String? {
-        guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
-              size <= 256 * 1024,
-              let data = try? Data(contentsOf: url),
+        guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+              let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: maximumManifestBytes + 1),
+              data.count <= maximumManifestBytes,
               let version = (try? JSONDecoder().decode(Manifest.self, from: data))?.version,
               isValid(version) else { return nil }
         return version

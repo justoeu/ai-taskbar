@@ -74,8 +74,17 @@ Windows a grant refills: `five_hour` → session, `seven_day` → weekly,
 `AnthropicProvider` asks for `?cedar_ember=1` (as the CLI) only while a window
 is above 90% — the only time a button can show. The fetch that first crosses
 90% makes a second call; while it stays above, the one call carries the
-status. A failed status call is logged and the plain payload is kept: it can
-cost the button, never the usage numbers.
+status. Its failure can cost the button, never the usage numbers:
+
+- any status-call failure other than 401 (re-read once by the caller) or
+  cancellation falls back to the plain call in the same fetch, and pauses
+  status reads for an hour (`AnthropicProvider.resetStatusPause`), so a
+  server that refuses the variant neither fails the card nor doubles calls;
+- a status payload is accepted only if it decodes, and a `cedar_ember` of an
+  unexpected shape is ignored on its own (no grants, windows intact);
+- the cache stores the status payload with `cedar_ember` reduced to the
+  decoded allow-list (`AnthropicResetStatus.sanitizedPayload`), so
+  `event_props` (tier, tenure, billing path) never reaches the disk.
 
 ## 5. Claim flow and safety
 
@@ -98,7 +107,12 @@ cost the button, never the usage numbers.
    the popover), in memory only. Unlike OpenAI there is no journal: a relaunch
    starts over, and a new attempt re-reads the grants before claiming.
 
-The org UUID and grant id are validated before they reach the URL/body.
+The org UUID and grant id are validated before they reach the URL/body. All
+three reset calls use `HTTPClient.sendBounded` (same-origin HTTPS redirects
+only): a 307 to another host would re-send the POST and its answer would be
+read as the claim result. A check that finishes while the popover is closed
+re-presents its confirmation when the card reappears, and the next click
+always re-arms it.
 
 ## 6. Tests
 

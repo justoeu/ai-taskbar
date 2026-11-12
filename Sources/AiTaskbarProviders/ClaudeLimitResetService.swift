@@ -70,7 +70,7 @@ public struct ClaudeLimitResetReceipt: Sendable, Equatable {
 /// The organization comes from `/api/oauth/profile` for the SAME token (only
 /// the two UUIDs are decoded — never name or e-mail), so it cannot drift from
 /// the account the token belongs to.
-public final class ClaudeLimitResetService: @unchecked Sendable {
+public final class ClaudeLimitResetService: Sendable {
     static let base = URL(string: "https://api.anthropic.com")!
     static let program = "cedar_ember"
 
@@ -129,7 +129,10 @@ public final class ClaudeLimitResetService: @unchecked Sendable {
     }
 
     private func context() async throws -> Context {
-        guard let version = cliVersion(), let agent = ClaudeCLIVersion.userAgent(version: version) else {
+        let cliVersion = self.cliVersion
+        // File metadata reads: off the cooperative pool, as in the provider.
+        guard let version = try await OffPool.run({ cliVersion() }),
+              let agent = ClaudeCLIVersion.userAgent(version: version) else {
             throw ClaudeLimitResetError.cliUnavailable
         }
         let credentials: AnthropicCredentials
@@ -183,8 +186,14 @@ public final class ClaudeLimitResetService: @unchecked Sendable {
     func profile(_ context: Context) async throws -> Identity {
         let (data, response) = try await sendDefinitive(request("/api/oauth/profile", context), what: "profile")
         let body = try checked(data, response, what: "profile")
-        guard let decoded = try? SharedCoders.decoder.decode(Profile.self, from: body),
-              let account = decoded.account?.uuid.flatMap(Self.canonicalUUID),
+        let decoded: Profile
+        do {
+            decoded = try SharedCoders.decoder.decode(Profile.self, from: body)
+        } catch {
+            AppLog.network.error("claude reset: profile decode failed: \(String(describing: error), privacy: .public)")
+            throw ClaudeLimitResetError.failed
+        }
+        guard let account = decoded.account?.uuid.flatMap(Self.canonicalUUID),
               let organization = decoded.organization?.uuid.flatMap(Self.canonicalUUID) else {
             AppLog.network.error("claude reset: profile without account/organization uuid")
             throw ClaudeLimitResetError.failed
@@ -225,7 +234,9 @@ public final class ClaudeLimitResetService: @unchecked Sendable {
         let data: Data
         let response: HTTPURLResponse
         do {
-            (data, response) = try await http.send(req, maximumResponseBytes: 64 * 1024)
+            // Same-origin HTTPS redirects only: a 307 elsewhere would re-send
+            // the POST and its answer would be read as the claim result.
+            (data, response) = try await http.sendBounded(req, maximumResponseBytes: 64 * 1024)
         } catch is CancellationError {
             throw ClaudeLimitResetError.submissionUncertain
         } catch {
@@ -243,8 +254,15 @@ public final class ClaudeLimitResetService: @unchecked Sendable {
             AppLog.network.error("claude reset: claim HTTP \(response.statusCode)")
             throw ClaudeLimitResetError.failed
         }
-        guard let decoded = try? SharedCoders.decoder.decode(ClaimResponse.self, from: data),
-              let raw = decoded.result else {
+        let decoded: ClaimResponse
+        do {
+            decoded = try SharedCoders.decoder.decode(ClaimResponse.self, from: data)
+        } catch {
+            AppLog.network.error("claude reset: claim answer unreadable: \(String(describing: error), privacy: .public)")
+            throw ClaudeLimitResetError.submissionUncertain
+        }
+        guard let raw = decoded.result else {
+            AppLog.network.error("claude reset: claim answer without result")
             throw ClaudeLimitResetError.submissionUncertain
         }
         // An unknown result is not a reset: Claude Code reads it as "unavailable".
@@ -256,7 +274,7 @@ public final class ClaudeLimitResetService: @unchecked Sendable {
     /// Reads that spend nothing: a transport failure is just a failure.
     private func sendDefinitive(_ request: URLRequest, what: String) async throws -> (Data, HTTPURLResponse) {
         do {
-            return try await http.send(request)
+            return try await http.sendBounded(request, maximumResponseBytes: HTTPClient.defaultMaximumResponseBytes)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

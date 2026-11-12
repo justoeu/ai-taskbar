@@ -79,6 +79,22 @@ struct ClaudeResetControllerTests {
         #expect(controller.message == L10n.localizedString("claude_reset_already_used"))
     }
 
+    @Test("a definitive failure on a retry drops the pending attempt")
+    func definitiveRetry() async {
+        var calls = 0
+        let controller = ClaudeResetController(prepare: { _ in attempt() }, consume: { _, _ in
+            calls += 1
+            throw calls == 1 ? ClaudeLimitResetError.submissionUncertain : ClaudeLimitResetError.accountChanged
+        })
+        await controller.prepare(kind: .weekly)
+        expectFalse(await controller.consume())
+        expectTrue(controller.pendingAttempt != nil)
+        await controller.prepare(kind: .weekly)
+        expectFalse(await controller.consume())
+        expectTrue(controller.pendingAttempt == nil)
+        #expect(controller.message == L10n.localizedString("claude_reset_account_changed"))
+    }
+
     @Test("a definitive failure leaves no pending attempt")
     func definitive() async {
         let controller = ClaudeResetController(prepare: { _ in attempt() }, consume: { _, _ in
@@ -101,6 +117,21 @@ struct ClaudeResetControllerTests {
         expectFalse(controller.isConfirming)
         #expect(controller.message == L10n.localizedString("claude_reset_cli_unavailable"))
         expectFalse(await controller.consume())
+    }
+
+    @Test("a confirmation never presented does not swallow the next click")
+    func unpresentedConfirmation() async {
+        let controller = ClaudeResetController(prepare: { _ in attempt() }, consume: { _, _ in
+            ClaudeLimitResetReceipt(outcome: .reset, resetsLeft: nil)
+        })
+        await controller.prepare(kind: .weekly)
+        expectTrue(controller.isConfirming)
+        // The popover closed before the view saw it; the next click must flip
+        // the flag so `onChange` fires again.
+        controller.beginPreparing(kind: .weekly)
+        expectFalse(controller.isConfirming)
+        await controller.prepare(kind: .weekly)
+        expectTrue(controller.isConfirming)
     }
 
     @Test("cancel drops the attempt")
@@ -130,7 +161,7 @@ struct ClaudeResetControllerTests {
             await controller.prepare(kind: .weekly)
             _ = await controller.consume()
             #expect(controller.message == L10n.localizedString(key))
-            #expect(controller.isSuccess == success)
+            expectTrue(controller.isSuccess == success)
         }
         let errors: [(ClaudeLimitResetError, String)] = [
             (.noEligibleReset, "claude_reset_unavailable"),

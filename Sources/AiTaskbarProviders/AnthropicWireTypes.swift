@@ -21,6 +21,23 @@ public struct AnthropicUsageResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case five_hour, seven_day, seven_day_opus, extra_usage, limits, cedar_ember
     }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        five_hour = try c.decodeIfPresent(AnthropicWindow.self, forKey: .five_hour)
+        seven_day = try c.decodeIfPresent(AnthropicWindow.self, forKey: .seven_day)
+        seven_day_opus = try c.decodeIfPresent(AnthropicWindow.self, forKey: .seven_day_opus)
+        extra_usage = try c.decodeIfPresent(AnthropicExtraUsage.self, forKey: .extra_usage)
+        limits = try c.decodeIfPresent([AnthropicLimit].self, forKey: .limits)
+        // The reset block is only fetched while a window is above 90%: a
+        // reshaped block must cost the reset buttons, never the usage card.
+        do {
+            cedar_ember = try c.decodeIfPresent(AnthropicResetStatus.self, forKey: .cedar_ember)
+        } catch {
+            AppLog.network.error("anthropic cedar_ember ignored: \(String(describing: error), privacy: .public)")
+            cedar_ember = nil
+        }
+    }
 }
 
 /// The `cedar_ember` block. Allow-list: `event_props` (tier, tenure, billing
@@ -50,6 +67,42 @@ public struct AnthropicResetStatus: Decodable {
             } catch {
                 value = nil
             }
+        }
+    }
+
+    static let grantFields: Set<String> = ["id", "label", "resets_left", "starts_at", "ends_at", "clears",
+                                           "paused", "type", "gives_back_weekly", "unavailable_reason"]
+
+    /// The payload with `cedar_ember` reduced to the decoded allow-list
+    /// (`eligible`, `next_grant_id`, and per grant `grantFields`), so the raw
+    /// `event_props` (tier, tenure, billing path) is never written to the
+    /// cache. A payload without the block is returned untouched.
+    public static func sanitizedPayload(_ data: Data) throws -> Data {
+        let value: JSONValue
+        do {
+            value = try SharedCoders.decoder.decode(JSONValue.self, from: data)
+        } catch {
+            throw AppError.schema("anthropic usage is not JSON: \(error)")
+        }
+        guard case .object(var root) = value, let block = root["cedar_ember"], block != .null else { return data }
+        if case .object(let status) = block {
+            var kept: [String: JSONValue] = [:]
+            if let eligible = status["eligible"] { kept["eligible"] = eligible }
+            if let next = status["next_grant_id"] { kept["next_grant_id"] = next }
+            if case .array(let grants) = status["grants"] {
+                kept["grants"] = .array(grants.map { grant in
+                    guard case .object(let fields) = grant else { return .null }
+                    return .object(fields.filter { grantFields.contains($0.key) })
+                })
+            }
+            root["cedar_ember"] = .object(kept)
+        } else {
+            root["cedar_ember"] = nil
+        }
+        do {
+            return try JSONEncoder().encode(JSONValue.object(root))
+        } catch {
+            throw AppError.schema("anthropic usage re-encode: \(error)")
         }
     }
 
