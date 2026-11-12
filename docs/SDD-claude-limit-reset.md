@@ -1,17 +1,17 @@
-# SDD — Claude limit resets (Fable, weekly, 5-hour, full)
+# SDD — Resets de limite do Claude (Fable, semanal, 5 horas, completo)
 
-Status: implemented 2026-11-12. Counterpart of
-`SDD-native-authorization-and-openai-reset.md` (OpenAI earned resets).
+Status: implementado em 2026-11-12. Par do
+`SDD-native-authorization-and-openai-reset.md` (resets conquistados da OpenAI).
 
-## 1. What exists upstream (measured, not documented)
+## 1. O que existe do lado da Anthropic (medido, não documentado)
 
-Claude Code 2.1.322 ships `/limit-reset [fable|full|5-hour|weekly]`
-(internal program name `cedar_ember`). Read from the CLI bundle and checked
-against the live API with a Max account on 2026-11-12:
+O Claude Code 2.1.322 traz `/limit-reset [fable|full|5-hour|weekly]`
+(nome interno do programa: `cedar_ember`). Lido do bundle do CLI e conferido
+contra a API real com uma conta Max em 2026-11-12:
 
 - **Status:** `GET https://api.anthropic.com/api/oauth/usage?cedar_ember=1`
-  (Bearer OAuth, `anthropic-beta: oauth-2025-04-20`). Without the parameter
-  the block is `null`. Shape:
+  (Bearer OAuth, `anthropic-beta: oauth-2025-04-20`). Sem o parâmetro, o bloco
+  vem `null`. Formato:
 
   ```json
   "cedar_ember": {
@@ -27,103 +27,112 @@ against the live API with a Max account on 2026-11-12:
   }
   ```
 
-- **Claim:** `POST https://api.anthropic.com/api/organizations/{orgUUID}/reset_rate_limits`
-  body `{"program":"cedar_ember","grant_id":…,"request_id":…}`; grant id
-  `^[a-z0-9_-]{1,40}$`, request id `^[A-Za-z0-9_-]{1,64}$`. Answer
+- **Resgate:** `POST https://api.anthropic.com/api/organizations/{orgUUID}/reset_rate_limits`
+  com corpo `{"program":"cedar_ember","grant_id":…,"request_id":…}`; grant id
+  `^[a-z0-9_-]{1,40}$`, request id `^[A-Za-z0-9_-]{1,64}$`. Resposta
   `{result: reset|already_used|not_limited|cooldown|ineligible|unavailable,
-  reason, resets_left, cleared, weekly_resets_at, cooldown_until}`; 429 is
-  rate limited, 401/403 auth.
-- **Kinds** (Claude Code's own rule): `gives_back_weekly` → Fable; else the
-  `type`; else only `five_hour` → 5-hour, only others → weekly, both → full.
-  `seven_day_overage_included` is the model-scoped weekly limit (Fable).
-- **Surface gate.** The status is `eligible` only for the Claude Code CLI at a
-  recent version: `claude-cli/2.1.322 (external, cli)` → eligible;
+  reason, resets_left, cleared, weekly_resets_at, cooldown_until}`; 429 é
+  limitação de taxa, 401/403 é autenticação.
+- **Tipos** (regra do próprio Claude Code): `gives_back_weekly` → Fable; senão
+  o `type`; senão só `five_hour` → 5 horas, só outros → semanal, ambos →
+  completo. `seven_day_overage_included` é o limite semanal por modelo (Fable).
+- **Restrição de superfície.** O status só vem `eligible` para o Claude Code
+  CLI numa versão recente: `claude-cli/2.1.322 (external, cli)` → elegível;
   `claude-cli/1.0 (external, cli)` → `cli_version`; `claude-cli/1.0`,
   `ai-taskbar/… (external, cli)` → `surface`.
 
-## 2. Decision: present the installed CLI on reset calls only
+## 2. Decisão: apresentar-se como o CLI instalado só nas chamadas de reset
 
-Chosen by the maintainer on 2026-11-12 over (b) a button that opens Claude Code
-and (c) not shipping. The reset calls send
-`claude-cli/<installed version> (external, cli)`; every other Anthropic call
-keeps `claude-cli/1.0`. The version is read from the install location
-(`ClaudeCLIVersion.installed`: launcher symlink, versions folder, Homebrew
-cask, npm manifest — never by running the binary) and validated to
-`digits.digits.digits` because it goes into a header. No CLI installed → no
-status read and no button. This deliberately passes the surface gate; it is
-the user's own grant, spent only on an explicit, confirmed click.
+Escolhida pelo mantenedor em 2026-11-12, em vez de (b) um botão que abre o
+Claude Code ou (c) não entregar. As chamadas de reset enviam
+`claude-cli/<versão instalada> (external, cli)`; todas as outras chamadas à
+Anthropic continuam com `claude-cli/1.0`. A versão é lida do local de
+instalação (`ClaudeCLIVersion.installed`: symlink do launcher, pasta de
+versões, cask do Homebrew, manifesto do npm — nunca executando o binário) e
+validada como `dígitos.dígitos.dígitos`, porque vai num header. Sem CLI
+instalado → nenhuma leitura de status e nenhum botão. Isso passa
+deliberadamente pela restrição de superfície; o reset é do próprio usuário e
+só é gasto num clique explícito e confirmado.
 
-## 3. Rule (same as OpenAI)
+## 3. Regra (a mesma da OpenAI)
 
-`AnthropicSnapshot.limitResetOffers(now:)` offers a kind when a grant of it
-is usable (`resets_left > 0`, not paused, no `unavailable_reason`, inside
-`starts_at…ends_at`) AND a window it refills is **strictly above 90%**,
-finite, and not past its own reset time. `ClaudeResetController.offers` adds
-the OpenAI freshness gate: `.ok`, not stale, no `lastError`, fetched
-−5…300 s ago. One button per kind, in Claude Code's order (5-hour, weekly,
-Fable, full); the count is the sum over that kind's grants. The claim targets
-the server's `next_grant_id` when it is of that kind, else the grant
-expiring first.
+`AnthropicSnapshot.limitResetOffers(now:)` oferece um tipo quando há um grant
+dele utilizável (`resets_left > 0`, não pausado, sem `unavailable_reason`,
+dentro de `starts_at…ends_at`) E uma janela que ele recompõe está
+**estritamente acima de 90%**, é finita e não passou do próprio horário de
+reset. `ClaudeResetController.offers` acrescenta a exigência de frescor da
+OpenAI: `.ok`, não obsoleto, sem `lastError`, buscado há −5…300 s. Um botão
+por tipo, na ordem do Claude Code (5 horas, semanal, Fable, completo); a
+contagem é a soma dos grants daquele tipo. O resgate mira o `next_grant_id`
+do servidor quando ele é desse tipo; senão, o grant que expira primeiro.
 
-Windows a grant refills: `five_hour` → session, `seven_day` → weekly,
-`seven_day_opus` → Opus, `seven_day_overage_included` → model-scoped rows;
-`gives_back_weekly` adds weekly; a full grant with no `clears` refills all.
+Janelas que um grant recompõe: `five_hour` → sessão, `seven_day` → semanal,
+`seven_day_opus` → Opus, `seven_day_overage_included` → linhas por modelo;
+`gives_back_weekly` acrescenta a semanal; um grant completo sem `clears`
+recompõe todas.
 
-## 4. When the status is read
+## 4. Quando o status é lido
 
-`AnthropicProvider` asks for `?cedar_ember=1` (as the CLI) only while a window
-is above 90% — the only time a button can show. The fetch that first crosses
-90% makes a second call; while it stays above, the one call carries the
-status. Its failure can cost the button, never the usage numbers:
+O `AnthropicProvider` pede `?cedar_ember=1` (como o CLI) só enquanto alguma
+janela está acima de 90% — o único momento em que um botão pode aparecer. A
+busca que cruza 90% pela primeira vez faz uma segunda chamada; enquanto
+continua acima, a única chamada já traz o status. Uma falha aí pode custar o
+botão, nunca os números de uso:
 
-- any status-call failure other than 401 (re-read once by the caller) or
-  cancellation falls back to the plain call in the same fetch, and pauses
-  status reads for an hour (`AnthropicProvider.resetStatusPause`), so a
-  server that refuses the variant neither fails the card nor doubles calls;
-- a status payload is accepted only if it decodes, and a `cedar_ember` of an
-  unexpected shape is ignored on its own (no grants, windows intact);
-- the cache stores the status payload with `cedar_ember` reduced to the
-  decoded allow-list (`AnthropicResetStatus.sanitizedPayload`), so
-  `event_props` (tier, tenure, billing path) never reaches the disk.
+- qualquer falha da chamada de status que não seja 401 (relida uma vez por
+  quem chamou) ou cancelamento cai para a chamada simples na mesma busca e
+  pausa as leituras de status por uma hora
+  (`AnthropicProvider.resetStatusPause`), de modo que um servidor que recuse a
+  variante nem derruba o card nem dobra as chamadas;
+- um payload de status só é aceito se decodificar, e um `cedar_ember` com
+  formato inesperado é ignorado sozinho (sem grants, janelas intactas);
+- o cache guarda o payload de status com o `cedar_ember` reduzido à lista
+  permitida que é decodificada (`AnthropicResetStatus.sanitizedPayload`), então
+  `event_props` (tier, tempo de conta, forma de cobrança) nunca chega ao disco.
 
-## 5. Claim flow and safety
+## 5. Fluxo de resgate e segurança
 
 `ClaudeLimitResetService` (Providers):
 
-1. **prepare(kind)** on click: credential read-only (never refreshed or
-   written back) → `GET /api/oauth/profile` (decodes ONLY `account.uuid` and
-   `organization.uuid`; e-mail and names are never decoded) → status → rule.
-2. **Confirmation**: in-window `ConfirmationRequest`, destructive, so Return
-   never confirms; names account, kind, the server's grant label and the count.
-3. **consume**: profile again (account or org changed → `accountChanged`);
-   for a first attempt the status again (grant gone or rule no longer met →
-   `noEligibleReset`); then the POST.
-4. **Errors**: transport failure, 5xx or an unreadable 2xx →
-   `submissionUncertain` (the request may have landed): the controller keeps
-   the attempt and the next click resumes it with the SAME `request_id`.
-   429/401/403/other 4xx are definitive and drop it. An unknown `result` is
-   read as `unavailable`, never as a reset.
-5. The pending attempt lives with the account's view model (survives closing
-   the popover), in memory only. Unlike OpenAI there is no journal: a relaunch
-   starts over, and a new attempt re-reads the grants before claiming.
+1. **prepare(kind)** no clique: credencial só leitura (nunca renovada nem
+   regravada) → `GET /api/oauth/profile` (decodifica SÓ `account.uuid` e
+   `organization.uuid`; e-mail e nomes nunca são decodificados) → status →
+   regra.
+2. **Confirmação**: `ConfirmationRequest` dentro da janela, destrutiva, então
+   Return nunca confirma; mostra a conta, o tipo, o rótulo do grant vindo do
+   servidor e a contagem.
+3. **consume**: perfil de novo (conta ou organização mudou →
+   `accountChanged`); numa primeira tentativa, o status de novo (grant sumiu
+   ou a regra deixou de valer → `noEligibleReset`); depois o POST.
+4. **Erros**: falha de transporte, 5xx ou 2xx ilegível →
+   `submissionUncertain` (a requisição pode ter chegado): o controller guarda
+   a tentativa e o próximo clique a retoma com o MESMO `request_id`.
+   429/401/403/outros 4xx são definitivos e a descartam, inclusive numa
+   repetição. Um `result` desconhecido é lido como `unavailable`, nunca como
+   reset.
+5. A tentativa pendente vive no view model da conta (sobrevive a fechar o
+   popover), só em memória. Ao contrário da OpenAI, não há diário em disco: um
+   relançamento começa do zero, e uma nova tentativa relê os grants antes de
+   resgatar.
 
-The org UUID and grant id are validated before they reach the URL/body. All
-three reset calls use `HTTPClient.sendBounded` (same-origin HTTPS redirects
-only): a 307 to another host would re-send the POST and its answer would be
-read as the claim result. A check that finishes while the popover is closed
-leaves a confirmation the view never presented; the next click clears it and
-presents again. It is deliberately NOT re-presented on `onAppear`: the card
-rebuilds when its state flips between `.ok` and `.failed`, and a second
-`present` cancels the open request (whose `onCancel` clears the attempt), so
-Confirm would do nothing.
+O UUID da organização e o grant id são validados antes de chegar à URL/corpo.
+As três chamadas de reset usam `HTTPClient.sendBounded` (só redirects HTTPS
+para a mesma origem): um 307 para outro host reenviaria o POST e a resposta
+seria lida como resultado do resgate. Uma verificação que termina com o
+popover fechado deixa uma confirmação que a view nunca apresentou; o próximo
+clique a limpa e apresenta de novo. Ela NÃO é reapresentada no `onAppear`, de
+propósito: o card é reconstruído quando o estado alterna entre `.ok` e
+`.failed`, e um segundo `present` cancela o pedido aberto (cujo `onCancel`
+limpa a tentativa), deixando "Confirmar" sem efeito.
 
-## 6. Tests
+## 6. Testes
 
-- `ClaudeLimitResetTests` (Providers): golden decode of a real-shape fixture
-  (`Fixtures.anthropicUsageWithResets200`), classification, the rule (exactly
-  90%, Fable-only, expired / not started, awaiting reset, session, full, NaN),
-  Codable back-compat, every service path (headers, URL, body, retry without
-  re-check, account change, uncertain vs definitive errors, tampered input),
-  and the provider's conditional status read.
+- `ClaudeLimitResetTests` (Providers): decodificação golden de um fixture com
+  formato real (`Fixtures.anthropicUsageWithResets200`), classificação, a
+  regra (exatamente 90%, só Fable, expirado / não iniciado, aguardando reset,
+  sessão, completo, NaN), compatibilidade do Codable, cada caminho do serviço
+  (headers, URL, corpo, repetição sem nova checagem, troca de conta, erros
+  incertos vs. definitivos, entrada adulterada), a leitura condicional de
+  status do provider, o fallback com pausa de 1 h e o cache sanitizado.
 - `ClaudeCLIVersionTests` (Core), `ClaudeResetControllerTests` (App).
 - `ai-taskbar-validate`: "Wire types: Claude limit resets (cedar_ember)".
