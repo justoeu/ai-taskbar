@@ -65,6 +65,23 @@ struct OpenAIResetControllerTests {
         #expect(calls == 2)
     }
 
+    @Test("a confirmation never presented does not swallow the next click")
+    func unpresented_confirmation() async {
+        let offer = OpenAIResetOffer(accountID: "A", accountLabel: "A", availableCount: 1)
+        let controller = OpenAIResetController(prepare: { _ in offer }, consume: { _, _, _ in
+            OpenAIResetReceipt(outcome: .reset, limitsRefreshed: true)
+        })
+        let path = URL(fileURLWithPath: "/unused-test-auth")
+        await controller.prepare(path: path)
+        expectTrue(controller.isConfirming)
+        // The popover closed before the view saw it; the next click must flip
+        // the flag so `onChange` fires again.
+        controller.beginPreparing()
+        expectFalse(controller.isConfirming)
+        await controller.prepare(path: path)
+        expectTrue(controller.isConfirming)
+    }
+
     @Test("activity and isSuccess track preparation, consumption, and completion states")
     func activity_and_success_lifecycle() async {
         let offer = OpenAIResetOffer(accountID: "A", accountLabel: "A", availableCount: 2)
