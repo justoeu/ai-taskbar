@@ -31,7 +31,7 @@ Sequência normal: snapshot elegível → clique → `initialize` → `initializ
 
 `accountId` retornado pelo servidor deve corresponder exatamente à conta confirmada, inclusive em repetição. Ausência de identidade falha fechada. Repetição usa o mesmo `idempotencyKey`; não gera outro UUID após resposta perdida. Falhas anteriores ao envio não são classificadas como resgate ambíguo. Resultados conhecidos: `reset`, `alreadyRedeemed`, `nothingToReset`, `noCredit`. Falha na atualização posterior não converte resgate já confirmado em falha de resgate.
 
-Confirmação nunca apresentada: se a verificação termina com o popover fechado, `isConfirming` fica `true` sem que a view tenha visto a mudança, e o `onChange` não dispara mais (true → true) — o botão parecia morto. Por isso `beginPreparing` zera `isConfirming` a cada clique e `OpenAIResetControls` reapresenta a confirmação pendente no `onAppear`. Mesmo tratamento no reset do Claude.
+Confirmação nunca apresentada: se a verificação termina com o popover fechado, `isConfirming` fica `true` sem que a view tenha visto a mudança, e o `onChange` não dispara mais (true → true) — o botão parecia morto. Por isso `beginPreparing` zera `isConfirming` a cada clique, e o clique seguinte volta a apresentar a confirmação. Não há reapresentação no `onAppear`: o card é reconstruído quando o estado alterna entre `.ok` e `.failed`, e apresentar de novo cancelava o pedido aberto (o `onCancel` limpa a oferta), deixando "Confirmar" sem efeito; também mostraria, horas depois, uma confirmação destrutiva baseada numa leitura antiga.
 
 ## 4. Segurança e isolamento
 

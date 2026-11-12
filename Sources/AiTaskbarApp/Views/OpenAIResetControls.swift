@@ -80,13 +80,6 @@ struct OpenAIResetControls: View {
             .animation(.easeInOut(duration: 0.2), value: reset.isBusy)
             .animation(.easeInOut(duration: 0.2), value: reset.message)
             .task { await reset.restorePending() }
-            // A check that finished while the popover was closed left a
-            // confirmation pending: show it when the card comes back.
-            .onAppear {
-                if reset.isConfirming, reset.offer != nil {
-                    ConfirmationCenter.shared.present(Self.confirmation(reset: reset, vm: vm, path: path))
-                }
-            }
             // In-window, not `.alert`: a native alert window closed the
             // popover and the click never reached "Confirm".
             .onChange(of: reset.isConfirming) { confirming in
