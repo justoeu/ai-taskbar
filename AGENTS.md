@@ -811,7 +811,7 @@ guesses. These are the facts, measured on macOS 26 with a standalone
   silently stopped working after the OS update. `MainPopoverTrigger` keeps
   the old target/action route whenever the button has one and otherwise
   calls the status item's `_requestExpandedInterfaceSession` (open; it never
-  closes) / `_endExpandedInterfaceSession:animate:` with a nil session
+  closes) / `_endExpandedInterfaceSession:animate:` (two BOOLs; NO, animate)
   (close, in sync: `onDisappear` runs and the next real click still
   toggles). Both private, both checked with `responds(to:)` first, and
   only on macOS 27+ (`isSceneStatusItemOS`): macOS 13–26 keep the previous

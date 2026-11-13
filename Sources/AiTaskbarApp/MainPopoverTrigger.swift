@@ -14,8 +14,9 @@ import AiTaskbarCore
 /// interface session:
 ///
 /// - `_requestExpandedInterfaceSession` opens it (it never closes it);
-/// - `_endExpandedInterfaceSession:animate:` with a nil session closes it in
-///   sync: `onDisappear` runs, a later request reopens it, and the next real
+/// - `_endExpandedInterfaceSession:animate:` (two BOOLs, runtime encoding
+///   `v24@0:8B16B20`; the first is passed NO, the second is `animate`)
+///   closes it in sync: `onDisappear` runs, a later request reopens it, and the next real
 ///   click on the icon still toggles correctly. `window.close()`,
 ///   `orderOut`, `NSApp.hide` and `NSApp.deactivate` were tried too: the
 ///   first three hide the window without telling MenuBarExtra (it then never
@@ -42,11 +43,10 @@ enum MainPopoverTrigger {
 
     /// macOS 27 is where status items became scene items and the old
     /// trigger stopped working; older systems keep the old route.
-    nonisolated static var isSceneStatusItemOS: Bool {
+    nonisolated static let isSceneStatusItemOS: Bool =
         ProcessInfo.processInfo.isOperatingSystemAtLeast(
             OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0)
         )
-    }
 
     /// Whether the popover content dissolves in on open. macOS 27 keeps the
     /// view alive and shows the window ~20 ms BEFORE any open signal reaches
@@ -104,9 +104,11 @@ enum MainPopoverTrigger {
             case .open:
                 sceneItem.perform(requestSelector)
             case .close:
-                typealias EndSession = @convention(c) (AnyObject, Selector, AnyObject?, Bool) -> Void
+                // The selector takes two BOOLs (`v24@0:8B16B20` on 27.2.1),
+                // not an object: declare exactly that.
+                typealias EndSession = @convention(c) (AnyObject, Selector, Bool, Bool) -> Void
                 let end = unsafeBitCast(sceneItem.method(for: endSelector), to: EndSession.self)
-                end(sceneItem, endSelector, nil, true)
+                end(sceneItem, endSelector, false, true)
             }
         case .performClick:
             if isSceneStatusItemOS {

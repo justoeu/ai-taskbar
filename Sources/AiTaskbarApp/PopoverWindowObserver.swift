@@ -55,7 +55,13 @@ struct PopoverWindowObserver: NSViewRepresentable {
             observers.forEach(NotificationCenter.default.removeObserver)
             observers.removeAll()
             lastReported = nil
-            guard let window else { return }
+            guard let window else {
+                if PopoverWindowHolder.shared.tracker === self {
+                    PopoverWindowHolder.shared.window = nil
+                    PopoverWindowHolder.shared.tracker = nil
+                }
+                return
+            }
             PopoverWindowHolder.shared.window = window
             PopoverWindowHolder.shared.tracker = self
             let names: [Notification.Name] = [
@@ -70,7 +76,9 @@ struct PopoverWindowObserver: NSViewRepresentable {
                     MainActor.assumeIsolated { self?.evaluate(forceHidden: closing) }
                 }
             }
-            evaluate(forceHidden: false)
+            // Not synchronously: this can run inside a SwiftUI update, and
+            // the callback mutates view state.
+            DispatchQueue.main.async { [weak self] in self?.evaluate(forceHidden: false) }
         }
 
         func evaluate(forceHidden: Bool) {

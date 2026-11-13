@@ -193,7 +193,14 @@ public struct PopoverContentView: View {
                             }
                         }
                     }
-                    .onAppear { popoverDidOpen(proxy) }
+                    .onAppear {
+                        // macOS 27: the window observer may have handled
+                        // this open first; never run the open work twice
+                        // (a second run would scroll away from a pinned
+                        // LLM's card). Before 27 the flag is always false
+                        // here, since onDisappear resets it.
+                        if !isOpenHandled { popoverDidOpen(proxy) }
+                    }
                     .onDisappear { popoverDidClose(proxy) }
                     // macOS 27 keeps this view alive across closes: onAppear
                     // runs on the first open only and onDisappear never runs
