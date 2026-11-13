@@ -697,7 +697,7 @@ the same item. No telemetry, no remote logging.
 ```bash
 make app                # debug-quality release build, host arch (fast iteration)
 make app-universal      # arm64 + x86_64 fat binary
-make icon               # regenerate Resources/AppIcon.icns from Swift drawing script
+make icon               # regenerate Resources/AppIcon.icns from the Swift drawing script (manual; commit the result — builds use the committed icon)
 make dmg                # host-arch DMG
 make dmg-universal      # universal DMG
 make validate           # runtime assertions + Swift Testing + coverage ≥90% + smoke launch + perms audit
