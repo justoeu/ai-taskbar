@@ -802,6 +802,55 @@ guesses. These are the facts, measured on macOS 26 with a standalone
   slide under the notch — the "icons overlapping" report.
 - The geometry check must not depend on finding the main button: a failed
   lookup used to return "allowed", which is how every LLM could be pinned.
+- **macOS 27 opens the popover through a scene session, not a click.**
+  Measured on 27.2.1 (2026-11-13) with a standalone MenuBarExtra probe: the
+  main item is an `NSSceneStatusItem`, a real click arrives as a scene action
+  (no mouse event reaches the app), and its button has NO target/action —
+  `performClick`, `accessibilityPerformPress` and synthesized mouse events
+  all leave the popover closed. That is how clicking a pinned % (and Esc)
+  silently stopped working after the OS update. `MainPopoverTrigger` keeps
+  the old target/action route whenever the button has one and otherwise
+  calls the status item's `_requestExpandedInterfaceSession` (open; it never
+  closes) / `_endExpandedInterfaceSession:animate:` (two BOOLs; NO, animate)
+  (close, in sync: `onDisappear` runs and the next real click still
+  toggles). Both private, both checked with `responds(to:)` first, and
+  only on macOS 27+ (`isSceneStatusItemOS`): macOS 13–26 keep the previous
+  route byte for byte (target/action, else `performClick`) — not everyone
+  has upgraded.
+  `window.close()` / `orderOut` / `NSApp.hide` hide the window without
+  telling MenuBarExtra and it never reopens — do not use them. Also on 27:
+  a click on any status item dismisses the open popover BEFORE the item's
+  action runs, so the "click the same LLM again to close" toggle is
+  `PinnedStatusItemManager.decideClick`'s `recentClose` rule (same vendor
+  within `dismissedByClickWindow`, 0.5 s → leave it closed; macOS 27+
+  only, older systems never swallow a click). The label's
+  `StatusItemButtonFinder` is never mounted on 27, so the main button comes
+  from the `NSApp.windows` scan.
+- **macOS 27 keeps the popover view alive: `onAppear` runs on the FIRST
+  open only and `onDisappear` never runs** (measured in the real app,
+  2026-11-13). Everything the popover did there — `isPopoverPresented`, the
+  Esc/arrow key monitor, activating the app, landing on the home screen,
+  cancelling a pending confirmation, clearing the pinned focus — silently
+  stopped. The work lives in `popoverDidOpen` / `popoverDidClose`; SwiftUI's
+  lifecycle calls them everywhere, and on 27 `PopoverWindowObserver` (the
+  window's real visibility: occlusion / key / willClose) calls them too,
+  guarded by `isOpenHandled` so a close is applied once. A status-item
+  click hides the popover BEFORE the item's action and the observer hears
+  it later — or never, when a pinned click on another LLM reopens it at
+  once — so `PinnedStatusItemManager.reconcileClosedPopover` resyncs the
+  observer from the click itself (store "presented" + window gone), and a
+  close applied there does not clear the focus the click just set. On 27 the
+  window is also shown WITHOUT being key (`keyWindow` nil), so no key event
+  reached the app; `popoverDidOpen` makes it key there. Synthetic key events
+  (CGEvent) are not delivered to any app on this system, so Esc is verified
+  by hand, not by script.
+  The window is also on screen ~20 ms BEFORE the first open signal (key /
+  occlusion notifications arrive after it is drawn), so the content
+  dissolve (`hasAppeared`) is OFF on 27
+  (`MainPopoverTrigger.dissolvesContentOnOpen`): zeroing the opacity at
+  close and fading it back at open showed the header, then a blank window,
+  then the cards — the flicker reported right after the fix above. macOS
+  13–26 keep the dissolve.
 
 ### Codex credits are a QUANTITY — never render them as money
 
