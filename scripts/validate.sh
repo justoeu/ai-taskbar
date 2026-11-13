@@ -37,6 +37,11 @@ COVERAGE_FLOOR="$COVERAGE_FLOOR" scripts/coverage.sh "$COVERAGE_FLOOR"
 bold "[4/6] assemble .app bundle"
 make app >/dev/null 2>&1
 test -x build/AiTaskbar.app/Contents/MacOS/ai-taskbar || fail "Mach-O missing"
+# A build must never rewrite tracked files: `make publish` refuses a dirty
+# tree, so a build that touches Resources/ blocks every release (v0.35.2).
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git diff --quiet -- Resources/ || fail "make app modified tracked files under Resources/"
+fi
 codesign --verify build/AiTaskbar.app 2>/dev/null || fail "ad-hoc signature invalid"
 # Bundle.module crashes the popover if the SPM-generated resource bundle is
 # in the wrong location (regression from v0.1.0). Must live in Resources/.

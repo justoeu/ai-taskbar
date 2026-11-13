@@ -60,15 +60,19 @@ all: app
 build:
 	swift build -c release
 
-# Render the AppIcon.icns from the Swift script. Idempotent — safe to chain
-# before every `app` build so the icon never goes stale relative to the
-# source script.
+# Render Resources/AppIcon.icns from the Swift script. MANUAL: run it after
+# editing scripts/generate_icon.swift and commit the result. It is NOT a
+# prerequisite of `app` / `app-universal` any more: iconutil output is not
+# byte-stable across toolchains (Xcode 26.x → the 2026-11 update rewrote it,
+# visually identical), so every build dirtied the tree and `make publish`'s
+# clean-tree stamp refused the notarized v0.35.2 DMGs. Builds copy the
+# committed icon.
 icon:
 	@scripts/build_icon.sh
 
 # Default `app` target = host-architecture only. Fast for local iteration.
 # For distribution use `make app-universal` (also runs on Intel Macs).
-app: icon
+app:
 	swift build -c release
 	rm -rf $(APP_DIR)
 	mkdir -p $(APP_DIR)/Contents/MacOS $(APP_DIR)/Contents/Resources
@@ -91,13 +95,25 @@ app: icon
 # Universal binary (arm64 + x86_64). Works with Command Line Tools alone —
 # no full Xcode required. Strategy: build each arch separately, then `lipo`
 # them into a fat binary. ~2× build time vs single-arch.
-app-universal: icon
+app-universal:
+	# Paths come from `swift build --show-bin-path`, never hard-coded:
+	# Swift 6.4 writes every --arch to .build/out/Products/Release and no
+	# longer updates .build/<arch>-apple-macosx/release, so the old fixed
+	# paths silently picked up binaries left there by an older toolchain
+	# (the v0.35.2 universal DMG carried the v0.35.1 code). Stale copies are
+	# removed first and each arch is copied right after its own build,
+	# since both arches can share one output directory.
+	mkdir -p build
+	rm -rf build/.ai-taskbar.arm64 build/.ai-taskbar.x86_64 build/.ai-taskbar.bundle
 	@echo "==> Building arm64..."
 	swift build -c release --arch arm64
-	cp .build/arm64-apple-macosx/release/ai-taskbar build/.ai-taskbar.arm64
+	BIN=$$(swift build -c release --arch arm64 --show-bin-path) && \
+		cp "$$BIN/ai-taskbar" build/.ai-taskbar.arm64 && \
+		cp -R "$$BIN/ai-taskbar_AiTaskbarApp.bundle" build/.ai-taskbar.bundle
 	@echo "==> Building x86_64..."
 	swift build -c release --arch x86_64
-	cp .build/x86_64-apple-macosx/release/ai-taskbar build/.ai-taskbar.x86_64
+	BIN=$$(swift build -c release --arch x86_64 --show-bin-path) && \
+		cp "$$BIN/ai-taskbar" build/.ai-taskbar.x86_64
 	@echo "==> lipo merging..."
 	rm -rf $(APP_DIR)
 	mkdir -p $(APP_DIR)/Contents/MacOS $(APP_DIR)/Contents/Resources
@@ -106,10 +122,12 @@ app-universal: icon
 	rm -f build/.ai-taskbar.arm64 build/.ai-taskbar.x86_64
 	cp Resources/Info.plist $(APP_DIR)/Contents/Info.plist
 	cp Resources/AppIcon.icns $(APP_DIR)/Contents/Resources/
-	# Copy resource bundle (arm64 + x86_64 ship the same resources, pick arm64).
-	# Lives in Contents/Resources/ for `Bundle.module` to find it — see the
-	# detailed comment on the `app` target above.
-	-cp -R .build/arm64-apple-macosx/release/ai-taskbar_AiTaskbarApp.bundle $(APP_DIR)/Contents/Resources/ 2>/dev/null || true
+	# Resource bundle (arm64 + x86_64 ship the same resources, taken from the
+	# arm64 build). Lives in Contents/Resources/ for `Bundle.module` to find
+	# it — see the detailed comment on the `app` target above. Required: a
+	# missing bundle makes the popover fatalError, so no `|| true` here.
+	cp -R build/.ai-taskbar.bundle $(APP_DIR)/Contents/Resources/ai-taskbar_AiTaskbarApp.bundle
+	rm -rf build/.ai-taskbar.bundle
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP_DIR)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $(BUNDLE_ID)" $(APP_DIR)/Contents/Info.plist
 	codesign --force --deep --timestamp=none --sign "$(APP_SIGN_IDENTITY)" $(APP_DIR)
