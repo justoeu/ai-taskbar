@@ -58,14 +58,33 @@ fi
 # stale layout) `head -1` could pair a stale profile or binary with this run.
 BIN_PATH=$(swift build --show-bin-path)
 PROFDATA="$BIN_PATH/codecov/default.profdata"
-BINARY="$BIN_PATH/ai-taskbarPackageTests.xctest/Contents/MacOS/ai-taskbarPackageTests"
-
-if [ ! -f "$PROFDATA" ] || [ ! -f "$BINARY" ]; then
-    fail "couldn't find $PROFDATA or $BINARY — did swift test succeed?"
+# Up to Swift 6.3 SwiftPM linked every test target into ONE
+# `ai-taskbarPackageTests` bundle. Swift 6.4 (Xcode 26.6 / macOS 27 SDK)
+# builds one `<Target>.xctest` per test target instead, each with its own
+# copy of Core/Providers, so llvm-cov gets every one of them (the first
+# positionally, the rest via -object) and merges their counters per file.
+LEGACY_BINARY="$BIN_PATH/ai-taskbarPackageTests.xctest/Contents/MacOS/ai-taskbarPackageTests"
+OBJECTS=()
+if [ -f "$LEGACY_BINARY" ]; then
+    OBJECTS=("$LEGACY_BINARY")
+else
+    for bundle in "$BIN_PATH"/*Tests.xctest; do
+        exe="$bundle/Contents/MacOS/$(basename "$bundle" .xctest)"
+        [ -f "$exe" ] && OBJECTS+=("$exe")
+    done
 fi
 
+if [ ! -f "$PROFDATA" ] || [ "${#OBJECTS[@]}" -eq 0 ]; then
+    fail "couldn't find $PROFDATA or any test binary under $BIN_PATH — did swift test succeed?"
+fi
+
+LLVM_COV_OBJECTS=("${OBJECTS[0]}")
+for obj in "${OBJECTS[@]:1}"; do
+    LLVM_COV_OBJECTS+=(-object "$obj")
+done
+
 bold "Line coverage — AiTaskbarCore + AiTaskbarProviders"
-TOTAL_LINE=$(xcrun llvm-cov report "$BINARY" -instr-profile="$PROFDATA" \
+TOTAL_LINE=$(xcrun llvm-cov report "${LLVM_COV_OBJECTS[@]}" -instr-profile="$PROFDATA" \
     -ignore-filename-regex='.build|Tests|AiTaskbarApp|AiTaskbarTesting|AiTaskbarValidate|swift-testing|TOMLKit' \
     2>/dev/null \
     | awk '/^TOTAL/ {gsub("%","",$10); print $10}')

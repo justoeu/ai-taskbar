@@ -532,46 +532,132 @@ public final class PinnedStatusItemManager: ObservableObject {
 
     public private(set) var lastFocusedPinnedVendor: VendorId?
 
+    /// The pinned vendor the popover was showing when it last closed, and
+    /// when. See `decideClick`.
+    struct RecentClose: Equatable {
+        let vendor: VendorId
+        let at: Date
+    }
+
+    private(set) var recentClose: RecentClose?
+    /// Injected by tests.
+    var now: () -> Date = Date.init
+
+    /// How long after the popover closed a click on the SAME pinned item is
+    /// read as "that click closed it". On macOS 27 a click on any status item
+    /// dismisses the open popover BEFORE the item's action runs (measured: the
+    /// popover's `onDisappear`, then the click with `isPopoverPresented`
+    /// false), so without this the toggle-close click reopened it at once.
+    /// Applied on macOS 27+ only.
+    nonisolated static let dismissedByClickWindow: TimeInterval = 0.5
+
+    /// Called by the popover's `onDisappear`.
     public func clearLastFocusedPinnedVendor() {
+        if let vendor = lastFocusedPinnedVendor {
+            recentClose = RecentClose(vendor: vendor, at: now())
+        }
         lastFocusedPinnedVendor = nil
+    }
+
+    enum PinnedClick: Equatable {
+        /// Close the popover (second click on the LLM it shows).
+        case close
+        /// Focus the clicked LLM, opening the popover when it is closed.
+        case focus(openPopover: Bool)
+        /// The click already closed the popover itself (macOS 27); leave it.
+        case ignore
+    }
+
+    nonisolated static func decideClick(
+        clicked: VendorId,
+        isPresented: Bool,
+        lastFocused: VendorId?,
+        recentClose: RecentClose?,
+        now: Date,
+        clickDismissesPopoverFirst: Bool = MainPopoverTrigger.isSceneStatusItemOS
+    ) -> PinnedClick {
+        if isPresented {
+            return lastFocused == clicked ? .close : .focus(openPopover: false)
+        }
+        // macOS ≤ 26: the popover is still open when the action runs, so the
+        // branch above already handles the toggle; never swallow a click.
+        if clickDismissesPopoverFirst, let recentClose, recentClose.vendor == clicked {
+            let elapsed = now.timeIntervalSince(recentClose.at)
+            if elapsed >= 0, elapsed < dismissedByClickWindow { return .ignore }
+        }
+        return .focus(openPopover: true)
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
         guard let (vid, _) = statusItems.first(where: { $0.value.button == sender }) else { return }
-        let mainButton = MainStatusItemHolder.shared.mainButton ?? findMainStatusBarButton()
+        handleClick(on: vid)
+    }
 
-        let isPresented = store?.isPopoverPresented ?? false
-        let isAlreadyFocused = (lastFocusedPinnedVendor == vid)
+    /// Injected by tests: whether the popover window is on screen (nil =
+    /// unknown, the popover never opened), and the observer resync.
+    var popoverWindowShowing: () -> Bool? = { PopoverWindowHolder.shared.isWindowShowing }
+    var resyncPopoverWindow: () -> Void = { PopoverWindowHolder.shared.resync() }
 
-        if isPresented && isAlreadyFocused {
-            // Clicking again on the currently opened/focused LLM toggles the popover closed
+    /// macOS 27: a click on a status item hides the open popover BEFORE the
+    /// item's action runs, and the window observer reports that only later
+    /// (or never, when the popover reopens at once). Seen from the action,
+    /// the store still says "presented" while the window is already gone —
+    /// so have the observer apply that close now (the popover's own close
+    /// bookkeeping), and let `decideClick` see it as the recent close it is.
+    /// Without an observer the bookkeeping is applied here. Returns whether
+    /// it reconciled anything.
+    @discardableResult
+    func reconcileClosedPopover(isSceneStatusItemOS: Bool = MainPopoverTrigger.isSceneStatusItemOS) -> Bool {
+        guard isSceneStatusItemOS,
+              let store, store.isPopoverPresented,
+              popoverWindowShowing() == false
+        else { return false }
+        resyncPopoverWindow()
+        if store.isPopoverPresented {
+            store.isPopoverPresented = false
+            clearLastFocusedPinnedVendor()
+        }
+        return true
+    }
+
+    func handleClick(on vid: VendorId) {
+        reconcileClosedPopover()
+        let decision = Self.decideClick(
+            clicked: vid,
+            isPresented: store?.isPopoverPresented ?? false,
+            lastFocused: lastFocusedPinnedVendor,
+            recentClose: recentClose,
+            now: now()
+        )
+        recentClose = nil
+        switch decision {
+        case .close:
             lastFocusedPinnedVendor = nil
-            triggerStatusBarButton(mainButton)
-        } else {
+            triggerMainPopover(.close)
+        case .focus(let openPopover):
             lastFocusedPinnedVendor = vid
             store?.focusVendor(vid)
-            if !isPresented {
-                triggerStatusBarButton(mainButton)
-            }
+            if openPopover { triggerMainPopover(.open) }
+        case .ignore:
+            break
         }
     }
 
-    /// Closes the open popover (Esc). Goes through the main status button,
-    /// the same toggle a click uses: closing the MenuBarExtra window directly
+    /// Closes the open popover (Esc). Goes through the main status item, the
+    /// same toggle a click uses: closing the MenuBarExtra window directly
     /// leaves its internal state "open", and the next click then does nothing.
     public func closeMainPopover() {
         guard store?.isPopoverPresented == true else { return }
         lastFocusedPinnedVendor = nil
-        triggerStatusBarButton(MainStatusItemHolder.shared.mainButton ?? findMainStatusBarButton())
+        triggerMainPopover(.close)
     }
 
-    private func triggerStatusBarButton(_ button: NSStatusBarButton?) {
-        guard let button else { return }
-        if let target = button.target, let action = button.action {
-            NSApplication.shared.sendAction(action, to: target, from: button)
-        } else {
-            button.performClick(nil)
+    private func triggerMainPopover(_ intent: MainPopoverTrigger.Intent) {
+        guard let button = MainStatusItemHolder.shared.mainButton ?? findMainStatusBarButton() else {
+            AppLog.pinning.error("main status button not found; cannot toggle the popover")
+            return
         }
+        MainPopoverTrigger.trigger(button, intent: intent)
     }
 
     private func findMainStatusBarButton() -> NSStatusBarButton? {

@@ -43,8 +43,14 @@ codesign --verify build/AiTaskbar.app 2>/dev/null || fail "ad-hoc signature inva
 spm_bundle="build/AiTaskbar.app/Contents/Resources/ai-taskbar_AiTaskbarApp.bundle"
 test -d "$spm_bundle" \
     || fail "SPM resource bundle missing from Contents/Resources/ — Bundle.module will fatalError"
-test -f "$spm_bundle/en.lproj/Localizable.strings" \
-    || fail "Localizable.strings missing from resource bundle"
+# Swift <= 6.3 writes a flat bundle (<bundle>/en.lproj); Swift 6.4 writes a
+# standard macOS bundle (<bundle>/Contents/Resources/en.lproj). Foundation's
+# Bundle resolves both, so either layout is valid; neither is a failure.
+for lang in en pt-BR es; do
+    test -f "$spm_bundle/$lang.lproj/Localizable.strings" \
+        || test -f "$spm_bundle/Contents/Resources/$lang.lproj/Localizable.strings" \
+        || fail "$lang Localizable.strings missing from resource bundle"
+done
 ok "bundle + ad-hoc signature OK"
 
 bold "[5/6] smoke launch"

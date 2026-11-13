@@ -23,6 +23,8 @@ public struct PopoverContentView: View {
     /// Drives the opacity dissolve when the popover opens.
     @State private var hasAppeared = false
     @State private var overlay: Overlay?
+    /// Whether `popoverDidOpen` ran without a matching `popoverDidClose`.
+    @State private var isOpenHandled = false
     @ObservedObject private var confirmations = ConfirmationCenter.shared
     @FocusState private var statusButtonFocused: Bool
     public var onQuit: () -> Void
@@ -33,6 +35,95 @@ public struct PopoverContentView: View {
 
     static let scrollTopID = "popover-scroll-top"
     static let appearDuration: TimeInterval = 0.12
+
+    /// Everything the popover does when it opens. Called by `onAppear` and,
+    /// on macOS 27, by `PopoverWindowObserver`.
+    private func popoverDidOpen(_ proxy: ScrollViewProxy) {
+        isOpenHandled = true
+        store.isPopoverPresented = true
+        claudeAccountWatcher.check()
+        // An accessory app is not activated by opening its
+        // menu-bar window, so keys (Esc) would go to the
+        // previous app. Activate, then listen for Esc.
+        NSApp.activate(ignoringOtherApps: true)
+        PopoverKeyMonitor.shared.store = store
+        PopoverKeyMonitor.shared.start()
+        // macOS 27 shows the window without making it key, so no key event
+        // (Esc, ← / →) reaches the app at all. Older systems make it key.
+        if MainPopoverTrigger.isSceneStatusItemOS {
+            DispatchQueue.main.async {
+                guard let window = PopoverKeyMonitor.shared.window, window.isVisible, !window.isKeyWindow else { return }
+                window.makeKey()
+            }
+        }
+        if MainPopoverTrigger.dissolvesContentOnOpen(isSceneStatusItemOS: MainPopoverTrigger.isSceneStatusItemOS) {
+            hasAppeared = false
+            withAnimation(reduceMotion ? nil : .easeOut(duration: Self.appearDuration)) {
+                hasAppeared = true
+            }
+        } else {
+            // macOS 27: the window is already on screen when this runs, so a
+            // dissolve here would blank visible content and fade it back.
+            hasAppeared = true
+        }
+        guard let focused = store.consumeFocusedVendor() else {
+            // Opened from the main icon: always anchor on the
+            // FIRST LLM of the list, never where the last
+            // focused LLM left it. No animation — the window
+            // is fading in already. Re-applied on the next
+            // runloop turn, after SwiftUI has laid out.
+            let first = firstCardID
+            proxy.scrollTo(first, anchor: .top)
+            // Re-applied after layout settles: a real click can
+            // show the window before the ScrollView is sized.
+            for delay in [0.05, 0.15] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    proxy.scrollTo(first, anchor: .top)
+                }
+            }
+            return
+        }
+        overlay = nil
+        if let vm = store.vendorVM(instance: focused), !vm.isExpanded {
+            vm.isExpanded = true
+        }
+        let target = AnyHashable(focused.vendor)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo(target, anchor: .top)
+            }
+        }
+    }
+
+    /// Everything the popover does when it closes. Called by `onDisappear`
+    /// and, on macOS 27, by `PopoverWindowObserver`.
+    private func popoverDidClose(_ proxy: ScrollViewProxy, fromWindowObserver: Bool = false) {
+        isOpenHandled = false
+        // macOS 27 (window observer): the pinned-click path may already
+        // have reconciled this close, and a pinned item may already have
+        // focused the NEXT open; only a close nobody saw clears that focus.
+        let wasPresented = store.isPopoverPresented
+        store.isPopoverPresented = false
+        PopoverKeyMonitor.shared.stop()
+        // A confirmation left open would come back on the next
+        // open looking stuck; closing the popover cancels it.
+        ConfirmationCenter.shared.cancel()
+        // Reopening always starts on the home screen, never on
+        // the About / Analytics / Status / Settings page it
+        // was closed from.
+        overlay = nil
+        analyticsStore.targetVendor = nil
+        // Reset while hidden, so the next open from the main
+        // icon already starts at the first LLM even if the
+        // scroll on appear loses a race with layout.
+        proxy.scrollTo(firstCardID, anchor: .top)
+        if MainPopoverTrigger.dissolvesContentOnOpen(isSceneStatusItemOS: MainPopoverTrigger.isSceneStatusItemOS) {
+            hasAppeared = false
+        }
+        if wasPresented || !fromWindowObserver {
+            PinnedStatusItemManager.shared.clearLastFocusedPinnedVendor()
+        }
+    }
 
     /// The first LLM card, or the top anchor when the list is empty.
     private var firstCardID: AnyHashable {
@@ -102,65 +193,21 @@ public struct PopoverContentView: View {
                             }
                         }
                     }
-                    .onAppear {
-                        store.isPopoverPresented = true
-                        claudeAccountWatcher.check()
-                        // An accessory app is not activated by opening its
-                        // menu-bar window, so keys (Esc) would go to the
-                        // previous app. Activate, then listen for Esc.
-                        NSApp.activate(ignoringOtherApps: true)
-                        PopoverKeyMonitor.shared.store = store
-                        PopoverKeyMonitor.shared.start()
-                        hasAppeared = false
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: Self.appearDuration)) {
-                            hasAppeared = true
+                    .onAppear { popoverDidOpen(proxy) }
+                    .onDisappear { popoverDidClose(proxy) }
+                    // macOS 27 keeps this view alive across closes: onAppear
+                    // runs on the first open only and onDisappear never runs
+                    // (measured 2026-11-13, 27.2.1), so the open/close work
+                    // follows the window's real visibility there. Older
+                    // systems keep the SwiftUI lifecycle alone.
+                    .background(PopoverWindowObserver { visible in
+                        guard MainPopoverTrigger.isSceneStatusItemOS else { return }
+                        if visible {
+                            if !isOpenHandled { popoverDidOpen(proxy) }
+                        } else if isOpenHandled {
+                            popoverDidClose(proxy, fromWindowObserver: true)
                         }
-                        guard let focused = store.consumeFocusedVendor() else {
-                            // Opened from the main icon: always anchor on the
-                            // FIRST LLM of the list, never where the last
-                            // focused LLM left it. No animation — the window
-                            // is fading in already. Re-applied on the next
-                            // runloop turn, after SwiftUI has laid out.
-                            let first = firstCardID
-                            proxy.scrollTo(first, anchor: .top)
-                            // Re-applied after layout settles: a real click can
-                            // show the window before the ScrollView is sized.
-                            for delay in [0.05, 0.15] {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                                    proxy.scrollTo(first, anchor: .top)
-                                }
-                            }
-                            return
-                        }
-                        overlay = nil
-                        if let vm = store.vendorVM(instance: focused), !vm.isExpanded {
-                            vm.isExpanded = true
-                        }
-                        let target = AnyHashable(focused.vendor)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                proxy.scrollTo(target, anchor: .top)
-                            }
-                        }
-                    }
-                    .onDisappear {
-                        store.isPopoverPresented = false
-                        PopoverKeyMonitor.shared.stop()
-                        // A confirmation left open would come back on the next
-                        // open looking stuck; closing the popover cancels it.
-                        ConfirmationCenter.shared.cancel()
-                        // Reopening always starts on the home screen, never on
-                        // the About / Analytics / Status / Settings page it
-                        // was closed from.
-                        overlay = nil
-                        analyticsStore.targetVendor = nil
-                        // Reset while hidden, so the next open from the main
-                        // icon already starts at the first LLM even if the
-                        // scroll on appear loses a race with layout.
-                        proxy.scrollTo(firstCardID, anchor: .top)
-                        hasAppeared = false
-                        PinnedStatusItemManager.shared.clearLastFocusedPinnedVendor()
-                    }
+                    })
                 }
                 Divider()
                 footerBar
