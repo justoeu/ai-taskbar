@@ -30,14 +30,21 @@ struct MetaLocalizationDocsTests {
         }
     }
 
-    @Test("README and AGENTS document the Meta vendor and scanner semantics")
+    @Test("README, provider docs, config example and AGENTS document the Meta vendor")
     func docs_present() throws {
         let root = LocalizableStrings.repositoryRoot
         let readme = try String(contentsOf: root.appendingPathComponent("README.md"),
                                 encoding: .utf8)
         #expect(readme.contains("| **Muse (Meta)** |"))
-        #expect(readme.contains("### Meta (Muse)"))
-        #expect(readme.contains("[meta]\nenabled = false"))
+        let providers = try String(contentsOf: root.appendingPathComponent("docs/providers.md"),
+                                   encoding: .utf8)
+        #expect(providers.contains("## Meta (Muse)"))
+        let example = try String(contentsOf: root.appendingPathComponent("config.example.toml"),
+                                 encoding: .utf8)
+        // The [meta] section (up to the next section header) ships disabled.
+        let metaSection = example.components(separatedBy: "\n[meta]\n").dropFirst().first?
+            .components(separatedBy: "\n[").first ?? ""
+        #expect(metaSection.contains("\nenabled = false\n"))
         let agents = try String(contentsOf: root.appendingPathComponent("AGENTS.md"),
                                 encoding: .utf8)
         #expect(agents.contains("`MuseSessionScanner` (`~/.local/share/muse/sessions`)"))
