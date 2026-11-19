@@ -172,7 +172,7 @@ public enum PricingTable {
         "gpt-6-sol":       ModelPricing(input: 2, output: 10, cacheRead: 0.2, cacheCreate: 2.5, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
         "gpt-6-luna":      ModelPricing(input: 0.1, output: 0.5, cacheRead: 0.01, cacheCreate: 0.125, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
         // GPT-6 Astra — previous flagship (same page, 2026-11-18).
-        "gpt-6-astra":   ModelPricing(input: 10, output: 50, cacheRead: 1, cacheCreate: 12.5, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
+        "gpt-6-astra":     ModelPricing(input: 10, output: 50, cacheRead: 1, cacheCreate: 12.5, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
         // GPT-6.1 Sol — verified against developers.openai.com/api/docs/pricing
         // and the model page on 2026-11-12: $2 / $10, cache read $0.10, cache
         // write $2.50 (30 min tier); prompts over 272K bill 2x input/cache and
@@ -284,6 +284,10 @@ public enum PricingTable {
         "gemini-3.1-flash-lite": ModelPricing(input: 0.25, output: 1.50, cacheRead: 0.025),
         // 3.1 Pro (preview): $2 / $12 (cached $0.20) for prompts up to 200K,
         // $4 / $18 (cached $0.40) above — 2x input/cache, 1.5x output.
+        // NOTE: the tier is data only today. `CostMath` bills it from the
+        // `ModelUsage.longContext*` subsets, and `GeminiUsageScanner` does
+        // not fill them (nor for the 2.5 / 1.5 Pro tiers below), so a >200K
+        // prompt is billed at the base rate until the scanner tags requests.
         "gemini-3.1-pro":     ModelPricing(input: 2.0, output: 12.0, cacheRead: 0.20,
                                            longContextThreshold: 200_000,
                                            longContextInputMultiplier: 2.0,

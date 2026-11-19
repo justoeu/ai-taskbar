@@ -147,6 +147,8 @@ struct CostTests {
         #expect(m?.cacheReadPer1M == 0.1)
         #expect(m?.cacheCreatePer1M == 2.5)
         #expect(m?.longContextThresholdTokens == 272_000)
+        #expect(m?.longContextInputMultiplier == 2)
+        #expect(m?.longContextOutputMultiplier == 1.5)
     }
 
     @Test("GPT-6 Sol caches at $0.20, unlike 6.1/6.2 Sol")
