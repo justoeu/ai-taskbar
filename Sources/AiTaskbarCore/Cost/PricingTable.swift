@@ -1,7 +1,7 @@
 import Foundation
 
 /// USD price per 1 million tokens. Values reflect the public price lists as of
-/// 2026-09-05 (Claude: 2026-11-09); intentionally conservative when a model isn't listed. Update as
+/// 2026-09-05 (Claude: 2026-11-09; GPT-6.x and Gemini 3.x/4: 2026-11-18); intentionally conservative when a model isn't listed. Update as
 /// new models ship.
 ///
 /// The runtime-consulted tables are the ones a local log scanner prices
@@ -157,7 +157,21 @@ public enum PricingTable {
     /// OpenAI bills cached input at 10% of input on the models below; current
     /// model pages also document cache writes at 125% of input.
     public static let openai: [String: ModelPricing] = [
-        // GPT-6 Astra — current flagship.
+        // GPT-6.2 Astra / Sol — verified against
+        // developers.openai.com/api/docs/pricing on 2026-11-18 (standard tier):
+        // Astra $8 / $40, cache read $0.40, cache write $10 (30 min); CHEAPER
+        // than GPT-6 Astra. Sol $2 / $10, cache read $0.10, cache write $2.50.
+        // Prompts over 272K bill 2x input/cache and 1.5x output for the whole
+        // request (Astra $16/$60, Sol $4/$15). Explicit keys: no shorter key is
+        // a prefix of these ids, so without them every 6.2 turn is unpriced.
+        "gpt-6.2-astra":   ModelPricing(input: 8, output: 40, cacheRead: 0.4, cacheCreate: 10, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
+        "gpt-6.2-sol":     ModelPricing(input: 2, output: 10, cacheRead: 0.1, cacheCreate: 2.5, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
+        // GPT-6.1 Terra / GPT-6 Sol / GPT-6 Luna — same page, same date.
+        // GPT-6 Sol caches at $0.20, unlike 6.1/6.2 Sol ($0.10).
+        "gpt-6.1-terra":   ModelPricing(input: 1, output: 5, cacheRead: 0.05, cacheCreate: 1.25, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
+        "gpt-6-sol":       ModelPricing(input: 2, output: 10, cacheRead: 0.2, cacheCreate: 2.5, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
+        "gpt-6-luna":      ModelPricing(input: 0.1, output: 0.5, cacheRead: 0.01, cacheCreate: 0.125, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
+        // GPT-6 Astra — previous flagship (same page, 2026-11-18).
         "gpt-6-astra":     ModelPricing(input: 10, output: 50, cacheRead: 1, cacheCreate: 12.5, longContextThreshold: 272_000, longContextInputMultiplier: 2, longContextOutputMultiplier: 1.5),
         // GPT-6.1 Sol — verified against developers.openai.com/api/docs/pricing
         // and the model page on 2026-11-12: $2 / $10, cache read $0.10, cache
@@ -242,20 +256,44 @@ public enum PricingTable {
         // left to the `gemini-4` prefix below, so that flip cannot
         // silently reprice other Gemini 4 variants.
         "gemini-4-argon":     ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),
-        // Gemini 4 Carbon — Google blog launch post (2026-10-28): same
-        // introductory $2 / $10, cached input 95% off (= $0.10); standard
-        // $4 / $20 "after the introductory period", with NO date given
-        // (unlike Argon), so it gets its own key and flips on its own.
-        // Rollout is restricted (cyber defenders, Fairwind) and the API ID
-        // is not published yet: `gemini-4-carbon` follows the Argon naming,
-        // and longest-prefix lookup also covers a `-preview` / effort suffix.
+        // Gemini 4 Carbon — API ID `gemini-4-carbon` now published on
+        // aistudio.google.com/docs/pricing (verified 2026-11-18): same
+        // introductory $2 / $10 (cached $0.10) through 2026-11-30, then
+        // $4 / $20 (cached $0.20) from 2026-12-01, like Argon. Own key so
+        // the flip cannot reprice other Gemini 4 variants via the prefix.
         "gemini-4-carbon":    ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),
+        // Gemini 4 Neon (launched 2026-11-18) and Hydrogen — same page, same
+        // date: Neon $3 / $15 (cached $0.15), Hydrogen $1.50 / $7.50 (cached
+        // $0.075), output includes thinking; no dated price change and no
+        // context-length tier. Explicit keys: the `gemini-4` catch-all below
+        // would price Neon 33% low and Hydrogen 33% high.
+        "gemini-4-neon":      ModelPricing(input: 3.0, output: 15.0, cacheRead: 0.15),
+        "gemini-4-hydrogen":  ModelPricing(input: 1.5, output: 7.5, cacheRead: 0.075),
         // Conservative catch-all for other Gemini 4 variants at Argon's
         // introductory tier.
         "gemini-4":           ModelPricing(input: 2.0, output: 10.0, cacheRead: 0.10),
-        // Gemini 3.x
-        "gemini-3.8-flash":   ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
-        "gemini-3-flash":     ModelPricing(input: 0.075, output: 0.30, cacheRead: 0.01875),
+        // Gemini 3.x — verified against aistudio.google.com/docs/pricing on
+        // 2026-11-18. `gemini-3.8-flash` had been entered at $0.075 / $0.30,
+        // 10x below the published rate. 3.8 / 3.6 Flash rise to $1.50 / $7.50
+        // (cached $0.15) on 2027-01-01 — flip both keys then.
+        "gemini-3.8-flash":   ModelPricing(input: 0.75, output: 3.75, cacheRead: 0.075),
+        "gemini-3.6-flash":   ModelPricing(input: 0.75, output: 3.75, cacheRead: 0.075),
+        "gemini-3.5-flash-lite": ModelPricing(input: 0.30, output: 2.50, cacheRead: 0.03),
+        // Text/image/video rate; audio input ($0.50) is not told apart in the
+        // local records.
+        "gemini-3.1-flash-lite": ModelPricing(input: 0.25, output: 1.50, cacheRead: 0.025),
+        // 3.1 Pro (preview): $2 / $12 (cached $0.20) for prompts up to 200K,
+        // $4 / $18 (cached $0.40) above — 2x input/cache, 1.5x output.
+        // NOTE: the tier is data only today. `CostMath` bills it from the
+        // `ModelUsage.longContext*` subsets, and `GeminiUsageScanner` does
+        // not fill them (nor for the 2.5 / 1.5 Pro tiers below), so a >200K
+        // prompt is billed at the base rate until the scanner tags requests.
+        "gemini-3.1-pro":     ModelPricing(input: 2.0, output: 12.0, cacheRead: 0.20,
+                                           longContextThreshold: 200_000,
+                                           longContextInputMultiplier: 2.0,
+                                           longContextOutputMultiplier: 1.5),
+        // `gemini-3-flash-preview` (legacy), text/image/video rate.
+        "gemini-3-flash":     ModelPricing(input: 0.50, output: 3.00, cacheRead: 0.05),
         "gemini-3-pro":       ModelPricing(input: 1.25, output: 5.00, cacheRead: 0.3125),
         "gemini-3":           ModelPricing(input: 0.15, output: 0.60, cacheRead: 0.0375),
         // Gemini 2.5 Pro (Prompt <= 128k: $1.25 in / $5.00 out; > 128k: $2.50 in / $10.00 out)

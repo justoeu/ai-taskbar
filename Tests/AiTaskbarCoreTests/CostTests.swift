@@ -125,6 +125,41 @@ struct CostTests {
         #expect(m?.longContextThresholdTokens == 272_000)
     }
 
+    /// GPT-6.2 shares no prefix with any older key, so a missing entry would
+    /// leave every 6.2 turn unpriced.
+    @Test("GPT-6.2 Astra has explicit current pricing (cheaper than GPT-6 Astra)")
+    func lookup_gpt62_astra() {
+        let m = PricingTable.lookup("gpt-6.2-astra", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 8)
+        #expect(m?.outputPer1M == 40)
+        #expect(m?.cacheReadPer1M == 0.4)
+        #expect(m?.cacheCreatePer1M == 10)
+        #expect(m?.longContextThresholdTokens == 272_000)
+        #expect(m?.longContextInputMultiplier == 2)
+        #expect(m?.longContextOutputMultiplier == 1.5)
+    }
+
+    @Test("GPT-6.2 Sol has explicit current pricing")
+    func lookup_gpt62_sol() {
+        let m = PricingTable.lookup("gpt-6.2-sol", table: PricingTable.openai)
+        #expect(m?.inputPer1M == 2)
+        #expect(m?.outputPer1M == 10)
+        #expect(m?.cacheReadPer1M == 0.1)
+        #expect(m?.cacheCreatePer1M == 2.5)
+        #expect(m?.longContextThresholdTokens == 272_000)
+        #expect(m?.longContextInputMultiplier == 2)
+        #expect(m?.longContextOutputMultiplier == 1.5)
+    }
+
+    @Test("GPT-6 Sol caches at $0.20, unlike 6.1/6.2 Sol")
+    func lookup_gpt6_sol_terra_luna() {
+        #expect(PricingTable.lookup("gpt-6-sol", table: PricingTable.openai)?.cacheReadPer1M == 0.2)
+        #expect(PricingTable.lookup("gpt-6.1-terra", table: PricingTable.openai)?.inputPer1M == 1)
+        #expect(PricingTable.lookup("gpt-6.1-terra", table: PricingTable.openai)?.outputPer1M == 5)
+        #expect(PricingTable.lookup("gpt-6-luna", table: PricingTable.openai)?.inputPer1M == 0.1)
+        #expect(PricingTable.lookup("gpt-6-luna", table: PricingTable.openai)?.outputPer1M == 0.5)
+    }
+
     /// Codex's auto-review alias has no published rate; an explicit estimate
     /// beats `nil`, which would silently price every review turn at $0.
     @Test("codex-auto-review is priced rather than silently dropped")
@@ -410,6 +445,39 @@ struct CostTests {
         // Antigravity routes Gemini through the same table.
         #expect(PricingTable.lookup("gemini-4-carbon-high", table: PricingTable.antigravity)?.outputPer1M == 10.0)
         expectTrue(PricingTable.table(for: .gemini)["gemini-4"] != nil)
+    }
+
+    @Test("Gemini 4 Neon and Hydrogen have their own rates, not the gemini-4 catch-all")
+    func lookup_gemini4_neon_hydrogen() {
+        let neon = PricingTable.lookup("gemini-4-neon", table: PricingTable.gemini)
+        #expect(neon?.inputPer1M == 3.0)
+        #expect(neon?.outputPer1M == 15.0)
+        #expect(neon?.cacheReadPer1M == 0.15)
+        let hydrogen = PricingTable.lookup("gemini-4-hydrogen", table: PricingTable.gemini)
+        #expect(hydrogen?.inputPer1M == 1.5)
+        #expect(hydrogen?.outputPer1M == 7.5)
+        #expect(hydrogen?.cacheReadPer1M == 0.075)
+        // Antigravity effort suffix resolves to the base model.
+        #expect(PricingTable.lookup("gemini-4-neon-high", table: PricingTable.antigravity)?.outputPer1M == 15.0)
+    }
+
+    /// `gemini-3.8-flash` was entered at $0.075 / $0.30, 10x below Google's rate.
+    @Test("Gemini 3.x Flash / Pro carry the published rates")
+    func lookup_gemini3x() {
+        let flash = PricingTable.lookup("gemini-3.8-flash-high", table: PricingTable.antigravity)
+        #expect(flash?.inputPer1M == 0.75)
+        #expect(flash?.outputPer1M == 3.75)
+        #expect(flash?.cacheReadPer1M == 0.075)
+        #expect(PricingTable.lookup("gemini-3.6-flash", table: PricingTable.gemini)?.inputPer1M == 0.75)
+        #expect(PricingTable.lookup("gemini-3.5-flash-lite", table: PricingTable.gemini)?.outputPer1M == 2.5)
+        #expect(PricingTable.lookup("gemini-3.1-flash-lite", table: PricingTable.gemini)?.inputPer1M == 0.25)
+        #expect(PricingTable.lookup("gemini-3-flash-preview", table: PricingTable.gemini)?.inputPer1M == 0.5)
+        let pro = PricingTable.lookup("gemini-3.1-pro-preview", table: PricingTable.gemini)
+        #expect(pro?.inputPer1M == 2.0)
+        #expect(pro?.outputPer1M == 12.0)
+        #expect(pro?.longContextThresholdTokens == 200_000)
+        #expect(pro?.longContextInputMultiplier == 2.0)
+        #expect(pro?.longContextOutputMultiplier == 1.5)
     }
 
     @Test("GLM Flash models have expected pricing tiers")
