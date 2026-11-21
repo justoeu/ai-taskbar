@@ -326,6 +326,7 @@
 "zai_reset_auth_required" = "A Z.AI recusou a chave de API. Confira a chave em Ajustes.";
 "zai_reset_rate_limited" = "A Z.AI está limitando as requisições. Tente de novo em um minuto.";
 "zai_reset_rejected" = "A Z.AI recusou o reset; nenhum reset foi gasto.";
+"zai_reset_unconfirmed" = "A Z.AI não confirmou esta nova tentativa; a anterior pode ter sido aplicada. Atualizando o uso…";
 "zai_reset_failed" = "Não foi possível aplicar o reset. Verifique a conexão e tente de novo.";
 "zai_reset_submission_uncertain" = "Não foi possível confirmar o resultado. Tente de novo esta mesma operação; ela não pode gastar um segundo reset.";
 

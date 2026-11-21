@@ -77,15 +77,43 @@ struct ZAIResetControllerTests {
         expectTrue(controller.pendingAttempt == nil)
     }
 
-    @Test("a refusal drops the attempt: nothing was spent")
-    func rejected() async {
-        let controller = ZAIResetController(prepare: { _ in attempt() }, consume: { _, _ in
-            throw ZAILimitResetError.rejected
+    @Test("a refusal is an answer: the attempt ends and the card refreshes")
+    func refused() async {
+        for (outcome, key) in [(ZAILimitResetReceipt.Outcome.refused, "zai_reset_rejected"),
+                               (.unconfirmed, "zai_reset_unconfirmed")] {
+            let controller = ZAIResetController(prepare: { _ in attempt() }, consume: { attempt, _ in
+                ZAILimitResetReceipt(kind: attempt.kind, outcome: outcome)
+            })
+            await controller.prepare(kind: .weekly)
+            expectTrue(await controller.consume()) // true → the view refreshes the card
+            expectTrue(controller.pendingAttempt == nil)
+            expectFalse(controller.isSuccess)
+            #expect(controller.message == L10n.localizedString(key))
+            #expect(L10n.localizedString(key) != key)
+        }
+    }
+
+    @Test("any failure on a retry keeps the same attempt; a first attempt keeps it only when uncertain")
+    func retryKeepsAttempt() async {
+        let first = attempt()
+        var calls = 0
+        let controller = ZAIResetController(prepare: { _ in first }, consume: { _, _ in
+            calls += 1
+            throw calls == 1 ? ZAILimitResetError.submissionUncertain : ZAILimitResetError.authorization
         })
         await controller.prepare(kind: .weekly)
         expectFalse(await controller.consume())
-        expectTrue(controller.pendingAttempt == nil)
-        #expect(controller.message == L10n.localizedString("zai_reset_rejected"))
+        await controller.prepare(kind: .weekly)
+        expectFalse(await controller.consume())
+        expectTrue(controller.pendingAttempt?.id == first.id)
+        #expect(controller.message == L10n.localizedString("zai_reset_auth_required"))
+
+        let fresh = ZAIResetController(prepare: { _ in attempt() }, consume: { _, _ in
+            throw ZAILimitResetError.authorization
+        })
+        await fresh.prepare(kind: .weekly)
+        expectFalse(await fresh.consume())
+        expectTrue(fresh.pendingAttempt == nil)
     }
 
     @Test("every error and kind has its own text")
@@ -94,7 +122,6 @@ struct ZAIResetControllerTests {
             (.noEligibleReset, "zai_reset_unavailable"),
             (.authorization, "zai_reset_auth_required"),
             (.rateLimited, "zai_reset_rate_limited"),
-            (.rejected, "zai_reset_rejected"),
             (.submissionUncertain, "zai_reset_submission_uncertain"),
             (.failed, "zai_reset_failed"),
         ]
@@ -112,15 +139,23 @@ struct ZAIResetControllerTests {
     func confirmation() {
         let presentation = LimitResetControls<ZAILimitResetAttempt, ZAILimitResetReceipt>.Presentation.zai
         let weekly = presentation.confirmMessage("Z.AI", attempt())
-        expectTrue(weekly.contains(ZAIResetController.kindName(.weekly)))
-        expectTrue(weekly.contains("3"))
+        #expect(weekly == L10n.localizedString("zai_reset_confirm_message_weekly", "Z.AI",
+                                               ZAIResetController.kindName(.weekly),
+                                               LimitResetControls<ZAILimitResetAttempt, ZAILimitResetReceipt>
+                                                   .Presentation.expiry("2026-12-22 23:59:59"),
+                                               3))
         expectTrue(weekly.contains("2026"))
         let fiveHour = presentation.confirmMessage("Z.AI", ZAILimitResetAttempt(
             kind: .fiveHour, recordID: 1, grantType: nil, expiresAt: nil, resetsLeft: 1))
         expectTrue(fiveHour.contains("—"))
         #expect(weekly != fiveHour)
         expectTrue(presentation.info != nil)
-        let options = presentation.options(.ok(FetchOutcome(snapshot: snapshot(session: 100), fetchedAt: .now)))
+        // `options` reads the wall clock, so build the snapshot on it.
+        let wall = Date.now
+        let live = VendorSnapshot.zai(ZAISnapshot(
+            session: UsageWindow(label: "s", utilizationPercent: 100, resetsAt: wall.addingTimeInterval(600)),
+            resetGrants: [ZAIResetGrant(recordID: 9, kind: .weekly, grantType: nil, expiresAt: nil)]))
+        let options = presentation.options(.ok(FetchOutcome(snapshot: live, fetchedAt: wall)))
         #expect(options.map(\.kind) == [.weekly])
     }
 
@@ -129,6 +164,7 @@ struct ZAIResetControllerTests {
         typealias Controls = LimitResetControls<ZAILimitResetAttempt, ZAILimitResetReceipt>.Presentation
         #expect(Controls.expiry(nil) == "—")
         #expect(Controls.expiry("soon") == "soon")
+        #expect(Controls.expiry("2026-13-45") == "2026-13-45")
         let day = Controls.expiry("2026-12-22 23:59:59")
         expectTrue(day.contains("2026"))
         expectTrue(day.contains("22"))

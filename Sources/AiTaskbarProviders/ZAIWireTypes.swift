@@ -33,11 +33,16 @@ public struct ZAIEnvelope: Decodable {
     /// NOT a Z.AI field: the app's allow-listed copy of
     /// `/api/biz/customer-package-reset/list`, merged into the cached usage
     /// payload by `ZAIProvider` while a window is above 90%
-    /// (`ZAIResetList.merging(into:)`). Absent on every other payload.
+    /// (`ZAIResetList.merging(into:)`) under a namespaced key, so a future
+    /// Z.AI field cannot collide with it. Absent on every other payload.
     public let resetList: ZAIResetList?
 
+    /// The key `merging(into:)` writes; never a Z.AI field name.
+    public static let mergedResetListKey = "_aiTaskbarResetList"
+
     enum CodingKeys: String, CodingKey {
-        case code, msg, success, data, resetList
+        case code, msg, success, data
+        case resetList = "_aiTaskbarResetList"
     }
 
     public init(code: Int? = nil, msg: String? = nil, success: Bool? = nil, data: ZAIMonitorData? = nil,
@@ -56,7 +61,12 @@ public struct ZAIEnvelope: Decodable {
         success = try c.decodeIfPresent(Bool.self, forKey: .success)
         data = try c.decodeIfPresent(ZAIMonitorData.self, forKey: .data)
         // A reshaped list costs only the reset button, never the card.
-        resetList = try? c.decodeIfPresent(ZAIResetList.self, forKey: .resetList)
+        do {
+            resetList = try c.decodeIfPresent(ZAIResetList.self, forKey: .resetList)
+        } catch {
+            AppLog.network.warning("zai: cached reset list ignored: \(String(describing: error), privacy: .public)")
+            resetList = nil
+        }
     }
 }
 
@@ -96,7 +106,10 @@ public struct ZAIResetList: Codable, Sendable, Equatable {
             // JSON integers only, decoded exactly (no Double round trip):
             // a fractional, out-of-range or non-numeric id is absent.
             recordId = try? c.decodeIfPresent(Int64.self, forKey: .recordId)
-            grantType = try? c.decodeIfPresent(String.self, forKey: .grantType)
+            // Echoed back on use: a value that is present but not a string
+            // cannot be echoed faithfully, so the whole record is dropped
+            // (`Lossy`), exactly like a string that fails validation.
+            grantType = try c.decodeIfPresent(String.self, forKey: .grantType)
             expireTime = try? c.decodeIfPresent(String.self, forKey: .expireTime)
             available = try? c.decodeIfPresent(Bool.self, forKey: .available)
         }
@@ -108,6 +121,12 @@ public struct ZAIResetList: Codable, Sendable, Equatable {
             let expiry = expireTime.flatMap { ZAIResetGrant.isValidExpiry($0) ? $0 : nil }
             return ZAIResetGrant(recordID: recordId, kind: kind, grantType: grantType, expiresAt: expiry)
         }
+    }
+
+    /// An entry that fails to decode is skipped, not the whole list.
+    private struct Lossy: Decodable {
+        let entry: Entry?
+        init(from decoder: Decoder) throws { entry = try? Entry(from: decoder) }
     }
 
     public let fiveHourResets: [Entry]
@@ -122,8 +141,8 @@ public struct ZAIResetList: Codable, Sendable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        fiveHourResets = try c.decodeIfPresent([Entry].self, forKey: .fiveHourResets) ?? []
-        weekResets = try c.decodeIfPresent([Entry].self, forKey: .weekResets) ?? []
+        fiveHourResets = try c.decodeIfPresent([Lossy].self, forKey: .fiveHourResets)?.compactMap(\.entry) ?? []
+        weekResets = try c.decodeIfPresent([Lossy].self, forKey: .weekResets)?.compactMap(\.entry) ?? []
     }
 
     /// Unused, well-formed records, 5-hour first.
@@ -146,14 +165,15 @@ public struct ZAIResetList: Codable, Sendable, Equatable {
         return response.data
     }
 
-    /// `usage` with this list (allow-listed) under `resetList`. The usage
+    /// `usage` with this list (allow-listed) under `ZAIEnvelope.mergedResetListKey`. The usage
     /// payload's own fields are carried over untouched.
     public func merging(into usage: Data) throws -> Data {
         guard case .object(var object) = try SharedCoders.decoder.decode(JSONValue.self, from: usage) else {
             throw AppError.schema("zai usage payload is not an object")
         }
-        object["resetList"] = try SharedCoders.decoder.decode(JSONValue.self, from: try JSONEncoder().encode(self))
-        return try JSONEncoder().encode(JSONValue.object(object))
+        object[ZAIEnvelope.mergedResetListKey] = try SharedCoders.decoder.decode(
+            JSONValue.self, from: try SharedCoders.encoder.encode(self))
+        return try SharedCoders.encoder.encode(JSONValue.object(object))
     }
 }
 

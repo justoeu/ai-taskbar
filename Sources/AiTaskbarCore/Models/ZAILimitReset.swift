@@ -37,9 +37,32 @@ public struct ZAIResetGrant: Sendable, Equatable, Codable {
             && value.unicodeScalars.allSatisfy { ($0.isASCII && CharacterSet.alphanumerics.contains($0)) || $0 == "_" || $0 == "-" }
     }
 
-    /// `yyyy-MM-dd` with an optional ` HH:mm:ss`; anything else is dropped.
+    /// `yyyy-MM-dd` with an optional ` HH:mm:ss`, ASCII digits, and a real
+    /// calendar date (`2026-13-45` would roll over into a wrong day);
+    /// anything else is dropped.
     public static func isValidExpiry(_ value: String) -> Bool {
-        value.range(of: #"^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$"#, options: .regularExpression) != nil
+        guard value.range(of: #"^[0-9]{4}-[0-9]{2}-[0-9]{2}( [0-9]{2}:[0-9]{2}:[0-9]{2})?$"#,
+                          options: .regularExpression) != nil else { return false }
+        return expiryDate(value) != nil
+    }
+
+    /// The expiry's calendar day as a UTC midnight, nil when the date does
+    /// not exist. The server gives no time zone; the day is shown as given.
+    public static func expiryDate(_ value: String) -> Date? {
+        let parts = value.prefix(10).split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? calendar.timeZone
+        let wanted = DateComponents(year: parts[0], month: parts[1], day: parts[2])
+        guard let date = calendar.date(from: wanted) else { return nil }
+        let back = calendar.dateComponents([.year, .month, .day], from: date)
+        guard back.year == parts[0], back.month == parts[1], back.day == parts[2] else { return nil }
+        if value.count > 10 {
+            let time = value.dropFirst(11).split(separator: ":").compactMap { Int($0) }
+            guard time.count == 3, (0...23).contains(time[0]), (0...59).contains(time[1]),
+                  (0...59).contains(time[2]) else { return nil }
+        }
+        return date
     }
 
     /// The date part (`yyyy-MM-dd`), for display.

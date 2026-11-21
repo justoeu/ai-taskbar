@@ -23,14 +23,14 @@ enum ZAIRequests {
     }
 }
 
-/// Errors a Z.AI quota reset can end in. `submissionUncertain` is the only
-/// one after which the SAME attempt (same `requestId`) may be retried.
+/// Errors a Z.AI quota reset can end in. A server ANSWER to the use call is
+/// a `ZAILimitResetReceipt`, not an error, so the card refreshes after it.
 public enum ZAILimitResetError: Error, Equatable, Sendable {
     case noEligibleReset
     case authorization
     case rateLimited
-    /// Z.AI answered and refused (its `code` was not 200): nothing was spent.
-    case rejected
+    /// The request may have reached the server: only a retry with the SAME
+    /// `requestId` is safe.
     case submissionUncertain
     case failed
 }
@@ -59,11 +59,27 @@ public struct ZAILimitResetAttempt: Sendable, Equatable, Identifiable {
     public var requestID: String { id.uuidString.lowercased() }
 }
 
-/// A use the server confirmed (`code: 200`, `success: true`).
+/// The server's answer to a use call.
 public struct ZAILimitResetReceipt: Sendable, Equatable {
-    public let kind: ZAIResetKind
+    public enum Outcome: Sendable, Equatable {
+        /// `code: 200`, `success: true`.
+        case reset
+        /// Any other answer to a FIRST attempt: nothing was spent (the
+        /// console clears its requestId on it too).
+        case refused
+        /// Any other answer to a RETRY: the earlier, lost attempt may have
+        /// been applied, and whether Z.AI answers a repeated requestId with
+        /// success is not known, so "nothing was spent" cannot be claimed.
+        case unconfirmed
+    }
 
-    public init(kind: ZAIResetKind) { self.kind = kind }
+    public let kind: ZAIResetKind
+    public let outcome: Outcome
+
+    public init(kind: ZAIResetKind, outcome: Outcome = .reset) {
+        self.kind = kind
+        self.outcome = outcome
+    }
 }
 
 /// The console's "Reset Quota" (`docs/SDD-zai-quota-reset.md`), read from
@@ -112,7 +128,7 @@ public final class ZAILimitResetService: Sendable {
             guard stillOffered else { throw ZAILimitResetError.noEligibleReset }
         }
         try Task.checkCancellation()
-        return try await use(attempt, apiKey: key)
+        return try await use(attempt, apiKey: key, retry: retry)
     }
 
     // MARK: - Calls
@@ -128,18 +144,23 @@ public final class ZAILimitResetService: Sendable {
 
     /// Fresh usage windows plus the reset list. Spends nothing.
     func status(_ apiKey: String) async throws -> ZAISnapshot {
-        let usage = try await read(ZAIRequests.usageURL, apiKey: apiKey, what: "usage")
-        let list = try await read(ZAIRequests.resetListURL, apiKey: apiKey, what: "list")
+        let usage = try await read(ZAIRequests.usageURL, apiKey: apiKey, what: "usage",
+                                   limit: HTTPClient.defaultMaximumResponseBytes)
+        let list = try await read(ZAIRequests.resetListURL, apiKey: apiKey, what: "list",
+                                  limit: ZAIRequests.resetResponseLimit)
         let envelope: ZAIEnvelope
+        let listStatus: Answer
         let resets: ZAIResetList?
         do {
             envelope = try SharedCoders.decoder.decode(ZAIEnvelope.self, from: usage)
+            listStatus = try SharedCoders.decoder.decode(Answer.self, from: list)
             resets = try ZAIResetList.decodeResponse(list)
         } catch {
             AppLog.network.error("zai reset: status decode failed: \(String(describing: error), privacy: .public)")
             throw ZAILimitResetError.failed
         }
         try Self.checkBody(code: envelope.code, success: envelope.success, what: "usage")
+        try Self.checkBody(code: listStatus.code, success: listStatus.success, what: "list")
         guard let resets, envelope.data != nil else {
             AppLog.network.error("zai reset: usage or list without data")
             throw ZAILimitResetError.failed
@@ -155,18 +176,19 @@ public final class ZAILimitResetService: Sendable {
         let grantType: String?
     }
 
-    private struct UseResponse: Decodable {
+    /// Z.AI's `{code, msg, success}` answer shape (list and use).
+    private struct Answer: Decodable {
         let code: Int?
         let msg: String?
         let success: Bool?
     }
 
-    func use(_ attempt: ZAILimitResetAttempt, apiKey: String) async throws -> ZAILimitResetReceipt {
+    func use(_ attempt: ZAILimitResetAttempt, apiKey: String, retry: Bool) async throws -> ZAILimitResetReceipt {
         guard attempt.recordID > 0,
               attempt.grantType.map(ZAIResetGrant.isValidGrantType) ?? true else {
             throw ZAILimitResetError.failed
         }
-        let body = try JSONEncoder().encode(UseBody(targetType: Self.targetType, resetType: attempt.kind.rawValue,
+        let body = try SharedCoders.encoder.encode(UseBody(targetType: Self.targetType, resetType: attempt.kind.rawValue,
                                                     recordId: attempt.recordID, requestId: attempt.requestID,
                                                     grantType: attempt.grantType))
         let req = ZAIRequests.request(ZAIRequests.resetUseURL, apiKey: apiKey, method: "POST", body: body)
@@ -183,9 +205,9 @@ public final class ZAILimitResetService: Sendable {
             throw ZAILimitResetError.submissionUncertain
         }
         try Self.checkHTTP(response.statusCode, what: "use", uncertainOnServerError: true)
-        let decoded: UseResponse
+        let decoded: Answer
         do {
-            decoded = try SharedCoders.decoder.decode(UseResponse.self, from: data)
+            decoded = try SharedCoders.decoder.decode(Answer.self, from: data)
         } catch {
             AppLog.network.error("zai reset: use answer unreadable: \(String(describing: error), privacy: .public)")
             throw ZAILimitResetError.submissionUncertain
@@ -194,24 +216,23 @@ public final class ZAILimitResetService: Sendable {
             return ZAILimitResetReceipt(kind: attempt.kind)
         }
         AppLog.network.error(
-            "zai reset: use refused, code \(decoded.code ?? -1): \(PIIScrub.scrub(diagnostic: decoded.msg ?? ""), privacy: .public)")
+            "zai reset: use not confirmed, code \(decoded.code ?? -1): \(PIIScrub.scrub(diagnostic: decoded.msg ?? ""), privacy: .public)")
         switch decoded.code {
-        case .some(500...599): throw ZAILimitResetError.submissionUncertain
+        // A 2xx without a code is closer to "unreadable" than to a refusal.
+        case nil, .some(500...599): throw ZAILimitResetError.submissionUncertain
         case 401, 403: throw ZAILimitResetError.authorization
         case 429: throw ZAILimitResetError.rateLimited
-        // Any other answer is the server refusing (the console clears its
-        // requestId on it too): nothing was spent.
-        default: throw ZAILimitResetError.rejected
+        default: return ZAILimitResetReceipt(kind: attempt.kind, outcome: retry ? .unconfirmed : .refused)
         }
     }
 
     /// Reads that spend nothing: a transport failure is just a failure.
-    private func read(_ url: URL, apiKey: String, what: String) async throws -> Data {
+    private func read(_ url: URL, apiKey: String, what: String, limit: Int) async throws -> Data {
         let data: Data
         let response: HTTPURLResponse
         do {
             (data, response) = try await http.sendBounded(ZAIRequests.request(url, apiKey: apiKey),
-                                                         maximumResponseBytes: HTTPClient.defaultMaximumResponseBytes)
+                                                         maximumResponseBytes: limit)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

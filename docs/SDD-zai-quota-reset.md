@@ -58,14 +58,17 @@ O `ZAIProvider` pede a lista só enquanto a sessão ou a semanal está acima de
 ≠ 200, JSON inesperado) mantém os números de uso e **pausa** as leituras por
 1 h (`ZAIProvider.resetListPause`). A lista é reduzida à allow-list
 (`recordId`, `grantType`, `expireTime`, `available` por entrada) e mesclada
-ao payload em cache sob a chave `resetList` (`ZAIResetList.merging(into:)`):
+ao payload em cache sob a chave `_aiTaskbarResetList`
+(`ZAIResetList.merging(into:)`; com namespace para um campo futuro da Z.AI
+nunca ser lido como a lista):
 `customerId`, `organizationId` e `projectId` nunca chegam à memória nem ao
 disco. Um `resetList` com formato inesperado é ignorado sozinho.
 
 Validação na decodificação: `recordId` inteiro JSON > 0 (decodificado como
 `Int64`, sem passar por `Double`); `grantType` `^[A-Za-z0-9_-]{1,32}$` ou
-ausente (um valor inválido descarta o registro, porque ele volta no corpo do
-POST); `expireTime` `yyyy-MM-dd[ HH:mm:ss]`, senão ausente. A validade é
+ausente (um valor inválido ou de outro tipo descarta o registro, porque ele
+volta no corpo do POST); `expireTime` `yyyy-MM-dd[ HH:mm:ss]` com dígitos ASCII
+e data que existe (`2026-02-30` não), senão ausente. A validade é
 mostrada como data (sem fuso: o servidor não informa um) e a disponibilidade
 vem do `available` do servidor.
 
@@ -79,15 +82,22 @@ vem do `available` do servidor.
    tipo, validade, quantos restam e o que será zerado.
 3. **consume**: numa primeira tentativa, uso + lista de novo (o registro sumiu
    ou a regra deixou de valer → `noEligibleReset`); depois o POST.
-4. **Erros**: transporte (cancelamento incluso), HTTP 5xx, 2xx ilegível ou
-   `code` 5xx no corpo → `submissionUncertain`: o controller guarda a tentativa
-   e o próximo clique a retoma com o **mesmo `requestId`**, sem reler nada.
-   HTTP/`code` 401/403 → `authorization`; 429 → `rateLimited`; qualquer outra
-   resposta com corpo → `rejected` (nada foi gasto, como no console); outro
-   HTTP 4xx → `failed`. Todos os definitivos descartam a tentativa.
+4. **Respostas**: transporte (cancelamento incluso), HTTP 5xx, 2xx ilegível,
+   corpo sem `code` ou `code` 5xx → `submissionUncertain`: o controller guarda
+   a tentativa e o próximo clique a retoma com o **mesmo `requestId`**, sem
+   reler nada. HTTP/`code` 401/403 → `authorization`; 429 → `rateLimited`;
+   outro HTTP 4xx → `failed`. Qualquer outra resposta com corpo é um
+   **recibo**, não um erro, para o card ser atualizado (como o console relê a
+   lista): `refused` numa primeira tentativa (nada foi gasto) e `unconfirmed`
+   numa repetição (a tentativa perdida pode ter sido aplicada, e não se sabe se
+   a Z.AI responde sucesso a um `requestId` repetido — o app não afirma que
+   nada foi gasto). Numa repetição, qualquer erro lançado mantém a tentativa
+   (o mesmo `requestId` é sempre seguro; um novo poderia gastar um segundo
+   reset); numa primeira tentativa, só o incerto a mantém.
 
-O POST usa `HTTPClient.sendBounded` (só redirects HTTPS para a mesma origem,
-256 KiB). A mensagem do servidor só vai para o log, passada por `PIIScrub`; a
+Todas as chamadas com a chave, inclusive o GET de uso agendado, usam
+`HTTPClient.sendBounded` (só redirects HTTPS para a mesma origem); a lista e o
+POST com teto de 256 KiB. A mensagem do servidor só vai para o log, passada por `PIIScrub`; a
 UI mostra texto localizado. O texto de ajuda (ⓘ ao lado do botão) reproduz a
 explicação do console.
 

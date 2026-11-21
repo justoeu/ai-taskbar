@@ -566,10 +566,13 @@ first real confirmation is the acceptance test. A WEEK reset also clears the
 5-hour window, so `ZAISnapshot.limitResetOffers` offers it when EITHER window
 is strictly above 90% (the confirmation says it clears both). The provider
 reads the list only above 90% and pauses it 1 h on any failure; the list is
-merged into the cached payload under `resetList`, allow-listed (`customerId`,
-organization and project ids are never decoded). `requestId` is kept across a
-`submissionUncertain` retry exactly like the console; any answer with a body
-other than success/5xx is `rejected` (nothing spent). Claude and Z.AI share
+merged into the cached payload under the namespaced `_aiTaskbarResetList`,
+allow-listed (`customerId`, organization and project ids are never decoded).
+`requestId` is kept across a `submissionUncertain` retry exactly like the
+console, and on a retry ANY thrown error keeps it. A server answer other than
+success/5xx is a receipt, not an error (so the card refreshes): `refused` on a
+first attempt (nothing spent), `unconfirmed` on a retry — never claim
+"nothing spent" there, the lost attempt may have been applied. Claude and Z.AI share
 `LimitResetController` / `LimitResetControls`; add a vendor by giving it an
 `Interpretation` and a `Presentation`, not by copying the controller.
 

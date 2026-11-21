@@ -33,7 +33,7 @@ public enum L10n {
     /// but the app stays alive) if nothing matches.
     private static let resourceBundle: Bundle = {
         let bundleName = "ai-taskbar_AiTaskbarApp.bundle"
-        var candidates: [URL?] = [
+        let candidates: [URL?] = [
             // Packaged .app: SwiftPM resource bundle copied to
             // Contents/Resources/ by `make app` / `make app-universal`.
             Bundle.main.resourceURL?.appendingPathComponent(bundleName),
@@ -44,7 +44,10 @@ public enum L10n {
         for url in candidates {
             if let url, let b = Bundle(url: url) { return b }
         }
-        // Test runner or build output fallback: locate in .build. Swift 6.4
+        #if DEBUG
+        // Test runner or build output fallback: locate in .build. Debug only:
+        // a release binary must not read strings from the build machine's
+        // source path (`#filePath`). Swift 6.4
         // with full Xcode writes to `.build/out/Products/<Config>` and leaves
         // the older `<arch>-apple-macosx/<config>` copies untouched, so the
         // NEWEST bundle wins: a stale one served old strings to the tests,
@@ -64,6 +67,9 @@ public enum L10n {
             return (bundle, modified)
         }
         return built.max { $0.1 < $1.1 }?.0 ?? .main
+        #else
+        return .main
+        #endif
     }()
 
     /// Resolves the effective bundle for string lookups. When the override

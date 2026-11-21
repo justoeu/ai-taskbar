@@ -4,7 +4,7 @@ import AiTaskbarCore
 import AiTaskbarProviders
 
 /// An attempt a `LimitResetController` can prepare, confirm and resume.
-protocol LimitResetAttempting: Sendable, Equatable {
+protocol LimitResetAttempting: Sendable {
     associatedtype Kind: Hashable & Sendable
     var kind: Kind { get }
 }
@@ -32,10 +32,11 @@ final class LimitResetController<Attempt: LimitResetAttempting, Receipt: Sendabl
     /// How a vendor words its answers.
     struct Interpretation {
         /// Message and success flag for a server answer.
-        let receipt: (Receipt) -> (message: String, success: Bool)
-        let error: (Error) -> String
-        /// True only for the error after which the SAME attempt may be retried.
-        let isUncertain: (Error) -> Bool
+        let receipt: @MainActor (Receipt) -> (message: String, success: Bool)
+        let error: @MainActor (Error) -> String
+        /// Whether the attempt survives this error (is it a retry?). Kept,
+        /// the next click resends the SAME request id instead of a new one.
+        let keepsAttempt: @MainActor (Error, Bool) -> Bool
     }
 
     @Published private(set) var isBusy = false
@@ -144,7 +145,7 @@ final class LimitResetController<Attempt: LimitResetAttempting, Receipt: Sendabl
         } catch {
             // Only an uncertain claim keeps its request id; any definitive
             // answer (even on a retry) ends it, so the fresh offers return.
-            pendingAttempt = interpretation.isUncertain(error) ? attempt : nil
+            pendingAttempt = interpretation.keepsAttempt(error, retry) ? attempt : nil
             message = interpretation.error(error)
             isSuccess = false
             return false
@@ -182,7 +183,7 @@ extension LimitResetController where Attempt == ClaudeLimitResetAttempt, Receipt
                 }
             },
             error: { Self.errorMessage($0) },
-            isUncertain: { $0 as? ClaudeLimitResetError == .submissionUncertain }))
+            keepsAttempt: { error, _ in error as? ClaudeLimitResetError == .submissionUncertain }))
     }
 
     convenience init(service: ClaudeLimitResetService) {
@@ -221,9 +222,22 @@ extension LimitResetController where Attempt == ZAILimitResetAttempt, Receipt ==
     convenience init(prepare: @escaping (ZAIResetKind) async throws -> ZAILimitResetAttempt,
                      consume: @escaping (ZAILimitResetAttempt, Bool) async throws -> ZAILimitResetReceipt) {
         self.init(prepare: prepare, consume: consume, interpretation: Interpretation(
-            receipt: { _ in (L10n.localizedString("zai_reset_done"), true) },
+            receipt: { receipt in
+                switch receipt.outcome {
+                case .reset: return (L10n.localizedString("zai_reset_done"), true)
+                case .refused: return (L10n.localizedString("zai_reset_rejected"), false)
+                case .unconfirmed: return (L10n.localizedString("zai_reset_unconfirmed"), false)
+                }
+            },
             error: { Self.errorMessage($0) },
-            isUncertain: { $0 as? ZAILimitResetError == .submissionUncertain }))
+            // Server answers are receipts, so every thrown error on a retry
+            // left the lost attempt's outcome unknown (a missing key, a
+            // transport failure, a 401 before processing): resending the
+            // SAME request id stays safe, a new one could spend a second
+            // reset if the first was applied.
+            keepsAttempt: { error, retry in
+                retry || error as? ZAILimitResetError == .submissionUncertain
+            }))
     }
 
     convenience init(service: ZAILimitResetService) {
@@ -242,7 +256,6 @@ extension LimitResetController where Attempt == ZAILimitResetAttempt, Receipt ==
         case .noEligibleReset: return L10n.localizedString("zai_reset_unavailable")
         case .authorization: return L10n.localizedString("zai_reset_auth_required")
         case .rateLimited: return L10n.localizedString("zai_reset_rate_limited")
-        case .rejected: return L10n.localizedString("zai_reset_rejected")
         case .submissionUncertain: return L10n.localizedString("zai_reset_submission_uncertain")
         default: return L10n.localizedString("zai_reset_failed")
         }

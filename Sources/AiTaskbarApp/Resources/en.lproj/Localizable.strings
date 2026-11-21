@@ -327,6 +327,7 @@
 "zai_reset_auth_required" = "Z.AI refused the API key. Check the key in Settings.";
 "zai_reset_rate_limited" = "Z.AI is rate limiting requests. Try again in a minute.";
 "zai_reset_rejected" = "Z.AI refused the reset; no reset was spent.";
+"zai_reset_unconfirmed" = "Z.AI did not confirm this retry; the earlier attempt may have been applied. Refreshing usage…";
 "zai_reset_failed" = "Could not apply the reset. Check the connection and try again.";
 "zai_reset_submission_uncertain" = "Could not confirm the result. Retry this same attempt; it cannot spend a second reset.";
 

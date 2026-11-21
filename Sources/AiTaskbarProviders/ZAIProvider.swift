@@ -1,7 +1,8 @@
 import Foundation
+import os
 import AiTaskbarCore
 
-public final class ZAIProvider: UsageProvider, @unchecked Sendable {
+public final class ZAIProvider: UsageProvider {
     public let vendorId: VendorId = .zai
     private let credentials: EnvOrConfigCredentialReader
     private let fetcher: CachedFetch
@@ -10,8 +11,7 @@ public final class ZAIProvider: UsageProvider, @unchecked Sendable {
     private let now: @Sendable () -> Date
     /// A failed list read pauses list reads for an hour, so a server that
     /// refuses it neither fails the card nor doubles every call.
-    private let resetListLock = NSLock()
-    private var resetListPausedUntil: Date?
+    private let resetListPausedUntil = OSAllocatedUnfairLock<Date?>(initialState: nil)
     static let resetListPause: TimeInterval = 3600
     /// User-clicked quota resets (`docs/SDD-zai-quota-reset.md`).
     public let limitResets: ZAILimitResetService
@@ -51,7 +51,14 @@ public final class ZAIProvider: UsageProvider, @unchecked Sendable {
             decode: decodeSnapshot,
             fetch: { [self] in
                 let apiKey = try credentials.read()
-                let usage = try await http.fetchPayload(ZAIRequests.request(ZAIRequests.usageURL, apiKey: apiKey))
+                // Same-origin redirects only: the raw key rides in the header.
+                let (usage, response) = try await http.sendBounded(
+                    ZAIRequests.request(ZAIRequests.usageURL, apiKey: apiKey),
+                    maximumResponseBytes: HTTPClient.defaultMaximumResponseBytes)
+                guard (200..<300).contains(response.statusCode) else {
+                    throw AppError.http(status: response.statusCode,
+                                        body: String(decoding: usage.prefix(1024), as: UTF8.self))
+                }
                 try Task.checkCancellation()
                 return try await withResetList(usage, apiKey: apiKey)
             }
@@ -62,7 +69,8 @@ public final class ZAIProvider: UsageProvider, @unchecked Sendable {
     /// above 90% — the only time a reset can be offered. Its failure costs
     /// the reset button, never the usage numbers.
     private func withResetList(_ usage: Data, apiKey: String) async throws -> Data {
-        let paused = resetListLock.withLock { resetListPausedUntil.map { $0 > now() } ?? false }
+        let now = self.now()
+        let paused = resetListPausedUntil.withLock { $0.map { $0 > now } ?? false }
         guard !paused, Self.isNearLimit(usage) else { return usage }
         do {
             let (data, response) = try await http.sendBounded(
@@ -81,8 +89,8 @@ public final class ZAIProvider: UsageProvider, @unchecked Sendable {
         } catch {
             AppLog.network.error(
                 "zai reset list failed, paused for 1 h: \(String(describing: error), privacy: .public)")
-            let until = now().addingTimeInterval(Self.resetListPause)
-            resetListLock.withLock { resetListPausedUntil = until }
+            let until = self.now().addingTimeInterval(Self.resetListPause)
+            resetListPausedUntil.withLock { $0 = until }
             return usage
         }
     }

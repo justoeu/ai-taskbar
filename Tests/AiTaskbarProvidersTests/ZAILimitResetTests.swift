@@ -89,11 +89,21 @@ struct ZAIResetWireTests {
             else { return nil }
             return o
         }())
-        object["resetList"] = .object(["weekResets": .string("nope")])
+        object[ZAIEnvelope.mergedResetListKey] = .object(["weekResets": .string("nope")])
         let data = try JSONEncoder().encode(JSONValue.object(object))
         let snapshot = try JSONDecoder().decode(ZAIEnvelope.self, from: data).toSnapshot(configTier: nil)
         #expect(snapshot.resetGrants.isEmpty)
         #expect(snapshot.session?.utilizationPercent == 100)
+    }
+
+    @Test("a Z.AI field named like ours is never read as the merged list")
+    func namespacedKey() throws {
+        let usage = Fixtures.zaiUsageNearLimit200.replacingOccurrences(
+            of: #""success": true,"#,
+            with: #""success": true, "resetList": {"weekResets":[{"recordId":1,"available":true}]},"#)
+        let snapshot = try JSONDecoder().decode(ZAIEnvelope.self, from: Data(usage.utf8)).toSnapshot(configTier: nil)
+        #expect(snapshot.resetGrants.isEmpty)
+        #expect(ZAIEnvelope.mergedResetListKey == "_aiTaskbarResetList")
     }
 
     @Test("only unused, well-formed records become grants")
@@ -108,7 +118,9 @@ struct ZAIResetWireTests {
           {"recordId":4,"grantType":"BAD TYPE/../","available":true},
           {"recordId":5,"grantType":null,"expireTime":"soon","available":true},
           {"recordId":6,"grantType":"PROMO_1","expireTime":"2026-12-01","available":true},
-          {"recordId":7,"grantType":"GLOBAL","expireTime":"2026-12-01 00:00:00"}
+          {"recordId":7,"grantType":"GLOBAL","expireTime":"2026-12-01 00:00:00"},
+          {"recordId":8,"grantType":5,"available":true},
+          {"recordId":12,"grantType":"GLOBAL","expireTime":"2026-02-30 00:00:00","available":true}
         ]}
         """#
         let list = try JSONDecoder().decode(ZAIResetList.self, from: Data(body.utf8))
@@ -116,6 +128,7 @@ struct ZAIResetWireTests {
         #expect(list.grants == [
             ZAIResetGrant(recordID: 5, kind: .fiveHour, grantType: nil, expiresAt: nil),
             ZAIResetGrant(recordID: 6, kind: .fiveHour, grantType: "PROMO_1", expiresAt: "2026-12-01"),
+            ZAIResetGrant(recordID: 12, kind: .fiveHour, grantType: "GLOBAL", expiresAt: nil),
         ])
     }
 
@@ -129,6 +142,11 @@ struct ZAIResetWireTests {
         expectTrue(ZAIResetGrant.isValidExpiry("2026-12-22 23:59:59"))
         expectTrue(ZAIResetGrant.isValidExpiry("2026-12-22"))
         expectFalse(ZAIResetGrant.isValidExpiry("2026-12-22T23:59:59Z"))
+        expectFalse(ZAIResetGrant.isValidExpiry("2026-13-45"))
+        expectFalse(ZAIResetGrant.isValidExpiry("2026-02-30"))
+        expectFalse(ZAIResetGrant.isValidExpiry("2026-12-22 24:00:00"))
+        expectFalse(ZAIResetGrant.isValidExpiry("２０２６-12-22"))
+        expectTrue(ZAIResetGrant.isValidExpiry("2028-02-29 00:00:00"))
         #expect(grant(1, .weekly).expiryDay == "2026-12-22")
         expectTrue(grant(1, .weekly, expires: nil).expiryDay == nil)
     }
@@ -186,16 +204,26 @@ struct ZAIResetWireTests {
 
 // MARK: - Provider
 
+/// A clock the provider reads and the test advances.
+private final class Clock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = now
+    var current: Date { lock.withLock { value } }
+    func advance(_ seconds: TimeInterval) { lock.withLock { value += seconds } }
+}
+
 @Suite("Z.AI provider reads the reset list", .serialized)
 struct ZAIProviderResetListTests {
     private let cacheDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("zai-reset-\(UUID().uuidString)")
+    private let clock = Clock()
 
     init() { StubURLProtocol.reset() }
 
     private func provider() -> ZAIProvider {
-        ZAIProvider(credentials: credentials(), cache: DiskCache(vendor: .zai, baseDir: cacheDir, ttl: 300),
-                    http: .stubbed(protocols: [StubURLProtocol.self]), now: { now })
+        let clock = self.clock
+        return ZAIProvider(credentials: credentials(), cache: DiskCache(vendor: .zai, baseDir: cacheDir, ttl: 300),
+                           http: .stubbed(protocols: [StubURLProtocol.self]), now: { clock.current })
     }
 
     private func route(usage: String = Fixtures.zaiUsageNearLimit200,
@@ -245,6 +273,27 @@ struct ZAIProviderResetListTests {
         route()
         _ = try await p.fetchUsage(forceRefresh: true)
         #expect(StubURLProtocol.captured.map { $0.url?.path ?? "" } == ["/api/monitor/usage/quota/limit"])
+        // Past the hour the list is read again.
+        clock.advance(ZAIProvider.resetListPause + 1)
+        StubURLProtocol.reset()
+        route()
+        #expect(grants(try await p.fetchUsage(forceRefresh: true)).map(\.recordID) == [9, 10, 11])
+    }
+
+    @Test("the weekly window alone above 90% reads the list too")
+    func weeklyThreshold() async throws {
+        route(usage: Fixtures.zaiUsageNearLimit200
+            .replacingOccurrences(of: #""percentage": 100"#, with: #""percentage": 10"#)
+            .replacingOccurrences(of: #""percentage": 21"#, with: #""percentage": 95"#))
+        #expect(grants(try await provider().fetchUsage(forceRefresh: true)).count == 3)
+        #expect(StubURLProtocol.captured.count == 2)
+    }
+
+    @Test("a usage error keeps its status and never reads the list")
+    func usageError() async {
+        StubURLProtocol.handler = { _ in .init(status: 401, data: Data("bad key".utf8)) }
+        await #expect(throws: (any Error).self) { try await provider().fetchUsage(forceRefresh: true) }
+        #expect(StubURLProtocol.captured.count == 1)
     }
 
     @Test("a list reporting failure in its body pauses too")
@@ -356,6 +405,17 @@ struct ZAILimitResetServiceTests {
         StubURLProtocol.reset()
         route(list: .init(status: 404, data: Data()))
         await #expect(throws: ZAILimitResetError.failed) { try await service().prepare(kind: .weekly) }
+        // A read that spends nothing is never "uncertain".
+        StubURLProtocol.reset()
+        route(list: .init(status: 500, data: Data()))
+        await #expect(throws: ZAILimitResetError.failed) { try await service().prepare(kind: .weekly) }
+        // The list's own body codes map like the usage body's.
+        StubURLProtocol.reset()
+        route(list: .init(data: Data(#"{"code":401,"msg":"expired","success":false}"#.utf8)))
+        await #expect(throws: ZAILimitResetError.authorization) { try await service().prepare(kind: .weekly) }
+        StubURLProtocol.reset()
+        route(list: .init(data: Data(#"{"code":429,"success":false}"#.utf8)))
+        await #expect(throws: ZAILimitResetError.rateLimited) { try await service().prepare(kind: .weekly) }
     }
 
     @Test("consume re-checks, then POSTs the console's body with the raw key")
@@ -424,6 +484,8 @@ struct ZAILimitResetServiceTests {
             .failing(.networkConnectionLost),
             .init(data: Data("<html>".utf8)),
             .init(data: Data(#"{"code":500,"msg":"internal","success":false}"#.utf8)),
+            .init(data: Data("{}".utf8)),
+            .init(data: Data(#"{"msg":"?"}"#.utf8)),
         ]
         for answer in answers {
             StubURLProtocol.reset()
@@ -434,12 +496,24 @@ struct ZAILimitResetServiceTests {
         }
     }
 
-    @Test("definitive answers")
+    @Test("a refusal is an answer: nothing spent on a first attempt, unknown on a retry")
+    func refusal() async throws {
+        for body in [#"{"code":400,"msg":"record used","success":false}"#, #"{"code":200,"success":false}"#] {
+            StubURLProtocol.reset()
+            route(use: .init(data: Data(body.utf8)))
+            #expect(try await service().consume(attempt(), retry: false).outcome == .refused)
+            StubURLProtocol.reset()
+            route(use: .init(data: Data(body.utf8)))
+            #expect(try await service().consume(attempt(), retry: true).outcome == .unconfirmed)
+        }
+        StubURLProtocol.reset()
+        route()
+        #expect(try await service().consume(attempt(), retry: true).outcome == .reset)
+    }
+
+    @Test("definitive failures")
     func definitive() async {
         let answers: [(StubURLProtocol.CannedResponse, ZAILimitResetError)] = [
-            (.init(data: Data(#"{"code":400,"msg":"record used","success":false}"#.utf8)), .rejected),
-            (.init(data: Data(#"{"code":200,"success":false}"#.utf8)), .rejected),
-            (.init(data: Data(#"{"msg":"?"}"#.utf8)), .rejected),
             (.init(data: Data(#"{"code":401,"success":false}"#.utf8)), .authorization),
             (.init(data: Data(#"{"code":429,"success":false}"#.utf8)), .rateLimited),
             (.init(status: 403, data: Data()), .authorization),

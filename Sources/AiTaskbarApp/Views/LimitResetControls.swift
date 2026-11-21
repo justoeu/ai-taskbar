@@ -194,17 +194,10 @@ extension LimitResetControls.Presentation where Attempt == ZAILimitResetAttempt,
     /// a plain date; a dash when absent.
     static func expiry(_ raw: String?) -> String {
         guard let raw else { return "—" }
-        let day = String(raw.prefix(10))
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
-        let parts = day.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3,
-              let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else {
-            return raw
-        }
+        guard let date = ZAIResetGrant.expiryDate(raw) else { return raw }
         let formatter = DateFormatter()
         formatter.locale = L10n.effectiveLocale
-        formatter.timeZone = calendar.timeZone
+        formatter.timeZone = TimeZone(identifier: "UTC") ?? .current
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
