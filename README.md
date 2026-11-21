@@ -324,6 +324,20 @@ stays read-only: nothing is refreshed or written back. A lost response can be
 retried with the same request id, which the server dedupes. See
 [docs/SDD-claude-limit-reset.md](docs/SDD-claude-limit-reset.md).
 
+### Z.AI — quota resets (5-hour and weekly)
+
+The Z.AI console's **Reset Quota** card hands out one-time resets with their
+own expiry dates; a *weekly reset* also clears the 5-hour quota without
+spending a 5-hour reset. The Z.AI card offers them under the **same rule as
+OpenAI and Claude**: a current, healthy snapshot with a window **above 90%**
+that the reset refills, and an unused reset of that kind (**Use weekly reset
+(3)**). Clicking re-reads usage and the reset list with your API key, then an
+in-window, click-only confirmation names the reset, its expiry, how many remain
+and what it clears. The reset list is read only while a window is above 90%,
+and only the record ids, types and expiry dates are kept (never the account
+ids). A lost response can be retried with the same request id. See
+[docs/SDD-zai-quota-reset.md](docs/SDD-zai-quota-reset.md).
+
 ### xAI (Grok) — SuperGrok CLI monitoring & API team billing
 
 > ⚠️ **Important requirement:** xAI does **not** provide a public REST API for querying individual SuperGrok / grok.com quotas or token balances. To monitor your SuperGrok usage and quota, you **must have the official Grok CLI installed and authenticated locally** (`grok login`).

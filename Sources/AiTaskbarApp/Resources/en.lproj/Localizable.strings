@@ -310,6 +310,27 @@
 "claude_reset_failed" = "Could not apply the reset. Check the connection and try again.";
 "claude_reset_submission_uncertain" = "Could not confirm the result. Retry this same attempt; it cannot spend a second reset.";
 
+/* Z.AI quota resets */
+"zai_reset_kind_five_hour" = "5-hour reset";
+"zai_reset_kind_weekly" = "weekly reset";
+"zai_reset_button" = "Use %1$@ (%2$ld)";
+"zai_reset_retry" = "Retry: %@";
+"zai_reset_checking_status" = "Checking available Z.AI resets…";
+"zai_reset_applying_status" = "Applying Z.AI quota reset…";
+"zai_reset_waiting_response" = "Waiting for Z.AI to respond…";
+"zai_reset_info" = "Each reset has its own expiry and stops working once it expires. A weekly reset also clears the 5-hour quota without spending a 5-hour reset. The button appears when a quota the reset refills is above 90%.";
+"zai_reset_confirm_title" = "Use a Z.AI quota reset?";
+"zai_reset_confirm_message_five_hour" = "Account: %1$@\nReset: %2$@\nValid until: %3$@\nAvailable: %4$ld\nClears the 5-hour quota now; this cannot be undone. A retry reuses the same operation and cannot spend a second one.";
+"zai_reset_confirm_message_weekly" = "Account: %1$@\nReset: %2$@\nValid until: %3$@\nAvailable: %4$ld\nClears the weekly AND the 5-hour quota now; this cannot be undone. A retry reuses the same operation and cannot spend a second one.";
+"zai_reset_done" = "Reset applied. Refreshing usage…";
+"zai_reset_unavailable" = "No Z.AI reset available for use above 90% right now.";
+"zai_reset_auth_required" = "Z.AI refused the API key. Check the key in Settings.";
+"zai_reset_rate_limited" = "Z.AI is rate limiting requests. Try again in a minute.";
+"zai_reset_rejected" = "Z.AI refused the reset; no reset was spent.";
+"zai_reset_unconfirmed" = "Z.AI did not confirm this retry; the earlier attempt may have been applied. Refreshing usage…";
+"zai_reset_failed" = "Could not apply the reset. Check the connection and try again.";
+"zai_reset_submission_uncertain" = "Could not confirm the result. Retry this same attempt; it cannot spend a second reset.";
+
 // Codex credits. The wire value is a QUANTITY (no currency symbol), so no
 // string here may introduce one.
 "credits_label" = "Credits";

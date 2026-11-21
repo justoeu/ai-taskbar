@@ -865,6 +865,25 @@ section("Wire types: Z.AI fixture") {
     expect(errSnap.session == nil, "Z.AI session nil when data is nil")
 }
 
+section("Wire types: Z.AI quota resets (customer-package-reset)") {
+    let list = try ZAIResetList.decodeResponse(Fixtures.data(Fixtures.zaiResetList200))
+    expect(list?.grants.map(\.recordID) == [9, 10, 11], "Z.AI reset list: three weekly records")
+    expect(list?.grants.allSatisfy { $0.kind == .weekly } ?? false, "Z.AI reset list: WEEK group is weekly")
+    let merged = try list.map { try $0.merging(into: Fixtures.data(Fixtures.zaiUsageNearLimit200)) }
+    expect(!(merged.map { String(decoding: $0, as: UTF8.self).contains("customerId") } ?? true),
+           "Z.AI reset list: customerId never cached")
+    let snapshot = try merged.map {
+        try SharedCoders.decoder.decode(ZAIEnvelope.self, from: $0).toSnapshot(configTier: nil)
+    }
+    let now = Date(timeIntervalSince1970: 1_795_200_000)
+    expect(snapshot?.limitResetOffers(now: now).map(\.kind) == [.weekly],
+           "Z.AI: a weekly reset is offered for a spent 5-hour window")
+    expect(snapshot?.limitResetOffers(now: now).first?.resetsLeft == 3, "Z.AI: offer counts every weekly record")
+    let quiet = try SharedCoders.decoder.decode(ZAIEnvelope.self, from: Fixtures.data(Fixtures.zaiUsage200))
+        .toSnapshot(configTier: nil)
+    expect(!quiet.hasWindowAboveResetThreshold, "Z.AI: below 90% the list is not read")
+}
+
 section("DiskCache TTL semantics") {
     let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("ai-taskbar-validate-\(UUID().uuidString)")

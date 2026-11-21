@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AiTaskbarCore
 
 public final class ZAIProvider: UsageProvider {
@@ -7,16 +8,25 @@ public final class ZAIProvider: UsageProvider {
     private let fetcher: CachedFetch
     private let http: HTTPClient
     private let configTier: String?
-    private static let usageURL = URL(string: "https://api.z.ai/api/monitor/usage/quota/limit")!
+    private let now: @Sendable () -> Date
+    /// A failed list read pauses list reads for an hour, so a server that
+    /// refuses it neither fails the card nor doubles every call.
+    private let resetListPausedUntil = OSAllocatedUnfairLock<Date?>(initialState: nil)
+    static let resetListPause: TimeInterval = 3600
+    /// User-clicked quota resets (`docs/SDD-zai-quota-reset.md`).
+    public let limitResets: ZAILimitResetService
 
     public init(credentials: EnvOrConfigCredentialReader,
                 cache: DiskCache,
                 http: HTTPClient,
-                configTier: String? = nil) {
+                configTier: String? = nil,
+                now: @escaping @Sendable () -> Date = { Date() }) {
         self.credentials = credentials
         self.fetcher = CachedFetch(cache: cache)
         self.http = http
         self.configTier = configTier
+        self.now = now
+        self.limitResets = ZAILimitResetService(credentials: credentials, http: http, now: now)
     }
 
     public convenience init(config: ZAIConfig,
@@ -41,15 +51,56 @@ public final class ZAIProvider: UsageProvider {
             decode: decodeSnapshot,
             fetch: { [self] in
                 let apiKey = try credentials.read()
-                var req = URLRequest(url: Self.usageURL)
-                req.timeoutInterval = 10
-                // **NO** "Bearer " prefix — Z.AI rejects that with 401.
-                req.setValue(apiKey, forHTTPHeaderField: "Authorization")
-                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                req.setValue("en-US,en", forHTTPHeaderField: "Accept-Language")
-                return try await http.fetchPayload(req)
+                // Same-origin redirects only: the raw key rides in the header.
+                let (usage, response) = try await http.sendBounded(
+                    ZAIRequests.request(ZAIRequests.usageURL, apiKey: apiKey),
+                    maximumResponseBytes: HTTPClient.defaultMaximumResponseBytes)
+                guard (200..<300).contains(response.statusCode) else {
+                    throw AppError.http(status: response.statusCode,
+                                        body: String(decoding: usage.prefix(1024), as: UTF8.self))
+                }
+                try Task.checkCancellation()
+                return try await withResetList(usage, apiKey: apiKey)
             }
         )
+    }
+
+    /// The reset list is read only while the 5-hour or weekly window is
+    /// above 90% — the only time a reset can be offered. Its failure costs
+    /// the reset button, never the usage numbers.
+    private func withResetList(_ usage: Data, apiKey: String) async throws -> Data {
+        let now = self.now()
+        let paused = resetListPausedUntil.withLock { $0.map { $0 > now } ?? false }
+        guard !paused, Self.isNearLimit(usage) else { return usage }
+        do {
+            let (data, response) = try await http.sendBounded(
+                ZAIRequests.request(ZAIRequests.resetListURL, apiKey: apiKey),
+                maximumResponseBytes: ZAIRequests.resetResponseLimit)
+            try Task.checkCancellation()
+            guard (200..<300).contains(response.statusCode) else {
+                throw AppError.http(status: response.statusCode, body: "")
+            }
+            guard let list = try ZAIResetList.decodeResponse(data) else {
+                throw AppError.schema("zai reset list reported failure")
+            }
+            return try list.merging(into: usage)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            AppLog.network.error(
+                "zai reset list failed, paused for 1 h: \(String(describing: error), privacy: .public)")
+            let until = self.now().addingTimeInterval(Self.resetListPause)
+            resetListPausedUntil.withLock { $0 = until }
+            return usage
+        }
+    }
+
+    static func isNearLimit(_ payload: Data) -> Bool {
+        guard let parsed = try? SharedCoders.decoder.decode(ZAIEnvelope.self, from: payload),
+              parsed.data != nil else {
+            return false // the decode path reports schema drift itself
+        }
+        return parsed.toSnapshot(configTier: nil).hasWindowAboveResetThreshold
     }
 
     private func decodeSnapshot(_ data: Data) throws -> VendorSnapshot {

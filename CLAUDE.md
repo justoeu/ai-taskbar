@@ -554,6 +554,28 @@ transport failure / 5xx / unreadable 2xx on the claim is `submissionUncertain`
 and resumable with the same `request_id`; never read an unknown `result` as a
 reset. Read-only credential: never refresh or write back for a reset.
 
+### Z.AI quota resets — the console's "Reset Quota", same rule
+
+`docs/SDD-zai-quota-reset.md`. Read from the console bundle and checked
+against the live list with the API key (2026-11-21): list
+`GET api.z.ai/api/biz/customer-package-reset/list?targetType=PERSONAL`, use
+`POST …/customer-package-reset/use` with `{targetType, resetType
+(FIVE_HOUR|WEEK), recordId, requestId, grantType}`, same raw-key header as the
+usage call. The POST was NOT exercised with the key (it spends a reset): the
+first real confirmation is the acceptance test. A WEEK reset also clears the
+5-hour window, so `ZAISnapshot.limitResetOffers` offers it when EITHER window
+is strictly above 90% (the confirmation says it clears both). The provider
+reads the list only above 90% and pauses it 1 h on any failure; the list is
+merged into the cached payload under the namespaced `_aiTaskbarResetList`,
+allow-listed (`customerId`, organization and project ids are never decoded).
+`requestId` is kept across a `submissionUncertain` retry exactly like the
+console, and on a retry ANY thrown error keeps it. A server answer other than
+success/5xx is a receipt, not an error (so the card refreshes): `refused` on a
+first attempt (nothing spent), `unconfirmed` on a retry — never claim
+"nothing spent" there, the lost attempt may have been applied. Claude and Z.AI share
+`LimitResetController` / `LimitResetControls`; add a vendor by giving it an
+`Interpretation` and a `Presentation`, not by copying the controller.
+
 ### Cost scanners — token semantics differ per source, do not generalize
 
 Each scanner reads a different vendor's local records, and the same-sounding
