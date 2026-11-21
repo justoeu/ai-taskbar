@@ -233,6 +233,30 @@ public enum Fixtures {
     }
     """#
 
+    /// `GET /api/monitor/usage/quota/limit` with the 5-hour window spent and
+    /// the weekly at 21% (the measured state of 2026-11-21, resets moved to
+    /// fixed instants after the tests' clock).
+    public static let zaiUsageNearLimit200 = #"""
+    {
+      "code": 200, "msg": "Operation successful", "success": true,
+      "data": {
+        "level": "max",
+        "limits": [
+          { "type": "TOKENS_LIMIT", "unit": 3, "number": 5, "percentage": 100,
+            "nextResetTime": 1795300000000 },
+          { "type": "TOKENS_LIMIT", "unit": 6, "number": 1, "percentage": 21,
+            "nextResetTime": 1795900000000 }
+        ]
+      }
+    }
+    """#
+
+    /// `GET /api/biz/customer-package-reset/list?targetType=PERSONAL`, shape
+    /// verbatim from 2026-11-21 (customer id replaced by a fictitious one).
+    public static let zaiResetList200 = #"""
+    {"code":200,"msg":"Operation successful","data":{"customerId":12345678901234567,"targetType":"PERSONAL","organizationId":null,"projectId":null,"lastFiveHourResetTime":null,"lastWeekResetTime":null,"fiveHourResets":[],"weekResets":[{"recordId":9,"grantType":"GLOBAL","expireTime":"2026-12-22 23:59:59","available":true},{"recordId":10,"grantType":"GLOBAL","expireTime":"2026-12-22 23:59:59","available":true},{"recordId":11,"grantType":"GLOBAL","expireTime":"2026-12-22 23:59:59","available":true}]},"success":true}
+    """#
+
     public static let kimiBalance200 = #"""
     {
       "code": 0,

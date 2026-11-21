@@ -30,16 +30,130 @@ public struct ZAIEnvelope: Decodable {
     public let msg: String?
     public let success: Bool?
     public let data: ZAIMonitorData?
+    /// NOT a Z.AI field: the app's allow-listed copy of
+    /// `/api/biz/customer-package-reset/list`, merged into the cached usage
+    /// payload by `ZAIProvider` while a window is above 90%
+    /// (`ZAIResetList.merging(into:)`). Absent on every other payload.
+    public let resetList: ZAIResetList?
 
     enum CodingKeys: String, CodingKey {
-        case code, msg, success, data
+        case code, msg, success, data, resetList
     }
 
-    public init(code: Int? = nil, msg: String? = nil, success: Bool? = nil, data: ZAIMonitorData? = nil) {
+    public init(code: Int? = nil, msg: String? = nil, success: Bool? = nil, data: ZAIMonitorData? = nil,
+                resetList: ZAIResetList? = nil) {
         self.code = code
         self.msg = msg
         self.success = success
         self.data = data
+        self.resetList = resetList
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code = try c.decodeIfPresent(Int.self, forKey: .code)
+        msg = try c.decodeIfPresent(String.self, forKey: .msg)
+        success = try c.decodeIfPresent(Bool.self, forKey: .success)
+        data = try c.decodeIfPresent(ZAIMonitorData.self, forKey: .data)
+        // A reshaped list costs only the reset button, never the card.
+        resetList = try? c.decodeIfPresent(ZAIResetList.self, forKey: .resetList)
+    }
+}
+
+/// `GET https://api.z.ai/api/biz/customer-package-reset/list?targetType=PERSONAL`
+/// (API key, same header as the usage call). Measured 2026-11-21:
+///
+/// ```json
+/// { "code": 200, "msg": "Operation successful", "success": true,
+///   "data": { "customerId": …, "targetType": "PERSONAL", "organizationId": null,
+///             "projectId": null, "lastFiveHourResetTime": null, "lastWeekResetTime": null,
+///             "fiveHourResets": [],
+///             "weekResets": [ { "recordId": 9, "grantType": "GLOBAL",
+///                               "expireTime": "2026-12-22 23:59:59", "available": true } ] } }
+/// ```
+///
+/// Only the two arrays are decoded, and only `recordId`, `grantType`,
+/// `expireTime`, `available` per entry: `customerId` and the organization /
+/// project ids never reach memory or the disk cache.
+public struct ZAIResetList: Codable, Sendable, Equatable {
+    public struct Entry: Codable, Sendable, Equatable {
+        public let recordId: Int64?
+        public let grantType: String?
+        public let expireTime: String?
+        public let available: Bool?
+
+        public init(recordId: Int64?, grantType: String?, expireTime: String?, available: Bool?) {
+            self.recordId = recordId
+            self.grantType = grantType
+            self.expireTime = expireTime
+            self.available = available
+        }
+
+        enum CodingKeys: String, CodingKey { case recordId, grantType, expireTime, available }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            // JSON integers only, decoded exactly (no Double round trip):
+            // a fractional, out-of-range or non-numeric id is absent.
+            recordId = try? c.decodeIfPresent(Int64.self, forKey: .recordId)
+            grantType = try? c.decodeIfPresent(String.self, forKey: .grantType)
+            expireTime = try? c.decodeIfPresent(String.self, forKey: .expireTime)
+            available = try? c.decodeIfPresent(Bool.self, forKey: .available)
+        }
+
+        func grant(kind: ZAIResetKind) -> ZAIResetGrant? {
+            guard available == true, let recordId, recordId > 0 else { return nil }
+            let grantType = grantType.flatMap { ZAIResetGrant.isValidGrantType($0) ? $0 : nil }
+            if self.grantType != nil, grantType == nil { return nil } // tampered: not echoed back
+            let expiry = expireTime.flatMap { ZAIResetGrant.isValidExpiry($0) ? $0 : nil }
+            return ZAIResetGrant(recordID: recordId, kind: kind, grantType: grantType, expiresAt: expiry)
+        }
+    }
+
+    public let fiveHourResets: [Entry]
+    public let weekResets: [Entry]
+
+    public init(fiveHourResets: [Entry], weekResets: [Entry]) {
+        self.fiveHourResets = fiveHourResets
+        self.weekResets = weekResets
+    }
+
+    enum CodingKeys: String, CodingKey { case fiveHourResets, weekResets }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        fiveHourResets = try c.decodeIfPresent([Entry].self, forKey: .fiveHourResets) ?? []
+        weekResets = try c.decodeIfPresent([Entry].self, forKey: .weekResets) ?? []
+    }
+
+    /// Unused, well-formed records, 5-hour first.
+    public var grants: [ZAIResetGrant] {
+        fiveHourResets.compactMap { $0.grant(kind: .fiveHour) }
+            + weekResets.compactMap { $0.grant(kind: .weekly) }
+    }
+
+    private struct Response: Decodable {
+        let code: Int?
+        let success: Bool?
+        let data: ZAIResetList?
+    }
+
+    /// The list from a raw response, or nil when it reports failure or has no
+    /// `data`. Throws only on a body that is not the expected JSON.
+    public static func decodeResponse(_ raw: Data) throws -> ZAIResetList? {
+        let response = try SharedCoders.decoder.decode(Response.self, from: raw)
+        guard response.code == nil || response.code == 200, response.success != false else { return nil }
+        return response.data
+    }
+
+    /// `usage` with this list (allow-listed) under `resetList`. The usage
+    /// payload's own fields are carried over untouched.
+    public func merging(into usage: Data) throws -> Data {
+        guard case .object(var object) = try SharedCoders.decoder.decode(JSONValue.self, from: usage) else {
+            throw AppError.schema("zai usage payload is not an object")
+        }
+        object["resetList"] = try SharedCoders.decoder.decode(JSONValue.self, from: try JSONEncoder().encode(self))
+        return try JSONEncoder().encode(JSONValue.object(object))
     }
 }
 
@@ -197,7 +311,8 @@ extension ZAIEnvelope {
             session: session,
             weekly: weekly,
             mcp: mcp,
-            topModels: topModels
+            topModels: topModels,
+            resetGrants: resetList?.grants ?? []
         )
     }
 

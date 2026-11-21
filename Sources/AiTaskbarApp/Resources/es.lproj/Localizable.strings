@@ -309,6 +309,26 @@
 "claude_reset_failed" = "No se pudo aplicar el reset. Revisa la conexión e inténtalo de nuevo.";
 "claude_reset_submission_uncertain" = "No se pudo confirmar el resultado. Reintenta esta misma operación; no puede gastar un segundo reset.";
 
+/* Z.AI quota resets */
+"zai_reset_kind_five_hour" = "reset de 5 horas";
+"zai_reset_kind_weekly" = "reset semanal";
+"zai_reset_button" = "Usar %1$@ (%2$ld)";
+"zai_reset_retry" = "Reintentar: %@";
+"zai_reset_checking_status" = "Comprobando resets de Z.AI disponibles…";
+"zai_reset_applying_status" = "Aplicando reset de cuota de Z.AI…";
+"zai_reset_waiting_response" = "Esperando respuesta de Z.AI…";
+"zai_reset_info" = "Cada reset tiene su propia validez y deja de servir cuando vence. El reset semanal también reinicia la cuota de 5 horas, sin gastar un reset de 5 horas. El botón aparece cuando una cuota que el reset recompone supera el 90%.";
+"zai_reset_confirm_title" = "¿Usar un reset de cuota de Z.AI?";
+"zai_reset_confirm_message_five_hour" = "Cuenta: %1$@\nReset: %2$@\nVálido hasta: %3$@\nDisponibles: %4$ld\nReinicia ahora la cuota de 5 horas; no se puede deshacer. Un reintento reutiliza la misma operación y no puede gastar un segundo.";
+"zai_reset_confirm_message_weekly" = "Cuenta: %1$@\nReset: %2$@\nVálido hasta: %3$@\nDisponibles: %4$ld\nReinicia ahora la cuota semanal Y la de 5 horas; no se puede deshacer. Un reintento reutiliza la misma operación y no puede gastar un segundo.";
+"zai_reset_done" = "Reset aplicado. Actualizando el uso…";
+"zai_reset_unavailable" = "No hay reset de Z.AI disponible para usar por encima del 90% ahora.";
+"zai_reset_auth_required" = "Z.AI rechazó la clave de API. Revisa la clave en Ajustes.";
+"zai_reset_rate_limited" = "Z.AI está limitando las solicitudes. Inténtalo de nuevo en un minuto.";
+"zai_reset_rejected" = "Z.AI rechazó el reset; no se gastó ningún reset.";
+"zai_reset_failed" = "No se pudo aplicar el reset. Revisa la conexión e inténtalo de nuevo.";
+"zai_reset_submission_uncertain" = "No se pudo confirmar el resultado. Reintenta esta misma operación; no puede gastar un segundo reset.";
+
 // Créditos de Codex. El valor de la API es CANTIDAD (sin símbolo de moneda),
 // así que ninguna cadena aquí debe introducir uno.
 "credits_label" = "Créditos";

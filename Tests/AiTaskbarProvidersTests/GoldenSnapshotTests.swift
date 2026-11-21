@@ -129,6 +129,8 @@ struct GoldenSnapshotTests {
         #expect(Int((snap.topModels?[1].percent ?? 0).rounded()) == 38) // 15/40 ≈ 37.5
         #expect(Int((snap.topModels?[2].percent ?? 0).rounded()) == 13) //  5/40 ≈ 12.5
         #expect(snap.topModels?[0].rawUsage == 20)
+        // The reset list is read only above 90%; this payload carries none.
+        #expect(snap.resetGrants.isEmpty)
     }
 
     // MARK: - Kimi

@@ -41,19 +41,29 @@ public enum L10n {
             // bundle is the sibling of the executable.
             Bundle.main.bundleURL.appendingPathComponent(bundleName),
         ]
-        // Test runner or build output fallback: locate in .build
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<4 { root.deleteLastPathComponent() }
-        candidates.append(root.appendingPathComponent(".build/arm64-apple-macosx/debug/\(bundleName)"))
-        candidates.append(root.appendingPathComponent(".build/debug/\(bundleName)"))
-        candidates.append(root.appendingPathComponent(".build/arm64-apple-macosx/release/\(bundleName)"))
-        candidates.append(root.appendingPathComponent(".build/release/\(bundleName)"))
-        candidates.append(root.appendingPathComponent(".build/x86_64-apple-macosx/debug/\(bundleName)"))
-        candidates.append(root.appendingPathComponent(".build/x86_64-apple-macosx/release/\(bundleName)"))
         for url in candidates {
             if let url, let b = Bundle(url: url) { return b }
         }
-        return .main
+        // Test runner or build output fallback: locate in .build. Swift 6.4
+        // with full Xcode writes to `.build/out/Products/<Config>` and leaves
+        // the older `<arch>-apple-macosx/<config>` copies untouched, so the
+        // NEWEST bundle wins: a stale one served old strings to the tests,
+        // where `localizedString(key) == localizedString(key)` still passed.
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 { root.deleteLastPathComponent() }
+        let buildDirs = ["out/Products/Debug", "out/Products/Release",
+                         "arm64-apple-macosx/debug", "debug", "arm64-apple-macosx/release", "release",
+                         "x86_64-apple-macosx/debug", "x86_64-apple-macosx/release"]
+        let built = buildDirs.compactMap { dir -> (Bundle, Date)? in
+            let url = root.appendingPathComponent(".build/\(dir)/\(bundleName)")
+            guard let bundle = Bundle(url: url) else { return nil }
+            let strings = bundle.url(forResource: "Localizable", withExtension: "strings",
+                                     subdirectory: nil, localization: "en") ?? url
+            let modified = (try? strings.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+            return (bundle, modified)
+        }
+        return built.max { $0.1 < $1.1 }?.0 ?? .main
     }()
 
     /// Resolves the effective bundle for string lookups. When the override

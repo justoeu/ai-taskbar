@@ -694,7 +694,7 @@ public struct VendorSectionView: View {
             // Usage credits + model-scoped windows (e.g. Fable) now render as
             // regular rows via `VendorSnapshot.windows`; only resets add UI.
             if let reset = vm.claudeReset {
-                ClaudeResetControls(vm: vm, reset: reset)
+                LimitResetControls(vm: vm, reset: reset, presentation: .claude)
             }
         case .openai(let s):
             OpenAIResetControls(vm: vm, reset: vm.openAIReset)
@@ -707,6 +707,9 @@ public struct VendorSectionView: View {
                 topModelsList(models)
             }
         case .zai(let s):
+            if let reset = vm.zaiReset {
+                LimitResetControls(vm: vm, reset: reset, presentation: .zai)
+            }
             if let models = s.topModels, !models.isEmpty {
                 topModelsList(models)
             }

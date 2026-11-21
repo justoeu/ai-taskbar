@@ -67,6 +67,9 @@ public final class VendorViewModel: ObservableObject, Identifiable {
     /// Claude limit resets for THIS account; nil for every other vendor.
     lazy var claudeReset: ClaudeResetController? = (provider as? AnthropicProvider)
         .map { ClaudeResetController(service: $0.limitResets) }
+    /// Z.AI quota resets ("Reset Quota"); nil for every other vendor.
+    lazy var zaiReset: ZAIResetController? = (provider as? ZAIProvider)
+        .map { ZAIResetController(service: $0.limitResets) }
 
     @Published public private(set) var state: State = .idle
     /// When the in-flight refresh started, on the clock of whoever started

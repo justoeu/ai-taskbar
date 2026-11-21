@@ -400,17 +400,39 @@ public struct ZAISnapshot: Sendable, Equatable, Codable {
     /// TIME_LIMIT entry — the only per-model signal the API exposes. Empty /
     /// nil when the array is absent (older accounts, nothing used yet).
     public let topModels: [ModelShare]?
+    /// Unused "Reset Quota" records (`/api/biz/customer-package-reset/list`).
+    /// Empty unless the list was read, which happens only while the 5-hour
+    /// or weekly window is above 90% (`docs/SDD-zai-quota-reset.md`).
+    public let resetGrants: [ZAIResetGrant]
 
     public init(planLabel: String? = nil,
                 session: UsageWindow? = nil,
                 weekly: UsageWindow? = nil,
                 mcp: UsageWindow? = nil,
-                topModels: [ModelShare]? = nil) {
+                topModels: [ModelShare]? = nil,
+                resetGrants: [ZAIResetGrant] = []) {
         self.planLabel = planLabel
         self.session = session
         self.weekly = weekly
         self.mcp = mcp
         self.topModels = topModels
+        self.resetGrants = resetGrants
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case planLabel, session, weekly, mcp, topModels, resetGrants
+    }
+
+    // History persisted before `resetGrants` existed must still decode.
+    // `encode(to:)` is synthesized from `CodingKeys`: keep both in lockstep.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        planLabel = try c.decodeIfPresent(String.self, forKey: .planLabel)
+        session = try c.decodeIfPresent(UsageWindow.self, forKey: .session)
+        weekly = try c.decodeIfPresent(UsageWindow.self, forKey: .weekly)
+        mcp = try c.decodeIfPresent(UsageWindow.self, forKey: .mcp)
+        topModels = try c.decodeIfPresent([ModelShare].self, forKey: .topModels)
+        resetGrants = try c.decodeIfPresent([ZAIResetGrant].self, forKey: .resetGrants) ?? []
     }
 }
 
