@@ -108,7 +108,9 @@ números — honesto; esconder uma conta real não é.
 Se duas extras produzem a mesma chave (§4.4), a primeira pelo **caminho**
 mantém a chave do `accountUuid` e a outra usa os 8 hex de
 `SHA-256("dir:" + caminho)`. A ordem por caminho (não pela data do item) faz a
-atribuição nunca trocar entre execuções. A padrão usa a chave nua e nunca
+atribuição estável para o mesmo conjunto de pastas. Uma pasta nova, um logout
+ou o CLI corrigindo um `accountUuid` defasado ainda podem mover uma chave,
+como qualquer chave derivada do UUID. A padrão usa a chave nua e nunca
 colide.
 
 ### 4.4 Identidade e rótulo

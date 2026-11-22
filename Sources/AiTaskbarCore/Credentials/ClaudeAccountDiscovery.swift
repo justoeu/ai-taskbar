@@ -79,13 +79,18 @@ public struct ClaudeAccountDiscovery: Sendable {
         var found: [ClaudeAccount] = []
         var usedKeys: Set<String> = []
         // Paths decide which folder keeps the UUID-derived key on a collision,
-        // so a key never flips between launches.
+        // so the same set of folders always gets the same keys (Keychain dates
+        // change; paths do not). A folder appearing, logging out, or the CLI
+        // correcting a stale `accountUuid` can still move a key, as any
+        // UUID-derived key would.
         let ordered = candidates().sorted { a, b in
             if a.isDefault != b.isDefault { return a.isDefault }
             return a.dir.path < b.dir.path
         }
         for candidate in ordered {
-            let uuid: String
+            // nil only for an unreadable default config, which needs no UUID:
+            // the default's key is the bare vendor.
+            let uuid: String?
             switch Self.login(at: candidate.configFile) {
             case .loggedIn(let value):
                 uuid = value
@@ -94,9 +99,8 @@ public struct ClaudeAccountDiscovery: Sendable {
             case .unknown where candidate.isDefault:
                 // The default card needed only its Keychain item before
                 // multi-account; an unreadable or oversized `~/.claude.json`
-                // must not take it away. Without the UUID it cannot be
-                // deduped, so it gets a key no real UUID can collide with.
-                uuid = "default:\(candidate.dir.path)"
+                // must not take it away.
+                uuid = nil
             case .unknown:
                 continue
             }
@@ -105,21 +109,22 @@ public struct ClaudeAccountDiscovery: Sendable {
                 return false
             }) else { continue }
             let key: ProviderInstanceKey
-            if candidate.isDefault {
-                key = ProviderInstanceKey(vendor: .anthropic)
-            } else {
+            if let uuid, !candidate.isDefault {
                 var account = Self.shortHash(uuid)
                 // The default's key is the bare vendor, so only another extra
                 // can collide.
                 if usedKeys.contains(account) {
                     // Another folder reports the same account (a stale config
                     // or a second login): this one is keyed by its path.
-                    AppLog.keychain.info(
+                    // Debug: discovery re-runs on every popover open.
+                    AppLog.keychain.debug(
                         "Claude account discovery: two config folders report the same account; both are shown")
                     account = Self.shortHash("dir:" + candidate.dir.path)
                 }
                 usedKeys.insert(account)
                 key = ProviderInstanceKey(vendor: .anthropic, account: account)
+            } else {
+                key = ProviderInstanceKey(vendor: .anthropic)
             }
             let account = ClaudeAccount(
                 instanceKey: key,
