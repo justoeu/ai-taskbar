@@ -92,12 +92,26 @@ testável sem tocar no Keychain real.
 
 Isso descarta sozinho os itens órfãos (sem pasta) e os backups (sem item).
 
-### 4.3 Deduplicação
+### 4.3 Sem deduplicação por `accountUuid`
 
-Duas pastas com o mesmo `accountUuid` são a mesma conta: fica uma só. Vence a
-pasta padrão; entre extras, a de item do Keychain modificado mais
-recentemente (`kSecAttrModificationDate`), e depois o caminho em ordem
-lexicográfica, para o resultado ser determinístico.
+(Revisto em 2026-11-21.) A versão inicial fundia pastas com o mesmo
+`accountUuid`, mas esse campo é um cache que o CLI regrava tarde: medido com
+três logins, `claude auth login` em `~/.claude` gravou no Keychain o token de
+uma conta nova e o `~/.claude.json` continuou com o `oauthAccount` da conta de
+outra pasta (as sessões abertas regravam a cópia que têm em memória). A fusão
+escondeu o card de uma conta ativa.
+
+Cada pasta tem o seu próprio item no Keychain, então cada pasta logada com item
+presente é um card. Duas pastas na mesma conta mostram dois cards com os mesmos
+números — honesto; esconder uma conta real não é.
+
+Se duas extras produzem a mesma chave (§4.4), a primeira pelo **caminho**
+mantém a chave do `accountUuid` e a outra usa os 8 hex de
+`SHA-256("dir:" + caminho)`. A ordem por caminho (não pela data do item) faz a
+atribuição estável para o mesmo conjunto de pastas. Uma pasta nova, um logout
+ou o CLI corrigindo um `accountUuid` defasado ainda podem mover uma chave,
+como qualquer chave derivada do UUID. A padrão usa a chave nua e nunca
+colide.
 
 ### 4.4 Identidade e rótulo
 
@@ -256,8 +270,8 @@ instância `anthropic`; o histórico legado fica no disco, intocado.
 
 - `ClaudeAccountDiscoveryTests` com pastas temporárias e sonda de Keychain
   falsa: conta padrão, extras com nomes variados, órfãos ignorados, backup sem
-  item ignorado, `.claude.json` sem login ignorado, deduplicação por
-  `accountUuid`, barra final, `config_dirs`, ordem e rótulos, hash do serviço
+  item ignorado, `.claude.json` sem login ignorado, pastas com o mesmo
+  `accountUuid` sem fusão (config defasado), barra final, `config_dirs`, ordem e rótulos, hash do serviço
   (vetor fixo num caminho fictício: `/Users/example/.claude-work` → `dd1118a7`).
 - Chaves legadas fixadas: instância padrão → `anthropic` em cache, histórico,
   pin, notificação e `autosaveName`.
