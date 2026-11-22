@@ -118,24 +118,48 @@ struct ClaudeAccountDiscoveryTests {
         #expect(accounts.map(\.instanceKey.storageKey) == ["anthropic"])
     }
 
-    @Test("a folder logged into the default account collapses into the default")
-    func dedupe_against_default() throws {
+    /// Regression, measured 2026-11-21 with three logins: `claude auth login`
+    /// in `~/.claude` wrote a token for a new account, while `~/.claude.json`
+    /// still named the account another folder is on. Merging by that stale
+    /// `accountUuid` hid the other folder's card.
+    @Test("a folder whose config names the default's account is still its own card")
+    func stale_default_config_does_not_hide_an_extra() throws {
         try write(login("same"), to: home.appendingPathComponent(".claude.json"))
-        let copy = try makeFolder(".claude-copy", uuid: "same")
-        let accounts = discover([ClaudeAccountDiscovery.baseService: present, service(copy): present])
-        #expect(accounts.count == 1)
-        expectTrue(accounts.first?.isDefault ?? false)
+        let other = try makeFolder(".claude-other", uuid: "same")
+        let accounts = discover([ClaudeAccountDiscovery.baseService: present, service(other): present])
+        #expect(accounts.count == 2)
+        #expect(accounts.map(\.label) == [nil, "other"])
+        // The default's key is the bare vendor, so the extra keeps its
+        // UUID-derived key (and its history).
+        #expect(accounts.last?.instanceKey.storageKey == "anthropic." + ClaudeAccountDiscovery.shortHash("same"))
     }
 
-    @Test("two folders on one account keep the most recently written item")
-    func dedupe_between_extras() throws {
-        let old = try makeFolder(".claude-old", uuid: "same")
-        let new = try makeFolder(".claude-new", uuid: "same")
+    @Test("two extra folders reporting one account both show, with distinct keys")
+    func colliding_extras_get_distinct_keys() throws {
+        let alpha = try makeFolder(".claude-alpha", uuid: "same")
+        let beta = try makeFolder(".claude-beta", uuid: "same")
         let accounts = discover([
-            service(old): .present(modified: Date(timeIntervalSince1970: 1_000)),
-            service(new): .present(modified: Date(timeIntervalSince1970: 2_000)),
+            service(alpha): .present(modified: Date(timeIntervalSince1970: 1_000)),
+            service(beta): .present(modified: Date(timeIntervalSince1970: 2_000)),
         ])
-        #expect(accounts.map(\.label) == ["new"])
+        #expect(accounts.map(\.label) == ["alpha", "beta"])
+        let keys = accounts.map(\.instanceKey.storageKey)
+        #expect(Set(keys).count == 2)
+        // The first by PATH keeps the UUID key, whatever the Keychain dates,
+        // so the assignment never flips between launches.
+        #expect(keys.first == "anthropic." + ClaudeAccountDiscovery.shortHash("same"))
+        #expect(keys.last == "anthropic." + ClaudeAccountDiscovery.shortHash("dir:" + beta.path))
+    }
+
+    @Test("three logins, one of them with a stale config, are three cards")
+    func three_logins() throws {
+        try write(login("uuid-c"), to: home.appendingPathComponent(".claude.json"))
+        let b = try makeFolder(".claude-b", uuid: "uuid-b")
+        let c = try makeFolder(".claude-c", uuid: "uuid-c")
+        let accounts = discover([ClaudeAccountDiscovery.baseService: present,
+                                 service(b): present, service(c): present])
+        #expect(accounts.count == 3)
+        #expect(Set(accounts.map(\.instanceKey.storageKey)).count == 3)
     }
 
     @Test("accounts are ordered default first, then by label")

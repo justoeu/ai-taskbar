@@ -469,7 +469,13 @@ path, `/Users/example/.claude-work` → `dd1118a7`, never a real one).
   suffixed items for folders that no longer exist (agents run with throwaway
   `CLAUDE_CONFIG_DIR`s), and a copied backup folder can carry a config but
   no item.
-  Deduped by `accountUuid` (default folder wins). A config that exists but
+  NOT merged by `accountUuid`: each folder has its own Keychain item, and
+  `oauthAccount` is a cache the CLI rewrites lazily (measured 2026-11-21:
+  `~/.claude.json` still named the previous login 45 min after `claude auth
+  login` wrote another account's token, so merging hid a live account's
+  card). Same account in two folders = two cards; on a key collision
+  between extras the first by path keeps the UUID key, the other is keyed
+  by `SHA-256("dir:" + path)`. A config that exists but
   cannot be read (permissions, over 16 MiB, invalid JSON mid-rewrite) is
   `.unknown`, never "logged out": it is logged and not memoized, and the
   default account is kept on its Keychain item alone (as before
@@ -488,7 +494,7 @@ path, `/Users/example/.claude-work` → `dd1118a7`, never a real one).
   so stepping through accounts switches the pinned %. Per-account values a
   build of PR #55 stored (`anthropic.<k>`) fold into their vendor. The default account's
   `storageKey` is the bare `anthropic`, so a one-account user migrates
-  nothing; extras are `anthropic.<first 8 hex of SHA-256(accountUuid)>` (the
+  nothing; extras are `anthropic.<first 8 hex of SHA-256(accountUuid)>` (path-keyed on a collision, see above; the
   UUID itself is never stored or logged).
 - **One card per vendor** (`UsageStore.vendorGroups`): accounts sit behind an
   `AccountSwitcherView` (‹ • • name ›, dots ringed orange for a hidden account

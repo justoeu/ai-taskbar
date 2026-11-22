@@ -66,9 +66,25 @@ public struct ClaudeAccountDiscovery: Sendable {
     }
 
     /// The default account first, then the others by label.
+    ///
+    /// Folders are NOT merged by `accountUuid`: every folder holds its own
+    /// Keychain item, and `oauthAccount` in a config file is a cache the CLI
+    /// rewrites lazily — measured 2026-11-21, `~/.claude.json` still named the
+    /// previous login 45 min after `claude auth login` had written a token for
+    /// another account (running sessions write their in-memory copy back),
+    /// so merging it with the folder really on that account hid a live card.
+    /// Two folders logged into one account show two cards with the same
+    /// figures, which is honest; hiding a real account is not.
     public func discover() -> [ClaudeAccount] {
-        var found: [(account: ClaudeAccount, uuid: String, modified: Date?)] = []
-        for candidate in candidates() {
+        var found: [ClaudeAccount] = []
+        var usedKeys: Set<String> = []
+        // Paths decide which folder keeps the UUID-derived key on a collision,
+        // so a key never flips between launches.
+        let ordered = candidates().sorted { a, b in
+            if a.isDefault != b.isDefault { return a.isDefault }
+            return a.dir.path < b.dir.path
+        }
+        for candidate in ordered {
             let uuid: String
             switch Self.login(at: candidate.configFile) {
             case .loggedIn(let value):
@@ -84,35 +100,35 @@ public struct ClaudeAccountDiscovery: Sendable {
             case .unknown:
                 continue
             }
-            var modified: Date?
-            var service: String?
-            for name in candidate.services {
-                if case .present(let date) = probe.presence(service: name) {
-                    service = name
-                    modified = date
-                    break
+            guard let service = candidate.services.first(where: {
+                if case .present = probe.presence(service: $0) { return true }
+                return false
+            }) else { continue }
+            let key: ProviderInstanceKey
+            if candidate.isDefault {
+                key = ProviderInstanceKey(vendor: .anthropic)
+            } else {
+                var account = Self.shortHash(uuid)
+                // The default's key is the bare vendor, so only another extra
+                // can collide.
+                if usedKeys.contains(account) {
+                    // Another folder reports the same account (a stale config
+                    // or a second login): this one is keyed by its path.
+                    AppLog.keychain.info(
+                        "Claude account discovery: two config folders report the same account; both are shown")
+                    account = Self.shortHash("dir:" + candidate.dir.path)
                 }
+                usedKeys.insert(account)
+                key = ProviderInstanceKey(vendor: .anthropic, account: account)
             }
-            guard let service else { continue }
-            let key = candidate.isDefault
-                ? ProviderInstanceKey(vendor: .anthropic)
-                : ProviderInstanceKey(vendor: .anthropic, account: Self.shortHash(uuid))
             let account = ClaudeAccount(
                 instanceKey: key,
                 label: candidate.isDefault ? nil : Self.label(forConfigDir: candidate.dir),
                 configDir: candidate.dir,
                 keychainService: service)
-            found.append((account, uuid, modified))
+            found.append(account)
         }
-        // One account per accountUuid: the default folder wins, then the most
-        // recently written Keychain item, then the path, so the result is
-        // deterministic.
-        var byUUID: [String: (account: ClaudeAccount, uuid: String, modified: Date?)] = [:]
-        for entry in found {
-            guard let kept = byUUID[entry.uuid] else { byUUID[entry.uuid] = entry; continue }
-            if Self.prefer(entry, over: kept) { byUUID[entry.uuid] = entry }
-        }
-        let sorted = byUUID.values.map(\.account).sorted { a, b in
+        let sorted = found.sorted { a, b in
             if a.isDefault != b.isDefault { return a.isDefault }
             let order = (a.label ?? "").localizedStandardCompare(b.label ?? "")
             if order != .orderedSame { return order == .orderedAscending }
@@ -138,15 +154,6 @@ public struct ClaudeAccountDiscovery: Sendable {
             return ClaudeAccount(instanceKey: account.instanceKey, label: unique,
                                  configDir: account.configDir, keychainService: account.keychainService)
         }
-    }
-
-    private static func prefer(_ a: (account: ClaudeAccount, uuid: String, modified: Date?),
-                               over b: (account: ClaudeAccount, uuid: String, modified: Date?)) -> Bool {
-        if a.account.isDefault != b.account.isDefault { return a.account.isDefault }
-        let ma = a.modified ?? .distantPast
-        let mb = b.modified ?? .distantPast
-        if ma != mb { return ma > mb }
-        return a.account.configDir.path < b.account.configDir.path
     }
 
     // MARK: - Candidates
